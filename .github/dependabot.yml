@@ -1,0 +1,42 @@
+version: 2
+
+# This file governs VERSION updates. Security alerts are switched on in the repository
+# settings and are not affected by the cadence below - they open a pull request immediately
+# (Part 2). Two things that are often confused.
+
+updates:
+
+  # Monthly rather than weekly, and that is not negligence. Play and development happen in
+  # bursts: many commits at first, then months of quiet. A weekly cadence produces eight open
+  # pull requests during such a quiet spell, and the danger is not the work but that a real
+  # security report drowns in it. With grouping the only difference is whether the same
+  # collective pull request is opened four times or once.
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+        # Both pull in a check of their own - the format parcours and the package build -
+        # and in a collective pull request one would no longer see the very change whose
+        # effect is worth looking at.
+        exclude-patterns:
+          - "Magick.NET*"
+          - "WixToolset.*"
+    ignore:
+      # WiX 6 and later are no longer MS-RL but carry the Open Source Maintenance Fee
+      # agreement, and v7 refuses to build without an accepted EULA. We stay on v5 and
+      # re-evaluate at every milestone; the reasoning lives in Part 9. Without this rule
+      # Dependabot would put us back in front of that decision every month.
+      - dependency-name: WixToolset.Sdk
+        versions: [">=6.0.0"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        update-types: [minor, patch]

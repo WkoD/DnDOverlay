@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Reducer, protocol, coordinates - and the architecture test. The latter is why this
+       project references all five libraries: it inspects their assemblies, and they have
+       to sit next to the test assembly for that. The rules apply to src/ only, so these
+       references are not themselves a violation (Part 2). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="TngTech.ArchUnitNET" />
+    <PackageReference Include="TngTech.ArchUnitNET.xUnitV3" />
+    <PackageReference Include="Mono.Cecil" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+    <ProjectReference Include="..\..\src\DnDOverlay.Hub\DnDOverlay.Hub.csproj" />
+    <ProjectReference Include="..\..\src\DnDOverlay.Campaign\DnDOverlay.Campaign.csproj" />
+    <ProjectReference Include="..\..\src\DnDOverlay.Imaging\DnDOverlay.Imaging.csproj" />
+    <ProjectReference Include="..\..\src\DnDOverlay.Transport\DnDOverlay.Transport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

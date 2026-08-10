@@ -1,0 +1,30 @@
+DnDOverlay
+Copyright 2026 Christopher Pawek
+
+This product includes software developed by third parties:
+
+  Magick.NET (https://github.com/dlemstra/Magick.NET)
+    Copyright Dirk Lemstra
+    Licensed under the Apache License, Version 2.0.
+    Bundles ImageMagick (https://imagemagick.org), licensed under the
+    ImageMagick License, an Apache-2.0 compatible license.
+
+  WpfAnimatedGif (https://github.com/XamlAnimatedGif/WpfAnimatedGif)
+    Copyright Thomas Levesque
+    Licensed under the MIT License.
+
+  ArchUnitNET (https://github.com/TNG/ArchUnitNET) - test-time only
+    Copyright TNG Technology Consulting GmbH
+    Licensed under the Apache License, Version 2.0.
+
+  xUnit.net (https://github.com/xunit/xunit) - test-time only
+    Copyright .NET Foundation and Contributors
+    Licensed under the Apache License, Version 2.0.
+
+  WiX Toolset (https://github.com/wixtoolset) - build-time only
+    Copyright .NET Foundation and Contributors
+    Licensed under the Microsoft Reciprocal License (MS-RL).
+
+  MinVer (https://github.com/adamralph/minver) - build-time only
+    Copyright Adam Ralph
+    Licensed under the Apache License, Version 2.0.

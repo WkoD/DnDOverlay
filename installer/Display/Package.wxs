@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <!-- Per-user installation into %LOCALAPPDATA%\Programs\DnDOverlay\Display.
+       Install as exactly the user that is later logged on automatically - otherwise nothing
+       ever starts, and nothing looks wrong either (Part 9). -->
+
+  <Package Name="DnDOverlay Display"
+           Manufacturer="WkoD"
+           Version="0.0.1"
+           UpgradeCode="DB79FBDF-BF57-4199-A343-B18A4640E69E"
+           Scope="perUser">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of DnDOverlay Display is already installed." />
+
+    <!-- Content arrives in M7: harvested publish output, autostart entry, the custom action
+         that fills gaps in display.json without ever overwriting it, and the cache cleanup
+         that must also run on upgrade. -->
+    <Feature Id="Main" Title="DnDOverlay Display" Level="1" />
+
+  </Package>
+
+</Wix>

@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WebSocket client, reconnect, AssetCache, discovery listener.
+       The AssetCache carries bytes, streams and file paths - never decoded bitmaps.
+       Decoding happens in Display, with WIC, in its own project. Two costed promises
+       depend on that: the WinUI fallback of spike A and the slim Display MSI (Part 2). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+  </ItemGroup>
+
+</Project>

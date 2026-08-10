@@ -1,0 +1,110 @@
+name: CI
+
+# Triggered by pull requests and by pushes to master - deliberately not by every push.
+# Triggering on both without a filter produces two identical runs for every commit on a
+# pull request branch. With required reviews every change reaches master through a pull
+# request anyway, so nothing is lost (Part 2).
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Three commits in quick succession cancel the runs they overtook instead of producing
+# three green ticks in a row. This aims at the early phase; later it never triggers.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+
+  # The main job. Control and Display are net10.0-windows, so building the solution
+  # requires Windows. Free on a public repository - and only there (Part 2).
+  windows:
+    name: Build, test and format (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # MinVer derives the version from the git tag, and checkout fetches a single
+          # commit without tags by default. Cosmetic here, fatal in release.yml.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - run: dotnet build DnDOverlay.slnx --configuration Release
+
+      - run: dotnet test DnDOverlay.slnx --configuration Release --no-build
+
+      # Over the whole solution, and only here: the installers live outside the solution,
+      # so this cannot trip over the WiX SDK (Part 2).
+      - run: dotnet format DnDOverlay.slnx --verify-no-changes
+
+  # Turns an intention into a property: the five libraries build and test on Linux.
+  # The point is not a port. The point is that the separation this plan draws for quite
+  # different reasons - testability without WPF, the WinUI fallback, Campaign as its own
+  # library - demonstrably holds instead of merely being claimed (Part 2).
+  linux:
+    name: Build and test the libraries (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Never over the solution: Control and Display cannot be built here. The filter names
+      # the five libraries and all five test projects explicitly - the format parcours
+      # included, because Campaign is where the platform-sensitive assumptions actually live.
+      - run: dotnet build DnDOverlay.Libraries.slnf --configuration Release
+
+      - run: dotnet test DnDOverlay.Libraries.slnf --configuration Release --no-build
+
+  # Starts on every run and reports success immediately when the installers are untouched.
+  # That it starts rather than being skipped by a paths filter is the condition for it to be
+  # a required check at all: GitHub counts a skipped required check as pending, not as
+  # passed, and such pull requests could never be merged (Part 2).
+  installers:
+    name: Build the installers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Are the installers affected?
+        id: affected
+        shell: bash
+        run: |
+          base="${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "If in doubt, build."
+            echo "affected=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$base" HEAD | grep -qE '^(installer/|global\.json$)'; then
+            echo "affected=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "affected=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-dotnet@v6
+        if: steps.affected.outputs.affected == 'true'
+        with:
+          global-json-file: global.json
+
+      # Always one at a time through their own project file, never through the solution -
+      # they are not in it. The WiX pin sits in global.json, which is why a change there
+      # counts as affected: it would otherwise be the only pin in the repository whose
+      # update passes unchecked, and a failure would first show up at the next tag, where
+      # it is invisible (Part 2, Part 9).
+      - run: dotnet build installer/Control/Control.wixproj --configuration Release
+        if: steps.affected.outputs.affected == 'true'
+
+      - run: dotnet build installer/Display/Display.wixproj --configuration Release
+        if: steps.affected.outputs.affected == 'true'

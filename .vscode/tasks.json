@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["build", "DnDOverlay.slnx"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["test", "DnDOverlay.slnx"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "format",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["format", "DnDOverlay.slnx", "--verify-no-changes"],
+      "problemMatcher": []
+    },
+    {
+      "label": "libraries (what the Linux job builds)",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["test", "DnDOverlay.Libraries.slnf"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "installers (never through the solution)",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["build", "installer/Control/Control.wixproj"],
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Folder reconciliation, inventory reconstruction, migration, ingest, moving the base
+       path, delete cascade, name checking. This is the library where the platform-sensitive
+       assumptions actually live - paths, file names, forbidden characters, casing, culture -
+       which is why the Linux job runs it too (Part 2). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DnDOverlay.Campaign\DnDOverlay.Campaign.csproj" />
+    <ProjectReference Include="..\DnDOverlay.TestData\DnDOverlay.TestData.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

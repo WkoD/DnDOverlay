@@ -1,0 +1,14 @@
+<Project Sdk="WixToolset.Sdk">
+
+  <!-- See installer/Control/Control.wixproj for why this lives outside the solution.
+       The display package is the one installed often, so its size matters: framework
+       dependent, roughly 5 MB, with a launch condition for the .NET Desktop Runtime (Part 9). -->
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <OutputName>DnDOverlay.Display</OutputName>
+    <!-- See Control.wixproj: only valid while the package is empty. REMOVE IN M7. -->
+    <SuppressIces>ICE71</SuppressIces>
+  </PropertyGroup>
+
+</Project>

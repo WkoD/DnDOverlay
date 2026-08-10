@@ -1,0 +1,23 @@
+<Project Sdk="WixToolset.Sdk">
+
+  <!-- The WiX SDK version is pinned in global.json under msbuild-sdks - that is the pin that
+       actually determines the build, which is why there is no tools manifest (Part 9).
+
+       This project is deliberately NOT part of DnDOverlay.slnx: "never built through the
+       solution" is a property of the layout rather than a setting somebody can undo (Part 2).
+       It is built on its own, by the installer job and by release.yml.
+
+       Empty until M7 - it builds in seconds and grows with the application. Building it from
+       day one is what proves the separation holds. -->
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <OutputName>DnDOverlay.Control</OutputName>
+    <!-- ICE71 says "the Media table has no entries" - true, because the package carries no
+         files yet. TreatWarningsAsErrors turns it into an error, so it is suppressed by name.
+         REMOVE IN M7, as soon as the publish output is harvested: from then on the warning
+         would mean something real. -->
+    <SuppressIces>ICE71</SuppressIces>
+  </PropertyGroup>
+
+</Project>

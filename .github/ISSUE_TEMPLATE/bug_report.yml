@@ -1,0 +1,45 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Two things make a report easy to act on: the **event id**
+        from the log and which side you saw it on (Control or Display).
+
+  - type: dropdown
+    id: application
+    attributes:
+      label: Which application?
+      options:
+        - Control (the DM machine)
+        - Display (a screen machine)
+        - Both / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the options window and in the device list.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: |
+        The log is written in the interface language, and the **event id** is the key to it -
+        it appears in every line as a number and a name and can be looked up in
+        `docs/protocol.md`. Logs live under `%LOCALAPPDATA%\DnDOverlay\logs`.
+      render: text

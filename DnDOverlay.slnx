@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DnDOverlay.Campaign/DnDOverlay.Campaign.csproj" />
+    <Project Path="src/DnDOverlay.Control/DnDOverlay.Control.csproj" />
+    <Project Path="src/DnDOverlay.Core/DnDOverlay.Core.csproj" />
+    <Project Path="src/DnDOverlay.Display/DnDOverlay.Display.csproj" />
+    <Project Path="src/DnDOverlay.Hub/DnDOverlay.Hub.csproj" />
+    <Project Path="src/DnDOverlay.Imaging/DnDOverlay.Imaging.csproj" />
+    <Project Path="src/DnDOverlay.Transport/DnDOverlay.Transport.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DnDOverlay.Campaign.Tests/DnDOverlay.Campaign.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.Core.Tests/DnDOverlay.Core.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.Hub.Tests/DnDOverlay.Hub.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.Imaging.Tests/DnDOverlay.Imaging.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.TestData/DnDOverlay.TestData.csproj" />
+    <Project Path="tests/DnDOverlay.Transport.Tests/DnDOverlay.Transport.Tests.csproj" />
+  </Folder>
+</Solution>

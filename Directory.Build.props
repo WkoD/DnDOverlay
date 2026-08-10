@@ -1,0 +1,44 @@
+﻿<Project>
+
+  <!-- Applies to every project in the repository. The installers under installer/
+       are deliberately outside the solution and build on their own (Part 2, Part 9);
+       they still pick this file up, so keep everything here framework-agnostic. -->
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>DnDOverlay</Product>
+    <Company>WkoD</Company>
+    <Authors>WkoD</Authors>
+    <Copyright>Copyright (c) 2026 Christopher Pawek</Copyright>
+    <RepositoryUrl>https://github.com/WkoD/DnDOverlay</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <!-- English is the neutral resource language; German ships as a satellite (Part 8). -->
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <!-- MinVer derives the version from the git tag - the same source the update check
+       compares against (Part 9). Tags are v1.2.3, hence the prefix.
+
+       Not in the WiX projects: MinVer refuses to run outside SDK-style projects, and the
+       installers need the MSI three-part version anyway, which release.yml maps explicitly
+       from the SemVer and passes in (Part 9). -->
+  <PropertyGroup>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectExtension)' != '.wixproj'">
+    <PackageReference Include="MinVer" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+  </ItemGroup>
+
+</Project>

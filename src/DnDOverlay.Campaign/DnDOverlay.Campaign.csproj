@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The stock: create/open/verify campaigns, the inventory, ingest, scene and layout
+       files, folder reconciliation, thumbnails, base path. Its only caller is Control.
+       A library rather than a folder inside Control, so the checks that carry the most -
+       folder reconciliation, inventory reconstruction, schema migration, delete cascade -
+       do not need a WPF assembly in order to run (Part 2). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+  </ItemGroup>
+
+</Project>

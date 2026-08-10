@@ -1,0 +1,76 @@
+name: Release
+
+# Only a pushed tag produces something installable. A merge to master produces nothing:
+# MinVer gives the commit a prerelease version above the last tag, which is published
+# nowhere (Part 2).
+#
+# A failed or draft-stranded run is INVISIBLE - the devices then simply report no update,
+# without an error. A red run here deserves attention (Part 9).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish, package and attach
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Without the full history MinVer falls back to 0.0.0-alpha.0 - here that would
+          # write the wrong version into the MSI and into the release asset, and that number
+          # is exactly what the update check compares against (Part 9).
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Control self-contained: it hosts Kestrel and therefore needs two shared frameworks.
+      # Display framework dependent: it is the one installed often, so its size counts.
+      - name: Publish Control (self-contained)
+        run: >
+          dotnet publish src/DnDOverlay.Control/DnDOverlay.Control.csproj
+          --configuration Release --runtime win-x64 --self-contained true
+          --output publish/Control
+
+      - name: Publish Display (framework dependent)
+        run: >
+          dotnet publish src/DnDOverlay.Display/DnDOverlay.Display.csproj
+          --configuration Release --runtime win-x64 --self-contained false
+          --output publish/Display
+
+      # M7 adds the SemVer to MSI three-part mapping here: ProductVersion only accepts
+      # major.minor.build and ignores a fourth field, so MinVer's SemVer with its prerelease
+      # marker does not fit. The full SemVer stays in the assembly and is what the update
+      # check compares (Part 9).
+      - name: Build the installers
+        run: |
+          dotnet build installer/Control/Control.wixproj --configuration Release
+          dotnet build installer/Display/Display.wixproj --configuration Release
+
+      # The GitHub API reports file sizes but no hashes, so the update check verifies against
+      # this file. It protects against truncated and corrupted downloads, not against an
+      # attacker - the chain of trust is the TLS connection to GitHub (Part 9).
+      - name: Collect artefacts and checksums
+        shell: bash
+        run: |
+          mkdir -p artefacts
+          cp installer/Control/bin/Release/*.msi artefacts/
+          cp installer/Display/bin/Release/*.msi artefacts/
+          cd artefacts
+          sha256sum *.msi > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # shell: bash is not cosmetic here. The default shell on a Windows runner is PowerShell,
+      # and PowerShell does not expand wildcards for native commands - gh would receive the
+      # literal string "artefacts/*" and attach nothing. A failure here is invisible: the
+      # devices then simply report no update (Part 9).
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" artefacts/* --generate-notes

@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+# Binary assets - never touch these
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.tif binary
+*.tiff binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.msi binary
+*.snk binary
+*.pfx binary

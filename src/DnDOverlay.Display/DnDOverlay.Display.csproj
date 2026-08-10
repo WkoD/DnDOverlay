@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The display PC: transparent always-on-top overlay per screen, gestures, tray.
+       It deliberately does not reference Imaging - the display only ever sees PNG, JPEG
+       and GIF and decodes them with WIC, which keeps its MSI at a few megabytes (Part 5). -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- See Control: LibraryImport generates unsafe marshalling code. The display needs it
+         more than any other project - EnumDisplayMonitors, GetDpiForMonitor, SetWindowLong,
+         RegisterHotKey, SetThreadExecutionState all live here (Part 6). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+    <ProjectReference Include="..\DnDOverlay.Transport\DnDOverlay.Transport.csproj" />
+  </ItemGroup>
+
+</Project>

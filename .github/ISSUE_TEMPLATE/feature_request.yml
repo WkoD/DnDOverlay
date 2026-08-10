@@ -1,0 +1,26 @@
+name: Idea
+description: Suggest something DnDOverlay should be able to do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before writing: `docs/design-principles.md` lists what DnDOverlay deliberately is
+        **not** - no virtual tabletop, no image editor, no service, no user management,
+        no catalogue beyond the campaign, no video or sound. None of that is excluded because
+        it would be bad; it is excluded because it would make a different product.
+
+  - type: textarea
+    id: situation
+    attributes:
+      label: What are you trying to do at the table?
+      description: The situation, not the solution - that is what makes a good answer possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you handle it today?
+    validations:
+      required: false

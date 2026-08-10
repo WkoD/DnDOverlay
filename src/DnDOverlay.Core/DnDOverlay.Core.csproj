@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Core knows nobody. Protocol DTOs, scene model, own identifier and geometry types,
+       the single scene reducer, ItemToRect, IImageCodec, IAssetSource, ISecretStore.
+       net10.0 rather than net10.0-windows: a WPF reference here is a compile error,
+       not a test finding (Part 2). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+</Project>

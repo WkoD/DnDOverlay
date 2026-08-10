@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- THE GENERATOR - not a test project. It writes images, bombs and token containers into
+       a directory handed to it, and carries the assembly fixture. Two test projects need
+       the same files: the format parcours and the folder reconciliation in Campaign.Tests
+       (Part 2).
+
+       It references Magick.NET DIRECTLY rather than going through our own codec: its
+       purpose is WRITING formats, and the statement "what the build can write it can also
+       read" hangs on exactly that. Both must carry the same package variant, otherwise the
+       same ImageMagick types would appear twice in one compilation of Imaging.Tests. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" />
+  </ItemGroup>
+
+</Project>

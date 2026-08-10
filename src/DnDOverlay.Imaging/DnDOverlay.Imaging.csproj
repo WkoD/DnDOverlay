@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- IImageCodec on top of Magick.NET, plus the token container unpacker in front of it
+       (ZipArchive + XmlReader, without a Magick dependency). This is the only project in
+       src/ that may reference Magick.NET - the architecture test enforces that. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+  </ItemGroup>
+
+</Project>

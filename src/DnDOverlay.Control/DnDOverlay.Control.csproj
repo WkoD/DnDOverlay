@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The DM surface. Hosts the hub in its own process and is the only owner of the
+       campaign folder (Part 2). Published self-contained, because it needs two shared
+       frameworks - WindowsDesktop and AspNetCore - and is installed exactly once (Part 9). -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Win32 calls go through LibraryImport (Part 2), and its generated marshalling code is
+         unsafe - without this the very first P/P-Invoke fails to compile. Allowed here and
+         nowhere else: the five libraries must not call into native code at all, and the
+         architecture test enforces that. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+    <ProjectReference Include="..\DnDOverlay.Hub\DnDOverlay.Hub.csproj" />
+    <ProjectReference Include="..\DnDOverlay.Campaign\DnDOverlay.Campaign.csproj" />
+    <ProjectReference Include="..\DnDOverlay.Imaging\DnDOverlay.Imaging.csproj" />
+    <ProjectReference Include="..\DnDOverlay.Transport\DnDOverlay.Transport.csproj" />
+  </ItemGroup>
+
+</Project>

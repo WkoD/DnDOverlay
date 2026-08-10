@@ -1,0 +1,44 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# IDE / user files (.vscode is checked in on purpose)
+.vs/
+*.user
+*.suo
+*.userprefs
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# WiX
+*.wixpdb
+*.msi
+
+# Test data is generated on every run, never committed (Part 2, Part 10).
+# In a public repository a checked-in test image would be a publication.
+tests/*/TestData/
+
+# Data root of development runs (Part 9): configuration, campaigns, cache, logs.
+# Whatever a developer drags in here comes from foreign sources - it must not
+# reach a public repository.
+dev-data/
+
+# The German working plan (Part 2): scaffolding, not the building. What carries
+# moves to docs/, README and CONTRIBUTING.md as it is built.
+plan/
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store

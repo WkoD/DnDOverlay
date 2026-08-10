@@ -1,0 +1,230 @@
+namespace DnDOverlay.Core.Tests.Architecture;
+
+/// <summary>
+/// The declared structure of the repository. These rules bite while the projects are still
+/// empty, which is the whole point: a reference from Hub into Campaign would compile without
+/// complaint and would be impossible to unpick half a year later (Part 2).
+/// </summary>
+public sealed class ProjectStructureTests
+{
+    [Fact]
+    public void Core_references_nothing()
+    {
+        var core = RepositoryLayout.SourceProjects["DnDOverlay.Core"];
+
+        Assert.Empty(core.ProjectReferences);
+        Assert.Empty(core.PackageReferences);
+    }
+
+    [Theory]
+    [InlineData("DnDOverlay.Hub")]
+    [InlineData("DnDOverlay.Campaign")]
+    [InlineData("DnDOverlay.Imaging")]
+    [InlineData("DnDOverlay.Transport")]
+    public void Libraries_reference_only_Core(string library)
+    {
+        var project = RepositoryLayout.SourceProjects[library];
+
+        Assert.All(
+            project.ProjectReferences,
+            reference => Assert.Equal("DnDOverlay.Core", reference));
+    }
+
+    /// <summary>
+    /// The arrangement belongs to the hub, the material to the campaign (Part 1, idea 3).
+    /// This is not a technical impossibility like the target framework but a decision, so it
+    /// is the rule that needs a net most.
+    /// </summary>
+    [Fact]
+    public void Hub_does_not_know_Campaign()
+    {
+        var hub = RepositoryLayout.SourceProjects["DnDOverlay.Hub"];
+
+        Assert.DoesNotContain("DnDOverlay.Campaign", hub.ProjectReferences, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Campaign_does_not_know_the_Hub()
+    {
+        var campaign = RepositoryLayout.SourceProjects["DnDOverlay.Campaign"];
+
+        Assert.DoesNotContain("DnDOverlay.Hub", campaign.ProjectReferences, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Magick.NET lives in Imaging alone. Transport is checked explicitly, because two costed
+    /// promises hang on it - the WinUI fallback and the slim Display MSI (Part 2).
+    /// </summary>
+    [Fact]
+    public void Only_Imaging_references_Magick()
+    {
+        var offenders = RepositoryLayout.SourceProjects.Values
+            .Where(project => project.Name != "DnDOverlay.Imaging")
+            .Where(project => project.PackageReferences.Any(
+                package => package.StartsWith("Magick.NET", StringComparison.Ordinal)))
+            .Select(project => project.Name)
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    /// <summary>
+    /// The rule applies to src/, not to tests/: the test data generator references Magick.NET
+    /// on purpose, because it WRITES formats (Part 2, Part 10).
+    /// </summary>
+    [Fact]
+    public void The_test_data_generator_references_the_same_Magick_variant_as_Imaging()
+    {
+        var imaging = RepositoryLayout.SourceProjects["DnDOverlay.Imaging"];
+        var generator = RepositoryLayout.TestProjects["DnDOverlay.TestData"];
+
+        var imagingPackage = Assert.Single(
+            imaging.PackageReferences,
+            package => package.StartsWith("Magick.NET", StringComparison.Ordinal));
+        var generatorPackage = Assert.Single(
+            generator.PackageReferences,
+            package => package.StartsWith("Magick.NET", StringComparison.Ordinal));
+
+        Assert.Equal(imagingPackage, generatorPackage);
+    }
+
+    /// <summary>
+    /// The five libraries build on net10.0, so a WPF reference is a compile error rather than
+    /// a test finding. Only the two applications are Windows-bound (Part 2).
+    /// </summary>
+    [Fact]
+    public void The_five_libraries_are_platform_neutral()
+    {
+        foreach (var name in RepositoryLayout.Libraries)
+        {
+            var framework = Assert.Single(RepositoryLayout.SourceProjects[name].TargetFrameworks);
+            Assert.Equal("net10.0", framework);
+        }
+    }
+
+    [Fact]
+    public void The_two_applications_target_Windows()
+    {
+        foreach (var name in RepositoryLayout.Applications)
+        {
+            var framework = Assert.Single(RepositoryLayout.SourceProjects[name].TargetFrameworks);
+            Assert.Equal("net10.0-windows", framework);
+        }
+    }
+
+    [Fact]
+    public void Nothing_else_lives_in_src()
+    {
+        var expected = RepositoryLayout.Libraries
+            .Concat(RepositoryLayout.Applications)
+            .OrderBy(name => name, StringComparer.Ordinal);
+
+        var actual = RepositoryLayout.SourceProjects.Keys
+            .OrderBy(name => name, StringComparer.Ordinal);
+
+        Assert.Equal(expected, actual);
+    }
+
+    /// <summary>
+    /// No test project may depend on Control or Display: the Linux job does not build them,
+    /// and a test tree that needs them would fail there for a reason nobody would look for
+    /// in the test tree (Part 2, Part 11).
+    /// </summary>
+    [Fact]
+    public void No_test_project_depends_on_an_application()
+    {
+        var offenders = RepositoryLayout.TestProjects.Values
+            .Where(project => project.ProjectReferences.Intersect(
+                RepositoryLayout.Applications, StringComparer.Ordinal).Any())
+            .Select(project => project.Name)
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    /// <summary>
+    /// Every project below src/ and tests/ is in the solution. Without this a new project
+    /// would simply not be built - and nothing would say so, because a solution that does not
+    /// know a project cannot fail on it.
+    /// </summary>
+    [Fact]
+    public void Every_project_is_in_the_solution()
+    {
+        var solution = ReadSolution();
+
+        var missing = RepositoryLayout.SourceProjects.Values
+            .Concat(RepositoryLayout.TestProjects.Values)
+            .Where(project => !solution.Contains(project.Name + ".csproj", StringComparison.Ordinal))
+            .Select(project => project.Name)
+            .ToList();
+
+        Assert.Empty(missing);
+    }
+
+    /// <summary>
+    /// The Linux job builds through a solution filter, so the filter is what decides which
+    /// projects are checked on the second platform. If a new library were missing from it,
+    /// the job would stay green and simply stop looking - the quietest way for a net to fail.
+    /// The rule is therefore: the filter carries everything the solution carries, except the
+    /// two Windows applications (Part 2).
+    /// </summary>
+    [Fact]
+    public void The_Linux_filter_covers_every_platform_neutral_project()
+    {
+        var filter = File.ReadAllText(
+            Path.Combine(RepositoryLayout.RepositoryRoot.FullName, "DnDOverlay.Libraries.slnf"));
+
+        var shouldBeCovered = RepositoryLayout.SourceProjects.Values
+            .Where(project => !RepositoryLayout.Applications.Contains(project.Name, StringComparer.Ordinal))
+            .Concat(RepositoryLayout.TestProjects.Values)
+            .Select(project => project.Name)
+            .ToList();
+
+        var missing = shouldBeCovered
+            .Where(name => !filter.Contains(name + ".csproj", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Empty(missing);
+
+        // And the other way round: the applications must not be in it. They target
+        // net10.0-windows and fail on Linux with NETSDK1100 - measured, not assumed.
+        foreach (var application in RepositoryLayout.Applications)
+        {
+            Assert.DoesNotContain(application + ".csproj", filter, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The installers are never built through the solution - and therefore they are not in it.
+    /// A property of the layout instead of a setting somebody can undo (Part 2).
+    /// </summary>
+    [Fact]
+    public void The_installers_are_not_part_of_the_solution()
+    {
+        var solution = ReadSolution();
+
+        Assert.DoesNotContain("wixproj", solution, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("installer", solution, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ReadSolution() =>
+        File.ReadAllText(Path.Combine(RepositoryLayout.RepositoryRoot.FullName, "DnDOverlay.slnx"));
+
+    /// <summary>
+    /// The hub speaks HTTP and WebSocket, so it carries the ASP.NET Core framework reference -
+    /// and it is the only library that does. Kestrel lives inside the Control process, which is
+    /// why Control is published self-contained (Part 9).
+    /// </summary>
+    [Fact]
+    public void Only_the_Hub_references_AspNetCore()
+    {
+        foreach (var project in RepositoryLayout.SourceProjects.Values)
+        {
+            var expected = project.Name == "DnDOverlay.Hub"
+                ? new[] { "Microsoft.AspNetCore.App" }
+                : [];
+
+            Assert.Equal(expected, project.FrameworkReferences);
+        }
+    }
+}

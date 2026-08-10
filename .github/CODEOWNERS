@@ -1,0 +1,18 @@
+# Code owners for DnDOverlay.
+#
+# This has no effect until a second person is involved, and that is GitHub's behaviour
+# rather than an oversight: GitHub never requests a review from the author of a pull
+# request and does not let them approve their own. While the owner develops alone this
+# file produces no review request at all - and the branch protection option "Require
+# review from Code Owners" would not be ineffective but would make every own pull request
+# unmergeable.
+#
+# Therefore: until the first outside contribution this file is a statement of intent, the
+# option stays off, and the owner may bypass the pull request requirement. The force-push
+# and deletion locks apply from day one. When a second contributor joins, both switches
+# are tightened (Part 2).
+#
+# Syntax note: no "!" for exceptions, no "[ ]" ranges, no "#" escaped with "\" - three
+# gitignore patterns that do NOT apply here. Several owners go on the same line.
+
+* @WkoD

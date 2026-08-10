@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <!-- Per-user installation into %LOCALAPPDATA%\Programs\DnDOverlay\Control, so no admin
+       rights are needed and the product still shows up under Apps & Features (Part 9).
+       The UpgradeCode is fixed forever: without it there would be five entries under
+       Apps & Features after half a year. -->
+
+  <Package Name="DnDOverlay Control"
+           Manufacturer="WkoD"
+           Version="0.0.1"
+           UpgradeCode="6D5D3E56-85A5-4106-A31F-FE7B612091E8"
+           Scope="perUser">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of DnDOverlay Control is already installed." />
+
+    <!-- Content arrives in M7: harvested publish output, autostart entry, start menu
+         shortcut, the firewall choice and the cache cleanup condition. -->
+    <Feature Id="Main" Title="DnDOverlay Control" Level="1" />
+
+  </Package>
+
+</Wix>

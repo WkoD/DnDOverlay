@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+
+  // Control and Display run side by side on the development machine - that is a regular
+  // arrangement, not a special mode (Part 2). Both get --data dev-data so a test run never
+  // touches the regularly installed copy on the same machine: configuration, campaigns,
+  // image cache and logs all move into the project (Part 9). dev-data/ is git-ignored.
+  //
+  // The installed Control has to be closed: the single-instance mutex does not allow a
+  // second one, it brings the running window to the front.
+
+  "configurations": [
+    {
+      "name": "Control",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/DnDOverlay.Control/bin/Debug/net10.0-windows/DnDOverlay.Control.exe",
+      "args": ["--windowed", "--data", "dev-data"],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Display",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/DnDOverlay.Display/bin/Debug/net10.0-windows/DnDOverlay.Display.exe",
+      "args": ["--windowed", "--data", "dev-data"],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    }
+  ],
+
+  // The everyday case. The single configurations above exist for the two-machine run in
+  // M1c, where each machine carries only one role.
+  "compounds": [
+    {
+      "name": "Control + Display",
+      "configurations": ["Control", "Display"],
+      "stopAll": true
+    }
+  ]
+}
