@@ -103,6 +103,19 @@ public sealed class DisplayClient
                 TransportLog.Connected(_logger, welcome.ControlId, welcome.AssetPath);
             }
 
+            // Answered here rather than by the application, because it says nothing about the
+            // application: it says this socket is alive. It is also what tells a clone from a
+            // crashed display coming straight back - the hub asks the connection it already has,
+            // and silence is the answer that replaces it (Part 4).
+            if (message is PingMessage)
+            {
+                await socket.SendAsync(
+                    ProtocolJson.Serialise(new PongMessage()),
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (message is not null)
             {
                 await inbox.WriteAsync(message, cancellationToken).ConfigureAwait(false);

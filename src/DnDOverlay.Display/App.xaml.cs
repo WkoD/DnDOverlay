@@ -30,8 +30,18 @@ public sealed partial class App : Application, IDisposable
     private readonly Dictionary<AssetId, ImageSource> _images = [];
     private readonly CancellationTokenSource _shutdown = new();
 
+    private readonly ISecretStore _secrets = new WindowsSecretStore();
+
+    /// <summary>
+    /// Made once and kept while this device is unpaired. It belongs to the REQUEST, not to the
+    /// connection attempt: the DM walks over to the table to compare it, and a number that
+    /// changed on the way would be worse than none (Part 4).
+    /// </summary>
+    private readonly string _pairingCode = PairingCodes.Create();
+
     private ILogger<App> _logger = null!;
     private ConfigurationFile<DisplayConfiguration>? _configuration;
+    private DisplayConfiguration _settings = new();
     private DataRoot _dataRoot;
     private HttpClient _http = null!;
     private AssetClient _assets = null!;
@@ -59,6 +69,7 @@ public sealed partial class App : Application, IDisposable
             TimeProvider.System);
 
         var loaded = _configuration.Load(() => new DisplayConfiguration());
+        _settings = loaded.Value;
 
         // Written back at once when it did not exist: from here the DeviceId has to survive
         // every restart, or this machine would introduce itself as a new device each morning
@@ -120,12 +131,25 @@ public sealed partial class App : Application, IDisposable
                 options.Windowed ? "windowed" : "overlay");
         }
 
+        // The token travels with the control it belongs to: one without the other would be
+        // offered to the first hub that answers (Part 4). A stored token that does not decrypt is
+        // simply absent - the device pairs again, which is what TryRead returning a value instead
+        // of throwing is for.
+        string? token = null;
+
+        if (_settings.ControlId is not null && DeviceTokens.TryRead(_secrets, _settings.Token, out var stored))
+        {
+            token = stored;
+        }
+
         var hello = new HelloMessage(
             _device,
             deviceName,
             typeof(App).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             Protocol.Version,
-            [.. monitors.Select(monitor => monitor.Screen)]);
+            [.. monitors.Select(monitor => monitor.Screen)],
+            token,
+            token is null ? _pairingCode : null);
 
         _ = ConnectAsync(host, options.Port, hello, loggers);
     }
@@ -205,6 +229,18 @@ public sealed partial class App : Application, IDisposable
         {
             case WelcomeMessage welcome:
                 _assetPath = welcome.AssetPath;
+                Remember(welcome);
+                break;
+
+            case PairingPendingMessage pending:
+                // In M5b this is where the setup screen goes down: name, address and code, large
+                // enough to read from two metres. Until then the tray - which is also M6 - has to
+                // make do with the log (Part 6).
+                DisplayLog.PairingPending(_logger, pending.PairingCode);
+                break;
+
+            case RejectedMessage rejected:
+                Refused(rejected.Reason);
                 break;
 
             case SceneSnapshotMessage snapshot:
@@ -218,6 +254,63 @@ public sealed partial class App : Application, IDisposable
                 break;
 
             default:
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Keeps a freshly issued token, together with the control it belongs to. Written straight
+    /// through the debounce: it is the one value whose loss would cost the pairing (Part 6).
+    /// </summary>
+    private void Remember(WelcomeMessage welcome)
+    {
+        if (welcome.Token is null || _configuration is null)
+        {
+            return;
+        }
+
+        _settings = _settings with
+        {
+            ControlId = welcome.ControlId,
+            Token = DeviceTokens.Store(_secrets, welcome.Token),
+        };
+
+        _configuration.Save(_settings);
+        _configuration.Flush();
+
+        DisplayLog.Paired(_logger, welcome.ControlId);
+    }
+
+    /// <summary>
+    /// The three ways a control can turn this device away, and they are told apart on purpose.
+    /// </summary>
+    private void Refused(RejectionReason reason)
+    {
+        switch (reason)
+        {
+            case RejectionReason.DuplicateDevice:
+                // Cloning a disk is the usual way to set up a second display PC. The control only
+                // says the identity collides; the fresh one is made HERE, which keeps the rule
+                // that every device creates its own (Part 3, Part 7).
+                _settings = _settings with { DeviceId = Guid.NewGuid(), ControlId = null, Token = null };
+                _configuration?.Save(_settings);
+                _configuration?.Flush();
+
+                DisplayLog.FreshIdentityTaken(_logger, _settings.DeviceId);
+                break;
+
+            case RejectionReason.InvalidToken:
+                // The binding is NOT dropped here. The beacon is unauthenticated, so a forged
+                // control answering every Hello with "unknown token" would unbind every display
+                // in the house and then adopt them. It takes a tap at the device, and that tap is
+                // the hurdle an attacker on the network cannot take (Part 4).
+                DisplayLog.TokenUnknown(_logger);
+                break;
+
+            case RejectionReason.Denied:
+            case RejectionReason.LimitExceeded:
+            default:
+                DisplayLog.PairingRefused(_logger, reason.ToString());
                 break;
         }
     }

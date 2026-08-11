@@ -23,6 +23,19 @@ public sealed class RunningThreadTests : IAsyncLifetime
 {
     private static readonly AssetId Asset = new(new string('a', 64));
 
+    /// <summary>
+    /// Two devices that are already paired, and their token.
+    /// <para>
+    /// Since M1b a <c>Hello</c> without one does not get a <c>Welcome</c> - it waits for the DM,
+    /// with no deadline anywhere (Part 4). These tests are about the running thread and not about
+    /// pairing, so they take the shortest legitimate way in: the normal case at every power-on.
+    /// </para>
+    /// </summary>
+    private const string Token = "a-token-that-was-issued-earlier";
+
+    private static readonly DeviceId FirstDevice = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"));
+    private static readonly DeviceId SecondDevice = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"));
+
     private WebApplication _app = null!;
     private Uri _http = null!;
     private Uri _ws = null!;
@@ -33,7 +46,11 @@ public sealed class RunningThreadTests : IAsyncLifetime
 
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Services.AddDnDOverlayHub();
+        builder.Services.AddDnDOverlayHub(hub => hub.KnownDevices =
+        [
+            new PairedDevice(FirstDevice, "TEST-PC", PairingRole.Display, Token),
+            new PairedDevice(SecondDevice, "TEST-PC", PairingRole.Display, Token),
+        ]);
         builder.Services.AddSingleton<IAssetSource>(new OneFakeAsset());
 
         _app = builder.Build();
@@ -99,12 +116,12 @@ public sealed class RunningThreadTests : IAsyncLifetime
     /// The thread itself: Hello in, Welcome and a snapshot per screen back, then a command from
     /// the control side arrives as a patch - and only at the device it concerns.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 30_000)]
     public async Task A_command_reaches_the_display_that_it_concerns()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        var device = new DeviceId(Guid.NewGuid());
+        var device = FirstDevice;
         var screen = new ScreenId(@"\\?\DISPLAY#TEST#1");
         var target = new ScreenRef(device, screen);
 
@@ -116,7 +133,8 @@ public sealed class RunningThreadTests : IAsyncLifetime
             "TEST-PC",
             "1.0.0",
             Protocol.Version,
-            [new ScreenInfo(screen, "TEST-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true)]),
+            [new ScreenInfo(screen, "TEST-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true)],
+            Token),
             cancellationToken);
 
         Assert.IsType<WelcomeMessage>(await ReceiveAsync(socket, cancellationToken));
@@ -149,12 +167,12 @@ public sealed class RunningThreadTests : IAsyncLifetime
     /// Five separately inserted images are five patches with five revisions - nothing is merged
     /// over a time window, however quickly they follow one another (Part 4).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 30_000)]
     public async Task Five_commands_are_five_patches_with_five_revisions()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        var device = new DeviceId(Guid.NewGuid());
+        var device = SecondDevice;
         var screen = new ScreenId(@"\\?\DISPLAY#TEST#2");
         var target = new ScreenRef(device, screen);
 
@@ -166,7 +184,8 @@ public sealed class RunningThreadTests : IAsyncLifetime
             "TEST-PC",
             "1.0.0",
             Protocol.Version,
-            [new ScreenInfo(screen, "TEST-PC//DISPLAY2", null, new PixelSize(1920, 1080), 96, true)]),
+            [new ScreenInfo(screen, "TEST-PC//DISPLAY2", null, new PixelSize(1920, 1080), 96, true)],
+            Token),
             cancellationToken);
 
         _ = await ReceiveAsync(socket, cancellationToken);

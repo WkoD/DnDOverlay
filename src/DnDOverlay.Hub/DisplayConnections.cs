@@ -17,6 +17,9 @@ public sealed class DisplayConnections
 {
     private readonly ConcurrentDictionary<DeviceId, DisplayConnection> _connections = new();
 
+    /// <summary>How many devices are connected right now - the ceiling is checked against this.</summary>
+    public int Count => _connections.Count;
+
     public void Add(DisplayConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -24,7 +27,25 @@ public sealed class DisplayConnections
         _connections[connection.Device] = connection;
     }
 
-    public void Remove(DeviceId device) => _connections.TryRemove(device, out _);
+    public bool TryGet(DeviceId device, out DisplayConnection connection) =>
+        _connections.TryGetValue(device, out connection!);
+
+    /// <summary>
+    /// Removes this connection, and only this one.
+    /// <para>
+    /// Removing by device would be the obvious shape and would take the WRONG connection out on
+    /// every fast reconnect: the new one has already registered under the same
+    /// <see cref="DeviceId"/> when the old one finishes tidying up. The symptom would be a
+    /// display that vanishes from the list moments after it came back.
+    /// </para>
+    /// </summary>
+    public void Remove(DisplayConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        _ = ((ICollection<KeyValuePair<DeviceId, DisplayConnection>>)_connections)
+            .Remove(new KeyValuePair<DeviceId, DisplayConnection>(connection.Device, connection));
+    }
 
     /// <summary>
     /// Sends a patch to every device it concerns, cut down to the operations for that device's

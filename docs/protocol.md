@@ -36,8 +36,11 @@ does not exist here, and the address is typed into a browser by a person standin
 
 | Message | Direction | Carries |
 |---|---|---|
-| `Hello` | display → control | device identifier, name, application version, protocol version, its screens |
-| `Welcome` | control → display | the control's identifier and the **path** assets are served from |
+| `Hello` | display → control | device identifier, name, application version, protocol version, its screens — plus **either** a device token **or** a pairing code |
+| `Welcome` | control → display | the control's identifier, the **path** assets are served from, and a freshly issued token exactly once |
+| `PairingPending` | control → display | the pairing code, so the device can put its setup screen down |
+| `Rejected` | control → display | why: `Denied` · `InvalidToken` · `LimitExceeded` · `DuplicateDevice` |
+| `Ping` / `Pong` | control ↔ display | heartbeat, and the probe that tells a clone from a restart |
 | `SceneSnapshot` | control → display | the complete scene of one screen |
 | `ScenePatch` | control → display | one command of the DM, as operations addressed at screens |
 
@@ -45,6 +48,46 @@ does not exist here, and the address is typed into a browser by a person standin
 socket the message arrived on. A remembered base URL is a trap: when the machine moves between
 WLAN and a dock, the WebSocket finds the new address by itself while the URL still points at the
 old one — the display would be *connected* and load nothing.
+
+### Pairing
+
+Four states per device — **unknown · waiting · paired · rejected** — and the way in is decided
+entirely by what the `Hello` carries:
+
+| `Hello` carries | Result |
+|---|---|
+| a **valid token** | in, without a question. The normal case at every power-on |
+| **no token**, a pairing code | **waiting** — unless the device was rejected before, new devices are not being accepted, or a limit says no |
+| a token **we do not know** | `Rejected(InvalidToken)`, and the device stays visible with that reason |
+| a valid token whose **device is already connected** | the hub asks the connection it has and waits a second — silence replaces it, an answer makes it a clone |
+
+Four things about this are load-bearing, and each of them is the answer to a failure that would
+otherwise be unfixable at the table:
+
+- **An open request has no deadline. It has a connection.** It stands as long as the socket stands
+  and vanishes with it, so what is in the list is what is knocking *right now*. A deadline would
+  have the opposite fault: the DM steps out, comes back, and the request is gone without anyone
+  having decided anything.
+- **The pairing code belongs to the request, not to the connection attempt.** The device makes it
+  once while unpaired and keeps it across drops — otherwise the DM would be comparing a number
+  that changed while he walked to the table.
+- **A clone is laid in front of the DM, never turned away.** Cloning a disk is the usual way to set
+  up a second display PC. He can take it on as its own device, which tells it to make itself a
+  fresh identity and pair regularly; the control only says the identity collides, so the rule that
+  every device creates its own stays intact.
+- **`InvalidToken` does not unbind anything by itself.** The beacon is unauthenticated, so a forged
+  control answering every `Hello` this way would unbind every display in the house and could then
+  adopt them. It takes a tap at the device — and that tap is the hurdle an attacker on the network
+  cannot take.
+
+**Tokens** come from `RandomNumberGenerator`, are compared with `CryptographicOperations.FixedTimeEquals`
+and are stored encrypted at both ends. The **role** — display or control — sits in our own entry
+and is never parsed out of the token: a display token at the control endpoint is refused, and the
+other way round.
+
+**The order when a device is allowed** is part of the promise: the control creates the token,
+encrypts it, writes `control.json` — and only then calls `ApprovePairingAsync`. The `Welcome` is
+sent from inside that call, so it cannot leave before the file exists.
 
 ### Addressing
 
@@ -163,8 +206,37 @@ the same application that draws.
 | 1012 | `Disconnected` | Information | transport |
 | 1013 | `ConnectFailed` | Warning | transport |
 | 1014 | `UnknownMessageIgnored` | Debug | transport |
+| 1020 | `PairingRequested` | Information | hub |
+| 1021 | `PairingApproved` | Information | hub |
+| 1022 | `PairingDenied` | Information | hub |
+| 1023 | `PairingWithdrawn` | Debug | hub |
+| 1024 | `TokenRefused` | Warning | hub |
+| 1025 | `NewDevicesBlocked` | Information | hub |
+| 1026 | `LimitReached` | Warning | hub |
+| 1027 | `CloneDetected` | Warning | hub |
+| 1028 | `ConnectionReplaced` | Information | hub |
+| 1029 | `FreshIdentityRequested` | Information | hub |
+| 1030 | `Unpaired` | Information | hub |
+| 1031 | `RejectionCleared` | Information | hub |
+| 1032 | `MessageIgnored` | Debug | hub |
+| 1033 | `PairingPending` | Information | display |
+| 1034 | `Paired` | Information | display |
+| 1035 | `TokenUnknown` | Warning | display |
+| 1036 | `FreshIdentityTaken` | Warning | display |
+| 1037 | `PairingRefused` | Warning | display |
 
-**Next free: 1015.** (1007–1009 are reserved for the hub so its block stays contiguous.)
+**Next free: 1038.** 1007–1009 stay unassigned so the first block could still grow, 1015–1019
+belong to transport, and pairing has 1020–1037.
+
+**1033–1037 are written by the display application, and they are still connection.** The range
+follows the **subject of the sentence**, never the assembly it is written in — the same rule that
+decides where a new message goes (above). Pairing seen from the device answers *who is talking to
+whom*, so it belongs beside the hub's lines and not in the display range.
+
+**1020 is written once per pairing code, never once per connection.** An unpaired device on weak
+Wi-Fi loses its connection and comes back every few seconds; because the code survives that, a
+second `Hello` refreshes the standing request instead of opening another. What the DM looks for
+later is not a notification but the trail: *did this device ever knock, and what came of it?*
 
 ### 2000–2999 · Assets
 
@@ -195,8 +267,13 @@ into one of them would have made the range names stop meaning anything.
 |---|---|---|---|
 | 4001 | `DataRootChosen` | Information | control |
 | 4002 | `DataRootChosen` | Information | display |
+| 4003 | `ConfigurationCreated` | Information | control |
+| 4004 | `ConfigurationReplaced` | Warning | control |
+| 4005 | `ConfigurationCreated` | Information | display |
+| 4006 | `ConfigurationReplaced` | Warning | display |
+| 4007 | `KnownDevicesRestored` | Information | control |
 
-**Next free: 4003.**
+**Next free: 4008.**
 
 Both applications say the same thing and still carry their own number: the identifier is the
 contract, and a shared one would make a line in the file ambiguous about who wrote it.

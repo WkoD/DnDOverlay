@@ -38,4 +38,16 @@ internal static partial class ControlLog
         Message = "control.json was unreadable. Set aside as {SetAside}; starting with defaults, "
                   + "so paired devices have to be allowed again.")]
     internal static partial void ConfigurationReplaced(ILogger logger, string setAside);
+
+    /// <summary>
+    /// How much of the pairing survived the start. A dropped token means the profile changed -
+    /// restored backup, reinstalled Windows, copied installation - and those devices simply pair
+    /// again; the line exists so that this is read once instead of guessed at the table
+    /// (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4007,
+        Level = LogLevel.Information,
+        Message = "{Restored} paired device(s) restored, {Dropped} dropped because the token did not decrypt.")]
+    internal static partial void KnownDevicesRestored(ILogger logger, int restored, int dropped);
 }

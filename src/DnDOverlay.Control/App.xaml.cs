@@ -58,6 +58,12 @@ public sealed partial class App : Application, IDisposable
             _configuration.Flush();
         }
 
+        // DPAPI, behind its interface. It is created here rather than resolved from the hub's
+        // container because the hub must not know it exists: pairing is hub business, the hub
+        // builds for net10.0, and ProtectedData is Windows only (Part 4).
+        var secrets = new WindowsSecretStore();
+        var restored = PairingDesk.Restore(loaded.Value, secrets);
+
         var asset = DemoAsset.Create();
         var builder = WebApplication.CreateBuilder();
 
@@ -77,6 +83,11 @@ public sealed partial class App : Application, IDisposable
         {
             hub.ControlId = loaded.Value.ControlId;
             hub.Port = loaded.Value.Port;
+
+            // A snapshot, taken once. The hub never learns where control.json is; what it gets
+            // are the values that belong to it, and what changes later comes in through
+            // ApprovePairingAsync (Part 7).
+            hub.KnownDevices = restored.Devices;
         });
 
         builder.Services.AddSingleton<IAssetSource>(asset);
@@ -92,10 +103,14 @@ public sealed partial class App : Application, IDisposable
 
         ControlLog.DataRootChosen(logger, _dataRoot.Path);
         Report(logger, loaded);
+        ControlLog.KnownDevicesRestored(logger, restored.Devices.Count, restored.Dropped);
+
+        var session = _host.Services.GetRequiredService<ISessionApi>();
 
         var window = new MainWindow(
             _host.Services.GetRequiredService<ScreenCatalog>(),
-            _host.Services.GetRequiredService<ISessionApi>(),
+            session,
+            new PairingDesk(session, secrets, _configuration, loaded.Value, TimeProvider.System),
             asset,
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"));
 

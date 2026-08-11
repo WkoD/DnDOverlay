@@ -29,4 +29,10 @@
     <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The one reference to DPAPI in the whole repository. It sits here and nowhere else -
+         see SecretStore.cs for why that is a rule and not a preference. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,5 @@
 using DnDOverlay.Core;
+using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Hub;
 
@@ -12,16 +13,31 @@ public sealed class SessionApi : ISessionApi, IDisposable
     private readonly SceneStore _scenes;
     private readonly ScreenCatalog _screens;
     private readonly DisplayConnections _connections;
+    private readonly PairingDirectory _pairing;
+    private readonly ILogger<SessionApi> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private long _revision;
 
-    public SessionApi(SceneStore scenes, ScreenCatalog screens, DisplayConnections connections)
+    public SessionApi(
+        SceneStore scenes,
+        ScreenCatalog screens,
+        DisplayConnections connections,
+        PairingDirectory pairing,
+        ILogger<SessionApi> logger)
     {
         _scenes = scenes;
         _screens = screens;
         _connections = connections;
+        _pairing = pairing;
+        _logger = logger;
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<PendingPairing> PendingPairings => _pairing.Pending;
+
+    /// <inheritdoc />
+    public IReadOnlyList<RefusedDevice> RefusedDevices => _pairing.Refused;
 
     /// <inheritdoc />
     public async Task<ItemId> AddItemAsync(
@@ -97,6 +113,66 @@ public sealed class SessionApi : ISessionApi, IDisposable
         {
             _gate.Release();
         }
+    }
+
+    /// <inheritdoc />
+    public Task ApprovePairingAsync(
+        DeviceId device,
+        string token,
+        PairingRole role = PairingRole.Display,
+        CancellationToken cancellationToken = default)
+    {
+        // No gate here, and that is not an oversight: these five touch the pairing directory,
+        // which guards itself - not the scene state, which is what the gate serialises.
+        _ = _pairing.Approve(device, token, role);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RejectAsync(DeviceId device, CancellationToken cancellationToken = default)
+    {
+        _ = _pairing.Reject(device);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task AcceptAsOwnDeviceAsync(DeviceId device, CancellationToken cancellationToken = default)
+    {
+        _ = _pairing.AcceptAsOwnDevice(device);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task UnpairAsync(DeviceId device, CancellationToken cancellationToken = default)
+    {
+        if (_pairing.Unpair(device))
+        {
+            HubLog.Unpaired(_logger, device);
+
+            // The token is gone, so the next Hello would be refused anyway - but a connection
+            // that is already open would carry on until then. Ending it makes "unpaired" mean
+            // now rather than eventually.
+            if (_connections.TryGet(device, out var connection))
+            {
+                connection.RequestClose();
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task ClearRejectionAsync(DeviceId device, CancellationToken cancellationToken = default)
+    {
+        if (_pairing.ClearRejection(device))
+        {
+            HubLog.RejectionCleared(_logger, device);
+        }
+
+        return Task.CompletedTask;
     }
 
     public void Dispose() => _gate.Dispose();

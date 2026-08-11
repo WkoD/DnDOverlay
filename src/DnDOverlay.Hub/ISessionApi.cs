@@ -36,4 +36,57 @@ public interface ISessionApi
 
     /// <summary>Reads a scene - what "save screen as scene" will use.</summary>
     Task<SceneState> GetSceneAsync(ScreenRef screen, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What is knocking right now - never what knocked earlier. An open request has no deadline;
+    /// it stands as long as its connection stands and vanishes with it (Part 4).
+    /// </summary>
+    IReadOnlyList<PendingPairing> PendingPairings { get; }
+
+    /// <summary>Devices that were turned away, with the reason and when they were last seen.</summary>
+    IReadOnlyList<RefusedDevice> RefusedDevices { get; }
+
+    /// <summary>
+    /// Lets a waiting device in, with a token the caller has ALREADY encrypted and written.
+    /// <para>
+    /// The order is the promise, and it is why the token is a parameter rather than something
+    /// this method makes up: the control creates it, protects it, saves control.json, and only
+    /// then calls in here. The <c>Welcome</c> is sent from inside, so it cannot leave before the
+    /// file exists - a control that died in between would otherwise leave a display holding a
+    /// token nobody remembers (Part 7).
+    /// </para>
+    /// <para>
+    /// <b>Barred over <c>/ws/control</c></b>, even with a valid control token: a control device
+    /// may drive the session but not widen the circle of admitted devices, or one compromised
+    /// tablet is enough to gain a permanent foothold (Part 4).
+    /// </para>
+    /// </summary>
+    Task ApprovePairingAsync(
+        DeviceId device,
+        string token,
+        PairingRole role = PairingRole.Display,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Says no. The device stays visible with its reason instead of simply vanishing.</summary>
+    Task RejectAsync(DeviceId device, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// For a device that turned out to be a clone: tells it to take a fresh identity and pair
+    /// regularly. Also barred over <c>/ws/control</c> - it lets a device in (Part 4).
+    /// </summary>
+    Task AcceptAsOwnDeviceAsync(DeviceId device, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Withdraws a token. In M5b this grows the confirmation with consequences, because it also
+    /// discards this device's arrangements - the hub cannot address its screens afterwards
+    /// (Part 3, Part 7).
+    /// </summary>
+    Task UnpairAsync(DeviceId device, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes a rejection back - the only way out of "rejected" the DM walks himself. Without it a
+    /// mistaken "no" could only be healed at the device, with "reset pairing" on a machine that
+    /// has no keyboard (Part 4).
+    /// </summary>
+    Task ClearRejectionAsync(DeviceId device, CancellationToken cancellationToken = default);
 }

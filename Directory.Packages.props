@@ -20,6 +20,14 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
   </ItemGroup>
 
+  <ItemGroup Label="Platform">
+    <!-- DPAPI. Out of band, so it needs a package even on a Windows target framework - and it is
+         referenced by exactly one project, DnDOverlay.Platform.Windows. The architecture test
+         forbids this assembly in all five libraries by name: pairing is hub business, and a
+         ProtectedData there would compile without a murmur (Part 4, Part 11). -->
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
+  </ItemGroup>
+
   <ItemGroup Label="Imaging">
     <!-- AnyCPU, not x64: the x64 variant carries Windows natives only, which would make
          DnDOverlay.Imaging Windows-bound although it targets net10.0 (Part 5). The native

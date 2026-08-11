@@ -36,7 +36,35 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// </para>
     /// </summary>
     public int Port { get; init; } = Protocol.Protocol.DefaultPort;
+
+    /// <summary>
+    /// Every device the DM has ever allowed, with its token. This is the file the whole pairing
+    /// hangs on: without it every display would introduce itself as a stranger after one restart
+    /// of the control (Part 4, Part 7).
+    /// </summary>
+    public IReadOnlyList<KnownDevice> KnownDevices { get; init; } = [];
 }
+
+/// <summary>
+/// One paired device as it sits in <c>control.json</c>.
+/// </summary>
+/// <param name="Token">
+/// Encrypted, never in the clear. On a display PC with autologon the file is readable by anyone
+/// who sits at the keyboard for a minute or copies the profile - and the same argument holds for
+/// the DM's machine (Part 4). What protects it is <see cref="ISecretStore"/>; that it is DPAPI
+/// underneath is not this file's business.
+/// </param>
+/// <param name="Role">
+/// What the token is good for. A display token presented at the control endpoint is refused, and
+/// the other way round - kept here, in our own file, rather than parsed out of the token
+/// (Part 4).
+/// </param>
+public sealed record KnownDevice(
+    Guid DeviceId,
+    string Name,
+    PairingRole Role,
+    string Token,
+    DateTimeOffset PairedAt);
 
 /// <summary>
 /// <c>display.json</c> - what a display PC knows about itself, at a fixed location that cannot
@@ -79,6 +107,17 @@ public sealed record DisplayConfiguration : IConfigurationDocument
     /// allowed and cleared only by "reset pairing" at the device (Part 4, Part 6).
     /// </summary>
     public Guid? ControlId { get; init; }
+
+    /// <summary>
+    /// The device token, encrypted through <see cref="ISecretStore"/> - never in the clear, for
+    /// the same reason as on the control side: this machine runs with autologon in a living room
+    /// (Part 4, Part 6).
+    /// <para>
+    /// It travels with <see cref="ControlId"/>: a token without the control it belongs to would
+    /// be offered to the first hub that answers.
+    /// </para>
+    /// </summary>
+    public string? Token { get; init; }
 }
 
 /// <summary>

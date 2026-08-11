@@ -19,12 +19,15 @@ public sealed class DisplayConnection : IAsyncDisposable
 {
     private readonly WebSocket _socket;
     private readonly ILogger _logger;
+    private readonly CancellationTokenSource _closing = new();
     private readonly Channel<ProtocolMessage> _outgoing =
         Channel.CreateBounded<ProtocolMessage>(new BoundedChannelOptions(256)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
         });
+
+    private TaskCompletionSource<bool>? _pong;
 
     public DisplayConnection(DeviceId device, WebSocket socket, IReadOnlyList<ScreenId> screens, ILogger logger)
     {
@@ -40,6 +43,58 @@ public sealed class DisplayConnection : IAsyncDisposable
 
     /// <summary>The screens this connection is responsible for - the hub addresses per connection.</summary>
     public IReadOnlyList<ScreenRef> Screens { get; }
+
+    /// <summary>Fires when this connection is being displaced by a newer one for the same device.</summary>
+    public CancellationToken Closing => _closing.Token;
+
+    /// <summary>
+    /// Asks this connection whether it is still there, and waits a moment for the answer.
+    /// <para>
+    /// This is the probe that tells a clone from a crashed display coming straight back - the two
+    /// are indistinguishable from the outside. Silence means it was the same machine and this
+    /// connection gets replaced; an answer means there are two of them, and the DM decides
+    /// (Part 4).
+    /// </para>
+    /// </summary>
+    public async Task<bool> ProbeAsync(TimeSpan grace, TimeProvider time, CancellationToken cancellationToken)
+    {
+        var pong = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Interlocked.Exchange(ref _pong, pong);
+
+        if (!TrySend(new PingMessage()))
+        {
+            return false;
+        }
+
+        try
+        {
+            return await pong.Task.WaitAsync(grace, time, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Called by the read loop when a <c>Pong</c> comes in.</summary>
+    public void NotePong() => Interlocked.Exchange(ref _pong, null)?.TrySetResult(true);
+
+    /// <summary>
+    /// Ends this connection because a newer one took over the device. The endpoint that owns it
+    /// notices through <see cref="Closing"/> and cleans up - nobody reaches into another
+    /// endpoint's socket.
+    /// </summary>
+    public void RequestClose()
+    {
+        if (!_closing.IsCancellationRequested)
+        {
+            _closing.Cancel();
+        }
+    }
 
     /// <summary>
     /// Queues a message. Returns <see langword="false"/> when the queue is closed, which happens
@@ -74,6 +129,7 @@ public sealed class DisplayConnection : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _outgoing.Writer.TryComplete();
+        _closing.Dispose();
 
         if (_socket.State == WebSocketState.Open)
         {

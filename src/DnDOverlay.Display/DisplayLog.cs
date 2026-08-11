@@ -4,8 +4,15 @@ using Microsoft.Extensions.Logging;
 namespace DnDOverlay.Display;
 
 /// <summary>
-/// The display range, 3000–3999. Numbers are global, strictly ascending within their range and
-/// never reused; the catalogue lives in <c>docs/protocol.md</c> (Part 8).
+/// The display application's log messages. They do not all sit in one range, and that is the
+/// rule rather than an exception: <b>the range follows the subject of the sentence, never the
+/// assembly it is written in</b> (Part 8). What is on a screen is display (3000), what this
+/// process does to itself is operations (4000), and who is talking to whom - pairing included -
+/// is connection (1000), the same range the hub writes into.
+/// <para>
+/// Numbers are global, strictly ascending within their range and never reused; the catalogue
+/// lives in <c>docs/protocol.md</c>.
+/// </para>
 /// </summary>
 internal static partial class DisplayLog
 {
@@ -77,4 +84,47 @@ internal static partial class DisplayLog
         Message = "display.json was unreadable. Set aside as {SetAside}; this device starts with "
                   + "a new identity and has to be paired again - or reassigned in the control.")]
     internal static partial void ConfigurationReplaced(ILogger logger, string setAside);
+
+    /// <summary>
+    /// Connection range, 1033 onwards: pairing seen from the device. Same range as the hub's,
+    /// because it is the same subject - who is talking to whom (Part 8).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1033,
+        Level = LogLevel.Information,
+        Message = "Waiting for the DM to allow this device. Pairing code {PairingCode}.")]
+    internal static partial void PairingPending(ILogger logger, string pairingCode);
+
+    [LoggerMessage(
+        EventId = 1034,
+        Level = LogLevel.Information,
+        Message = "Paired with control {ControlId}; the token is stored.")]
+    internal static partial void Paired(ILogger logger, Guid controlId);
+
+    /// <summary>
+    /// The binding is deliberately NOT dropped on this. Doing it automatically would turn a
+    /// convenience into an attack: the beacon is unauthenticated, so a forged control that
+    /// answers every Hello this way would unbind every display in the house and could then adopt
+    /// them itself. It takes a tap at the device - and that tap is the hurdle an attacker on the
+    /// network cannot take (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1035,
+        Level = LogLevel.Warning,
+        Message = "This control does not know this device any more. The pairing stays until it is "
+                  + "reset AT the device.")]
+    internal static partial void TokenUnknown(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 1036,
+        Level = LogLevel.Warning,
+        Message = "The DeviceId collided with a device that is already connected - taking a fresh "
+                  + "identity {DeviceId} and pairing again.")]
+    internal static partial void FreshIdentityTaken(ILogger logger, Guid deviceId);
+
+    [LoggerMessage(
+        EventId = 1037,
+        Level = LogLevel.Warning,
+        Message = "The control turned this device away: {Reason}.")]
+    internal static partial void PairingRefused(ILogger logger, string reason);
 }

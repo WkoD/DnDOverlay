@@ -27,6 +27,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The same hand-written clock the configuration tests use, linked rather than copied.
+         Without it the rate limit could only be tested in the direction that refuses - and the
+         direction that matters more is the one that lets go again: an unpaired display on weak
+         Wi-Fi reaches twenty attempts by itself, and a window that never resets would lock it
+         out for good (Part 4). One shared file beats a second implementation that drifts. -->
+    <Compile Include="..\DnDOverlay.Core.Tests\Configuration\ManualTime.cs" Link="ManualTime.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
