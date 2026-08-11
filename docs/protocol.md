@@ -139,6 +139,7 @@ identifier, which at least looks unknown.
 | 1000–1999 | connection |
 | 2000–2999 | assets |
 | 3000–3999 | display |
+| 4000–4999 | operations |
 
 ### 1000–1999 · Connection
 
@@ -176,6 +177,22 @@ identifier, which at least looks unknown.
 | 3006 | `AssetDecoded` | Information |
 
 **Next free: 3007.**
+
+### 4000–4999 · Operations
+
+What a process does to itself: where it stores things, which port it took, that it is going
+away. The fourth range exists because a data root is none of the three above — and putting it
+into one of them would have made the range names stop meaning anything.
+
+| Id | Name | Level | Where |
+|---|---|---|---|
+| 4001 | `DataRootChosen` | Information | control |
+| 4002 | `DataRootChosen` | Information | display |
+
+**Next free: 4003.**
+
+Both applications say the same thing and still carry their own number: the identifier is the
+contract, and a shared one would make a line in the file ambiguous about who wrote it.
 
 ### Falling back, never falling over
 

@@ -9,9 +9,9 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- See Control: LibraryImport generates unsafe marshalling code. The display needs it
-         more than any other project - EnumDisplayMonitors, GetDpiForMonitor, SetWindowLong,
-         RegisterHotKey, SetThreadExecutionState all live here (Part 6). -->
+    <!-- LibraryImport generates unsafe marshalling code. What remains here are the calls that
+         CHANGE our own overlay window - styles and placement; everything the operating system
+         is merely asked moved to Platform.Windows (Part 2). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+    <ProjectReference Include="..\DnDOverlay.Platform.Windows\DnDOverlay.Platform.Windows.csproj" />
     <ProjectReference Include="..\DnDOverlay.Transport\DnDOverlay.Transport.csproj" />
   </ItemGroup>
 

@@ -21,6 +21,7 @@
     <ProjectReference Include="..\DnDOverlay.Hub\DnDOverlay.Hub.csproj" />
     <ProjectReference Include="..\DnDOverlay.Campaign\DnDOverlay.Campaign.csproj" />
     <ProjectReference Include="..\DnDOverlay.Imaging\DnDOverlay.Imaging.csproj" />
+    <ProjectReference Include="..\DnDOverlay.Platform.Windows\DnDOverlay.Platform.Windows.csproj" />
     <ProjectReference Include="..\DnDOverlay.Transport\DnDOverlay.Transport.csproj" />
   </ItemGroup>
 

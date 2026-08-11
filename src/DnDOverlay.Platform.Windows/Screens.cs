@@ -1,30 +1,44 @@
 using DnDOverlay.Core;
 
-namespace DnDOverlay.Display;
+namespace DnDOverlay.Platform.Windows;
 
 /// <summary>One monitor as Windows reports it, plus the rectangle an overlay has to cover.</summary>
 /// <param name="Bounds">In PHYSICAL pixels, which is what <c>SetWindowPos</c> speaks.</param>
-internal sealed record MonitorInfo(ScreenInfo Screen, int Left, int Top, int Width, int Height)
+public sealed record MonitorInfo(ScreenInfo Screen, int Left, int Top, int Width, int Height)
 {
-    internal (int X, int Y, int Width, int Height) Bounds => (Left, Top, Width, Height);
+    public (int X, int Y, int Width, int Height) Bounds => (Left, Top, Width, Height);
 }
 
 /// <summary>
-/// Finding the screens. This is the one piece of the display that is genuinely platform bound,
-/// and it stays in the application for exactly that reason.
+/// Finding the screens - and the single reason this project exists.
+/// <para>
+/// The control needs this as much as the display: it has to know which screens its own window
+/// covers, because an always-on-top overlay must not land on the DM's stage (Part 2). Both
+/// processes therefore derive the <see cref="ScreenId"/> HERE, from the same code. Were the
+/// derivation written twice, one of the small decisions would eventually differ - which level
+/// of <c>EnumDisplayDevices</c>, with or without <c>EDD_GET_DEVICE_INTERFACE_NAME</c>, trimmed,
+/// lower-cased - and the result would not be an error but a comparison that never matches:
+/// the control suppresses nothing and covers its own stage. No test can catch that, because a
+/// test in one process proves nothing about a second one.
+/// </para>
 /// </summary>
-internal static unsafe class ScreenEnumeration
+public static unsafe class Screens
 {
     /// <summary>
     /// Every monitor attached to the desktop, with its device instance path as
     /// <see cref="ScreenId"/>.
     /// <para>
-    /// The identifier comes from the device INTERFACE name, not from the enumeration index:
-    /// indexes shift when a monitor is plugged or unplugged, and then every stored screen
-    /// setting would point at the wrong panel (Part 3).
+    /// The identifier comes from the device INTERFACE name, never from the enumeration index.
+    /// Indexes shift when a monitor is plugged or unplugged - measured, not assumed: after
+    /// reattaching the touch table it moved from index 2 to index 1 with the desk arrangement
+    /// unchanged (M0). Every stored screen setting would then point at the wrong panel (Part 3).
     /// </para>
     /// </summary>
-    internal static IReadOnlyList<MonitorInfo> Enumerate(string deviceName)
+    /// <param name="deviceName">
+    /// The device name the labels are derived from - the DEVICE name, not the raw machine name,
+    /// so screens inherit the uniqueness of their device (Part 3).
+    /// </param>
+    public static IReadOnlyList<MonitorInfo> Enumerate(string deviceName)
     {
         var monitors = new List<MonitorInfo>();
 

@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What the operating system is ASKED, in one place - screen enumeration and the ScreenId,
+       DPI, DPAPI, the single-instance mutex, the data root default, reading firewall rules,
+       the active network profile, RegisterHotKey, SetThreadExecutionState.
+
+       Why a project of its own rather than a folder in each application: the ScreenId is
+       derived here, and BOTH processes need it - the display to find its screens, the control
+       to know which screen its own window covers. They have to form character-identical
+       identifiers from the same hardware, and no test can catch a divergence, because a test
+       in one process proves nothing about a second one. Sameness is only obtainable by
+       construction (Part 2).
+
+       What CHANGES a window of our own stays with that window: overlay styles, HwndSource
+       hooks, the WM_DPICHANGED correction, asserting topmost, tray, SessionEnding.
+
+       UseWPF is off deliberately. The target framework is Windows-bound because the calls are,
+       not because there is a user interface here - and without WPF the boundary above is a
+       property of the build rather than a habit. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <!-- LibraryImport generates unsafe marshalling code. This is where most of it now lives. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
+  </ItemGroup>
+
+</Project>

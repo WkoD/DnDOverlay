@@ -2,6 +2,7 @@ using System.Windows;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
+using DnDOverlay.Platform.Windows;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,11 +23,20 @@ namespace DnDOverlay.Control;
 public sealed partial class App : Application
 {
     private WebApplication? _host;
+    private DataRoot _dataRoot;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
         base.OnStartup(e);
+
+        var options = ControlOptions.Parse(e.Args);
+
+        // Handed in, never fetched from inside a library (rule 10). Every further place -
+        // control.json, the campaign folder, the logs - is derived from this one value, and
+        // --data moves all of them at once so a development run never touches the installed
+        // copy on the same machine (Part 9).
+        _dataRoot = WindowsDataRoot.Resolve(options.DataRoot);
 
         var asset = DemoAsset.Create();
         var builder = WebApplication.CreateBuilder();
@@ -50,6 +60,10 @@ public sealed partial class App : Application
         _host.MapDnDOverlayHub();
 
         await _host.StartAsync().ConfigureAwait(true);
+
+        var logger = _host.Services.GetRequiredService<ILogger<App>>();
+
+        ControlLog.DataRootChosen(logger, _dataRoot.Path);
 
         var window = new MainWindow(
             _host.Services.GetRequiredService<ScreenCatalog>(),

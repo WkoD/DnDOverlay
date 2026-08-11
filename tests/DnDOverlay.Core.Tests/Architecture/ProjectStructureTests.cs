@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+
 namespace DnDOverlay.Core.Tests.Architecture;
 
 /// <summary>
@@ -103,12 +105,64 @@ public sealed class ProjectStructureTests
     }
 
     [Fact]
-    public void The_two_applications_target_Windows()
+    public void Everything_Windows_bound_says_so_in_its_target_framework()
     {
-        foreach (var name in RepositoryLayout.Applications)
+        foreach (var name in RepositoryLayout.WindowsBound)
         {
             var framework = Assert.Single(RepositoryLayout.SourceProjects[name].TargetFrameworks);
             Assert.Equal("net10.0-windows", framework);
+        }
+    }
+
+    /// <summary>
+    /// The platform project answers questions; it has no window of its own. Without this,
+    /// "what changes a window stays with its application" would be a habit rather than a
+    /// property of the build - and the first WPF type dragged in here would take the boundary
+    /// with it (Part 2).
+    /// </summary>
+    [Fact]
+    public void The_platform_project_carries_no_user_interface()
+    {
+        foreach (var name in RepositoryLayout.Platform)
+        {
+            var project = XDocument.Load(RepositoryLayout.SourceProjects[name].Path);
+
+            var useWpf = project.Descendants("UseWPF").Select(element => element.Value).ToList();
+            var useForms = project.Descendants("UseWindowsForms").Select(element => element.Value);
+
+            Assert.Equal(["false"], useWpf);
+            Assert.Empty(useForms);
+        }
+    }
+
+    /// <summary>
+    /// The one rule that makes the third category worth having: the platform project is for the
+    /// applications, and for nobody else. A library that reached into it would be Windows-bound
+    /// through the back door, and a test project that did would stop the Linux job dead.
+    /// </summary>
+    [Fact]
+    public void Neither_a_library_nor_a_test_reaches_into_the_platform_project()
+    {
+        var offenders = RepositoryLayout.Libraries
+            .Select(name => RepositoryLayout.SourceProjects[name])
+            .Concat(RepositoryLayout.TestProjects.Values)
+            .Where(project => project.ProjectReferences.Intersect(
+                RepositoryLayout.Platform, StringComparer.Ordinal).Any())
+            .Select(project => project.Name)
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    /// <summary>The platform project may know Core and nothing else - it produces Core types.</summary>
+    [Fact]
+    public void The_platform_project_references_only_Core()
+    {
+        foreach (var name in RepositoryLayout.Platform)
+        {
+            Assert.All(
+                RepositoryLayout.SourceProjects[name].ProjectReferences,
+                reference => Assert.Equal("DnDOverlay.Core", reference));
         }
     }
 
@@ -116,6 +170,7 @@ public sealed class ProjectStructureTests
     public void Nothing_else_lives_in_src()
     {
         var expected = RepositoryLayout.Libraries
+            .Concat(RepositoryLayout.Platform)
             .Concat(RepositoryLayout.Applications)
             .OrderBy(name => name, StringComparer.Ordinal);
 
@@ -165,8 +220,8 @@ public sealed class ProjectStructureTests
     /// The Linux job builds through a solution filter, so the filter is what decides which
     /// projects are checked on the second platform. If a new library were missing from it,
     /// the job would stay green and simply stop looking - the quietest way for a net to fail.
-    /// The rule is therefore: the filter carries everything the solution carries, except the
-    /// two Windows applications (Part 2).
+    /// The rule is therefore: the filter carries everything the solution carries, except what is
+    /// Windows-bound - the two applications and the platform project (Part 2).
     /// </summary>
     [Fact]
     public void The_Linux_filter_covers_every_platform_neutral_project()
@@ -175,7 +230,7 @@ public sealed class ProjectStructureTests
             Path.Combine(RepositoryLayout.RepositoryRoot.FullName, "DnDOverlay.Libraries.slnf"));
 
         var shouldBeCovered = RepositoryLayout.SourceProjects.Values
-            .Where(project => !RepositoryLayout.Applications.Contains(project.Name, StringComparer.Ordinal))
+            .Where(project => !RepositoryLayout.WindowsBound.Contains(project.Name, StringComparer.Ordinal))
             .Concat(RepositoryLayout.TestProjects.Values)
             .Select(project => project.Name)
             .ToList();
@@ -186,11 +241,11 @@ public sealed class ProjectStructureTests
 
         Assert.Empty(missing);
 
-        // And the other way round: the applications must not be in it. They target
+        // And the other way round: nothing Windows-bound may be in it. Those projects target
         // net10.0-windows and fail on Linux with NETSDK1100 - measured, not assumed.
-        foreach (var application in RepositoryLayout.Applications)
+        foreach (var windowsBound in RepositoryLayout.WindowsBound)
         {
-            Assert.DoesNotContain(application + ".csproj", filter, StringComparison.Ordinal);
+            Assert.DoesNotContain(windowsBound + ".csproj", filter, StringComparison.Ordinal);
         }
     }
 

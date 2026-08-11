@@ -6,7 +6,17 @@ namespace DnDOverlay.Display;
 /// What the command line can say. Everything here is a START argument and never a stored value -
 /// the real configuration lives in display.json from M1b (Part 6).
 /// </summary>
-internal sealed record DisplayOptions(string Host, int Port, string DeviceName, bool Windowed)
+/// <param name="DataRoot">
+/// <c>--data</c>, or null for the installed location. A development switch and nothing else: it
+/// appears in no installer and in no file, and it cannot be set remotely - it decides where the
+/// configuration lies, so it could not live in the configuration (Part 9).
+/// </param>
+internal sealed record DisplayOptions(
+    string Host,
+    int Port,
+    string DeviceName,
+    bool Windowed,
+    string? DataRoot)
 {
     internal static DisplayOptions Parse(IReadOnlyList<string> args)
     {
@@ -14,6 +24,7 @@ internal sealed record DisplayOptions(string Host, int Port, string DeviceName, 
         var port = Protocol.DefaultPort;
         var name = Environment.MachineName;
         var windowed = false;
+        string? dataRoot = null;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -39,11 +50,15 @@ internal sealed record DisplayOptions(string Host, int Port, string DeviceName, 
                     name = args[++i];
                     break;
 
+                case "--data" when i + 1 < args.Count:
+                    dataRoot = args[++i];
+                    break;
+
                 default:
                     break;
             }
         }
 
-        return new DisplayOptions(host, port, name, windowed);
+        return new DisplayOptions(host, port, name, windowed, dataRoot);
     }
 }

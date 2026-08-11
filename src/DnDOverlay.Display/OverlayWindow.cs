@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using DnDOverlay.Core;
+using DnDOverlay.Platform.Windows;
 using CoreRect = DnDOverlay.Core.Rect;
 
 namespace DnDOverlay.Display;

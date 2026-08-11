@@ -20,12 +20,31 @@ internal static class RepositoryLayout
         "DnDOverlay.Transport",
     ];
 
-    /// <summary>The two WPF applications - the only projects that may be Windows-bound.</summary>
+    /// <summary>
+    /// The third category, and the reason it exists: what the operating system is ASKED lives
+    /// here, for both applications, so that two processes derive character-identical ScreenIds
+    /// from the same hardware (Part 2).
+    /// <para>
+    /// It has to be a category rather than an exception. <see cref="Libraries"/> and
+    /// <see cref="Applications"/> alone would force the Linux filter rule to demand this project
+    /// be built there, where it fails with NETSDK1100 - and an exception inside a rule explains
+    /// itself to nobody half a year later.
+    /// </para>
+    /// </summary>
+    internal static readonly string[] Platform =
+    [
+        "DnDOverlay.Platform.Windows",
+    ];
+
+    /// <summary>The two WPF applications.</summary>
     internal static readonly string[] Applications =
     [
         "DnDOverlay.Control",
         "DnDOverlay.Display",
     ];
+
+    /// <summary>Everything under src/ that is Windows-bound - the platform project and the apps.</summary>
+    internal static readonly string[] WindowsBound = [.. Platform, .. Applications];
 
     internal static DirectoryInfo RepositoryRoot { get; } = FindRepositoryRoot();
 

@@ -44,4 +44,20 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Asset {AssetId} decoded at {Width}×{Height}.")]
     internal static partial void AssetDecoded(ILogger logger, AssetId assetId, int width, int height);
+
+    /// <summary>
+    /// Said out loud on purpose: a development run and an installed copy differ in exactly this
+    /// one path, and a run that quietly used the wrong root would be indistinguishable from a
+    /// correct one until it had already touched the DM's own configuration (Part 9).
+    /// <para>
+    /// 4000–4999 is the operations range - what the process does to itself. It is the fourth
+    /// range beside connection, assets and display, and it exists because a data root is none
+    /// of those three (Part 8).
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4002,
+        Level = LogLevel.Information,
+        Message = "Data root: {Path}")]
+    internal static partial void DataRootChosen(ILogger logger, string path);
 }

@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
+using DnDOverlay.Platform.Windows;
 using DnDOverlay.Transport;
 using Microsoft.Extensions.Logging;
 
@@ -29,6 +30,7 @@ public sealed partial class App : Application, IDisposable
     private readonly CancellationTokenSource _shutdown = new();
 
     private ILogger<App> _logger = null!;
+    private DataRoot _dataRoot;
     private HttpClient _http = null!;
     private AssetClient _assets = null!;
     private Uri _hubHttp = null!;
@@ -42,6 +44,11 @@ public sealed partial class App : Application, IDisposable
 
         var options = DisplayOptions.Parse(e.Args);
 
+        // Handed in, never fetched from inside a library (rule 10). From here every further
+        // place - display.json, the image store, the logs - is derived from this one value, and
+        // --data moves all of them at once (Part 9).
+        _dataRoot = WindowsDataRoot.Resolve(options.DataRoot);
+
         using var loggers = LoggerFactory.Create(builder => builder
             .SetMinimumLevel(LogLevel.Debug)
             .AddDebug()
@@ -54,7 +61,9 @@ public sealed partial class App : Application, IDisposable
         _assets = new AssetClient(_http);
         _hubHttp = new Uri($"http://{options.Host}:{options.Port}/");
 
-        var monitors = ScreenEnumeration.Enumerate(options.DeviceName);
+        DisplayLog.DataRootChosen(_logger, _dataRoot.Path);
+
+        var monitors = Screens.Enumerate(options.DeviceName);
 
         if (monitors.Count == 0)
         {

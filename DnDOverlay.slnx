@@ -6,6 +6,7 @@
     <Project Path="src/DnDOverlay.Display/DnDOverlay.Display.csproj" />
     <Project Path="src/DnDOverlay.Hub/DnDOverlay.Hub.csproj" />
     <Project Path="src/DnDOverlay.Imaging/DnDOverlay.Imaging.csproj" />
+    <Project Path="src/DnDOverlay.Platform.Windows/DnDOverlay.Platform.Windows.csproj" />
     <Project Path="src/DnDOverlay.Transport/DnDOverlay.Transport.csproj" />
   </Folder>
   <Folder Name="/tests/">
