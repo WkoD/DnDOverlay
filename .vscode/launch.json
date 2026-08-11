@@ -8,6 +8,15 @@
   //
   // The installed Control has to be closed: the single-instance mutex does not allow a
   // second one, it brings the running window to the front.
+  //
+  // THE COMPOUND BUILDS ONCE, AND THAT IS ALL THE FOUR ENTRIES BELOW ARE FOR.
+  // A preLaunchTask on both members runs "build" twice per F5. That is tidiness, not a fix:
+  // measured, the second run is harmless - an incremental build with nothing to do takes about a
+  // second and rewrites no output file, so it never meets a file the first process is holding.
+  // The compound therefore builds once, up front, and launches two configurations that build
+  // nothing themselves; those two are hidden from the dropdown. The visible Control and Display
+  // keep their own preLaunchTask, because in the two-machine run each machine carries only one
+  // role (M1c).
 
   "configurations": [
     {
@@ -31,15 +40,45 @@
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
       "stopAtEntry": false
+    },
+
+    // Members of the compound. Identical to the two above except that they build nothing -
+    // the compound has already done it. Hidden, so the dropdown keeps offering three choices.
+    {
+      "name": "Control (compound member)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/DnDOverlay.Control/bin/Debug/net10.0-windows/DnDOverlay.Control.exe",
+      "args": ["--windowed", "--data", "dev-data"],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "presentation": { "hidden": true }
+    },
+    {
+      "name": "Display (compound member)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/DnDOverlay.Display/bin/Debug/net10.0-windows/DnDOverlay.Display.exe",
+      "args": ["--windowed", "--data", "dev-data"],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "presentation": { "hidden": true }
     }
   ],
 
   // The everyday case. The single configurations above exist for the two-machine run in
   // M1c, where each machine carries only one role.
+  //
+  // The Control is listed first on purpose: the Display connects once and gives up when it
+  // fails - the reconnect backoff is M1b (DisplayClient). Should it still lose the race, the
+  // remedy is to restart the Display alone; the console says "ConnectFailed".
   "compounds": [
     {
       "name": "Control + Display",
-      "configurations": ["Control", "Display"],
+      "preLaunchTask": "build",
+      "configurations": ["Control (compound member)", "Display (compound member)"],
       "stopAll": true
     }
   ]
