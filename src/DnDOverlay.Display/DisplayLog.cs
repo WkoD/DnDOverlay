@@ -60,4 +60,21 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Data root: {Path}")]
     internal static partial void DataRootChosen(ILogger logger, string path);
+
+    [LoggerMessage(
+        EventId = 4005,
+        Level = LogLevel.Information,
+        Message = "No display.json yet - created one, device {DeviceId}.")]
+    internal static partial void ConfigurationCreated(ILogger logger, Guid deviceId);
+
+    /// <summary>
+    /// A warning, not a note: this costs the device its identity, and it will introduce itself
+    /// to the control as a new, unpaired device (Part 6).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4006,
+        Level = LogLevel.Warning,
+        Message = "display.json was unreadable. Set aside as {SetAside}; this device starts with "
+                  + "a new identity and has to be paired again - or reassigned in the control.")]
+    internal static partial void ConfigurationReplaced(ILogger logger, string setAside);
 }

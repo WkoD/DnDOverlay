@@ -1,6 +1,6 @@
 using System.Windows;
 using DnDOverlay.Core;
-using DnDOverlay.Core.Protocol;
+using DnDOverlay.Core.Configuration;
 using DnDOverlay.Hub;
 using DnDOverlay.Platform.Windows;
 using Microsoft.AspNetCore.Builder;
@@ -20,9 +20,10 @@ namespace DnDOverlay.Control;
 /// lifetime to reason about.
 /// </para>
 /// </summary>
-public sealed partial class App : Application
+public sealed partial class App : Application, IDisposable
 {
     private WebApplication? _host;
+    private ConfigurationFile<ControlConfiguration>? _configuration;
     private DataRoot _dataRoot;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -38,6 +39,25 @@ public sealed partial class App : Application
         // copy on the same machine (Part 9).
         _dataRoot = WindowsDataRoot.Resolve(options.DataRoot);
 
+        // The clock is handed in as well (rule 10). It is the second half of the same rule, and
+        // M1b is where the first timestamps appear - the debounce here, the file log and the
+        // device time next. A single DateTime.Now that settles in now would make two acceptance
+        // steps unautomatable later (Part 10, Part 11).
+        _configuration = new ConfigurationFile<ControlConfiguration>(
+            _dataRoot.ControlConfiguration,
+            ConfigurationJsonContext.Default.ControlConfiguration,
+            TimeProvider.System);
+
+        var loaded = _configuration.Load(() => new ControlConfiguration());
+
+        // Written back at once when it did not exist: the ControlId has to survive the first
+        // restart, or every display would find a stranger where its control used to be (Part 4).
+        if (loaded.Outcome is not ConfigurationOutcome.Loaded)
+        {
+            _configuration.Save(loaded.Value);
+            _configuration.Flush();
+        }
+
         var asset = DemoAsset.Create();
         var builder = WebApplication.CreateBuilder();
 
@@ -49,9 +69,16 @@ public sealed partial class App : Application
         // Kestrel listens on ALL interfaces. The selection is made by the firewall rule anyway,
         // and binding to "the right" address breaks the moment the Surface goes into its dock
         // (Part 4).
-        builder.WebHost.UseUrls($"http://0.0.0.0:{Protocol.DefaultPort}");
+        builder.WebHost.UseUrls($"http://0.0.0.0:{loaded.Value.Port}");
 
-        builder.Services.AddDnDOverlayHub();
+        // ControlId and port are START values, not part of any later snapshot: they stand
+        // before the first line of state exists (Part 7).
+        builder.Services.AddDnDOverlayHub(hub =>
+        {
+            hub.ControlId = loaded.Value.ControlId;
+            hub.Port = loaded.Value.Port;
+        });
+
         builder.Services.AddSingleton<IAssetSource>(asset);
 
         _host = builder.Build();
@@ -64,12 +91,13 @@ public sealed partial class App : Application
         var logger = _host.Services.GetRequiredService<ILogger<App>>();
 
         ControlLog.DataRootChosen(logger, _dataRoot.Path);
+        Report(logger, loaded);
 
         var window = new MainWindow(
             _host.Services.GetRequiredService<ScreenCatalog>(),
             _host.Services.GetRequiredService<ISessionApi>(),
             asset,
-            new Uri($"http://{Environment.MachineName}:{Protocol.DefaultPort}/"));
+            new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"));
 
         MainWindow = window;
         window.Show();
@@ -77,6 +105,10 @@ public sealed partial class App : Application
 
     protected override async void OnExit(ExitEventArgs e)
     {
+        // Anything outstanding goes to disk before the process does. SessionEnding gets the
+        // same treatment in M6, when the tray and the close dialog arrive (Part 6).
+        Dispose();
+
         if (_host is not null)
         {
             await _host.StopAsync().ConfigureAwait(true);
@@ -84,5 +116,31 @@ public sealed partial class App : Application
         }
 
         base.OnExit(e);
+    }
+
+    public void Dispose() => _configuration?.Dispose();
+
+    /// <summary>
+    /// Says what reading the file did. A replaced configuration must be visible, not quiet: the
+    /// control keeps known devices and their tokens in it, so a replacement means every display
+    /// has to be paired again - and being told that at the table is the difference between a
+    /// puzzle and a task (Part 6).
+    /// </summary>
+    private static void Report(ILogger logger, ConfigurationLoad<ControlConfiguration> loaded)
+    {
+        switch (loaded.Outcome)
+        {
+            case ConfigurationOutcome.Created:
+                ControlLog.ConfigurationCreated(logger, loaded.Value.ControlId);
+                break;
+
+            case ConfigurationOutcome.Replaced:
+                ControlLog.ConfigurationReplaced(logger, loaded.SetAside ?? "(not kept)");
+                break;
+
+            case ConfigurationOutcome.Loaded:
+            default:
+                break;
+        }
     }
 }

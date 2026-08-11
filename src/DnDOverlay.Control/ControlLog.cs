@@ -20,4 +20,22 @@ internal static partial class ControlLog
         Level = LogLevel.Information,
         Message = "Data root: {Path}")]
     internal static partial void DataRootChosen(ILogger logger, string path);
+
+    [LoggerMessage(
+        EventId = 4003,
+        Level = LogLevel.Information,
+        Message = "No control.json yet - created one, control {ControlId}.")]
+    internal static partial void ConfigurationCreated(ILogger logger, Guid controlId);
+
+    /// <summary>
+    /// Loud on purpose. control.json holds the known devices and their tokens, so a replacement
+    /// means every display has to be paired again - and hearing that beats discovering it at
+    /// the table (Part 6).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4004,
+        Level = LogLevel.Warning,
+        Message = "control.json was unreadable. Set aside as {SetAside}; starting with defaults, "
+                  + "so paired devices have to be allowed again.")]
+    internal static partial void ConfigurationReplaced(ILogger logger, string setAside);
 }

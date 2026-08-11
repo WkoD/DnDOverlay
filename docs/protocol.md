@@ -134,12 +134,19 @@ strictly ascending within a range.
 would render a *plausible but wrong* line from its old catalogue entry — worse than an unknown
 identifier, which at least looks unknown.
 
-| Range | Subject |
-|---|---|
-| 1000–1999 | connection |
-| 2000–2999 | assets |
-| 3000–3999 | display |
-| 4000–4999 | operations |
+| Range | Subject | The question it answers |
+|---|---|---|
+| 1000–1999 | connection | *who is talking to whom, and does it still work?* |
+| 2000–2999 | assets | *what happened to this image on its way in or out?* |
+| 3000–3999 | display | *what is on a screen, and why is it or is it not?* |
+| 4000–4999 | operations | *what is the process doing to itself?* |
+
+The third column is there so the range of a new message is read off rather than argued about.
+Where two of them seem to fit, the **subject of the sentence** decides: a failed asset download
+is an asset (2000) even though it travelled over the connection; a display that drops a patch
+for a screen it does not have is display (3000) even though the patch arrived over the wire;
+a data root, a taken port and a shutdown are operations (4000) even though they are written by
+the same application that draws.
 
 ### 1000–1999 · Connection
 

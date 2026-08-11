@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Configuration;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Platform.Windows;
 using DnDOverlay.Transport;
@@ -30,6 +31,7 @@ public sealed partial class App : Application, IDisposable
     private readonly CancellationTokenSource _shutdown = new();
 
     private ILogger<App> _logger = null!;
+    private ConfigurationFile<DisplayConfiguration>? _configuration;
     private DataRoot _dataRoot;
     private HttpClient _http = null!;
     private AssetClient _assets = null!;
@@ -49,21 +51,46 @@ public sealed partial class App : Application, IDisposable
         // --data moves all of them at once (Part 9).
         _dataRoot = WindowsDataRoot.Resolve(options.DataRoot);
 
+        // The clock is handed in too (rule 10) - the debounce below runs on it, which is what
+        // makes "one write for twenty changes" a test rather than a stopwatch.
+        _configuration = new ConfigurationFile<DisplayConfiguration>(
+            _dataRoot.DisplayConfiguration,
+            ConfigurationJsonContext.Default.DisplayConfiguration,
+            TimeProvider.System);
+
+        var loaded = _configuration.Load(() => new DisplayConfiguration());
+
+        // Written back at once when it did not exist: from here the DeviceId has to survive
+        // every restart, or this machine would introduce itself as a new device each morning
+        // and the DM would collect card corpses in the device list (Part 4, Part 7).
+        if (loaded.Outcome is not ConfigurationOutcome.Loaded)
+        {
+            _configuration.Save(loaded.Value);
+            _configuration.Flush();
+        }
+
+        // The command line wins for this session, the stored value fills the gap. Neither
+        // overwrites the file: what --host says is a start argument, not a change of
+        // configuration (Part 9).
+        var host = options.Host ?? loaded.Value.Host ?? "localhost";
+        var deviceName = options.DeviceName ?? loaded.Value.DeviceName ?? Environment.MachineName;
+
         using var loggers = LoggerFactory.Create(builder => builder
             .SetMinimumLevel(LogLevel.Debug)
             .AddDebug()
             .AddSimpleConsole());
 
         _logger = loggers.CreateLogger<App>();
-        _device = new DeviceId(Guid.NewGuid());
+        _device = new DeviceId(loaded.Value.DeviceId);
 
         _http = new HttpClient();
         _assets = new AssetClient(_http);
-        _hubHttp = new Uri($"http://{options.Host}:{options.Port}/");
+        _hubHttp = new Uri($"http://{host}:{options.Port}/");
 
         DisplayLog.DataRootChosen(_logger, _dataRoot.Path);
+        Report(_logger, loaded);
 
-        var monitors = Screens.Enumerate(options.DeviceName);
+        var monitors = Screens.Enumerate(deviceName);
 
         if (monitors.Count == 0)
         {
@@ -95,12 +122,12 @@ public sealed partial class App : Application, IDisposable
 
         var hello = new HelloMessage(
             _device,
-            options.DeviceName,
+            deviceName,
             typeof(App).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             Protocol.Version,
             [.. monitors.Select(monitor => monitor.Screen)]);
 
-        _ = ConnectAsync(options, hello, loggers);
+        _ = ConnectAsync(host, options.Port, hello, loggers);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -119,9 +146,40 @@ public sealed partial class App : Application, IDisposable
 
         _shutdown.Dispose();
         _http?.Dispose();
+
+        // Anything outstanding goes to disk before the process does (Part 6).
+        _configuration?.Flush();
     }
 
-    private async Task ConnectAsync(DisplayOptions options, HelloMessage hello, ILoggerFactory loggers)
+    /// <summary>
+    /// Says what reading display.json did.
+    /// <para>
+    /// A replacement is a warning and not a note: it costs the DeviceId, the token and the
+    /// screen names, so this machine reappears in the control as a NEW, unpaired device. That is
+    /// the accepted price for starting anyway - and it is healed with "reassign device", which
+    /// carries the old settings over (Part 6, Part 7). Nobody finds that path without being told
+    /// what happened.
+    /// </para>
+    /// </summary>
+    private static void Report(ILogger logger, ConfigurationLoad<DisplayConfiguration> loaded)
+    {
+        switch (loaded.Outcome)
+        {
+            case ConfigurationOutcome.Created:
+                DisplayLog.ConfigurationCreated(logger, loaded.Value.DeviceId);
+                break;
+
+            case ConfigurationOutcome.Replaced:
+                DisplayLog.ConfigurationReplaced(logger, loaded.SetAside ?? "(not kept)");
+                break;
+
+            case ConfigurationOutcome.Loaded:
+            default:
+                break;
+        }
+    }
+
+    private async Task ConnectAsync(string host, int port, HelloMessage hello, ILoggerFactory loggers)
     {
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {
@@ -129,7 +187,7 @@ public sealed partial class App : Application, IDisposable
         });
 
         var client = new DisplayClient(loggers.CreateLogger<DisplayClient>());
-        var hubUri = new Uri($"ws://{options.Host}:{options.Port}{Protocol.DisplayPath}");
+        var hubUri = new Uri($"ws://{host}:{port}{Protocol.DisplayPath}");
 
         var pump = Task.Run(() => client.RunAsync(hubUri, hello, inbox.Writer, _shutdown.Token));
 

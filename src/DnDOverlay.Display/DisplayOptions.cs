@@ -6,23 +6,28 @@ namespace DnDOverlay.Display;
 /// What the command line can say. Everything here is a START argument and never a stored value -
 /// the real configuration lives in display.json from M1b (Part 6).
 /// </summary>
+/// <param name="Host">
+/// Null when <c>--host</c> was not given. Null rather than "localhost", because "not said" and
+/// "said localhost" have to stay distinguishable: the stored host from display.json fills the
+/// gap, and a default would silently overrule it.
+/// </param>
 /// <param name="DataRoot">
 /// <c>--data</c>, or null for the installed location. A development switch and nothing else: it
 /// appears in no installer and in no file, and it cannot be set remotely - it decides where the
 /// configuration lies, so it could not live in the configuration (Part 9).
 /// </param>
 internal sealed record DisplayOptions(
-    string Host,
+    string? Host,
     int Port,
-    string DeviceName,
+    string? DeviceName,
     bool Windowed,
     string? DataRoot)
 {
     internal static DisplayOptions Parse(IReadOnlyList<string> args)
     {
-        var host = "localhost";
+        string? host = null;
         var port = Protocol.DefaultPort;
-        var name = Environment.MachineName;
+        string? name = null;
         var windowed = false;
         string? dataRoot = null;
 
