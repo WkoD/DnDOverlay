@@ -3,6 +3,7 @@ using System.Text.Json;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Core.Tests.Scene;
+using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Core.Tests.Protocol;
 
@@ -10,6 +11,13 @@ public sealed class ProtocolJsonTests
 {
     private static readonly ScreenRef Screen =
         new(new DeviceId(Guid.NewGuid()), new ScreenId(@"\\?\DISPLAY#IVM1234#5&1a2b"));
+
+    /// <summary>
+    /// Declared BEFORE <see cref="Messages"/>: static field initialisers run in declaration
+    /// order, so the other way round this is still null when the messages are built - and the
+    /// symptom is a null argument, not a compile error.
+    /// </summary>
+    private static readonly ScreenContext Context = ScreenContext.Default(new PixelSize(1920, 1080), 96);
 
     private static readonly ProtocolMessage[] Messages =
     [
@@ -22,6 +30,34 @@ public sealed class ProtocolJsonTests
         new WelcomeMessage(Guid.NewGuid(), DnDOverlay.Core.Protocol.Protocol.AssetPath),
         new SceneSnapshotMessage(Screen, Build.SceneWith(Build.Item())),
         new ScenePatchMessage(new ScenePatch([new ScreenOp(Screen, new AddItem(Build.Item()))])),
+
+        // The Hello with everything it grew in M1b: the full effective parameter set as the
+        // baseline of the two-sided configuration, and the scene the device still has - the two
+        // fields a restarting control needs to take anything over at all (Part 4).
+        new HelloMessage(
+            Screen.Device,
+            "TISCH-PC",
+            "1.0.0",
+            DnDOverlay.Core.Protocol.Protocol.Version,
+            [new ScreenInfo(Screen.Screen, "TISCH-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true)],
+            Token: "a-token",
+            PairingCode: null,
+            Settings: new ConfigUpdate(
+                [new ScreenConfigUpdate(Screen.Screen, ScreenSettings.Of(Context, "Touch table"))],
+                new DeviceSettings(LogLevel.Debug, LogLevel.Warning)),
+            Scenes: [new ScreenScene(Screen.Screen, Build.SceneWith(Build.Item()))]),
+
+        new ScreensChangedMessage(
+            [new ScreenInfo(Screen.Screen, "TISCH-PC//DISPLAY1", null, new PixelSize(3840, 2160), 144, true)]),
+
+        new ConfigUpdateMessage(new ConfigUpdate(
+            [
+                new ScreenConfigUpdate(
+                    Screen.Screen,
+                    new ScreenSettings(ParkEdge: ParkEdge.Bottom),
+                    new ScreenCommand(ScreenState.Diagnostic, SuppressReason.ControlWindow)),
+            ],
+            new DeviceSettings(ForwardAtLeast: LogLevel.Debug))),
     ];
 
     public static TheoryData<ProtocolMessage> AllMessages() => [.. Messages];
@@ -41,6 +77,8 @@ public sealed class ProtocolJsonTests
     [InlineData("Welcome")]
     [InlineData("SceneSnapshot")]
     [InlineData("ScenePatch")]
+    [InlineData("ScreensChanged")]
+    [InlineData("ConfigUpdate")]
     public void The_wire_names_are_the_ones_the_plan_promises(string wireName)
     {
         var payloads = Messages

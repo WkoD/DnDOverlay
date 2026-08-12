@@ -44,7 +44,19 @@ public static class HubEndpoints
         services.AddHostedService<DiscoveryBeacon>();
 
         services.AddSingleton<SceneStore>();
-        services.AddSingleton<ScreenCatalog>();
+
+        // Built rather than resolved, because it comes out of control.json: the wishes and the
+        // display parameters of every screen ever reported have to be there BEFORE the first
+        // device connects, or a table would come up Enabled that the DM had given back (Part 3).
+        services.AddSingleton(provider =>
+        {
+            var catalog = new ScreenCatalog();
+
+            catalog.Restore(provider.GetRequiredService<IOptions<HubOptions>>().Value.KnownScreens);
+
+            return catalog;
+        });
+
         services.AddSingleton<DisplayConnections>();
         services.AddSingleton<PairingDirectory>();
         services.AddSingleton<SessionApi>();
@@ -170,7 +182,7 @@ public static class HubEndpoints
                 return;
             }
 
-            catalog.Report(hello.DeviceId, hello.Screens);
+            Inventory(catalog, hello.DeviceId, hello.Screens, hello.Settings, logger);
 
             // A differing protocol version rejects nothing, in either direction. The control is
             // the path along which a display gets updated, so rejecting it would cut the one wire
@@ -203,6 +215,7 @@ public static class HubEndpoints
                 liveness,
                 inbox.Reader,
                 scenes,
+                catalog,
                 connections,
                 // Optional on purpose: the hub is a library and must run without one. Where a
                 // process log is registered - which is every real control - forwarded entries land
@@ -416,6 +429,7 @@ public static class HubEndpoints
         Liveness liveness,
         ChannelReader<ProtocolMessage> inbox,
         SceneStore scenes,
+        ScreenCatalog catalog,
         DisplayConnections connections,
         ProcessLog? processLog,
         HubOptions options,
@@ -439,6 +453,18 @@ public static class HubEndpoints
                 Protocol.AssetPath,
                 hello.Token is null ? device.Token : null));
 
+            TakeOver(hello, device.Device, scenes, logger);
+
+            // How each of this device's screens stands, plus whatever the control changed while it
+            // was away. It goes out BEFORE the scenes, because a display starts silent: until this
+            // arrives it has no window anywhere, and the wish is what puts one down (Part 3).
+            var settings = catalog.Drain(device.Device);
+
+            if (!settings.IsEmpty)
+            {
+                connection.TrySend(new ConfigUpdateMessage(settings));
+            }
+
             foreach (var screen in connection.Screens)
             {
                 connection.TrySend(new SceneSnapshotMessage(screen, scenes.Get(screen)));
@@ -450,13 +476,30 @@ public static class HubEndpoints
             // about the session - they say the socket is alive.
             await foreach (var message in inbox.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                if (message is LogEntryMessage entry)
+                switch (message)
                 {
-                    relay.Take(entry);
-                    continue;
-                }
+                    case LogEntryMessage entry:
+                        relay.Take(entry);
+                        break;
 
-                HubLog.UnhandledMessageIgnored(logger, device.Device);
+                    case ScreensChangedMessage reported:
+                        Rescan(reported, connection, catalog, scenes, device, logger);
+                        break;
+
+                    case ConfigUpdateMessage update:
+                        // Settings only. A screen wish or a finding from a device is passed over,
+                        // and saying so is the difference between a rule and a silence (Part 4).
+                        if (catalog.Apply(device.Device, update.Update))
+                        {
+                            HubLog.ScreenCommandIgnored(logger, device.Name);
+                        }
+
+                        break;
+
+                    default:
+                        HubLog.UnhandledMessageIgnored(logger, device.Device);
+                        break;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -468,7 +511,106 @@ public static class HubEndpoints
             // By instance, never by device: on a fast reconnect the new connection has already
             // registered under the same DeviceId when this one finishes tidying up.
             connections.Remove(connection);
+
+            // The screens stay KNOWN and stay settable; only their availability ends. Removing
+            // them would throw away the wish and the parameters, and preparing a scene for a
+            // switched-off table is exactly what has to keep working (Part 3).
+            catalog.Departed(device.Device);
+
             HubLog.DisplayDisconnected(logger, device.Device);
+        }
+    }
+
+    /// <summary>
+    /// A new inventory on a standing connection. The same comparison as at the <c>Hello</c>, plus
+    /// the one thing only a live connection has: the set of screens this socket is addressed by.
+    /// </summary>
+    private static void Rescan(
+        ScreensChangedMessage reported,
+        DisplayConnection connection,
+        ScreenCatalog catalog,
+        SceneStore scenes,
+        PairedDevice device,
+        ILogger logger)
+    {
+        Inventory(catalog, device.Device, reported.Screens, settings: null, logger);
+
+        connection.Reported([.. reported.Screens.Select(screen => screen.ScreenId)]);
+
+        // A screen that has just appeared has never had a snapshot. Without this it would stay
+        // empty until the DM next touched it - and on a hot-plug of a screen that WAS there, its
+        // scene would not come back at all.
+        foreach (var screen in connection.Screens)
+        {
+            connection.TrySend(new SceneSnapshotMessage(screen, scenes.Get(screen)));
+        }
+
+        var update = catalog.Drain(device.Device);
+
+        if (!update.IsEmpty)
+        {
+            connection.TrySend(new ConfigUpdateMessage(update));
+        }
+    }
+
+    /// <summary>
+    /// Takes a reported inventory and says what changed about it. Three findings, and only one of
+    /// them is dangerous - which is why they are told apart rather than summed up (Part 3).
+    /// </summary>
+    private static void Inventory(
+        ScreenCatalog catalog,
+        DeviceId device,
+        IReadOnlyList<ScreenInfo> screens,
+        ConfigUpdate? settings,
+        ILogger logger)
+    {
+        var before = screens
+            .Select(screen => new ScreenRef(device, screen.ScreenId))
+            .ToDictionary(key => key, key => catalog.InfoFor(key)?.Size);
+
+        var change = catalog.Report(device, screens, settings);
+
+        foreach (var screen in change.Added)
+        {
+            HubLog.ScreenAdded(logger, screen, catalog.InfoFor(screen)?.Label ?? screen.Screen.Value);
+        }
+
+        foreach (var screen in change.Missing)
+        {
+            HubLog.ScreenMissing(logger, screen, catalog.InfoFor(screen)?.Label ?? screen.Screen.Value);
+        }
+
+        foreach (var screen in change.Changed)
+        {
+            var now = catalog.InfoFor(screen);
+
+            HubLog.ScreenMetricsChanged(
+                logger,
+                now?.Label ?? screen.Screen.Value,
+                before.GetValueOrDefault(screen) ?? default,
+                now?.Size ?? default);
+        }
+    }
+
+    /// <summary>
+    /// The one exception to "the hub is authoritative", and deliberately this narrow: only for
+    /// screens the hub has no scene of its own for. Where it has one - because it has been running
+    /// longer, or has just loaded a layout - it puts that through with a snapshot instead
+    /// (Part 4).
+    /// </summary>
+    private static void TakeOver(HelloMessage hello, DeviceId device, SceneStore scenes, ILogger logger)
+    {
+        foreach (var reported in hello.Scenes ?? [])
+        {
+            var screen = new ScreenRef(device, reported.Screen);
+
+            if (scenes.Has(screen))
+            {
+                continue;
+            }
+
+            scenes.Set(screen, reported.Scene);
+            HubLog.SceneTakenOver(logger, screen, reported.Scene.Items.Count);
         }
     }
 

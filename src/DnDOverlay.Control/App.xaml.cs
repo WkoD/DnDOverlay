@@ -26,6 +26,8 @@ public sealed partial class App : Application, IDisposable
     private WebApplication? _host;
     private ConfigurationFile<ControlConfiguration>? _configuration;
     private ProcessLog? _log;
+    private ScreenCatalog? _screens;
+    private ControlSettings? _settings;
     private DataRoot _dataRoot;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -52,12 +54,16 @@ public sealed partial class App : Application, IDisposable
 
         var loaded = _configuration.Load(() => new ControlConfiguration());
 
+        // One owner for the file, several callers: pairing, the screen inventory and later the
+        // view state all change it, and separate copies would silently overwrite one another.
+        _settings = new ControlSettings(_configuration, loaded.Value);
+
         // Written back at once when it did not exist: the ControlId has to survive the first
         // restart, or every display would find a stranger where its control used to be (Part 4).
         if (loaded.Outcome is not ConfigurationOutcome.Loaded)
         {
-            _configuration.Save(loaded.Value);
-            _configuration.Flush();
+            _settings.Update(configuration => configuration);
+            _settings.Flush();
         }
 
         // DPAPI, behind its interface. It is created here rather than resolved from the hub's
@@ -108,6 +114,12 @@ public sealed partial class App : Application, IDisposable
             // are the values that belong to it, and what changes later comes in through
             // ApprovePairingAsync (Part 7).
             hub.KnownDevices = restored.Devices;
+
+            // The five wishes and the display parameters of every screen ever reported. Without
+            // them a table the DM had given back would come up Enabled after a restart of the
+            // control, and a scene could not be prepared for a switched-off device at all
+            // (Part 3).
+            hub.KnownScreens = loaded.Value.KnownScreens;
         });
 
         builder.Services.AddSingleton<IAssetSource>(asset);
@@ -131,11 +143,17 @@ public sealed partial class App : Application, IDisposable
         ControlLog.KnownDevicesRestored(logger, restored.Devices.Count, restored.Dropped);
 
         var session = _host.Services.GetRequiredService<ISessionApi>();
+        var screens = _host.Services.GetRequiredService<ScreenCatalog>();
+
+        // Written when the catalogue says something changed, never on a timer. Polling would be
+        // the obvious alternative and is quietly broken: the configuration file debounces, so a
+        // save on every tick would push its own deadline out for ever and write nothing at all.
+        screens.Changed += Persist;
+        _screens = screens;
 
         var window = new MainWindow(
-            _host.Services.GetRequiredService<ScreenCatalog>(),
             session,
-            new PairingDesk(session, secrets, _configuration, loaded.Value, TimeProvider.System),
+            new PairingDesk(session, secrets, _settings, TimeProvider.System),
             asset,
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"));
 
@@ -158,8 +176,28 @@ public sealed partial class App : Application, IDisposable
         base.OnExit(e);
     }
 
+    /// <summary>
+    /// Writes the screen inventory back. Only the WISH goes in, never a finding: what stands in
+    /// control.json has to be what the DM asked for, or a screen unplugged during a change would
+    /// come back with the wrong value (Part 3).
+    /// </summary>
+    private void Persist()
+    {
+        if (_settings is null || _screens is null)
+        {
+            return;
+        }
+
+        _settings.Update(configuration => configuration with { KnownScreens = _screens.Snapshot() });
+    }
+
     public void Dispose()
     {
+        if (_screens is not null)
+        {
+            _screens.Changed -= Persist;
+        }
+
         _configuration?.Dispose();
 
         // Nothing is buffered, so this closes a handle rather than saving anything: crash safety

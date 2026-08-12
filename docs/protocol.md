@@ -36,7 +36,7 @@ does not exist here, and the address is typed into a browser by a person standin
 
 | Message | Direction | Carries |
 |---|---|---|
-| `Hello` | display → control | device identifier, name, application version, protocol version, its screens — plus **either** a device token **or** a pairing code |
+| `Hello` | display → control | device identifier, name, application version, protocol version, its screens — plus **either** a device token **or** a pairing code, plus the full effective parameter set and the scene it still has on each screen |
 | `Welcome` | control → display | the control's identifier, the **path** assets are served from, and a freshly issued token exactly once |
 | `PairingPending` | control → display | the pairing code, so the device can put its setup screen down |
 | `Rejected` | control → display | why: `Denied` · `InvalidToken` · `LimitExceeded` · `DuplicateDevice` |
@@ -44,6 +44,8 @@ does not exist here, and the address is typed into a browser by a person standin
 | `SceneSnapshot` | control → display | the complete scene of one screen |
 | `ScenePatch` | control → display | one command of the DM, as operations addressed at screens |
 | `LogEntry` | display → control | one log message: identifier, name, level, the device's own timestamp, named values, optional raw text, optional screen |
+| `ScreensChanged` | display → control | a new screen inventory after a hot-plug or a resolution change — facts only |
+| `ConfigUpdate` | control **↔** display | changed display parameters as a **delta**; from the control additionally the screen wish and the transient finding |
 
 `Welcome` carries a **path**, never an absolute URL and never host and port. Those come from the
 socket the message arrived on. A remembered base URL is a trap: when the machine moves between
@@ -142,6 +144,71 @@ construction.
 The connection to a display does say which device is meant, so the device identifier looks
 redundant there. It is not: the control endpoint (M8) carries the messages of *all* devices over
 *one* connection, and the same message would need a different shape per endpoint.
+
+### Screens: wish, finding, settings
+
+Three different things are said about one screen, and keeping them apart is what makes the rest
+work.
+
+| | What it is | Who owns it | Where it lives |
+|---|---|---|---|
+| **Facts** — size, DPI, label | what the device reports | the device | `Hello` · `ScreensChanged` |
+| **Wish** — one of five states | what the DM asked for | the **control**, always | `control.json` |
+| **Finding** — unavailable · control window · hidden at the device | what is in the way right now | derived, never stored | transient |
+| **Settings** — the display parameters | either side may set them | both, reconciled | `control.json` **and** `display.json` |
+
+**A finding never overwrites the wish**, and that is not tidiness. A finding that did would have
+to restore the wish afterwards — remember what held before, and keep that memory consistent
+across crashes, restarts and simultaneous changes. That is exactly where such models come apart:
+a screen is unplugged, somebody changes the wish meanwhile, and the wrong value wins when it
+comes back. Leaving the wish untouched means there is **nothing to restore**.
+
+A display therefore never reports how it *stands*, only how it is *set*. A `ConfigUpdate`
+arriving from a device with a state in it is passed over and logged (3013).
+
+**A display starts silent**: every screen is `Inactive`, no window is put anywhere, and no scene
+is in memory. It stays that way until a control says otherwise. The reason is the autostart — a
+display PC runs at every logon, not only on game nights, and coming up with the last state set
+would make the application a trap: a frozen table nobody can explain, or an overlay on the
+monitor the DM expressly gave back, permanently, because on an ordinary Tuesday no control is
+running to correct it.
+
+**Settings are a delta in both directions** — `null` means *unchanged*, never *cleared*. They
+have to be, because the same value has two writers: every setting must be reachable at the device
+as well, and four of them act in the **hub** rather than at the device (the two load values, the
+placement mode and the park edge). A park edge changed at the table that the control knew nothing
+about would mean the hub computing against the old value while the device renders against the
+new — and the re-sorting the change should trigger not happening at all.
+
+The reconciliation has an order, and it is the whole of it:
+
+1. The `Hello` carries the device's **full effective set**. The control takes it over.
+2. Only then does the control send what **it** changed while the device was away.
+
+So per key the value set last holds, and nobody overruns something they never touched. Where both
+sides changed the *same* key, the control wins — and that is the only thing it wins.
+
+The counter-check that explains the sign of all this: a device that has never seen a control is
+fully settable at the table and keeps its settings across restarts. Were it to lose them at the
+first `ConfigUpdate`, local operation would be a sham.
+
+### The scene is transient — and it is handed over
+
+The arrangement is written down nowhere. It survives almost every failure anyway, because the
+side that connects hands it to the side that lost it:
+
+| | |
+|---|---|
+| display restarts | the control still has it and **puts it back** |
+| control restarts | it **takes it over** from the displays that are connected |
+| both at once | it is gone — that is what saving a scene is for |
+
+The `Hello` therefore carries the scene of each screen. The hub takes it over **only for screens
+it has no scene of its own for**; where it has one — because it has been running longer, or has
+just loaded a layout — it puts that through with a snapshot instead. That is the one exception to
+"the hub is authoritative", and it is kept exactly this narrow: bounded to the start.
+
+The screen **states** are expressly not in the `Hello`. All five are born in the control.
 
 ### Send queues
 
@@ -408,8 +475,25 @@ later is not a notification but the trail: *did this device ever knock, and what
 | 3004 | `UnknownScreenDiscarded` | Warning |
 | 3005 | `AssetFailed` | Warning |
 | 3006 | `AssetDecoded` | Information |
+| 3007 | `ScreenAdded` | Information |
+| 3008 | `ScreenMissing` | Information |
+| 3009 | `ScreenMetricsChanged` | Warning |
+| 3010 | `ScreenStateChanged` | Information |
+| 3011 | `ScreenSuppressed` | Information |
+| 3012 | `ScreenAvailable` | Information |
+| 3013 | `ScreenCommandIgnored` | Warning |
+| 3014 | `SceneTakenOver` | Information |
+| 3015 | `OverlayClosed` | Information |
+| 3016 | `ScreensReported` | Information |
+| 3017 | `SettingsApplied` | Information |
 
-**Next free: 3007.**
+**Next free: 3018.**
+
+Of these, 3007–3014 are written by the **hub** and 3015–3017 by the **display** — the range
+follows the subject of the sentence, never the assembly it is written in. Only one of the three
+inventory findings is a warning, and that is the point of telling them apart: a missing screen
+loses nothing, a new one is a fact, and a screen whose **metrics changed** has had its images
+recomputed — with undo not reaching them, because transformations are not in the timeline.
 
 ### 4000–4999 · Operations
 

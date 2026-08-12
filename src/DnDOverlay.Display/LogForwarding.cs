@@ -31,6 +31,13 @@ internal sealed class LogForwarding(ProcessLog log, LogLevel atLeast)
     private long _mark;
 
     /// <summary>
+    /// Settable while the process runs, because that is what a <c>ConfigUpdate</c> does to it -
+    /// and it is read fresh on every pass rather than captured, so raising a display to
+    /// <c>Debug</c> takes effect without waiting for the next connection (Part 6).
+    /// </summary>
+    public LogLevel AtLeast { get; set; } = atLeast;
+
+    /// <summary>
     /// Runs for the length of one connection. It does NOT log anything itself - a line about
     /// forwarding would produce a line to forward, and that is a loop with no bottom (Part 8).
     /// </summary>
@@ -68,7 +75,7 @@ internal sealed class LogForwarding(ProcessLog log, LogLevel atLeast)
 
                 // What fell out of the ring before it could be sent is counted per reader and
                 // deliberately not reported from here: saying so would be a line to forward.
-                while (log.Ring.Since(_mark, atLeast, Batch, out var next, out _) is { Count: > 0 } batch)
+                while (log.Ring.Since(_mark, AtLeast, Batch, out var next, out _) is { Count: > 0 } batch)
                 {
                     foreach (var record in batch)
                     {

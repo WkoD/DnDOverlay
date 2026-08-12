@@ -15,7 +15,9 @@ namespace DnDOverlay.Hub;
 /// worse than an unknown identifier that at least looks unknown.
 /// </para>
 /// <para>
-/// Next free in this range: <b>1048</b>. 1007–1009 stay unassigned so the first block could still
+/// Next free in the connection range: <b>1048</b>; in the display range, which the screen
+/// inventory writes into because the range follows the SUBJECT rather than the assembly:
+/// <b>3018</b>. 1007–1009 stay unassigned so the first block could still
 /// grow, 1010–1018 belong to Transport with 1019 left free, pairing has 1020–1037 (the display
 /// writes 1033–1037 - the range follows the subject, not the assembly), discovery has 1038–1041,
 /// the display's backoff 1042, the send side 1043–1045, and log forwarding 1046–1047. The
@@ -276,4 +278,82 @@ internal static partial class HubLog
         Level = LogLevel.Warning,
         Message = "{DeviceName} sent more than {Limit} log entries a second at {Level}; the surplus was dropped.")]
     internal static partial void LogRateExceeded(ILogger logger, string deviceName, int limit, LogLevel level);
+
+    /// <summary>
+    /// A screen nobody has met. It becomes <c>Enabled</c> like every unknown one, and this is a
+    /// plain fact - the way onwards is "reassign screen", should the derivation have moved
+    /// (Part 3).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3007,
+        Level = LogLevel.Information,
+        Message = "New screen {Screen} ({Label}) - playing on it.")]
+    internal static partial void ScreenAdded(ILogger logger, ScreenRef screen, string label);
+
+    /// <summary>
+    /// Gone from the inventory - and expressly WITHOUT a warning about a loss. Nothing goes: the
+    /// tile stays, it goes on showing the scene, and "save screen as scene" works unchanged. A
+    /// warning about a loss that is not happening would make the other two untrustworthy
+    /// (Part 3).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3008,
+        Level = LogLevel.Information,
+        Message = "Screen {Screen} ({Label}) is no longer reported - its scene and its state stay.")]
+    internal static partial void ScreenMissing(ILogger logger, ScreenRef screen, string label);
+
+    /// <summary>
+    /// The one finding at which something actually breaks, and therefore the only loud one:
+    /// clamping and capping are recomputed, items move and shrink - and UNDO does not reach them,
+    /// because transformations are not in the timeline (Part 1, idea 6; Part 3).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3009,
+        Level = LogLevel.Warning,
+        Message = "Screen {Label} changed from {Before} to {After} - images on it have been recomputed.")]
+    internal static partial void ScreenMetricsChanged(ILogger logger, string label, PixelSize before, PixelSize after);
+
+    [LoggerMessage(
+        EventId = 3010,
+        Level = LogLevel.Information,
+        Message = "Screen {Screen} is now {State}.")]
+    internal static partial void ScreenStateChanged(ILogger logger, ScreenRef screen, ScreenState state);
+
+    /// <summary>
+    /// A finding, never a state. The wish stands untouched next to it, which is what makes the
+    /// return trip free of any memory (Part 3).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3011,
+        Level = LogLevel.Information,
+        Message = "Screen {Screen} is not being played on: {Reason}.")]
+    internal static partial void ScreenSuppressed(ILogger logger, ScreenRef screen, SuppressReason reason);
+
+    [LoggerMessage(
+        EventId = 3012,
+        Level = LogLevel.Information,
+        Message = "Screen {Screen} can be played on again.")]
+    internal static partial void ScreenAvailable(ILogger logger, ScreenRef screen);
+
+    /// <summary>
+    /// A device sent a screen wish or a finding. All five states are born in the control and
+    /// travel one way; one arriving from the other side is passed over rather than obeyed, and
+    /// saying so is the difference between a rule and a silence (Part 3, Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3013,
+        Level = LogLevel.Warning,
+        Message = "{DeviceName} sent a screen state of its own - passed over; states belong to the control.")]
+    internal static partial void ScreenCommandIgnored(ILogger logger, string deviceName);
+
+    /// <summary>
+    /// The one exception to "the hub is authoritative", and it is deliberately this narrow: a
+    /// control that has just restarted has no scene, the display still has one, and the side that
+    /// connects hands it to the side that lost it (Part 1, idea 4; Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3014,
+        Level = LogLevel.Information,
+        Message = "Took the scene of {Screen} over from the device: {ItemCount} image(s).")]
+    internal static partial void SceneTakenOver(ILogger logger, ScreenRef screen, int itemCount);
 }

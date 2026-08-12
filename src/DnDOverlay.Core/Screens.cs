@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
+
 namespace DnDOverlay.Core;
 
 /// <summary>The five states a screen can be in - all of them the DM's wish (Part 3).</summary>
@@ -56,6 +59,264 @@ public sealed record ScreenInfo(
     PixelSize Size,
     double Dpi,
     bool IsPrimary);
+
+/// <summary>
+/// Why a screen is not being played on at the moment, although the DM wishes it were.
+/// <para>
+/// All of these are TRANSIENT FINDINGS and none of them is written into
+/// <see cref="ScreenState"/>. A finding that overwrote the wish would have to restore it
+/// afterwards - so remember what held before, and keep that memory consistent across crashes,
+/// restarts and simultaneous changes. That is exactly where such models come apart: a screen is
+/// unplugged, somebody changes the wish meanwhile, and the wrong value wins when it comes back.
+/// Leaving the wish untouched means there is NOTHING to restore (Part 3).
+/// </para>
+/// </summary>
+public enum SuppressReason
+{
+    /// <summary>Gone from the Windows inventory, or its device is not connected.</summary>
+    Unavailable = 0,
+
+    /// <summary>
+    /// The control's own window lies on it, so an always-on-top overlay would cover the DM's
+    /// stage. Only ever set for devices on the SAME machine, told apart by the loopback
+    /// interface - a foreign table with a coincidentally equal ScreenId is none of our business
+    /// (Part 2, Part 3).
+    /// </summary>
+    ControlWindow = 1,
+
+    /// <summary>
+    /// Hidden at the device itself with the rescue mark, because no control was reachable. Set
+    /// and cleared on the display side; any arriving <c>ConfigUpdate</c> clears it (Part 6).
+    /// Reaches the wire in M5a, when the mark itself is built.
+    /// </summary>
+    HiddenAtDevice = 2,
+}
+
+/// <summary>
+/// What the control knows about one screen: what the device reported, what the DM wishes, and
+/// what is getting in the way right now. The two halves are only put together here - the wish is
+/// never part of <see cref="ScreenInfo"/>, and the finding is never part of the wish (Part 3).
+/// </summary>
+/// <param name="Screen">
+/// The full address, and it has to be here rather than be implied. Part 3 sketches this type
+/// carrying only the reported facts, inside a device record that supplies the
+/// <see cref="DeviceId"/> - which works as long as it is always read through that record. Flat,
+/// it would be exactly the thing Part 3 rules out everywhere else: two cloned display PCs can
+/// report literally the same <see cref="ScreenId"/>, so a view identified by one alone would
+/// belong to either of two tables.
+/// </param>
+/// <param name="Suppressed">
+/// <see langword="null"/> when nothing is in the way. The scene stays fully visible and fully
+/// playable regardless; what rests is the presentation.
+/// </param>
+public sealed record ScreenView(
+    ScreenRef Screen,
+    ScreenInfo Info,
+    ScreenState State,
+    SuppressReason? Suppressed = null);
+
+/// <summary>
+/// A DELTA over the display parameters of one screen: <see langword="null"/> means "unchanged",
+/// never "cleared".
+/// <para>
+/// It has to be a delta because the same value has two writers - the control and the device
+/// itself, where Part 6 requires every setting to be reachable as well. A full set in one
+/// direction would reset the other side's change without anybody ordering it. Which is not
+/// cosmetic: four of these act in the HUB rather than at the device - the two load values enter
+/// the cap, <see cref="PlacementMode"/> the placement, <see cref="DefaultRotationDeg"/> every new
+/// item, and <see cref="ParkEdge"/> decides where parked images line up (Part 4).
+/// </para>
+/// <para>
+/// A record of nullable fields rather than a name/value map, for the same reason the protocol has
+/// no open type resolution: what can be set is a closed list, and a map would carry
+/// <c>object</c> values that no source generator can write (Part 4).
+/// </para>
+/// </summary>
+public sealed record ScreenSettings(
+    string? CustomName = null,
+    double? MinVisiblePixels = null,
+    double? MinScale = null,
+    double? MaxScale = null,
+    double? ScaleOnLoad = null,
+    double? MaxWidthOnLoad = null,
+    PlacementMode? Placement = null,
+    int? DefaultRotationDeg = null,
+    ParkEdge? ParkEdge = null)
+{
+    /// <summary>Nothing changed - the answer when a diff finds no difference.</summary>
+    public static readonly ScreenSettings None = new();
+
+    /// <summary>
+    /// Whether this delta says anything at all.
+    /// <para>
+    /// Not serialised, and that is not tidiness: a computed property has no business in a file
+    /// that documents what is settable, and on the wire it would be a field both ends carry and
+    /// neither reads. Measured on a real first run - display.json came out with an "isEmpty" in
+    /// it.
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public bool IsEmpty =>
+        CustomName is null
+        && MinVisiblePixels is null
+        && MinScale is null
+        && MaxScale is null
+        && ScaleOnLoad is null
+        && MaxWidthOnLoad is null
+        && Placement is null
+        && DefaultRotationDeg is null
+        && ParkEdge is null;
+
+    /// <summary>
+    /// The full effective set of a screen, for the baseline in the <c>Hello</c>. Size and DPI are
+    /// deliberately absent: they are hardware facts, they come with the screen list, and a device
+    /// that could set them would be able to lie about its own monitor.
+    /// </summary>
+    public static ScreenSettings Of(ScreenContext context, string? customName)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return new ScreenSettings(
+            CustomName: customName,
+            MinVisiblePixels: context.MinVisiblePixels,
+            MinScale: context.MinScale,
+            MaxScale: context.MaxScale,
+            ScaleOnLoad: context.ScaleOnLoad,
+            MaxWidthOnLoad: context.MaxWidthOnLoad,
+            Placement: context.Placement,
+            DefaultRotationDeg: context.DefaultRotationDeg,
+            ParkEdge: context.ParkEdge);
+    }
+
+    /// <summary>Lays this delta over a context, leaving untouched whatever it does not mention.</summary>
+    public ScreenContext ApplyTo(ScreenContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context with
+        {
+            MinVisiblePixels = MinVisiblePixels ?? context.MinVisiblePixels,
+            MinScale = MinScale ?? context.MinScale,
+            MaxScale = MaxScale ?? context.MaxScale,
+            ScaleOnLoad = ScaleOnLoad ?? context.ScaleOnLoad,
+            MaxWidthOnLoad = MaxWidthOnLoad ?? context.MaxWidthOnLoad,
+            Placement = Placement ?? context.Placement,
+            DefaultRotationDeg = DefaultRotationDeg ?? context.DefaultRotationDeg,
+            ParkEdge = ParkEdge ?? context.ParkEdge,
+        };
+    }
+
+    /// <summary>
+    /// What changed between two full sets - the delta that goes on the wire. Comparing doubles
+    /// exactly is right here rather than sloppy: both sides carry the same value through, so a
+    /// difference means somebody set something.
+    /// </summary>
+    public static ScreenSettings Diff(ScreenSettings before, ScreenSettings after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        return new ScreenSettings(
+            CustomName: string.Equals(before.CustomName, after.CustomName, StringComparison.Ordinal)
+                ? null
+                : after.CustomName,
+            MinVisiblePixels: before.MinVisiblePixels == after.MinVisiblePixels ? null : after.MinVisiblePixels,
+            MinScale: before.MinScale == after.MinScale ? null : after.MinScale,
+            MaxScale: before.MaxScale == after.MaxScale ? null : after.MaxScale,
+            ScaleOnLoad: before.ScaleOnLoad == after.ScaleOnLoad ? null : after.ScaleOnLoad,
+            MaxWidthOnLoad: before.MaxWidthOnLoad == after.MaxWidthOnLoad ? null : after.MaxWidthOnLoad,
+            Placement: before.Placement == after.Placement ? null : after.Placement,
+            DefaultRotationDeg: before.DefaultRotationDeg == after.DefaultRotationDeg
+                ? null
+                : after.DefaultRotationDeg,
+            ParkEdge: before.ParkEdge == after.ParkEdge ? null : after.ParkEdge);
+    }
+}
+
+/// <summary>
+/// The delta over what belongs to the DEVICE rather than to one of its screens - the parameters
+/// that concern the PROCESS, not a window (Part 6).
+/// <para>
+/// M1b has the two that exist: what the device produces at all, and what of it is worth the wire.
+/// The rest of the table - image store, wake lock, foreign windows, language - arrives with the
+/// milestone that builds it.
+/// </para>
+/// </summary>
+/// <param name="Level">
+/// What the device WRITES, into its ring buffer and its file alike. Raising a single display to
+/// <c>Debug</c> from the far side of the house is the documented way to hunt a fault (Part 8) -
+/// and the reason the message rate limit follows the level instead of being fixed (Part 4).
+/// </param>
+/// <param name="ForwardAtLeast">What of it goes over the wire. Warning by default.</param>
+public sealed record DeviceSettings(LogLevel? Level = null, LogLevel? ForwardAtLeast = null)
+{
+    /// <summary>Whether this delta says anything at all. Not serialised - see ScreenSettings.</summary>
+    [JsonIgnore]
+    public bool IsEmpty => Level is null && ForwardAtLeast is null;
+}
+
+/// <summary>
+/// How one screen stands, as the control alone may say it. Either wholly present or wholly
+/// absent - unlike <see cref="ScreenSettings"/> this is NOT a delta, and it does not need to be:
+/// it has one writer, so there is nothing on the other side that could be overwritten.
+/// <para>
+/// A display never sends this. Should one arrive from a device anyway, it is passed over and
+/// logged rather than obeyed: all five wishes are born in the control and travel one way (Part 3,
+/// Part 4).
+/// </para>
+/// </summary>
+/// <param name="Suppress">
+/// <see langword="null"/> means "nothing in the way" - which is also how a finding is CLEARED,
+/// since the field is always complete.
+/// </param>
+public sealed record ScreenCommand(ScreenState State, SuppressReason? Suppress = null);
+
+/// <summary>What one <c>ConfigUpdate</c> has to say about one screen.</summary>
+public sealed record ScreenConfigUpdate(
+    ScreenId Screen,
+    ScreenSettings? Settings = null,
+    ScreenCommand? Command = null);
+
+/// <summary>
+/// The payload of a <c>ConfigUpdate</c>, and of the baseline a <c>Hello</c> brings along.
+/// <para>
+/// The same mechanism runs in both directions - that is the whole design. From the device it
+/// carries settings only; from the control it may carry the wish and the finding as well. And the
+/// <c>Hello</c> uses the same shape with FULL values instead of a delta, because a baseline is
+/// exactly what it is (Part 4).
+/// </para>
+/// </summary>
+public sealed record ConfigUpdate(
+    IReadOnlyList<ScreenConfigUpdate> Screens,
+    DeviceSettings? Device = null)
+{
+    /// <summary>Nothing to say - the answer when a diff over both halves comes up empty.</summary>
+    public static readonly ConfigUpdate None = new([]);
+
+    [JsonIgnore]
+    public bool IsEmpty => Screens.Count == 0 && (Device is null || Device.IsEmpty);
+
+    /// <summary>
+    /// Structural over the screen list, for the same reason every other list-bearing DTO is: a
+    /// record compares list members by REFERENCE, so a message that went through the wire would
+    /// never equal the one that was sent.
+    /// </summary>
+    public bool Equals(ConfigUpdate? other) =>
+        other is not null && Device == other.Device && Screens.SequenceEqual(other.Screens);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Device);
+
+        foreach (var screen in Screens)
+        {
+            hash.Add(screen);
+        }
+
+        return hash.ToHashCode();
+    }
+}
 
 /// <summary>
 /// Everything a computation over a scene needs, handed into the reducer and into

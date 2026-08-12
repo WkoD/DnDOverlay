@@ -28,7 +28,20 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(SceneSnapshotMessage), "SceneSnapshot")]
 [JsonDerivedType(typeof(ScenePatchMessage), "ScenePatch")]
 [JsonDerivedType(typeof(LogEntryMessage), "LogEntry")]
+[JsonDerivedType(typeof(ScreensChangedMessage), "ScreensChanged")]
+[JsonDerivedType(typeof(ConfigUpdateMessage), "ConfigUpdate")]
 public abstract record ProtocolMessage;
+
+/// <summary>
+/// One screen's arrangement as the device still has it, carried in the <c>Hello</c>.
+/// <para>
+/// A bare <see cref="ScreenId"/> is enough here and correct: the <c>Hello</c> comes over the
+/// device's own socket and is never relayed, so the device is the sender rather than something
+/// that has to be stated. On a PATCH it would be wrong, because <c>/ws/control</c> carries every
+/// device over one connection (Part 4).
+/// </para>
+/// </summary>
+public sealed record ScreenScene(ScreenId Screen, SceneState Scene);
 
 /// <summary>
 /// What a display says when it connects.
@@ -47,6 +60,26 @@ public abstract record ProtocolMessage;
 /// unpaired device on weak Wi-Fi comes back every few seconds (Part 4).
 /// </para>
 /// </param>
+/// <param name="Settings">
+/// The full EFFECTIVE parameter set of this device and its screens - the baseline of the
+/// two-sided configuration. Without it the same value would have two writers and no reconciling,
+/// and the side that spoke last would quietly win. The control takes this over into its copy and
+/// only then sends out what it changed while the device was away, so per key the value set last
+/// holds and nobody overruns something they never touched (Part 4, Part 6).
+/// <para>
+/// Additive and optional (rule 7): an older display sends none, and then nothing is taken over.
+/// </para>
+/// </param>
+/// <param name="Scenes">
+/// What this device still has on its screens. It is here because a control that has just
+/// restarted TAKES IT OVER - the state is written down nowhere, and it survives almost every
+/// failure because whichever side connects hands it to the one that lost it (Part 1, idea 4;
+/// Part 4). The hub takes over only for screens it has no state of its own for; where it has one,
+/// it puts it through with a snapshot.
+/// <para>
+/// The screen STATES are expressly not in here. All five are born in the control (Part 3).
+/// </para>
+/// </param>
 public sealed record HelloMessage(
     DeviceId DeviceId,
     string Name,
@@ -54,7 +87,9 @@ public sealed record HelloMessage(
     int ProtocolVersion,
     IReadOnlyList<ScreenInfo> Screens,
     string? Token = null,
-    string? PairingCode = null) : ProtocolMessage
+    string? PairingCode = null,
+    ConfigUpdate? Settings = null,
+    IReadOnlyList<ScreenScene>? Scenes = null) : ProtocolMessage
 {
     /// <summary>
     /// Structural over the screen list, for the same reason <see cref="SceneState"/> is: a record
@@ -70,7 +105,11 @@ public sealed record HelloMessage(
         && ProtocolVersion == other.ProtocolVersion
         && string.Equals(Token, other.Token, StringComparison.Ordinal)
         && string.Equals(PairingCode, other.PairingCode, StringComparison.Ordinal)
-        && Screens.SequenceEqual(other.Screens);
+        && Settings == other.Settings
+        && Screens.SequenceEqual(other.Screens)
+        && (Scenes is null
+            ? other.Scenes is null
+            : other.Scenes is not null && Scenes.SequenceEqual(other.Scenes));
 
     public override int GetHashCode()
     {
@@ -81,10 +120,16 @@ public sealed record HelloMessage(
         hash.Add(ProtocolVersion);
         hash.Add(Token, StringComparer.Ordinal);
         hash.Add(PairingCode, StringComparer.Ordinal);
+        hash.Add(Settings);
 
         foreach (var screen in Screens)
         {
             hash.Add(screen);
+        }
+
+        foreach (var scene in Scenes ?? [])
+        {
+            hash.Add(scene);
         }
 
         return hash.ToHashCode();
@@ -237,6 +282,51 @@ public sealed record LogEntryMessage(
         return hash.ToHashCode();
     }
 }
+
+/// <summary>
+/// A new screen inventory after a hot-plug or a resolution change.
+/// <para>
+/// It carries facts and nothing else - the same list the <c>Hello</c> brings, for the same reason
+/// it does: a display reports which screens it HAS and knows no "unavailable". Which of them is
+/// missing is worked out on the control side, by comparing against what it last saw (Part 3).
+/// </para>
+/// </summary>
+public sealed record ScreensChangedMessage(IReadOnlyList<ScreenInfo> Screens) : ProtocolMessage
+{
+    public bool Equals(ScreensChangedMessage? other) =>
+        other is not null && Screens.SequenceEqual(other.Screens);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        foreach (var screen in Screens)
+        {
+            hash.Add(screen);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>
+/// Changed display parameters, screen names, the screen wish and the transient finding - and the
+/// one message in the whole protocol that travels in BOTH directions.
+/// <para>
+/// It has to, because the same value has two writers: Part 6 requires every setting to be
+/// reachable at the device as well, and four of them act in the hub rather than at the device. A
+/// <c>ParkEdge</c> changed at the table that the control knew nothing about would mean the hub
+/// computing against the old value while the device renders against the new - and the
+/// re-sorting that the change should trigger not happening at all. The report is therefore the
+/// order itself (Part 4).
+/// </para>
+/// <para>
+/// The counter-check that explains the whole sign of this: a device that has never seen a control
+/// is fully settable at the table and keeps its settings across restarts. Were it to lose them at
+/// the first <c>ConfigUpdate</c>, local operation would be a sham.
+/// </para>
+/// </summary>
+public sealed record ConfigUpdateMessage(ConfigUpdate Update) : ProtocolMessage;
 
 /// <summary>Constants that both ends agree on.</summary>
 public static class Protocol

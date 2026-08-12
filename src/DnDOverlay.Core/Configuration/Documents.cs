@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Core.Configuration;
 
@@ -43,7 +44,43 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// of the control (Part 4, Part 7).
     /// </summary>
     public IReadOnlyList<KnownDevice> KnownDevices { get; init; } = [];
+
+    /// <summary>
+    /// Every screen the control has ever been told about, with the DM's wish and everything a
+    /// computation over its scene needs.
+    /// <para>
+    /// This carries a promise that could not be kept otherwise: a screen is fully playable in
+    /// every state and on every finding - expressly including while its device is switched OFF.
+    /// Were size, DPI and the display parameters only ever to arrive in the <c>Hello</c>, the hub
+    /// could neither place nor cap for an absent device, and preparing the next scene ahead would
+    /// fall away (Part 3, Part 7).
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<KnownScreen> KnownScreens { get; init; } = [];
 }
+
+/// <summary>
+/// One screen as it sits in <c>control.json</c>: what the device said about it, what the DM
+/// wishes, and how it is set.
+/// </summary>
+/// <param name="State">
+/// The WISH, and only ever the wish. The three transient findings - unavailable, the control
+/// window lying on it, hidden at the device - are never written here. A finding that overwrote
+/// the wish would have to restore it afterwards, and that memory is exactly where such models
+/// come apart (Part 3).
+/// </param>
+/// <param name="Size">
+/// Physical pixels, as last reported. A hardware fact rather than a setting, which is why the
+/// device always wins on it and a <c>ConfigUpdate</c> cannot touch it.
+/// </param>
+public sealed record KnownScreen(
+    Guid DeviceId,
+    string ScreenId,
+    string Label,
+    ScreenState State,
+    PixelSize Size,
+    double Dpi,
+    ScreenSettings Settings);
 
 /// <summary>
 /// One paired device as it sits in <c>control.json</c>.
@@ -118,7 +155,29 @@ public sealed record DisplayConfiguration : IConfigurationDocument
     /// </para>
     /// </summary>
     public string? Token { get; init; }
+
+    /// <summary>
+    /// Every display parameter, per screen. It is here because Part 6 requires every setting to
+    /// be reachable at the device as well - and a device that has never seen a control has to be
+    /// fully settable at the table and keep its settings across restarts. Were it to lose them at
+    /// the first <c>ConfigUpdate</c>, local operation would be a sham (Part 4).
+    /// <para>
+    /// Written with EVERY value in full, never as a delta: on the wire a null means "unchanged",
+    /// in this file it would mean nothing at all, and Part 6 asks that a reader can see what is
+    /// settable without collecting the defaults from somewhere else.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ScreenPreferences> Screens { get; init; } = [];
+
+    /// <summary>
+    /// What concerns the process rather than one of its windows - written in full for the same
+    /// reason.
+    /// </summary>
+    public DeviceSettings Device { get; init; } = new(LogLevel.Information, LogLevel.Warning);
 }
+
+/// <summary>The stored parameters of one screen, keyed by the identifier the device derives.</summary>
+public sealed record ScreenPreferences(string ScreenId, ScreenSettings Settings);
 
 /// <summary>
 /// The source-generated context for the configuration files. Same reasoning as the protocol:

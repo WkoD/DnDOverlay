@@ -1,45 +1,164 @@
-using System.Collections.Concurrent;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Configuration;
 
 namespace DnDOverlay.Hub;
 
 /// <summary>
-/// What the hub knows about the screens out there: their reported facts and the
-/// <see cref="ScreenContext"/> every computation over a scene needs.
+/// What the hub knows about the screens out there: the facts a device reported, the DM's wish,
+/// the display parameters every computation over a scene needs, and what is getting in the way
+/// right now.
 /// <para>
-/// The context is kept even while a device is gone, and that is the point rather than a
-/// nicety: a screen is fully playable in every state - expressly including while its device is
-/// switched OFF. Were size and DPI only ever to arrive in the <c>Hello</c>, the hub could
+/// All of it is kept even while a device is gone, and that is the point rather than a nicety: a
+/// screen is fully playable in every state - expressly including while its device is switched
+/// OFF. Were size, DPI and the parameters only ever to arrive in the <c>Hello</c>, the hub could
 /// neither place nor cap for an absent device, and preparing the next scene ahead would fall
-/// away (Part 3).
+/// away (Part 3). It is persisted into control.json for the same reason.
 /// </para>
 /// <para>
-/// From M1b this is persisted into control.json. In M1a it lives for the run - which is why a
-/// screen unknown to the hub falls back to the defaults from Part 6 rather than refusing.
+/// One lock rather than concurrent dictionaries, because the invariants span several maps: what a
+/// device currently reports decides availability, and availability plus the wish make the view.
+/// Nothing awaits inside it.
 /// </para>
 /// </summary>
 public sealed class ScreenCatalog
 {
-    private readonly ConcurrentDictionary<ScreenRef, ScreenContext> _contexts = new();
-    private readonly ConcurrentDictionary<ScreenRef, ScreenInfo> _reported = new();
+    private readonly Lock _gate = new();
+    private readonly Dictionary<ScreenRef, Entry> _entries = [];
+    private readonly Dictionary<DeviceId, HashSet<ScreenId>> _present = [];
+    private readonly Dictionary<ScreenRef, ScreenSettings> _pending = [];
+    private readonly Dictionary<DeviceId, DeviceSettings> _pendingDevice = [];
 
-    /// <summary>Takes what a display said about itself in its <c>Hello</c>.</summary>
-    public void Report(DeviceId device, IReadOnlyList<ScreenInfo> screens)
+    /// <summary>
+    /// Fires when something worth keeping has changed - a screen appeared, a wish was set, a
+    /// parameter moved.
+    /// <para>
+    /// The control writes control.json from it. Polling would be the obvious alternative and is
+    /// quietly broken here: the configuration file debounces, so a save on every tick would push
+    /// its own deadline out for ever and write nothing at all. Findings are deliberately NOT in
+    /// here - they are never persisted (Part 3).
+    /// </para>
+    /// </summary>
+    public event Action? Changed;
+
+    /// <summary>Every screen the hub has ever been told about, connected or not.</summary>
+    public IReadOnlyCollection<ScreenRef> Known
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _entries.Keys];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Takes what a display said about itself, and says what changed about its inventory.
+    /// <para>
+    /// The settings that come with it are the BASELINE of the two-sided configuration: the
+    /// control takes over what the device reports, and only afterwards sends what it changed
+    /// while the device was away. Per key the value set last therefore holds, and nobody overruns
+    /// something they never touched (Part 4).
+    /// </para>
+    /// </summary>
+    public InventoryChange Report(DeviceId device, IReadOnlyList<ScreenInfo> screens, ConfigUpdate? reported)
     {
         ArgumentNullException.ThrowIfNull(screens);
 
-        foreach (var screen in screens)
+        var added = new List<ScreenRef>();
+        var changed = new List<ScreenRef>();
+        InventoryChange result;
+
+        lock (_gate)
         {
-            var key = new ScreenRef(device, screen.ScreenId);
+            var settings = Settings(reported);
 
-            _reported[key] = screen;
+            foreach (var screen in screens)
+            {
+                var key = new ScreenRef(device, screen.ScreenId);
 
-            // Size and DPI are hardware facts and always win; the display parameters keep
-            // whatever was set for this screen before, so a reconnect does not reset them.
-            _contexts.AddOrUpdate(
-                key,
-                _ => ScreenContext.Default(screen.Size, screen.Dpi),
-                (_, existing) => existing with { Size = screen.Size, Dpi = screen.Dpi });
+                if (!_entries.TryGetValue(key, out var entry))
+                {
+                    // A screen nobody has met becomes Enabled, like any unknown one (Part 3).
+                    var fresh = ScreenContext.Default(screen.Size, screen.Dpi);
+
+                    _entries[key] = new Entry(
+                        screen,
+                        ScreenState.Enabled,
+                        Baseline(fresh, settings, screen.ScreenId));
+
+                    added.Add(key);
+                    continue;
+                }
+
+                // Size and DPI are hardware facts and always win. A different resolution, aspect
+                // ratio or DPI is the one finding at which something actually breaks: clamping and
+                // capping are recomputed, items move, and undo does not reach transformations
+                // (Part 3). Hence loud, and hence told apart from the harmless two.
+                if (entry.Info.Size != screen.Size || entry.Info.Dpi != screen.Dpi)
+                {
+                    changed.Add(key);
+                }
+
+                // First take over what the device reports, THEN lay our own outstanding change
+                // back on top - that order is the whole reconciliation. Without the second half
+                // the baseline would undo exactly what the control set while the device was away,
+                // and per key the value set last would no longer hold (Part 4).
+                var taken = Baseline(entry.Context, settings, screen.ScreenId);
+
+                if (_pending.TryGetValue(key, out var mine))
+                {
+                    taken = mine.ApplyTo(taken);
+                }
+
+                _entries[key] = entry with
+                {
+                    Info = screen,
+                    Context = taken with { Size = screen.Size, Dpi = screen.Dpi },
+                };
+            }
+
+            var now = screens.Select(screen => screen.ScreenId).ToHashSet();
+            var before = _present.TryGetValue(device, out var seen) ? seen : [];
+
+            _present[device] = now;
+
+            // Missing is a plain fact and expressly carries no loss warning: the tile stays, the
+            // scene stays, and "save screen as scene" goes on working. A warning about a loss that
+            // is not happening would make the other two messages untrustworthy (Part 3).
+            var missing = _entries.Keys
+                .Where(key => key.Device == device && !now.Contains(key.Screen) && before.Contains(key.Screen))
+                .ToList();
+
+            // The device settings the device reported become ours, then whatever we changed while
+            // it was away goes on top.
+            if (reported?.Device is { } device_ && !device_.IsEmpty)
+            {
+                _pendingDevice.TryGetValue(device, out var mine);
+                _pendingDevice[device] = new DeviceSettings(
+                    mine?.Level ?? device_.Level,
+                    mine?.ForwardAtLeast ?? device_.ForwardAtLeast);
+            }
+
+            result = new InventoryChange(added, missing, changed);
+        }
+
+        // Always, not only when something was added: sizes, DPI and the reported baseline can all
+        // have moved without a screen appearing or going.
+        Changed?.Invoke();
+
+        return result;
+    }
+
+    /// <summary>
+    /// The device is gone. Its screens stay known and stay settable - only their availability
+    /// ends, and that is a finding rather than a state (Part 3).
+    /// </summary>
+    public void Departed(DeviceId device)
+    {
+        lock (_gate)
+        {
+            _present.Remove(device);
         }
     }
 
@@ -47,14 +166,309 @@ public sealed class ScreenCatalog
     /// The context to compute with. An unknown screen gets the defaults rather than an
     /// exception: the hub must be able to prepare a scene for a screen it has not met yet.
     /// </summary>
-    public ScreenContext ContextFor(ScreenRef screen) =>
-        _contexts.TryGetValue(screen, out var context)
-            ? context
-            : ScreenContext.Default(new PixelSize(1920, 1080), 96);
+    public ScreenContext ContextFor(ScreenRef screen)
+    {
+        lock (_gate)
+        {
+            return _entries.TryGetValue(screen, out var entry)
+                ? entry.Context
+                : ScreenContext.Default(new PixelSize(1920, 1080), 96);
+        }
+    }
 
-    public ScreenInfo? InfoFor(ScreenRef screen) =>
-        _reported.TryGetValue(screen, out var info) ? info : null;
+    public ScreenInfo? InfoFor(ScreenRef screen)
+    {
+        lock (_gate)
+        {
+            return _entries.TryGetValue(screen, out var entry) ? entry.Info : null;
+        }
+    }
 
-    /// <summary>Every screen the hub has ever been told about, connected or not.</summary>
-    public IReadOnlyCollection<ScreenRef> Known => _contexts.Keys.ToList();
+    /// <summary>
+    /// Reported facts, wish and finding in one - the shape the control shows. This is the only
+    /// place the two halves are put together (Part 3).
+    /// </summary>
+    public ScreenView? ViewOf(ScreenRef screen)
+    {
+        lock (_gate)
+        {
+            return _entries.TryGetValue(screen, out var entry) ? View(screen, entry) : null;
+        }
+    }
+
+    /// <summary>Every known screen, as the control shows it.</summary>
+    public IReadOnlyList<ScreenView> Views()
+    {
+        lock (_gate)
+        {
+            return [.. _entries.Select(pair => View(pair.Key, pair.Value))];
+        }
+    }
+
+    /// <summary>
+    /// Sets the DM's wish. Returns <see langword="false"/> when it already held, so nothing is
+    /// sent and nothing is written for a change that is not one.
+    /// </summary>
+    public bool SetState(ScreenRef screen, ScreenState state)
+    {
+        lock (_gate)
+        {
+            if (!_entries.TryGetValue(screen, out var entry) || entry.State == state)
+            {
+                return false;
+            }
+
+            _entries[screen] = entry with { State = state };
+        }
+
+        Changed?.Invoke();
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sets or clears a finding. It leaves <see cref="ScreenState"/> untouched - which is what
+    /// makes the return trip free: there is nothing to restore, the screen is simply played on
+    /// again with the wish that stood there all along (Part 3).
+    /// </summary>
+    public bool SetSuppress(ScreenRef screen, SuppressReason? reason)
+    {
+        lock (_gate)
+        {
+            if (!_entries.TryGetValue(screen, out var entry) || entry.Suppress == reason)
+            {
+                return false;
+            }
+
+            _entries[screen] = entry with { Suppress = reason };
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A change from the control's side. It is remembered per screen until it has gone out, so a
+    /// screen set while its device was switched off is not lost - that is the whole reason the
+    /// device window works without the device (Part 7).
+    /// </summary>
+    public void Change(ScreenRef screen, ScreenSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (settings.IsEmpty)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_entries.TryGetValue(screen, out var entry))
+            {
+                _entries[screen] = entry with { Context = settings.ApplyTo(entry.Context) };
+            }
+
+            _pending[screen] = _pending.TryGetValue(screen, out var known)
+                ? Merge(known, settings)
+                : settings;
+        }
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>A device-scope change from the control's side.</summary>
+    public void Change(DeviceId device, DeviceSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (settings.IsEmpty)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _pendingDevice[device] = _pendingDevice.TryGetValue(device, out var known)
+                ? new DeviceSettings(settings.Level ?? known.Level, settings.ForwardAtLeast ?? known.ForwardAtLeast)
+                : settings;
+        }
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Takes a delta a DEVICE sent. Settings only: a screen wish and a finding are the control's
+    /// alone, and one that arrives from a device is passed over. The caller logs that - the
+    /// catalogue says what happened, it does not decide what it costs.
+    /// </summary>
+    public bool Apply(DeviceId device, ConfigUpdate update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        var refused = false;
+        var applied = false;
+
+        lock (_gate)
+        {
+            foreach (var screen in update.Screens)
+            {
+                refused |= screen.Command is not null;
+
+                if (screen.Settings is not { IsEmpty: false } settings)
+                {
+                    continue;
+                }
+
+                var key = new ScreenRef(device, screen.Screen);
+
+                if (_entries.TryGetValue(key, out var entry))
+                {
+                    _entries[key] = entry with { Context = settings.ApplyTo(entry.Context) };
+                    applied = true;
+                }
+            }
+        }
+
+        if (applied)
+        {
+            Changed?.Invoke();
+        }
+
+        return refused;
+    }
+
+    /// <summary>
+    /// What a freshly connected device has to be told: how each of its screens stands, plus
+    /// whatever the control changed while it was away. Clears the pending changes, because they
+    /// are on their way out.
+    /// </summary>
+    public ConfigUpdate Drain(DeviceId device)
+    {
+        lock (_gate)
+        {
+            var screens = new List<ScreenConfigUpdate>();
+
+            foreach (var (key, entry) in _entries.Where(pair => pair.Key.Device == device))
+            {
+                _pending.Remove(key, out var settings);
+
+                screens.Add(new ScreenConfigUpdate(
+                    key.Screen,
+                    settings is { IsEmpty: false } ? settings : null,
+                    // The finding travels, the availability does not: a device that is connected
+                    // has by definition reported these screens, and one that is not gets nothing
+                    // at all. Only the control window can suppress a screen that is right here.
+                    new ScreenCommand(entry.State, entry.Suppress)));
+            }
+
+            _pendingDevice.Remove(device, out var pending);
+
+            return new ConfigUpdate(screens, pending is { IsEmpty: false } ? pending : null);
+        }
+    }
+
+    /// <summary>What goes into control.json.</summary>
+    public IReadOnlyList<KnownScreen> Snapshot()
+    {
+        lock (_gate)
+        {
+            return
+            [
+                .. _entries.Select(pair => new KnownScreen(
+                    pair.Key.Device.Value,
+                    pair.Key.Screen.Value,
+                    pair.Value.Info.Label,
+                    pair.Value.State,
+                    pair.Value.Info.Size,
+                    pair.Value.Info.Dpi,
+                    ScreenSettings.Of(pair.Value.Context, pair.Value.Info.CustomName))),
+            ];
+        }
+    }
+
+    /// <summary>
+    /// What comes back out of control.json at startup. Nothing is present yet - every screen is
+    /// known and none is available until a device says so.
+    /// </summary>
+    public void Restore(IReadOnlyList<KnownScreen> screens)
+    {
+        ArgumentNullException.ThrowIfNull(screens);
+
+        lock (_gate)
+        {
+            foreach (var screen in screens)
+            {
+                var key = new ScreenRef(new DeviceId(screen.DeviceId), new ScreenId(screen.ScreenId));
+
+                var info = new ScreenInfo(
+                    key.Screen,
+                    screen.Label,
+                    screen.Settings.CustomName,
+                    screen.Size,
+                    screen.Dpi,
+                    IsPrimary: false);
+
+                _entries[key] = new Entry(
+                    info,
+                    screen.State,
+                    screen.Settings.ApplyTo(ScreenContext.Default(screen.Size, screen.Dpi)));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lays a reported baseline over a context. Called under the lock.
+    /// </summary>
+    private static ScreenContext Baseline(ScreenContext context, Dictionary<ScreenId, ScreenSettings> reported, ScreenId screen) =>
+        reported.TryGetValue(screen, out var settings) ? settings.ApplyTo(context) : context;
+
+    private static Dictionary<ScreenId, ScreenSettings> Settings(ConfigUpdate? update) =>
+        update is null
+            ? []
+            : update.Screens
+                .Where(screen => screen.Settings is not null)
+                .ToDictionary(screen => screen.Screen, screen => screen.Settings!);
+
+    private static ScreenSettings Merge(ScreenSettings older, ScreenSettings newer) =>
+        new(
+            newer.CustomName ?? older.CustomName,
+            newer.MinVisiblePixels ?? older.MinVisiblePixels,
+            newer.MinScale ?? older.MinScale,
+            newer.MaxScale ?? older.MaxScale,
+            newer.ScaleOnLoad ?? older.ScaleOnLoad,
+            newer.MaxWidthOnLoad ?? older.MaxWidthOnLoad,
+            newer.Placement ?? older.Placement,
+            newer.DefaultRotationDeg ?? older.DefaultRotationDeg,
+            newer.ParkEdge ?? older.ParkEdge);
+
+    /// <summary>Called under the lock.</summary>
+    private ScreenView View(ScreenRef screen, Entry entry) =>
+        new(
+            screen,
+            entry.Info,
+            entry.State,
+            entry.Suppress ?? (Available(screen) ? null : SuppressReason.Unavailable));
+
+    /// <summary>Called under the lock.</summary>
+    private bool Available(ScreenRef screen) =>
+        _present.TryGetValue(screen.Device, out var present) && present.Contains(screen.Screen);
+
+    private sealed record Entry(
+        ScreenInfo Info,
+        ScreenState State,
+        ScreenContext Context,
+        SuppressReason? Suppress = null);
 }
+
+/// <summary>
+/// What a reported inventory changed about what the hub knew. Three findings, and only one of
+/// them is dangerous - which is why they are told apart here rather than at the call site
+/// (Part 3).
+/// </summary>
+/// <param name="Changed">
+/// Different resolution, aspect ratio or DPI. The only one at which something actually breaks,
+/// and therefore the only one that may be loud.
+/// </param>
+public sealed record InventoryChange(
+    IReadOnlyList<ScreenRef> Added,
+    IReadOnlyList<ScreenRef> Missing,
+    IReadOnlyList<ScreenRef> Changed);

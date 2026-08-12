@@ -11,6 +11,7 @@ using DnDOverlay.Core.Protocol;
 using DnDOverlay.Platform.Windows;
 using DnDOverlay.Transport;
 using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
 
 namespace DnDOverlay.Display;
 
@@ -28,7 +29,15 @@ public sealed partial class App : Application, IDisposable
     private readonly Dictionary<ScreenId, OverlayWindow> _windows = [];
     private readonly Dictionary<ScreenRef, SceneState> _scenes = [];
     private readonly Dictionary<ScreenId, ScreenContext> _contexts = [];
+    private readonly Dictionary<ScreenId, MonitorInfo> _monitors = [];
     private readonly Dictionary<AssetId, ImageSource> _images = [];
+
+    /// <summary>
+    /// How each screen stands right now. Everything starts <see cref="ScreenState.Inactive"/>
+    /// and stays that way until a control says otherwise - the silent start (Part 3).
+    /// </summary>
+    private readonly Dictionary<ScreenId, ScreenCommand> _states = [];
+
     private readonly CancellationTokenSource _shutdown = new();
 
     private readonly ISecretStore _secrets = new WindowsSecretStore();
@@ -52,6 +61,15 @@ public sealed partial class App : Application, IDisposable
     private Uri _hubHttp = null!;
     private string _assetPath = Protocol.AssetPath;
     private DeviceId _device;
+    private string _deviceName = string.Empty;
+    private bool _windowed;
+
+    /// <summary>
+    /// The outgoing queue of the connection that stands right now, or <see langword="null"/>
+    /// while there is none. A hot-plug while nothing is connected therefore reports nothing - and
+    /// needs to report nothing, because the next <c>Hello</c> carries the inventory anyway.
+    /// </summary>
+    private ChannelWriter<ProtocolMessage>? _outbox;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -94,6 +112,8 @@ public sealed partial class App : Application, IDisposable
         var host = options.Host ?? loaded.Value.Host;
         var deviceName = options.DeviceName ?? loaded.Value.DeviceName ?? Environment.MachineName;
 
+        _deviceName = deviceName;
+
         // One provider, registered once and never taken out - ILoggerFactory has AddProvider and
         // no counterpart, so the level a display is raised to from the far side of the house has
         // to live INSIDE it (Part 6, Part 8). The file is on from the start and not switched on
@@ -115,10 +135,12 @@ public sealed partial class App : Application, IDisposable
 
         _logger = _loggers.CreateLogger<App>();
 
-        // Warning by default: the file keeps everything this device produces, the wire carries
-        // what is worth the DM's attention. Settable per device from the control in M1b's next
-        // step, over ConfigUpdate (Part 6).
-        _forwarding = new LogForwarding(_log, LogLevel.Warning);
+        // Two knobs, not three: what the device WRITES - into the ring buffer and the file alike -
+        // and what of it is worth the wire. Both are settable per device from the control, which
+        // is the documented way to hunt a fault: raise this display to Debug from the far side of
+        // the house (Part 6, Part 8).
+        _log.Level = loaded.Value.Device.Level ?? LogLevel.Information;
+        _forwarding = new LogForwarding(_log, loaded.Value.Device.ForwardAtLeast ?? LogLevel.Warning);
 
         _device = new DeviceId(loaded.Value.DeviceId);
 
@@ -128,41 +150,235 @@ public sealed partial class App : Application, IDisposable
         DisplayLog.DataRootChosen(_logger, _dataRoot.Path);
         Report(_logger, loaded);
 
-        var monitors = Screens.Enumerate(deviceName);
+        _windowed = options.Windowed;
 
-        if (monitors.Count == 0)
+        if (!Survey(deviceName))
         {
             DisplayLog.NoScreens(_logger);
             Shutdown();
             return;
         }
 
-        foreach (var monitor in monitors)
-        {
-            DisplayLog.ScreenFound(
-                _logger,
-                monitor.Screen.ScreenId,
-                monitor.Screen.Label,
-                monitor.Screen.Size,
-                monitor.Screen.Dpi);
+        // NOTHING is shown here, and that is the whole of the silent start: a display PC runs in
+        // the autostart at every logon, not only on game nights. Coming up with the last state
+        // set would make the application a trap - a frozen table nobody can explain, or an overlay
+        // on the monitor the DM expressly gave back, permanently, because on an ordinary Tuesday
+        // there is no control running to correct it (Part 3).
+        //
+        // It costs nothing: the scene lives in memory only, so after a start there is nothing to
+        // show anyway. The way out is the Hello and the answer to it, and there is exactly one.
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
-            _contexts[monitor.Screen.ScreenId] = ScreenContext.Default(monitor.Screen.Size, monitor.Screen.Dpi);
-
-            var window = new OverlayWindow(monitor, options.Windowed);
-            _windows[monitor.Screen.ScreenId] = window;
-            window.Show();
-
-            DisplayLog.OverlayOpened(
-                _logger,
-                monitor.Screen.ScreenId,
-                options.Windowed ? "windowed" : "overlay");
-        }
+        // Every default written out on the first start, per screen, so whoever opens the file can
+        // SEE what is settable instead of collecting the defaults from somewhere else (Part 6,
+        // Part 9). Waiting for a control would leave a device that has never met one with an
+        // empty list - and it is exactly that device the rule is written for.
+        Remember();
 
         // The token travels with the control it belongs to: one without the other would be
         // offered to the first hub that answers (Part 4). A stored token that does not decrypt is
         // simply absent - the device pairs again, which is what TryRead returning a value instead
         // of throwing is for.
-        _ = RunAsync(host, options.Port, deviceName, [.. monitors.Select(monitor => monitor.Screen)], _loggers);
+        _ = RunAsync(host, options.Port, deviceName, _loggers);
+    }
+
+    /// <summary>
+    /// Reads the screens Windows currently offers, keeping what is already known about each of
+    /// them. Returns <see langword="false"/> when there is nothing to play on.
+    /// <para>
+    /// Stored parameters are laid over the defaults here rather than when a control connects: a
+    /// device that has never seen one has to be fully set up at the table and keep that across
+    /// restarts, or local operation would be a sham (Part 4, Part 6).
+    /// </para>
+    /// </summary>
+    private bool Survey(string deviceName)
+    {
+        var monitors = Screens.Enumerate(deviceName);
+
+        if (monitors.Count == 0)
+        {
+            return false;
+        }
+
+        var stored = _settings.Screens.ToDictionary(screen => screen.ScreenId, screen => screen.Settings, StringComparer.Ordinal);
+
+        _monitors.Clear();
+
+        foreach (var monitor in monitors)
+        {
+            var id = monitor.Screen.ScreenId;
+
+            DisplayLog.ScreenFound(_logger, id, monitor.Screen.Label, monitor.Screen.Size, monitor.Screen.Dpi);
+
+            _monitors[id] = monitor;
+
+            // Size and DPI are hardware facts and always win, whatever was stored about them.
+            var context = ScreenContext.Default(monitor.Screen.Size, monitor.Screen.Dpi);
+
+            _contexts[id] = stored.TryGetValue(id.Value, out var settings)
+                ? settings.ApplyTo(context)
+                : context;
+
+            _states.TryAdd(id, new ScreenCommand(ScreenState.Inactive));
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// A monitor was plugged, unplugged or re-resolved. The device reports which screens it HAS
+    /// and knows no "unavailable" - working out what is missing is the control's business
+    /// (Part 3).
+    /// </summary>
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        // SystemEvents fires on a thread of its own, and everything below touches windows.
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.InvokeAsync(() => OnDisplaySettingsChanged(sender, e));
+            return;
+        }
+
+        if (_shutdown.IsCancellationRequested || !Survey(_deviceName))
+        {
+            return;
+        }
+
+        // A screen that is gone takes its window with it; the rest keep theirs.
+        foreach (var id in _windows.Keys.Where(id => !_monitors.ContainsKey(id)).ToList())
+        {
+            Close(id);
+        }
+
+        foreach (var id in _monitors.Keys)
+        {
+            Show(id);
+        }
+
+        var screens = Inventory();
+
+        DisplayLog.ScreensReported(_logger, screens.Count);
+        _outbox?.TryWrite(new ScreensChangedMessage(screens));
+    }
+
+    private IReadOnlyList<ScreenInfo> Inventory() =>
+        [.. _monitors.Values.Select(monitor => monitor.Screen)];
+
+    /// <summary>
+    /// Takes a <c>ConfigUpdate</c> from the control: the settings it changed, and how each screen
+    /// is to stand.
+    /// <para>
+    /// A screen with a finding behaves exactly like <see cref="ScreenState.Inactive"/> - no
+    /// window - and the wish stays untouched underneath. That is the whole reason findings are not
+    /// states: when the finding falls away the window is simply back, with the state that stood
+    /// there all along (Part 3).
+    /// </para>
+    /// </summary>
+    private void Apply(ConfigUpdate update)
+    {
+        foreach (var screen in update.Screens)
+        {
+            if (screen.Settings is { IsEmpty: false } settings && _contexts.TryGetValue(screen.Screen, out var context))
+            {
+                _contexts[screen.Screen] = settings.ApplyTo(context);
+            }
+
+            if (screen.Command is { } command)
+            {
+                // Any arriving ConfigUpdate clears a local suppression as well: whoever has their
+                // control back wants to play on, not switch every screen back by hand (Part 6).
+                _states[screen.Screen] = command;
+            }
+
+            Show(screen.Screen);
+        }
+
+        if (update.Device is { } device)
+        {
+            _log!.Level = device.Level ?? _log.Level;
+            _forwarding!.AtLeast = device.ForwardAtLeast ?? _forwarding.AtLeast;
+        }
+
+        Remember();
+        DisplayLog.SettingsApplied(_logger, update.Screens.Count);
+    }
+
+    /// <summary>
+    /// Writes what arrived into display.json, in FULL rather than as the delta it came as: on the
+    /// wire a null means "unchanged", in the file it would mean nothing (Part 6).
+    /// <para>
+    /// The screen states are expressly not written. A state set from outside applies to the
+    /// running session; the lasting wish lives in the control, which is what makes the silent
+    /// start hold - an autostarting display PC must not come up with last night's arrangement
+    /// (Part 3).
+    /// </para>
+    /// </summary>
+    private void Remember()
+    {
+        if (_configuration is null)
+        {
+            return;
+        }
+
+        _settings = _settings with
+        {
+            Screens =
+            [
+                .. _contexts.Select(pair => new ScreenPreferences(
+                    pair.Key.Value,
+                    ScreenSettings.Of(pair.Value, _monitors.GetValueOrDefault(pair.Key)?.Screen.CustomName))),
+            ],
+            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast),
+        };
+
+        _configuration.Save(_settings);
+    }
+
+    /// <summary>
+    /// Puts a window down, takes one away, or leaves things as they are. It is the only place
+    /// that decides whether a screen carries an overlay, so "suppressed behaves like inactive" is
+    /// a property of the code rather than a rule somebody has to remember.
+    /// </summary>
+    private void Show(ScreenId screen)
+    {
+        var wanted = _states.TryGetValue(screen, out var command)
+            && command.State != ScreenState.Inactive
+            && command.Suppress is null
+            && _monitors.ContainsKey(screen);
+
+        if (!wanted)
+        {
+            Close(screen);
+            return;
+        }
+
+        if (_windows.ContainsKey(screen))
+        {
+            return;
+        }
+
+        var window = new OverlayWindow(_monitors[screen], _windowed);
+
+        _windows[screen] = window;
+        window.Show();
+
+        DisplayLog.OverlayOpened(_logger, screen, _windowed ? "windowed" : "overlay");
+
+        // Whatever was already known about this screen is drawn at once - a screen switched from
+        // inactive to active has to stand there complete, not empty until the DM next touches it.
+        // That is what makes preparing on an inactive screen work at all (Part 3).
+        Draw(new ScreenRef(_device, screen));
+    }
+
+    private void Close(ScreenId screen)
+    {
+        if (!_windows.Remove(screen, out var window))
+        {
+            return;
+        }
+
+        window.Close();
+        DisplayLog.OverlayClosed(_logger, screen);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -174,6 +390,8 @@ public sealed partial class App : Application, IDisposable
 
     public void Dispose()
     {
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+
         if (!_shutdown.IsCancellationRequested)
         {
             _shutdown.Cancel();
@@ -232,7 +450,6 @@ public sealed partial class App : Application, IDisposable
         string? preferred,
         int port,
         string deviceName,
-        IReadOnlyList<ScreenInfo> screens,
         ILoggerFactory loggers)
     {
         var client = new DisplayClient(loggers.CreateLogger<DisplayClient>());
@@ -254,7 +471,7 @@ public sealed partial class App : Application, IDisposable
                 continue;
             }
 
-            var reached = await ConnectAsync(client, target, deviceName, screens).ConfigureAwait(false);
+            var reached = await ConnectAsync(client, target, deviceName).ConfigureAwait(false);
 
             if (reached)
             {
@@ -300,11 +517,7 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>Runs one connection to the end. True when it actually reached a control.</summary>
-    private async Task<bool> ConnectAsync(
-        DisplayClient client,
-        Target target,
-        string deviceName,
-        IReadOnlyList<ScreenInfo> screens)
+    private async Task<bool> ConnectAsync(DisplayClient client, Target target, string deviceName)
     {
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {
@@ -314,7 +527,7 @@ public sealed partial class App : Application, IDisposable
         // Every attempt builds its own Hello. After a pairing this device has a token where it had
         // a code a moment ago - a message built once at startup would go on introducing this
         // machine as a stranger for as long as it runs.
-        var hello = Introduction(deviceName, screens);
+        var hello = Introduction(deviceName);
 
         _hubHttp = new Uri($"http://{target.Host}:{target.Port}/");
 
@@ -329,6 +542,10 @@ public sealed partial class App : Application, IDisposable
         var hubUri = new Uri($"ws://{target.Host}:{target.Port}{Protocol.DisplayPath}");
         var pump = Task.Run(() => client.RunAsync(hubUri, hello, inbox.Writer, outbox, _shutdown.Token));
 
+        // What a hot-plug and a locally changed setting reach the wire through, for as long as
+        // this connection stands.
+        _outbox = outbox.Writer;
+
         // Runs for the length of this connection; the mark it reads from survives it, so whatever
         // came up while there was none goes out now (Part 8).
         var forwarding = Task.Run(() => _forwarding!.RunAsync(outbox.Writer, _shutdown.Token));
@@ -342,6 +559,7 @@ public sealed partial class App : Application, IDisposable
             await HandleAsync(message).ConfigureAwait(false);
         }
 
+        _outbox = null;
         outbox.Writer.TryComplete();
 
         await pump.ConfigureAwait(false);
@@ -351,10 +569,29 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
+    /// Reports a locally changed setting back to the control. The same mechanism in the other
+    /// direction, not a second one - and it is what keeps local operation from being a sham: a
+    /// device changed at the table must not have its value quietly overwritten by the next
+    /// <c>ConfigUpdate</c> (Part 4, Part 6).
+    /// <para>
+    /// Nothing in M1b triggers it yet, because the tray window that would is M6. What exists is
+    /// the path - and the baseline the <c>Hello</c> carries, which is the half that works without
+    /// any surface at all.
+    /// </para>
+    /// </summary>
+    internal void Report(ConfigUpdate update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        Remember();
+        _outbox?.TryWrite(new ConfigUpdateMessage(update));
+    }
+
+    /// <summary>
     /// Either the token or the pairing code, never both: what a device brings is what decides how
     /// the hub treats it (Part 4).
     /// </summary>
-    private HelloMessage Introduction(string deviceName, IReadOnlyList<ScreenInfo> screens)
+    private HelloMessage Introduction(string deviceName)
     {
         string? token = null;
 
@@ -371,9 +608,27 @@ public sealed partial class App : Application, IDisposable
             deviceName,
             typeof(App).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             Protocol.Version,
-            screens,
+            Inventory(),
             token,
-            token is null ? _pairingCode : null);
+            token is null ? _pairingCode : null,
+
+            // The baseline of the two-sided configuration: the FULL effective set, so the control
+            // can take it over and only then send what it changed while this device was away. The
+            // screen states are expressly not in here - a display never reports how it stands,
+            // only how it is set (Part 3, Part 4).
+            new ConfigUpdate(
+                [
+                    .. _contexts.Select(pair => new ScreenConfigUpdate(
+                        pair.Key,
+                        ScreenSettings.Of(pair.Value, _monitors.GetValueOrDefault(pair.Key)?.Screen.CustomName))),
+                ],
+                new DeviceSettings(_log?.Level, _forwarding?.AtLeast)),
+
+            // What this device still has on its screens. A control that has just restarted takes
+            // it over, and only where it has no scene of its own - which is the one exception to
+            // "the hub is authoritative", and it is kept this narrow on purpose (Part 4).
+            [.. _scenes.Where(pair => pair.Key.Device == _device)
+                .Select(pair => new ScreenScene(pair.Key.Screen, pair.Value))]);
     }
 
     private async Task HandleAsync(ProtocolMessage message)
@@ -404,6 +659,12 @@ public sealed partial class App : Application, IDisposable
 
             case ScenePatchMessage patch:
                 await ApplyAsync(patch.Patch).ConfigureAwait(false);
+                break;
+
+            case ConfigUpdateMessage update:
+                // Onto the UI thread: this opens and closes windows, and everything here arrives
+                // on the connection task.
+                await Dispatcher.InvokeAsync(() => Apply(update.Update));
                 break;
 
             default:
@@ -539,16 +800,26 @@ public sealed partial class App : Application, IDisposable
         return image;
     }
 
-    private Task RenderAsync(ScreenRef screen)
+    private Task RenderAsync(ScreenRef screen) => Dispatcher.InvokeAsync(() => Draw(screen)).Task;
+
+    /// <summary>
+    /// Draws one screen. Must run on the UI thread - windows are created and drawn there, and
+    /// everything that reaches this comes over the connection task.
+    /// <para>
+    /// A screen without a window is not an error and not a special case: the scene is kept
+    /// regardless, so an inactive screen switched active stands there complete at once. Giving up
+    /// the scene when the window goes would make the arrangement fall out of the <c>Hello</c> and
+    /// a control restart would lose it (Part 3).
+    /// </para>
+    /// </summary>
+    private void Draw(ScreenRef screen)
     {
         if (!_windows.TryGetValue(screen.Screen, out var window)
             || !_contexts.TryGetValue(screen.Screen, out var context))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var scene = _scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty;
-
-        return window.Dispatcher.InvokeAsync(() => window.Render(scene, context, _images)).Task;
+        window.Render(_scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty, context, _images);
     }
 }

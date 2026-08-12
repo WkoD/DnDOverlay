@@ -17,23 +17,21 @@ namespace DnDOverlay.Control;
 /// </summary>
 internal sealed class MainWindow : Window
 {
-    private readonly ScreenCatalog _screens;
     private readonly ISessionApi _session;
     private readonly PairingDesk _pairing;
     private readonly DemoAsset _asset;
-    private readonly ListBox _list = new() { Margin = new Thickness(0, 0, 0, 12), MinHeight = 120 };
+    private readonly ListBox _list = new() { Margin = new Thickness(0, 0, 0, 8), MinHeight = 120 };
     private readonly ListBox _waiting = new() { Margin = new Thickness(0, 0, 0, 8), MinHeight = 60 };
+    private readonly ComboBox _state = new() { Width = 160, Margin = new Thickness(0, 0, 8, 0) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromSeconds(1) };
 
     internal MainWindow(
-        ScreenCatalog screens,
         ISessionApi session,
         PairingDesk pairing,
         DemoAsset asset,
         Uri address)
     {
-        _screens = screens;
         _session = session;
         _pairing = pairing;
         _asset = asset;
@@ -66,6 +64,7 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(0, 12, 0, 4),
         });
         panel.Children.Add(_list);
+        panel.Children.Add(StateRow());
         panel.Children.Add(send);
         panel.Children.Add(_status);
 
@@ -74,6 +73,47 @@ internal sealed class MainWindow : Window
         _refresh.Tick += (_, _) => Refresh();
         _refresh.Start();
         Refresh();
+    }
+
+    /// <summary>
+    /// The state selector, and it is not decoration: since the silent start a display puts NO
+    /// window anywhere until the control says so, so without a way back out of
+    /// <see cref="ScreenState.Inactive"/> a screen the DM gave back could never be taken up again
+    /// (Part 3).
+    /// <para>
+    /// It shows the WISH, never what is currently in the way. A finding stands next to it in the
+    /// list and leaves the wish untouched - which is why the selector does not jump about on its
+    /// own the moment somebody moves a window (Part 3, Part 7).
+    /// </para>
+    /// </summary>
+    private StackPanel StateRow()
+    {
+        foreach (var state in Enum.GetValues<ScreenState>())
+        {
+            _state.Items.Add(state);
+        }
+
+        var apply = new Button { Content = "Set state", Padding = new Thickness(12, 6, 12, 6) };
+
+        apply.Click += async (_, _) =>
+        {
+            if (_list.SelectedItem is not ScreenEntry entry || _state.SelectedItem is not ScreenState state)
+            {
+                _status.Text = "Pick a screen and a state.";
+                return;
+            }
+
+            await _session.SetScreenStateAsync(entry.Screen, state).ConfigureAwait(true);
+
+            _status.Text = $"{entry.Label} is now {state}.";
+            Refresh();
+        };
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
+        row.Children.Add(_state);
+        row.Children.Add(apply);
+
+        return row;
     }
 
     private StackPanel PairingButtons()
@@ -146,9 +186,11 @@ internal sealed class MainWindow : Window
     /// </summary>
     private void RefreshScreens()
     {
-        var known = _screens.Known.ToList();
+        // Read through the session rather than out of the catalogue: the surface is a client of
+        // its own hub, and this is the shape a tile will be drawn from (Part 1, rule 1).
+        var entries = _session.Screens.Select(view => new ScreenEntry(view)).ToList();
 
-        if (_list.Items.Count == known.Count)
+        if (_list.Items.Cast<ScreenEntry>().SequenceEqual(entries))
         {
             return;
         }
@@ -157,10 +199,9 @@ internal sealed class MainWindow : Window
 
         _list.Items.Clear();
 
-        foreach (var screen in known)
+        foreach (var entry in entries)
         {
-            var info = _screens.InfoFor(screen);
-            _list.Items.Add(new ScreenEntry(screen, info?.Label ?? screen.Screen.Value));
+            _list.Items.Add(entry);
         }
 
         _list.SelectedIndex = selected >= 0 && selected < _list.Items.Count ? selected : 0;
@@ -181,9 +222,21 @@ internal sealed class MainWindow : Window
         _status.Text = $"Sent as item {item} to {entry.Label}.";
     }
 
-    private sealed record ScreenEntry(ScreenRef Screen, string Label)
+    /// <summary>
+    /// The wish and the finding side by side, never one instead of the other. A screen that is
+    /// not being played on right now still shows the state the DM set - which is the whole reason
+    /// findings are not states (Part 3, Part 7).
+    /// </summary>
+    private sealed record ScreenEntry(ScreenView View)
     {
-        public override string ToString() => Label;
+        internal ScreenRef Screen => View.Screen;
+
+        internal string Label => View.Info.Label;
+
+        public override string ToString() =>
+            View.Suppressed is { } reason
+                ? $"{View.Info.Label} - {View.State}, not played on: {reason}"
+                : $"{View.Info.Label} - {View.State}";
     }
 
     /// <summary>

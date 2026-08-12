@@ -53,6 +53,29 @@ internal static partial class DisplayLog
     internal static partial void AssetDecoded(ILogger logger, AssetId assetId, int width, int height);
 
     /// <summary>
+    /// The counterpart to <c>OverlayOpened</c>, and it is worth its own line: on a machine that
+    /// nobody is looking at, "the table went dark" is otherwise a fact with no explanation. A
+    /// screen turned inactive and one merely suppressed look identical from the room (Part 3).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3015,
+        Level = LogLevel.Information,
+        Message = "Overlay on {ScreenId} closed.")]
+    internal static partial void OverlayClosed(ILogger logger, ScreenId screenId);
+
+    [LoggerMessage(
+        EventId = 3016,
+        Level = LogLevel.Information,
+        Message = "Screen inventory changed - reporting {ScreenCount} screen(s).")]
+    internal static partial void ScreensReported(ILogger logger, int screenCount);
+
+    [LoggerMessage(
+        EventId = 3017,
+        Level = LogLevel.Information,
+        Message = "Applied settings for {ScreenCount} screen(s) from the control.")]
+    internal static partial void SettingsApplied(ILogger logger, int screenCount);
+
+    /// <summary>
     /// Said out loud on purpose: a development run and an installed copy differ in exactly this
     /// one path, and a run that quietly used the wrong root would be indistinguishable from a
     /// correct one until it had already touched the DM's own configuration (Part 9).

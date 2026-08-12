@@ -33,8 +33,20 @@ public sealed class DisplayConnection
 
     public DeviceId Device { get; }
 
-    /// <summary>The screens this connection is responsible for - the hub addresses per connection.</summary>
-    public IReadOnlyList<ScreenRef> Screens { get; }
+    /// <summary>
+    /// The screens this connection is responsible for - the hub addresses per connection.
+    /// <para>
+    /// It changes while the connection stands: a monitor is plugged in, and the device says so
+    /// with <c>ScreensChanged</c>. Without following that, a patch for the new screen would be
+    /// sent to nobody - and the display's "unknown screen, discarded" net would never even see it
+    /// (Part 4).
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ScreenRef> Screens { get; private set; }
+
+    /// <summary>Takes a new inventory. Called from the one loop that reads this socket.</summary>
+    internal void Reported(IReadOnlyList<ScreenId> screens) =>
+        Screens = [.. screens.Select(screen => new ScreenRef(Device, screen))];
 
     /// <summary>
     /// Fires when this connection is over - displaced by a newer one for the same device, silent

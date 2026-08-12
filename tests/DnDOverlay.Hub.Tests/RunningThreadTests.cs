@@ -137,16 +137,16 @@ public sealed class RunningThreadTests : IAsyncLifetime
             Token),
             cancellationToken);
 
-        Assert.IsType<WelcomeMessage>(await ReceiveAsync(socket, cancellationToken));
+        await ReceiveAsync<WelcomeMessage>(socket, cancellationToken);
 
-        var snapshot = Assert.IsType<SceneSnapshotMessage>(await ReceiveAsync(socket, cancellationToken));
+        var snapshot = await ReceiveAsync<SceneSnapshotMessage>(socket, cancellationToken);
         Assert.Equal(target, snapshot.Screen);
         Assert.Empty(snapshot.Scene.Items);
 
         var session = _app.Services.GetRequiredService<ISessionApi>();
         var itemId = await session.AddItemAsync(target, Reference(), position: null, cancellationToken);
 
-        var patch = Assert.IsType<ScenePatchMessage>(await ReceiveAsync(socket, cancellationToken));
+        var patch = await ReceiveAsync<ScenePatchMessage>(socket, cancellationToken);
         var op = Assert.Single(patch.Patch.Ops);
 
         Assert.Equal(target, op.Screen);
@@ -188,8 +188,7 @@ public sealed class RunningThreadTests : IAsyncLifetime
             Token),
             cancellationToken);
 
-        _ = await ReceiveAsync(socket, cancellationToken);
-        _ = await ReceiveAsync(socket, cancellationToken);
+        await ReceiveAsync<SceneSnapshotMessage>(socket, cancellationToken);
 
         var session = _app.Services.GetRequiredService<ISessionApi>();
 
@@ -203,7 +202,7 @@ public sealed class RunningThreadTests : IAsyncLifetime
 
         for (var i = 0; i < 5; i++)
         {
-            var patch = Assert.IsType<ScenePatchMessage>(await ReceiveAsync(socket, cancellationToken));
+            var patch = await ReceiveAsync<ScenePatchMessage>(socket, cancellationToken);
             var item = Assert.IsType<ImageItem>(Assert.IsType<AddItem>(Assert.Single(patch.Patch.Ops).Op).Item);
 
             revisions.Add(item.Revision);
@@ -229,6 +228,30 @@ public sealed class RunningThreadTests : IAsyncLifetime
     /// tests would depend on staying shorter than one beat - which is the kind of assumption that
     /// holds until the day a machine is slow (Part 4).
     /// </summary>
+    /// <summary>
+    /// Reads until the message this test is about arrives, passing over whatever else the hub has
+    /// to say first.
+    /// <para>
+    /// Counting messages instead would make every test here depend on how many things a connecting
+    /// display is told - and that number grows with the milestones. The screen inventory added a
+    /// <c>ConfigUpdate</c> in front of the snapshots, and three tests failed that had nothing to do
+    /// with it. <b>A test should wait for what it asserts about, not for a position in a queue.</b>
+    /// </para>
+    /// </summary>
+    private static async Task<T> ReceiveAsync<T>(WebSocket socket, CancellationToken cancellationToken)
+        where T : ProtocolMessage
+    {
+        while (await ReceiveAsync(socket, cancellationToken) is { } message)
+        {
+            if (message is T wanted)
+            {
+                return wanted;
+            }
+        }
+
+        throw new InvalidOperationException($"The connection ended before a {typeof(T).Name} arrived.");
+    }
+
     private static async Task<ProtocolMessage?> ReceiveAsync(WebSocket socket, CancellationToken cancellationToken)
     {
         var buffer = new byte[64 * 1024];

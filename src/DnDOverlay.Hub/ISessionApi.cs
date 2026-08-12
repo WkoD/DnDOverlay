@@ -38,6 +38,45 @@ public interface ISessionApi
     Task<SceneState> GetSceneAsync(ScreenRef screen, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Every known screen with its reported facts, the DM's wish and whatever is getting in the
+    /// way right now - the shape a tile is drawn from. Screens of a device that is switched off
+    /// are in here too, and they are fully playable (Part 3).
+    /// </summary>
+    IReadOnlyList<ScreenView> Screens { get; }
+
+    /// <summary>
+    /// Sets the DM's wish for one screen. One of exactly two things that travel one way only, and
+    /// the reason is in the model: all five states are born here, live in control.json and are
+    /// never reported back (Part 3).
+    /// </summary>
+    Task SetScreenStateAsync(ScreenRef screen, ScreenState state, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets or clears a transient FINDING - <see langword="null"/> means "nothing in the way".
+    /// <para>
+    /// It leaves the wish untouched, and that is the whole construction: there is nothing to
+    /// remember and nothing to restore, so a screen unplugged while somebody changes its state
+    /// comes back with the state that was set, not with the one that happened to be current when
+    /// it went (Part 3).
+    /// </para>
+    /// </summary>
+    Task SuppressAsync(
+        ScreenRef screen,
+        SuppressReason? reason,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Changes display parameters from the control's side, as a DELTA - only the keys that
+    /// changed.
+    /// <para>
+    /// It works while the device is switched off: what is set is kept and goes out with the next
+    /// connection, which is what makes the device window usable before the display PC is even
+    /// switched on (Part 4, Part 7).
+    /// </para>
+    /// </summary>
+    Task ApplyConfigAsync(DeviceId device, ConfigUpdate update, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// What is knocking right now - never what knocked earlier. An open request has no deadline;
     /// it stands as long as its connection stands and vanishes with it (Part 4).
     /// </summary>

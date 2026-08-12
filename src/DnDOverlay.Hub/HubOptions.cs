@@ -26,6 +26,17 @@ public sealed class HubOptions
     public IReadOnlyList<PairedDevice> KnownDevices { get; set; } = [];
 
     /// <summary>
+    /// Every screen that was ever reported, with the DM's wish and its display parameters - again
+    /// a snapshot at construction, from the same file.
+    /// <para>
+    /// It is what makes the hub able to place, cap and rotate for a screen whose device is
+    /// switched off, which is the whole of "a screen is fully playable in every state"
+    /// (Part 3, Part 7).
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<Core.Configuration.KnownScreen> KnownScreens { get; set; } = [];
+
+    /// <summary>
     /// "Do not accept new devices" (Part 4). Off, requests are only logged - the answer to a
     /// stranger who keeps knocking, without a dialog in front of the group.
     /// </summary>

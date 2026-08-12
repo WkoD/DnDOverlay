@@ -19,22 +19,18 @@ internal sealed class PairingDesk
 {
     private readonly ISessionApi _session;
     private readonly ISecretStore _secrets;
-    private readonly ConfigurationFile<ControlConfiguration> _file;
+    private readonly ControlSettings _settings;
     private readonly TimeProvider _time;
-
-    private ControlConfiguration _configuration;
 
     internal PairingDesk(
         ISessionApi session,
         ISecretStore secrets,
-        ConfigurationFile<ControlConfiguration> file,
-        ControlConfiguration configuration,
+        ControlSettings settings,
         TimeProvider time)
     {
         _session = session;
         _secrets = secrets;
-        _file = file;
-        _configuration = configuration;
+        _settings = settings;
         _time = time;
     }
 
@@ -77,11 +73,11 @@ internal sealed class PairingDesk
 
         var token = DeviceTokens.Create();
 
-        _configuration = _configuration with
+        _settings.Update(configuration => configuration with
         {
             KnownDevices =
             [
-                .. _configuration.KnownDevices.Where(device => device.DeviceId != request.Device.Value),
+                .. configuration.KnownDevices.Where(device => device.DeviceId != request.Device.Value),
                 new KnownDevice(
                     request.Device.Value,
                     request.Name,
@@ -89,13 +85,11 @@ internal sealed class PairingDesk
                     DeviceTokens.Store(_secrets, token),
                     _time.GetLocalNow()),
             ],
-        };
-
-        _file.Save(_configuration);
+        });
 
         // Past the debounce on purpose. Everywhere else it saves writes; here it would decide
         // whether the token survives the next five seconds (Part 6).
-        _file.Flush();
+        _settings.Flush();
 
         // The hub writes the log line for this (event 1021). A second one from here would say the
         // same thing twice - and the range that owns it is connection, not operations (Part 8).

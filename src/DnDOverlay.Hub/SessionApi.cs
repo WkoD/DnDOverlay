@@ -1,4 +1,5 @@
 using DnDOverlay.Core;
+using DnDOverlay.Core.Protocol;
 using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Hub;
@@ -112,6 +113,101 @@ public sealed class SessionApi : ISessionApi, IDisposable
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ScreenView> Screens => _screens.Views();
+
+    /// <inheritdoc />
+    public Task SetScreenStateAsync(
+        ScreenRef screen,
+        ScreenState state,
+        CancellationToken cancellationToken = default)
+    {
+        // No gate: this touches the screen catalogue, which guards itself - not the scene state,
+        // which is what the gate serialises.
+        if (_screens.SetState(screen, state))
+        {
+            HubLog.ScreenStateChanged(_logger, screen, state);
+            Push(screen.Device);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task SuppressAsync(
+        ScreenRef screen,
+        SuppressReason? reason,
+        CancellationToken cancellationToken = default)
+    {
+        if (_screens.SetSuppress(screen, reason))
+        {
+            if (reason is { } named)
+            {
+                HubLog.ScreenSuppressed(_logger, screen, named);
+            }
+            else
+            {
+                HubLog.ScreenAvailable(_logger, screen);
+            }
+
+            Push(screen.Device);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task ApplyConfigAsync(
+        DeviceId device,
+        ConfigUpdate update,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        foreach (var screen in update.Screens)
+        {
+            if (screen.Settings is { IsEmpty: false } settings)
+            {
+                _screens.Change(new ScreenRef(device, screen.Screen), settings);
+            }
+
+            if (screen.Command is { } command)
+            {
+                _ = _screens.SetState(new ScreenRef(device, screen.Screen), command.State);
+                _ = _screens.SetSuppress(new ScreenRef(device, screen.Screen), command.Suppress);
+            }
+        }
+
+        if (update.Device is { IsEmpty: false } settings_)
+        {
+            _screens.Change(device, settings_);
+        }
+
+        Push(device);
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Sends what is outstanding for this device - but only if it is here. What is not sent stays
+    /// pending, which is the whole reason a screen can be set while its display PC is off
+    /// (Part 7).
+    /// </summary>
+    internal void Push(DeviceId device)
+    {
+        if (!_connections.TryGet(device, out var connection))
+        {
+            return;
+        }
+
+        var update = _screens.Drain(device);
+
+        if (!update.IsEmpty)
+        {
+            connection.TrySend(new ConfigUpdateMessage(update));
         }
     }
 

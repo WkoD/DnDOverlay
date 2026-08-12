@@ -61,7 +61,7 @@ public sealed class PairingOverTheWireTests
         var welcome = Assert.IsType<WelcomeMessage>(await first.NextAsync(cancellationToken));
 
         Assert.Equal(Token, welcome.Token);
-        Assert.IsType<SceneSnapshotMessage>(await first.NextAsync(cancellationToken));
+        await first.NextAsync<SceneSnapshotMessage>(cancellationToken);
         Assert.Empty(hub.Session.PendingPairings);
 
         // And back again with what it was given - the normal case at every power-on.
@@ -70,7 +70,7 @@ public sealed class PairingOverTheWireTests
         var second = Assert.IsType<WelcomeMessage>(await again.NextAsync(cancellationToken));
 
         Assert.Null(second.Token);
-        Assert.IsType<SceneSnapshotMessage>(await again.NextAsync(cancellationToken));
+        await again.NextAsync<SceneSnapshotMessage>(cancellationToken);
     }
 
     [Fact(Timeout = 30_000)]
@@ -366,6 +366,25 @@ public sealed class PairingOverTheWireTests
 
         internal async Task<ProtocolMessage> NextAsync(CancellationToken cancellationToken) =>
             await _inbox.Reader.ReadAsync(cancellationToken);
+
+        /// <summary>
+        /// Reads until the message this test is about arrives, passing over whatever else the hub
+        /// has to say first. Waiting for a POSITION in the queue would tie every test here to how
+        /// many things a connecting display is told - a number that grows with the milestones.
+        /// </summary>
+        internal async Task<T> NextAsync<T>(CancellationToken cancellationToken)
+            where T : ProtocolMessage
+        {
+            while (await _inbox.Reader.ReadAsync(cancellationToken) is { } message)
+            {
+                if (message is T wanted)
+                {
+                    return wanted;
+                }
+            }
+
+            throw new InvalidOperationException($"The connection ended before a {typeof(T).Name} arrived.");
+        }
 
         internal async Task WaitUntilClosedAsync(CancellationToken cancellationToken) =>
             await _closed.Task.WaitAsync(cancellationToken);

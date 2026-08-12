@@ -31,6 +31,14 @@ public sealed class SceneStore
 
     public void Set(ScreenRef screen, SceneState scene) => _scenes[screen] = scene;
 
+    /// <summary>
+    /// Whether this screen has a scene of OUR making. It is what bounds the one exception to
+    /// "the hub is authoritative": a control that has just restarted takes a device's scene over,
+    /// but only where it has none itself - where it has one, it puts that through instead
+    /// (Part 4).
+    /// </summary>
+    public bool Has(ScreenRef screen) => _scenes.ContainsKey(screen);
+
     /// <summary>Every screen that carries a scene, for the snapshots a connecting display gets.</summary>
     public IReadOnlyCollection<ScreenRef> Screens => _scenes.Keys.ToList();
 }

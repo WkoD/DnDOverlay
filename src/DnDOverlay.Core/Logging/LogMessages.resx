@@ -176,6 +176,39 @@
   <data name="E3006_AssetDecoded" xml:space="preserve">
     <value>Asset {AssetId} decoded at {Width}×{Height}.</value>
   </data>
+  <data name="E3007_ScreenAdded" xml:space="preserve">
+    <value>New screen {Screen} ({Label}) - playing on it.</value>
+  </data>
+  <data name="E3008_ScreenMissing" xml:space="preserve">
+    <value>Screen {Screen} ({Label}) is no longer reported - its scene and its state stay.</value>
+  </data>
+  <data name="E3009_ScreenMetricsChanged" xml:space="preserve">
+    <value>Screen {Label} changed from {Before} to {After} - images on it have been recomputed.</value>
+  </data>
+  <data name="E3010_ScreenStateChanged" xml:space="preserve">
+    <value>Screen {Screen} is now {State}.</value>
+  </data>
+  <data name="E3011_ScreenSuppressed" xml:space="preserve">
+    <value>Screen {Screen} is not being played on: {Reason}.</value>
+  </data>
+  <data name="E3012_ScreenAvailable" xml:space="preserve">
+    <value>Screen {Screen} can be played on again.</value>
+  </data>
+  <data name="E3013_ScreenCommandIgnored" xml:space="preserve">
+    <value>{DeviceName} sent a screen state of its own - passed over; states belong to the control.</value>
+  </data>
+  <data name="E3014_SceneTakenOver" xml:space="preserve">
+    <value>Took the scene of {Screen} over from the device: {ItemCount} image(s).</value>
+  </data>
+  <data name="E3015_OverlayClosed" xml:space="preserve">
+    <value>Overlay on {ScreenId} closed.</value>
+  </data>
+  <data name="E3016_ScreensReported" xml:space="preserve">
+    <value>Screen inventory changed - reporting {ScreenCount} screen(s).</value>
+  </data>
+  <data name="E3017_SettingsApplied" xml:space="preserve">
+    <value>Applied settings for {ScreenCount} screen(s) from the control.</value>
+  </data>
 
   <!-- 4000-4999 · Operations: what a process does to itself. -->
 
