@@ -123,6 +123,16 @@ public sealed class PairingDirectory
     }
 
     /// <summary>
+    /// Fires when either list the device window shows has moved - somebody knocked, somebody was
+    /// decided about, a rejection was taken back.
+    /// <para>
+    /// Always raised outside the lock. A subscriber reads both lists straight back, and reading
+    /// them from inside would mean waiting on the lock that is announcing the change.
+    /// </para>
+    /// </summary>
+    public event Action? Changed;
+
+    /// <summary>
     /// The switch from Part 4. With it off, a request is only logged - which is the answer to a
     /// device that keeps knocking, and it costs the DM nothing while he is playing.
     /// </summary>
@@ -169,6 +179,18 @@ public sealed class PairingDirectory
     {
         ArgumentNullException.ThrowIfNull(hello);
 
+        var admission = Decide(hello, address);
+
+        // Every outcome moves one of the two lists: a request opened, an existing one refreshed
+        // with a new address, a refusal filed, or a refusal dropped because a valid token turned
+        // up. Saying so unconditionally is cheaper than working out which of the four it was.
+        Changed?.Invoke();
+
+        return admission;
+    }
+
+    private Admission Decide(HelloMessage hello, string address)
+    {
         var now = _time.GetLocalNow();
 
         lock (_gate)
@@ -264,6 +286,8 @@ public sealed class PairingDirectory
     /// </summary>
     public bool Approve(DeviceId device, string token, PairingRole role)
     {
+        bool settled;
+
         lock (_gate)
         {
             if (!_pending.TryGetValue(device, out var request) || request.Snapshot.IsClone)
@@ -277,14 +301,19 @@ public sealed class PairingDirectory
             _refused.Remove(device);
             _pending.Remove(device);
 
-            return request.Settle(new PairingDecision.Approved(paired));
+            settled = request.Settle(new PairingDecision.Approved(paired));
         }
+
+        Changed?.Invoke();
+
+        return settled;
     }
 
     /// <summary>Turns a waiting device away and keeps it visible with its reason.</summary>
     public bool Reject(DeviceId device)
     {
         var now = _time.GetLocalNow();
+        bool settled;
 
         lock (_gate)
         {
@@ -303,8 +332,12 @@ public sealed class PairingDirectory
                 _refused[device] = new RefusedDevice(device, request.Snapshot.Name, RejectionReason.Denied, now);
             }
 
-            return request.Settle(new PairingDecision.Refused(RejectionReason.Denied));
+            settled = request.Settle(new PairingDecision.Refused(RejectionReason.Denied));
         }
+
+        Changed?.Invoke();
+
+        return settled;
     }
 
     /// <summary>
@@ -314,6 +347,8 @@ public sealed class PairingDirectory
     /// </summary>
     public bool AcceptAsOwnDevice(DeviceId device)
     {
+        bool settled;
+
         lock (_gate)
         {
             if (!_pending.TryGetValue(device, out var request) || !request.Snapshot.IsClone)
@@ -323,17 +358,30 @@ public sealed class PairingDirectory
 
             _pending.Remove(device);
 
-            return request.Settle(new PairingDecision.Refused(RejectionReason.DuplicateDevice));
+            settled = request.Settle(new PairingDecision.Refused(RejectionReason.DuplicateDevice));
         }
+
+        Changed?.Invoke();
+
+        return settled;
     }
 
     /// <summary>Withdraws the token. The device is a stranger again the next time it knocks.</summary>
     public bool Unpair(DeviceId device)
     {
+        bool removed;
+
         lock (_gate)
         {
-            return _paired.Remove(device);
+            removed = _paired.Remove(device);
         }
+
+        if (removed)
+        {
+            Changed?.Invoke();
+        }
+
+        return removed;
     }
 
     /// <summary>
@@ -343,10 +391,19 @@ public sealed class PairingDirectory
     /// </summary>
     public bool ClearRejection(DeviceId device)
     {
+        bool removed;
+
         lock (_gate)
         {
-            return _refused.Remove(device);
+            removed = _refused.Remove(device);
         }
+
+        if (removed)
+        {
+            Changed?.Invoke();
+        }
+
+        return removed;
     }
 
     /// <summary>
@@ -357,12 +414,19 @@ public sealed class PairingDirectory
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var withdrawn = false;
+
         lock (_gate)
         {
             if (_pending.TryGetValue(request.Snapshot.Device, out var current) && current == request)
             {
-                _pending.Remove(request.Snapshot.Device);
+                withdrawn = _pending.Remove(request.Snapshot.Device);
             }
+        }
+
+        if (withdrawn)
+        {
+            Changed?.Invoke();
         }
     }
 

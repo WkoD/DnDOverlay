@@ -77,10 +77,40 @@ public interface ISessionApi
     Task ApplyConfigAsync(DeviceId device, ConfigUpdate update, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Everything a surface shows, as one stream: the device tree, the scenes, the pairing desk and
+    /// the log.
+    /// <para>
+    /// <b>Its own stream per call, not a shared one.</b> With two control devices a shared one
+    /// would have the second taking the first one's events away (Part 4).
+    /// </para>
+    /// <para>
+    /// <b>The first element is always a complete opening picture</b>
+    /// (<see cref="SessionEvent.Opening"/>), and that is not a convenience for the caller. The hub
+    /// is a hosted service and listens before the surface stands (rule 5): an autostarting display
+    /// PC can connect, hand over its state and lodge a pairing request entirely before the first
+    /// subscription exists. Without the opening picture the surface would see none of it and would
+    /// wait for events that are long past.
+    /// </para>
+    /// <para>
+    /// The stream ENDS rather than skipping when a subscriber falls too far behind - a state event
+    /// is never dropped, so the only honest answer is to stop and let it subscribe again for a
+    /// fresh picture. That is the same rule a socket follows (Part 4).
+    /// </para>
+    /// </summary>
+    IAsyncEnumerable<SessionEvent> Subscribe(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// What is knocking right now - never what knocked earlier. An open request has no deadline;
     /// it stands as long as its connection stands and vanishes with it (Part 4).
     /// </summary>
     IReadOnlyList<PendingPairing> PendingPairings { get; }
+
+    /// <summary>
+    /// The switch from Part 4, and it belongs with the device list and nowhere else: it acts on
+    /// exactly what that list shows, and it is reached for in the moment the list is open anyway -
+    /// when a strange device keeps knocking. With it off, a request is only logged (Part 7).
+    /// </summary>
+    bool AcceptNewDevices { get; set; }
 
     /// <summary>Devices that were turned away, with the reason and when they were last seen.</summary>
     IReadOnlyList<RefusedDevice> RefusedDevices { get; }

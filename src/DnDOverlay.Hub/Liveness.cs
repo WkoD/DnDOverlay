@@ -40,6 +40,20 @@ internal sealed class Liveness
         _lastHeard = time.GetTimestamp();
     }
 
+    /// <summary>
+    /// The last round trip that was actually measured, or <see langword="null"/> until a
+    /// <c>Pong</c> has answered a <c>Ping</c> of ours.
+    /// <para>
+    /// It is read from here rather than worked out a second time, and that is the same reason the
+    /// number travels back in the <c>Ping</c>: both sides are to show ONE measurement instead of
+    /// each making its own (Part 4).
+    /// </para>
+    /// </summary>
+    internal TimeSpan? RoundTrip =>
+        Volatile.Read(ref _roundTripMs) is var measured && measured < 0
+            ? null
+            : TimeSpan.FromMilliseconds(measured);
+
     /// <summary>Called for every message that arrives. Anything at all counts as a sign of life.</summary>
     internal void Note() => Volatile.Write(ref _lastHeard, _time.GetTimestamp());
 

@@ -24,12 +24,14 @@ public sealed class ScreenCatalog
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<ScreenRef, Entry> _entries = [];
-    private readonly Dictionary<DeviceId, HashSet<ScreenId>> _present = [];
+    private readonly Dictionary<DeviceId, Presence> _present = [];
     private readonly Dictionary<ScreenRef, ScreenSettings> _pending = [];
     private readonly Dictionary<DeviceId, DeviceSettings> _pendingDevice = [];
 
+    private long _reports;
+
     /// <summary>
-    /// Fires when something worth keeping has changed - a screen appeared, a wish was set, a
+    /// Fires when something worth <b>keeping</b> has changed - a screen appeared, a wish was set, a
     /// parameter moved.
     /// <para>
     /// The control writes control.json from it. Polling would be the obvious alternative and is
@@ -39,6 +41,18 @@ public sealed class ScreenCatalog
     /// </para>
     /// </summary>
     public event Action? Changed;
+
+    /// <summary>
+    /// Fires when something worth <b>showing</b> has changed - everything <see cref="Changed"/>
+    /// covers, and the findings besides.
+    /// <para>
+    /// Two events rather than one, because the two questions are genuinely different: what is worth
+    /// writing to disk, and what is worth putting in front of the DM. A finding belongs to the
+    /// second and never to the first - it is transient by definition, and a screen that is
+    /// unavailable has to say so on the tile without that ever reaching control.json (Part 3).
+    /// </para>
+    /// </summary>
+    public event Action? ViewChanged;
 
     /// <summary>Every screen the hub has ever been told about, connected or not.</summary>
     public IReadOnlyCollection<ScreenRef> Known
@@ -119,9 +133,11 @@ public sealed class ScreenCatalog
             }
 
             var now = screens.Select(screen => screen.ScreenId).ToHashSet();
-            var before = _present.TryGetValue(device, out var seen) ? seen : [];
+            var before = _present.TryGetValue(device, out var seen) ? seen.Screens : [];
 
-            _present[device] = now;
+            var presence = ++_reports;
+
+            _present[device] = new Presence(presence, now);
 
             // Missing is a plain fact and expressly carries no loss warning: the tile stays, the
             // scene stays, and "save screen as scene" goes on working. A warning about a loss that
@@ -140,12 +156,12 @@ public sealed class ScreenCatalog
                     mine?.ForwardAtLeast ?? device_.ForwardAtLeast);
             }
 
-            result = new InventoryChange(added, missing, changed);
+            result = new InventoryChange(added, missing, changed, presence);
         }
 
         // Always, not only when something was added: sizes, DPI and the reported baseline can all
         // have moved without a screen appearing or going.
-        Changed?.Invoke();
+        Announce(persist: true);
 
         return result;
     }
@@ -154,11 +170,28 @@ public sealed class ScreenCatalog
     /// The device is gone. Its screens stay known and stay settable - only their availability
     /// ends, and that is a finding rather than a state (Part 3).
     /// </summary>
-    public void Departed(DeviceId device)
+    /// <param name="presence">
+    /// The ticket <see cref="Report"/> gave this connection. A stale one is ignored, which is what
+    /// keeps a slow departure from switching off a table that is already back.
+    /// </param>
+    public void Departed(DeviceId device, long presence)
     {
+        var present = false;
+
         lock (_gate)
         {
-            _present.Remove(device);
+            if (_present.TryGetValue(device, out var seen) && seen.Ticket == presence)
+            {
+                present = _present.Remove(device);
+            }
+        }
+
+        if (present)
+        {
+            // Worth showing, never worth writing: every screen of this device has just become
+            // unavailable, and the tiles have to say so - while control.json keeps exactly the
+            // wishes it kept before (Part 3).
+            Announce(persist: false);
         }
     }
 
@@ -221,7 +254,7 @@ public sealed class ScreenCatalog
             _entries[screen] = entry with { State = state };
         }
 
-        Changed?.Invoke();
+        Announce(persist: true);
 
         return true;
     }
@@ -241,9 +274,11 @@ public sealed class ScreenCatalog
             }
 
             _entries[screen] = entry with { Suppress = reason };
-
-            return true;
         }
+
+        Announce(persist: false);
+
+        return true;
     }
 
     /// <summary>
@@ -272,7 +307,7 @@ public sealed class ScreenCatalog
                 : settings;
         }
 
-        Changed?.Invoke();
+        Announce(persist: true);
     }
 
     /// <summary>A device-scope change from the control's side.</summary>
@@ -292,7 +327,7 @@ public sealed class ScreenCatalog
                 : settings;
         }
 
-        Changed?.Invoke();
+        Announce(persist: true);
     }
 
     /// <summary>
@@ -330,7 +365,7 @@ public sealed class ScreenCatalog
 
         if (applied)
         {
-            Changed?.Invoke();
+            Announce(persist: true);
         }
 
         return refused;
@@ -416,6 +451,24 @@ public sealed class ScreenCatalog
     }
 
     /// <summary>
+    /// Says what moved, always outside the lock - a subscriber reads straight back, and reading
+    /// from inside would mean waiting on the lock that is announcing the change.
+    /// </summary>
+    /// <param name="persist">
+    /// Whether this is also worth writing. Everything is worth showing; only some of it is worth
+    /// keeping, and a finding is never (Part 3).
+    /// </param>
+    private void Announce(bool persist)
+    {
+        if (persist)
+        {
+            Changed?.Invoke();
+        }
+
+        ViewChanged?.Invoke();
+    }
+
+    /// <summary>
     /// Lays a reported baseline over a context. Called under the lock.
     /// </summary>
     private static ScreenContext Baseline(ScreenContext context, Dictionary<ScreenId, ScreenSettings> reported, ScreenId screen) =>
@@ -450,13 +503,16 @@ public sealed class ScreenCatalog
 
     /// <summary>Called under the lock.</summary>
     private bool Available(ScreenRef screen) =>
-        _present.TryGetValue(screen.Device, out var present) && present.Contains(screen.Screen);
+        _present.TryGetValue(screen.Device, out var present) && present.Screens.Contains(screen.Screen);
 
     private sealed record Entry(
         ScreenInfo Info,
         ScreenState State,
         ScreenContext Context,
         SuppressReason? Suppress = null);
+
+    /// <summary>What one device last reported, and which report it was.</summary>
+    private sealed record Presence(long Ticket, HashSet<ScreenId> Screens);
 }
 
 /// <summary>
@@ -468,7 +524,19 @@ public sealed class ScreenCatalog
 /// Different resolution, aspect ratio or DPI. The only one at which something actually breaks,
 /// and therefore the only one that may be loud.
 /// </param>
+/// <param name="Presence">
+/// A ticket for this report. The caller hands it back to <see cref="ScreenCatalog.Departed"/>, so
+/// that a handler tidying up late cannot clear the presence a NEWER connection has just
+/// established.
+/// <para>
+/// It is the same cure <see cref="DisplayConnections.Remove"/> uses one floor up - identity rather
+/// than key - and this is the other place that needed it: a display that crashed and came straight
+/// back is served by a new handler while the old one is still unwinding, and clearing BY DEVICE
+/// would mark the live table's screens unavailable.
+/// </para>
+/// </param>
 public sealed record InventoryChange(
     IReadOnlyList<ScreenRef> Added,
     IReadOnlyList<ScreenRef> Missing,
-    IReadOnlyList<ScreenRef> Changed);
+    IReadOnlyList<ScreenRef> Changed,
+    long Presence);

@@ -26,6 +26,7 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     private static readonly DeviceId Restarted = new(Guid.Parse("cccccccc-0000-0000-0000-000000000002"));
     private static readonly DeviceId Plugged = new(Guid.Parse("cccccccc-0000-0000-0000-000000000003"));
     private static readonly DeviceId Talkative = new(Guid.Parse("cccccccc-0000-0000-0000-000000000004"));
+    private static readonly DeviceId Returning = new(Guid.Parse("cccccccc-0000-0000-0000-000000000005"));
 
     private static readonly ScreenId First = new(@"\\?\DISPLAY#WIRE#1");
     private static readonly ScreenId Second = new(@"\\?\DISPLAY#WIRE#2");
@@ -45,6 +46,7 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
             new PairedDevice(Restarted, "TISCH-PC", PairingRole.Display, Token),
             new PairedDevice(Plugged, "TISCH-PC", PairingRole.Display, Token),
             new PairedDevice(Talkative, "TISCH-PC", PairingRole.Display, Token),
+            new PairedDevice(Returning, "TISCH-PC", PairingRole.Display, Token),
         ]);
 
         // Registered although no test here fetches an asset - and that is not belt and braces.
@@ -178,6 +180,39 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
 
         Assert.Equal(target, snapshot.Screen);
         Assert.Empty(snapshot.Scene.Items);
+    }
+
+    /// <summary>
+    /// A display that crashed and came straight back. The old handler tidies up AFTER the new one
+    /// is already serving, and its clean-up works by DEVICE - so without a guard it would mark the
+    /// live connection's screens unavailable, and the tile would say "not played on" about a table
+    /// that is right there (Part 3).
+    /// <para>
+    /// Made deterministic by draining the old socket until the server closes it: that close comes
+    /// strictly after the clean-up, so there is nothing to sleep for.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_fast_reconnect_does_not_have_the_old_handler_disable_the_new_one()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var target = new ScreenRef(Returning, First);
+
+        using var stale = await ConnectAsync(Returning, [Info(First)], cancellationToken);
+
+        await ReceiveAsync<WelcomeMessage>(stale, cancellationToken);
+
+        // From here on nobody answers this socket's pings, so the probe finds silence and this
+        // connection is replaced rather than taken for a clone (Part 4).
+        using var fresh = await ConnectAsync(Returning, [Info(First)], cancellationToken);
+
+        await ReceiveAsync<WelcomeMessage>(fresh, cancellationToken);
+        await DrainUntilClosedAsync(stale, cancellationToken);
+
+        var catalog = _app.Services.GetRequiredService<ScreenCatalog>();
+
+        Assert.Null(catalog.ViewOf(target)!.Suppressed);
+        Assert.Equal(1, _app.Services.GetRequiredService<DisplayConnections>().Count);
     }
 
     /// <summary>
@@ -340,6 +375,33 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
         while (!settled())
         {
             await Task.Delay(20, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Reads a socket until the server has finished with it. Deliberately answering nothing: this
+    /// is the connection that is meant to look silent.
+    /// </summary>
+    private static async Task DrainUntilClosedAsync(WebSocket socket, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[64 * 1024];
+
+        try
+        {
+            while (socket.State == WebSocketState.Open)
+            {
+                var result = await socket.ReceiveAsync(buffer.AsMemory(), cancellationToken);
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    return;
+                }
+            }
+        }
+        catch (WebSocketException)
+        {
+            // Dropped rather than closed politely - which is just as good an answer to "is the
+            // server done with this one?".
         }
     }
 

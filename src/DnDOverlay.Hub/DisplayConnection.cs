@@ -22,16 +22,40 @@ public sealed class DisplayConnection
     internal DisplayConnection(
         DeviceId device,
         IReadOnlyList<ScreenId> screens,
+        HelloMessage hello,
+        string address,
         SendQueues outgoing,
         Liveness liveness)
     {
         Device = device;
         Screens = [.. screens.Select(screen => new ScreenRef(device, screen))];
+        Address = address;
+        AppVersion = hello.AppVersion;
+        ProtocolVersion = hello.ProtocolVersion;
         _outgoing = outgoing;
         _liveness = liveness;
     }
 
     public DeviceId Device { get; }
+
+    /// <summary>
+    /// Where this connection came from. Shown so a human can tell two devices apart, never used to
+    /// identify one - it changes with DHCP and with the dock (Part 3).
+    /// </summary>
+    public string Address { get; }
+
+    /// <summary>
+    /// What the device said about itself in its <c>Hello</c>. Both are reported and neither is
+    /// enforced: a differing protocol version rejects nothing, because the control is the path
+    /// along which a display gets updated (Part 4, Part 9).
+    /// </summary>
+    public string AppVersion { get; }
+
+    /// <inheritdoc cref="AppVersion" />
+    public int ProtocolVersion { get; }
+
+    /// <summary>The last measured round trip, or <see langword="null"/> before the first answer.</summary>
+    public TimeSpan? RoundTrip => _liveness.RoundTrip;
 
     /// <summary>
     /// The screens this connection is responsible for - the hub addresses per connection.

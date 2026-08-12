@@ -41,9 +41,10 @@ public sealed class ScreenInventoryTests
         catalog.Report(Device, [Info(Screen)], reported: null);
         catalog.SetState(target, ScreenState.Diagnostic);
 
-        // Unplugged - the screen is no longer reported, and the device goes with it.
-        catalog.Report(Device, [], reported: null);
-        catalog.Departed(Device);
+        // Unplugged - the screen is no longer reported, and the device goes with it. Departed is
+        // handed the ticket of the report it belongs to, so a late departure cannot switch off a
+        // connection that has meanwhile come back.
+        catalog.Departed(Device, catalog.Report(Device, [], reported: null).Presence);
 
         Assert.Equal(SuppressReason.Unavailable, catalog.ViewOf(target)!.Suppressed);
         Assert.Equal(ScreenState.Diagnostic, catalog.ViewOf(target)!.State);
@@ -171,10 +172,10 @@ public sealed class ScreenInventoryTests
         var catalog = new ScreenCatalog();
         var target = new ScreenRef(Device, Screen);
 
-        catalog.Report(Device, [Info(Screen)], reported: null);
+        var reported = catalog.Report(Device, [Info(Screen)], reported: null);
 
         // The control changes the park edge while the device is off.
-        catalog.Departed(Device);
+        catalog.Departed(Device, reported.Presence);
         catalog.Change(target, new ScreenSettings(ParkEdge: ParkEdge.Top));
 
         // The device comes back and reports that IT changed the placement mode.
@@ -203,8 +204,7 @@ public sealed class ScreenInventoryTests
         var catalog = new ScreenCatalog();
         var target = new ScreenRef(Device, Screen);
 
-        catalog.Report(Device, [Info(Screen)], reported: null);
-        catalog.Departed(Device);
+        catalog.Departed(Device, catalog.Report(Device, [Info(Screen)], reported: null).Presence);
         catalog.Change(target, new ScreenSettings(ParkEdge: ParkEdge.Top));
 
         catalog.Report(

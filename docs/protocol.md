@@ -247,6 +247,52 @@ The queues own the socket, so "exactly one writer" is a property of the construc
 a rule somebody has to keep — and it has to hold from the moment the socket is accepted, because
 the pairing answers, the refusals and the heartbeat all go out while there is no device yet.
 
+### The stream a surface reads
+
+A surface never polls. `ISessionApi.Subscribe` hands it a stream of `SessionEvent`, and that union
+is the definition of what a control can show at all: the control is a client of its own hub and
+uses the path a foreign device would, so what is missing from the union is missing from the
+screen.
+
+| Event | Carries |
+|---|---|
+| `Opening` | the device tree, every scene, the waiting requests, the refusals |
+| `DevicesChanged` | the device tree, whole |
+| `PairingChanged` | who is knocking and who was turned away |
+| `ScenePatched` | the same patch the displays got |
+| `SceneReplaced` | a whole arrangement — the take-over out of a `Hello`, later a loaded scene |
+| `Logged` | one line, ours or forwarded |
+
+The undo labels arrive with the timeline, `AssetProgress` with M2, `TouchPoints` with M3, and
+`Diagnostics`, `WindowList` and `WindowResult` with M5. Each is an added case, never a changed one.
+
+**Every call gets a stream of its own.** With two control devices a shared one would have the
+second taking the first one's events away.
+
+**The first element is always a complete opening picture**, and that is not a convenience for the
+caller. The hub is a hosted service and listens **before any surface stands**: a display PC on
+autostart can connect, hand over its state and lodge a pairing request entirely before the first
+subscription exists. Without the opening picture the surface would see none of it and would wait
+for events that are long past. It is the same property `SceneSnapshot` has for a connecting
+display, only for the event stream.
+
+**Registering and photographing happen under two locks — the scene gate and the fan-out**, in the
+order every command takes them. Taking the picture first would lose what happened in between;
+registering first would deliver events the picture already contains. That is harmless for a whole
+list and a real fault for a patch, because applying an `AddItem` twice makes two items — and the
+fan-out's lock alone would not close it: a command writes its scene and *then* publishes its
+patch, and a picture taken between the two contains the item and receives it again.
+
+**The classes of the send queues apply here as well.** What was transient on the way from a device
+stays transient on the way to a second control. A state event is never dropped: where a subscriber
+cannot keep up, its stream is **ended** rather than served something stale, and subscribing again
+yields a fresh opening picture — the same rule and the same way back as for a socket.
+
+**The list-bearing events are whole lists, and they are relied on to be idempotent.** A device
+leaving moves two sources — the connection list and the presence in the screen catalogue — so it
+announces twice, and only the second carries the whole truth. A reader takes the latest and is
+right. A delta per screen arrives when there is a surface that gains from it.
+
 ### Heartbeat
 
 The control sends `Ping` every **5 seconds** and treats a connection as dead after **12 seconds**

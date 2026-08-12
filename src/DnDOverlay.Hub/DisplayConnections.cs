@@ -20,11 +20,23 @@ public sealed class DisplayConnections
     /// <summary>How many devices are connected right now - the ceiling is checked against this.</summary>
     public int Count => _connections.Count;
 
+    /// <summary>
+    /// Fires when somebody arrived or left. It is what turns a device in the tree from connected to
+    /// not, and it is the only source for that - the screen catalogue keeps a departed device's
+    /// screens on purpose and therefore cannot say it (Part 3).
+    /// </summary>
+    public event Action? Changed;
+
+    /// <summary>Everyone who is here right now.</summary>
+    public IReadOnlyCollection<DisplayConnection> All => _connections.Values.ToList();
+
     public void Add(DisplayConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
         _connections[connection.Device] = connection;
+
+        Changed?.Invoke();
     }
 
     public bool TryGet(DeviceId device, out DisplayConnection connection) =>
@@ -43,8 +55,11 @@ public sealed class DisplayConnections
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        _ = ((ICollection<KeyValuePair<DeviceId, DisplayConnection>>)_connections)
-            .Remove(new KeyValuePair<DeviceId, DisplayConnection>(connection.Device, connection));
+        if (((ICollection<KeyValuePair<DeviceId, DisplayConnection>>)_connections)
+            .Remove(new KeyValuePair<DeviceId, DisplayConnection>(connection.Device, connection)))
+        {
+            Changed?.Invoke();
+        }
     }
 
     /// <summary>

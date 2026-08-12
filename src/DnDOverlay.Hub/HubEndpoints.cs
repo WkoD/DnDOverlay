@@ -59,7 +59,20 @@ public static class HubEndpoints
 
         services.AddSingleton<DisplayConnections>();
         services.AddSingleton<PairingDirectory>();
-        services.AddSingleton<SessionApi>();
+        services.AddSingleton<SessionEvents>();
+
+        // Built rather than resolved for one parameter: the process log is OPTIONAL. The hub is a
+        // library and has to run without one, while every real control registers one - and where it
+        // does, its lines join the stream a surface reads (Part 8).
+        services.AddSingleton(provider => new SessionApi(
+            provider.GetRequiredService<SceneStore>(),
+            provider.GetRequiredService<ScreenCatalog>(),
+            provider.GetRequiredService<DisplayConnections>(),
+            provider.GetRequiredService<PairingDirectory>(),
+            provider.GetRequiredService<SessionEvents>(),
+            provider.GetService<ProcessLog>(),
+            provider.GetRequiredService<ILogger<SessionApi>>()));
+
         services.AddSingleton<ISessionApi>(provider => provider.GetRequiredService<SessionApi>());
 
         return services;
@@ -134,6 +147,7 @@ public static class HubEndpoints
         ScreenCatalog catalog,
         DisplayConnections connections,
         PairingDirectory pairing,
+        SessionEvents events,
         IOptions<HubOptions> options,
         TimeProvider time,
         ILoggerFactory loggers)
@@ -182,7 +196,10 @@ public static class HubEndpoints
                 return;
             }
 
-            Inventory(catalog, hello.DeviceId, hello.Screens, hello.Settings, logger);
+            // The inventory is taken AFTER the admission, not here. A device that is still knocking
+            // - or that is about to be turned away - must not leave its screens in the catalogue,
+            // because the catalogue is what control.json is written from: a rejected stranger would
+            // otherwise bequeath the DM a row of screens he never allowed (Part 3, Part 7).
 
             // A differing protocol version rejects nothing, in either direction. The control is
             // the path along which a display gets updated, so rejecting it would cut the one wire
@@ -211,12 +228,14 @@ public static class HubEndpoints
             await ServeAsync(
                 hello,
                 admitted,
+                address,
                 outgoing,
                 liveness,
                 inbox.Reader,
                 scenes,
                 catalog,
                 connections,
+                events,
                 // Optional on purpose: the hub is a library and must run without one. Where a
                 // process log is registered - which is every real control - forwarded entries land
                 // in the same file and the same ring buffer as its own (Part 8).
@@ -425,12 +444,14 @@ public static class HubEndpoints
     private static async Task ServeAsync(
         HelloMessage hello,
         PairedDevice device,
+        string address,
         SendQueues outgoing,
         Liveness liveness,
         ChannelReader<ProtocolMessage> inbox,
         SceneStore scenes,
         ScreenCatalog catalog,
         DisplayConnections connections,
+        SessionEvents events,
         ProcessLog? processLog,
         HubOptions options,
         ILogger logger,
@@ -438,7 +459,11 @@ public static class HubEndpoints
         CancellationToken cancellationToken)
     {
         var screenIds = hello.Screens.Select(screen => screen.ScreenId).ToList();
-        var connection = new DisplayConnection(device.Device, screenIds, outgoing, liveness);
+        var connection = new DisplayConnection(device.Device, screenIds, hello, address, outgoing, liveness);
+
+        // Now that this device may be here. The ticket is what tells THIS report from a later one,
+        // so that unwinding after a fast reconnect cannot switch off the table that is already back.
+        var presence = Inventory(catalog, device.Device, hello.Screens, hello.Settings, logger);
 
         connections.Add(connection);
         HubLog.DisplayConnected(logger, device.Device, device.Name, screenIds.Count);
@@ -453,7 +478,7 @@ public static class HubEndpoints
                 Protocol.AssetPath,
                 hello.Token is null ? device.Token : null));
 
-            TakeOver(hello, device.Device, scenes, logger);
+            TakeOver(hello, device.Device, scenes, events, logger);
 
             // How each of this device's screens stands, plus whatever the control changed while it
             // was away. It goes out BEFORE the scenes, because a display starts silent: until this
@@ -483,7 +508,7 @@ public static class HubEndpoints
                         break;
 
                     case ScreensChangedMessage reported:
-                        Rescan(reported, connection, catalog, scenes, device, logger);
+                        presence = Rescan(reported, connection, catalog, scenes, device, logger);
                         break;
 
                     case ConfigUpdateMessage update:
@@ -515,7 +540,11 @@ public static class HubEndpoints
             // The screens stay KNOWN and stay settable; only their availability ends. Removing
             // them would throw away the wish and the parameters, and preparing a scene for a
             // switched-off table is exactly what has to keep working (Part 3).
-            catalog.Departed(device.Device);
+            //
+            // With OUR ticket, never bare: on a fast reconnect the new handler is already serving
+            // while this one unwinds, and clearing by device would mark the live table's screens
+            // unavailable - the very trap Remove(connection) avoids one line up.
+            catalog.Departed(device.Device, presence);
 
             HubLog.DisplayDisconnected(logger, device.Device);
         }
@@ -525,7 +554,7 @@ public static class HubEndpoints
     /// A new inventory on a standing connection. The same comparison as at the <c>Hello</c>, plus
     /// the one thing only a live connection has: the set of screens this socket is addressed by.
     /// </summary>
-    private static void Rescan(
+    private static long Rescan(
         ScreensChangedMessage reported,
         DisplayConnection connection,
         ScreenCatalog catalog,
@@ -533,7 +562,7 @@ public static class HubEndpoints
         PairedDevice device,
         ILogger logger)
     {
-        Inventory(catalog, device.Device, reported.Screens, settings: null, logger);
+        var presence = Inventory(catalog, device.Device, reported.Screens, settings: null, logger);
 
         connection.Reported([.. reported.Screens.Select(screen => screen.ScreenId)]);
 
@@ -551,13 +580,15 @@ public static class HubEndpoints
         {
             connection.TrySend(new ConfigUpdateMessage(update));
         }
+
+        return presence;
     }
 
     /// <summary>
     /// Takes a reported inventory and says what changed about it. Three findings, and only one of
     /// them is dangerous - which is why they are told apart rather than summed up (Part 3).
     /// </summary>
-    private static void Inventory(
+    private static long Inventory(
         ScreenCatalog catalog,
         DeviceId device,
         IReadOnlyList<ScreenInfo> screens,
@@ -590,6 +621,8 @@ public static class HubEndpoints
                 before.GetValueOrDefault(screen) ?? default,
                 now?.Size ?? default);
         }
+
+        return change.Presence;
     }
 
     /// <summary>
@@ -598,7 +631,12 @@ public static class HubEndpoints
     /// longer, or has just loaded a layout - it puts that through with a snapshot instead
     /// (Part 4).
     /// </summary>
-    private static void TakeOver(HelloMessage hello, DeviceId device, SceneStore scenes, ILogger logger)
+    private static void TakeOver(
+        HelloMessage hello,
+        DeviceId device,
+        SceneStore scenes,
+        SessionEvents events,
+        ILogger logger)
     {
         foreach (var reported in hello.Scenes ?? [])
         {
@@ -611,6 +649,10 @@ public static class HubEndpoints
 
             scenes.Set(screen, reported.Scene);
             HubLog.SceneTakenOver(logger, screen, reported.Scene.Items.Count);
+
+            // A whole arrangement, not a delta - a control that has just restarted has nothing to
+            // apply a patch to. This is the moment a surface gets a table it never laid (Part 4).
+            events.Publish(new SessionEvent.SceneReplaced(screen, reported.Scene));
         }
     }
 

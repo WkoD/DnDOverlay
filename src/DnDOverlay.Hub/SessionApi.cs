@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Logging;
 using DnDOverlay.Core.Protocol;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +17,8 @@ public sealed class SessionApi : ISessionApi, IDisposable
     private readonly ScreenCatalog _screens;
     private readonly DisplayConnections _connections;
     private readonly PairingDirectory _pairing;
+    private readonly SessionEvents _events;
+    private readonly ProcessLog? _log;
     private readonly ILogger<SessionApi> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -25,13 +29,33 @@ public sealed class SessionApi : ISessionApi, IDisposable
         ScreenCatalog screens,
         DisplayConnections connections,
         PairingDirectory pairing,
+        SessionEvents events,
+        ProcessLog? log,
         ILogger<SessionApi> logger)
     {
         _scenes = scenes;
         _screens = screens;
         _connections = connections;
         _pairing = pairing;
+        _events = events;
+        _log = log;
         _logger = logger;
+
+        // Hooked up here rather than announced at each call site, and that is the difference
+        // between a rule and a habit: a screen wish, a device arriving, a rejection taken back -
+        // none of them can be published from somewhere that forgot to. Only the scene patch is
+        // announced by hand, because only its caller holds the patch.
+        // ViewChanged and not Changed: what is worth SHOWING is the wider of the two, and it is the
+        // one a surface wants. Changed is the narrower "worth writing to control.json", and it is
+        // the control's business rather than this one's (Part 3).
+        _screens.ViewChanged += OnDevicesChanged;
+        _connections.Changed += OnDevicesChanged;
+        _pairing.Changed += OnPairingChanged;
+
+        if (_log is not null)
+        {
+            _log.Added += OnLogged;
+        }
     }
 
     /// <inheritdoc />
@@ -39,6 +63,110 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
     /// <inheritdoc />
     public IReadOnlyList<RefusedDevice> RefusedDevices => _pairing.Refused;
+
+    /// <inheritdoc />
+    public bool AcceptNewDevices
+    {
+        get => _pairing.AcceptNewDevices;
+        set => _pairing.AcceptNewDevices = value;
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<SessionEvent> Subscribe(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // BOTH locks, in the order every command takes them: the scene gate first, the fan-out
+        // second. The fan-out's own lock keeps an event from slipping past the picture - it cannot
+        // keep the picture from being taken between a command WRITING its scene and PUBLISHING its
+        // patch, and that gap is the one that costs an item twice.
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        SessionEvents.Subscription subscription;
+
+        try
+        {
+            subscription = _events.Open(Opening);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        using var reading = subscription;
+
+        await foreach (var @event in subscription.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            yield return @event;
+        }
+    }
+
+    /// <summary>
+    /// Everything that stands right now, in one element. Assembled here because this is the one
+    /// place that can see all four sources at once.
+    /// </summary>
+    private SessionEvent Opening() =>
+        new SessionEvent.Opening(
+            Devices(),
+            [.. _scenes.Screens.Select(screen => (screen, _scenes.Get(screen)))],
+            _pairing.Pending,
+            _pairing.Refused);
+
+    /// <summary>
+    /// The device tree: every device the DM has allowed, with its screens underneath.
+    /// <para>
+    /// It is built from the PAIRED devices, not from whoever happens to be connected - a device
+    /// that is switched off has to stay in the list with its screens, because its wishes and
+    /// parameters live here and setting them before the display PC is even on is what the window
+    /// is for (Part 7).
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<DeviceView> Devices()
+    {
+        var connected = _connections.All.ToDictionary(connection => connection.Device);
+
+        var screens = _screens.Views()
+            .GroupBy(view => view.Screen.Device)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<ScreenView>)[.. group]);
+
+        return
+        [
+            .. _pairing.Paired
+                .Select(device => Compose(device, connected, screens))
+
+                // A stable order, so a list that is rebuilt on every event does not reshuffle under
+                // the DM's finger. By name, because that is what he reads.
+                .OrderBy(device => device.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(device => device.Device.Value),
+        ];
+    }
+
+    private static DeviceView Compose(
+        PairedDevice device,
+        Dictionary<DeviceId, DisplayConnection> connected,
+        Dictionary<DeviceId, IReadOnlyList<ScreenView>> screens)
+    {
+        var here = connected.GetValueOrDefault(device.Device);
+
+        return new DeviceView(
+            device.Device,
+            device.Name,
+            here is not null,
+            screens.GetValueOrDefault(device.Device, []),
+
+            // Only while a socket is open. A version or a round trip remembered from last week
+            // would read as current and would not be.
+            here?.Address,
+            here?.AppVersion,
+            here?.ProtocolVersion,
+            here?.RoundTrip);
+    }
+
+    private void OnDevicesChanged() => _events.Publish(new SessionEvent.DevicesChanged(Devices()));
+
+    private void OnPairingChanged() =>
+        _events.Publish(new SessionEvent.PairingChanged(_pairing.Pending, _pairing.Refused));
+
+    private void OnLogged(LogRecord record) => _events.Publish(new SessionEvent.Logged(record));
 
     /// <inheritdoc />
     public async Task<ItemId> AddItemAsync(
@@ -89,7 +217,14 @@ public sealed class SessionApi : ISessionApi, IDisposable
             // One command, one patch - never merged with the next one over a time window
             // (Part 4). The store is written before the patch goes out, so a display that acts
             // on it can never be ahead of the hub.
-            _connections.Dispatch(new ScenePatch([new ScreenOp(screen, op)]));
+            var patch = new ScenePatch([new ScreenOp(screen, op)]);
+
+            _connections.Dispatch(patch);
+
+            // The same patch to the surfaces. Built once and sent to both audiences, because a
+            // second control has to APPLY it - handing it a whole scene instead would throw away
+            // what patches are for (Part 4, rule 1).
+            _events.Publish(new SessionEvent.ScenePatched(patch));
 
             return item.ItemId;
         }
@@ -271,5 +406,17 @@ public sealed class SessionApi : ISessionApi, IDisposable
         return Task.CompletedTask;
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose()
+    {
+        _screens.ViewChanged -= OnDevicesChanged;
+        _connections.Changed -= OnDevicesChanged;
+        _pairing.Changed -= OnPairingChanged;
+
+        if (_log is not null)
+        {
+            _log.Added -= OnLogged;
+        }
+
+        _gate.Dispose();
+    }
 }
