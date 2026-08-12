@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- One of the two firewall helpers - the fourth category under src/, next to the libraries,
+       the applications and the platform project.
+
+       Why an executable of its own rather than a mode of one program, or a call inside the
+       control: THE UAC PROMPT NAMES THE PROGRAM. A prompt that reads
+       DnDOverlay.FirewallRemove.exe tells the person the moment rights are being asked for what
+       is about to happen; a helper with two modes shows "something to do with the firewall", and
+       a library call inside the control shows nothing at all. That is exactly the moment trust is
+       being asked for, so it is not a cosmetic point (Part 9).
+
+       Neither helper takes arguments. A program that starts elevated and lets an unprivileged
+       caller tell it what to do is a privilege escalation with a covering letter - so what is to
+       be done is decided in the program, from its own directory.
+
+       No project reference, deliberately: it is one self-contained executable, and what the two
+       share is a linked source file. Windows-bound in the target framework because netsh and the
+       install path are, which is also what keeps it out of the Linux filter (Part 2). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DnDOverlay.Firewall</RootNamespace>
+    <AssemblyName>DnDOverlay.FirewallAdd</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\DnDOverlay.Firewall.Shared\FirewallRule.cs" Link="FirewallRule.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The second firewall helper. Everything in DnDOverlay.FirewallAdd.csproj applies here, and
+       this is the one the argument is really about: a UAC prompt that reads
+       DnDOverlay.FirewallRemove.exe says what is about to happen, while one showing "Windows
+       Command Processor" - which is what calling netsh directly would show - is a prompt nobody
+       reads before clicking (Part 9). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DnDOverlay.Firewall</RootNamespace>
+    <AssemblyName>DnDOverlay.FirewallRemove</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\DnDOverlay.Firewall.Shared\FirewallRule.cs" Link="FirewallRule.cs" />
+  </ItemGroup>
+
+</Project>

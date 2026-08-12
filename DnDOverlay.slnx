@@ -4,6 +4,8 @@
     <Project Path="src/DnDOverlay.Control/DnDOverlay.Control.csproj" />
     <Project Path="src/DnDOverlay.Core/DnDOverlay.Core.csproj" />
     <Project Path="src/DnDOverlay.Display/DnDOverlay.Display.csproj" />
+    <Project Path="src/DnDOverlay.FirewallAdd/DnDOverlay.FirewallAdd.csproj" />
+    <Project Path="src/DnDOverlay.FirewallRemove/DnDOverlay.FirewallRemove.csproj" />
     <Project Path="src/DnDOverlay.Hub/DnDOverlay.Hub.csproj" />
     <Project Path="src/DnDOverlay.Imaging/DnDOverlay.Imaging.csproj" />
     <Project Path="src/DnDOverlay.Platform.Windows/DnDOverlay.Platform.Windows.csproj" />

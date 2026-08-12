@@ -43,8 +43,31 @@ internal static class RepositoryLayout
         "DnDOverlay.Display",
     ];
 
-    /// <summary>Everything under src/ that is Windows-bound - the platform project and the apps.</summary>
-    internal static readonly string[] WindowsBound = [.. Platform, .. Applications];
+    /// <summary>
+    /// The fourth category: the two firewall helpers, and they are a category for the same reason
+    /// the platform project is one - not an exception inside a rule.
+    /// <para>
+    /// Two executables rather than one with two modes, because <b>the UAC prompt names the
+    /// program</b>: a prompt reading <c>DnDOverlay.FirewallRemove.exe</c> says what is about to
+    /// happen at the moment rights are being asked for, while one showing "Windows Command
+    /// Processor" - what calling netsh directly would show - is a prompt nobody reads before
+    /// clicking. Neither takes arguments, so there is nothing an unprivileged caller could steer
+    /// (Part 9).
+    /// </para>
+    /// <para>
+    /// <b>The price is named:</b> these two get no tests. A test project on them would not run on
+    /// Linux, so they buy sameness by construction rather than provability - the same trade the
+    /// platform project makes.
+    /// </para>
+    /// </summary>
+    internal static readonly string[] Helpers =
+    [
+        "DnDOverlay.FirewallAdd",
+        "DnDOverlay.FirewallRemove",
+    ];
+
+    /// <summary>Everything under src/ that is Windows-bound - platform, apps and the helpers.</summary>
+    internal static readonly string[] WindowsBound = [.. Platform, .. Applications, .. Helpers];
 
     internal static DirectoryInfo RepositoryRoot { get; } = FindRepositoryRoot();
 

@@ -25,8 +25,11 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly ListBox _list = new() { Margin = new Thickness(0, 0, 0, 8), MinHeight = 160 };
     private readonly ComboBox _state = new() { Width = 160, Margin = new Thickness(0, 0, 8, 0) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly Border _firstRun = new() { Margin = new Thickness(0, 0, 0, 12) };
 
     private DevicesWindow? _devices;
+    private NetworkWindow? _network;
+    private NetworkPanel? _welcome;
 
     internal MainWindow(
         ISessionApi session,
@@ -55,7 +58,8 @@ internal sealed class MainWindow : Window, IDisposable
             Margin = new Thickness(0, 0, 0, 12),
         });
 
-        panel.Children.Add(Devices());
+        panel.Children.Add(Windows());
+        panel.Children.Add(_firstRun);
         panel.Children.Add(new TextBlock
         {
             Text = "Screens",
@@ -79,6 +83,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         _listening.Cancel();
         _listening.Dispose();
+        _welcome?.Dispose();
     }
 
     /// <summary>
@@ -127,6 +132,8 @@ internal sealed class MainWindow : Window, IDisposable
     /// </summary>
     private void Show(IReadOnlyList<DeviceView> devices)
     {
+        Welcome(devices.Count == 0);
+
         var entries = devices
             .SelectMany(device => device.Screens)
             .Select(view => new ScreenEntry(view))
@@ -150,20 +157,45 @@ internal sealed class MainWindow : Window, IDisposable
     }
 
     /// <summary>
-    /// One window, reopened rather than duplicated. In M5b this moves into the menu in the panel
-    /// head, together with the log panel and the settings - the one place everything that is not a
-    /// grip during play is reached from (Part 7).
+    /// The first-run view, and it goes away by itself. It answers the three questions of the very
+    /// first start - where am I, can anything reach me, what now - and a machine with a device
+    /// already paired has answered all three (Part 7).
+    /// <para>
+    /// The grips inside it stay reachable through the network window, because a firewall rule stops
+    /// biting <b>without disappearing</b> when Windows reclassifies a network as public.
+    /// </para>
     /// </summary>
-    private Button Devices()
+    private void Welcome(bool show)
     {
-        var button = new Button
+        if (show == (_welcome is not null))
         {
-            Content = "Devices ...",
-            Padding = new Thickness(12, 6, 12, 6),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
+            return;
+        }
 
-        button.Click += (_, _) =>
+        if (!show)
+        {
+            _welcome?.Dispose();
+            _welcome = null;
+            _firstRun.Child = null;
+
+            return;
+        }
+
+        _welcome = new NetworkPanel(_address.Port, firstRun: true);
+        _firstRun.Child = _welcome;
+    }
+
+    /// <summary>
+    /// One instance each, reopened rather than duplicated. In M5b both move into the menu in the
+    /// panel head, together with the log panel - the one place everything that is not a grip during
+    /// play is reached from (Part 7).
+    /// </summary>
+    private StackPanel Windows()
+    {
+        var devices = new Button { Content = "Devices ...", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var network = new Button { Content = "Network ...", Padding = new Thickness(12, 6, 12, 6) };
+
+        devices.Click += (_, _) =>
         {
             if (_devices is { IsLoaded: true })
             {
@@ -175,7 +207,24 @@ internal sealed class MainWindow : Window, IDisposable
             _devices.Show();
         };
 
-        return button;
+        network.Click += (_, _) =>
+        {
+            if (_network is { IsLoaded: true })
+            {
+                _ = _network.Activate();
+                return;
+            }
+
+            _network = new NetworkWindow(_address.Port) { Owner = this };
+            _network.Show();
+        };
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
+
+        row.Children.Add(devices);
+        row.Children.Add(network);
+
+        return row;
     }
 
     /// <summary>

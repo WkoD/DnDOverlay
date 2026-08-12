@@ -177,12 +177,49 @@ public sealed class ProjectStructureTests
         }
     }
 
+    /// <summary>
+    /// A helper is one self-contained executable. A project reference would put an assembly beside
+    /// it that has to be deployed with it and says nothing to the person reading the UAC prompt -
+    /// what the two share is a LINKED SOURCE FILE, and this is what keeps it that way (Part 9).
+    /// </summary>
+    [Fact]
+    public void The_firewall_helpers_reference_nothing_at_all()
+    {
+        foreach (var name in RepositoryLayout.Helpers)
+        {
+            var project = RepositoryLayout.SourceProjects[name];
+
+            Assert.Empty(project.ProjectReferences);
+            Assert.Empty(project.PackageReferences);
+        }
+    }
+
+    /// <summary>
+    /// Nobody may take a helper as a library. It is an executable whose whole point is the name in
+    /// the elevation prompt; calling into it as code would give that up without anyone noticing,
+    /// and a test project that did would stop the Linux job dead.
+    /// </summary>
+    [Fact]
+    public void Neither_a_library_nor_a_test_reaches_into_a_firewall_helper()
+    {
+        var offenders = RepositoryLayout.Libraries
+            .Select(name => RepositoryLayout.SourceProjects[name])
+            .Concat(RepositoryLayout.TestProjects.Values)
+            .Where(project => project.ProjectReferences.Intersect(
+                RepositoryLayout.Helpers, StringComparer.Ordinal).Any())
+            .Select(project => project.Name)
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
     [Fact]
     public void Nothing_else_lives_in_src()
     {
         var expected = RepositoryLayout.Libraries
             .Concat(RepositoryLayout.Platform)
             .Concat(RepositoryLayout.Applications)
+            .Concat(RepositoryLayout.Helpers)
             .OrderBy(name => name, StringComparer.Ordinal);
 
         var actual = RepositoryLayout.SourceProjects.Keys
@@ -232,7 +269,8 @@ public sealed class ProjectStructureTests
     /// projects are checked on the second platform. If a new library were missing from it,
     /// the job would stay green and simply stop looking - the quietest way for a net to fail.
     /// The rule is therefore: the filter carries everything the solution carries, except what is
-    /// Windows-bound - the two applications and the platform project (Part 2).
+    /// Windows-bound - the applications, the platform project and the two firewall helpers
+    /// (Part 2).
     /// </summary>
     [Fact]
     public void The_Linux_filter_covers_every_platform_neutral_project()

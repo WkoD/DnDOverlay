@@ -16,6 +16,24 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- Build order only - the control does not reference their code, and must not: what a helper
+       is for is the NAME in the elevation prompt, and calling into it as a library would give
+       that up. It does ship them, though, so they have to land beside DnDOverlay.Control.exe:
+       that is where the installer puts them, and it is what lets a helper work out from its own
+       directory whether it is installed or in a build folder (Part 9). -->
+  <ItemGroup>
+    <ProjectReference Include="..\DnDOverlay.FirewallAdd\DnDOverlay.FirewallAdd.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DnDOverlay.FirewallRemove\DnDOverlay.FirewallRemove.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Target Name="CopyFirewallHelpers" AfterTargets="Build">
+    <ItemGroup>
+      <FirewallHelperFile Include="$(MSBuildThisFileDirectory)..\DnDOverlay.FirewallAdd\bin\$(Configuration)\$(TargetFramework)\DnDOverlay.FirewallAdd.*" />
+      <FirewallHelperFile Include="$(MSBuildThisFileDirectory)..\DnDOverlay.FirewallRemove\bin\$(Configuration)\$(TargetFramework)\DnDOverlay.FirewallRemove.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FirewallHelperFile)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
   <ItemGroup>
     <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
     <ProjectReference Include="..\DnDOverlay.Hub\DnDOverlay.Hub.csproj" />
