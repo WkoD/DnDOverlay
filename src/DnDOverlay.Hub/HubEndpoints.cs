@@ -39,6 +39,9 @@ public static class HubEndpoints
         // brings its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
 
+        // A hosted service, so it announces the control before the surface stands (rule 5).
+        services.AddHostedService<DiscoveryBeacon>();
+
         services.AddSingleton<SceneStore>();
         services.AddSingleton<ScreenCatalog>();
         services.AddSingleton<DisplayConnections>();

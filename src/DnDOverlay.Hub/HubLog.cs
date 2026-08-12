@@ -15,9 +15,10 @@ namespace DnDOverlay.Hub;
 /// worse than an unknown identifier that at least looks unknown.
 /// </para>
 /// <para>
-/// Next free in this range: <b>1033</b>. 1007–1009 stay unassigned so the first block could still
-/// grow, 1015–1019 belong to Transport, and pairing has 1020–1031 to itself. The catalogue lives
-/// in <c>docs/protocol.md</c>.
+/// Next free in this range: <b>1042</b>. 1007–1009 stay unassigned so the first block could still
+/// grow, 1015–1019 belong to Transport, pairing has 1020–1037 (the display writes 1033–1037 - the
+/// range follows the subject, not the assembly), and discovery has 1038 onwards. The catalogue
+/// lives in <c>docs/protocol.md</c>.
 /// </para>
 /// </summary>
 internal static partial class HubLog
@@ -181,4 +182,37 @@ internal static partial class HubLog
         Level = LogLevel.Debug,
         Message = "A message this build does not understand was ignored.")]
     internal static partial void MessageIgnored(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 1038,
+        Level = LogLevel.Information,
+        Message = "Announcing this control on UDP {Port}, every couple of seconds.")]
+    internal static partial void BeaconStarted(ILogger logger, int port);
+
+    [LoggerMessage(
+        EventId = 1039,
+        Level = LogLevel.Information,
+        Message = "The discovery beacon has stopped.")]
+    internal static partial void BeaconStopped(ILogger logger);
+
+    /// <summary>
+    /// Debug, not warning: on a machine with VPN or Hyper-V adapters this is the ordinary state
+    /// of affairs, and the others still carry us. A warning here would cry wolf every two seconds.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1040,
+        Level = LogLevel.Debug,
+        Message = "The beacon could not go out over {Address}.")]
+    internal static partial void BeaconInterfaceFailed(ILogger logger, Exception exception, System.Net.IPAddress address);
+
+    /// <summary>
+    /// This one IS a warning, and it is the one that matters: not a single interface took the
+    /// beacon, so no display will ever find this control by itself. The way out is the host by
+    /// hand (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1041,
+        Level = LogLevel.Warning,
+        Message = "The beacon reached no interface at all - displays will have to be given a host by hand.")]
+    internal static partial void BeaconReachedNobody(ILogger logger);
 }

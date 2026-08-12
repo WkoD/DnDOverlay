@@ -89,6 +89,43 @@ other way round.
 encrypts it, writes `control.json` — and only then calls `ApprovePairingAsync`. The `Welcome` is
 sent from inside that call, so it cannot leave before the file exists.
 
+### Finding each other
+
+The control announces itself on **UDP 47800** every two seconds. The beacon carries exactly four
+things — control identifier, display name, port, protocol version — and nothing else: it is
+unauthenticated and readable by everyone on the network, so device lists, versions of paired
+machines and screen names belong behind the pairing.
+
+| | |
+|---|---|
+| **Sent to every suitable interface**, not to the first | Windows sorts by metric and a Hyper-V adapter likes to be at the top; a beacon that goes only there reaches nobody, and the display PC simply stays quiet |
+| **To the subnet broadcast of each address**, never 255.255.255.255 | a limited broadcast leaves through whichever interface the routing table prefers — on a machine with a dock and Hyper-V that is the wrong one |
+| **The loopback device is among them** | control and display on one machine are a regular setup, not a development mode |
+| **The addresses are looked up every round** | the Surface changes them when it is docked; a socket bound at startup would keep shouting into a network that is no longer there |
+
+**Virtual adapters are not sorted out**, although the plan asked for it. Telling a Hyper-V or VPN
+adapter from a real one is guesswork — they present as Ethernet — and the two mistakes cost
+differently: a beacon into a virtual subnet reaches nobody and costs one datagram, while wrongly
+skipping a real one costs a device that never finds its control.
+
+**The address a display connects to comes from the datagram, never from the beacon's contents.** A
+control announcing its own idea of its address would announce the wrong one on every machine with
+more than one interface — and that is precisely the machine this has to work on.
+
+**Discovery stays active even when a host is configured.** The stored host is a *preferred*
+address, not an exclusive one: it changes when the Surface moves between Wi-Fi and its dock. So a
+configured host is tried first, an attempt that fails hands over to discovery, and a connection
+that worked hands back.
+
+**A paired display discards foreign beacons.** It belongs to *its* control — the address cannot
+tell controls apart, and a second control in the same network is no invention.
+
+**Reconnecting waits one second, doubling to thirty, with spread.** The spread is not cosmetic:
+after a control restarts, every display in the house lost its connection in the same moment, and
+without it they would all knock again in the same instant. A connection that came up resets the
+count, or a display that reconnects once an evening would take half a minute to recover from a
+two-second hiccup by the end of the night.
+
 ### Addressing
 
 Every operation carries a full `ScreenRef`, which is a device identifier plus a screen
@@ -224,9 +261,23 @@ the same application that draws.
 | 1035 | `TokenUnknown` | Warning | display |
 | 1036 | `FreshIdentityTaken` | Warning | display |
 | 1037 | `PairingRefused` | Warning | display |
+| 1015 | `ListeningForControls` | Information | transport |
+| 1016 | `ControlHeard` | Information | transport |
+| 1017 | `ForeignControlIgnored` | Debug | transport |
+| 1018 | `ListeningFailed` | Warning | transport |
+| 1038 | `BeaconStarted` | Information | hub |
+| 1039 | `BeaconStopped` | Information | hub |
+| 1040 | `BeaconInterfaceFailed` | Debug | hub |
+| 1041 | `BeaconReachedNobody` | Warning | hub |
+| 1042 | `RetryingIn` | Information | display |
 
-**Next free: 1038.** 1007–1009 stay unassigned so the first block could still grow, 1015–1019
-belong to transport, and pairing has 1020–1037.
+**Next free: 1043.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+free at the end of transport's, pairing has 1020–1037 and discovery 1038 onwards.
+
+**Two levels here are deliberate and they are opposites.** `BeaconInterfaceFailed` is Debug: on a
+machine with VPN or Hyper-V adapters one interface refusing is the ordinary state of affairs, and a
+warning every two seconds would cry wolf. `BeaconReachedNobody` is a Warning, because it means no
+display will ever find this control by itself.
 
 **1033–1037 are written by the display application, and they are still connection.** The range
 follows the **subject of the sentence**, never the assembly it is written in — the same rule that

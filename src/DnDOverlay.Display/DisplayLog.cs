@@ -127,4 +127,15 @@ internal static partial class DisplayLog
         Level = LogLevel.Warning,
         Message = "The control turned this device away: {Reason}.")]
     internal static partial void PairingRefused(ILogger logger, string reason);
+
+    /// <summary>
+    /// Written by the application rather than by Transport, because the waiting belongs to the
+    /// loop that decides WHETHER to try again - which is this one. Same range either way: who is
+    /// talking to whom (Part 8).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1042,
+        Level = LogLevel.Information,
+        Message = "Trying again in {Delay}.")]
+    internal static partial void RetryingIn(ILogger logger, TimeSpan delay);
 }

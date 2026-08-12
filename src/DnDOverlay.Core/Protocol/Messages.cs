@@ -190,4 +190,18 @@ public static class Protocol
 
     /// <summary>The default port Kestrel binds on, across all interfaces.</summary>
     public const int DefaultPort = 47800;
+
+    /// <summary>
+    /// The UDP port the discovery beacon goes out on. The same number as the TCP one and a
+    /// different protocol, so nothing collides - and one number to remember instead of two.
+    /// <para>
+    /// It does NOT follow a changed <see cref="DefaultPort"/> in configuration: a display that has
+    /// never spoken to this control cannot know a port that was chosen there, so the one place
+    /// they meet has to be fixed. Which port to connect to afterwards is in the beacon.
+    /// </para>
+    /// </summary>
+    public const int DiscoveryPort = 47800;
+
+    /// <summary>How often the beacon goes out. A machine set up at the table should appear at once.</summary>
+    public static readonly TimeSpan BeaconInterval = TimeSpan.FromSeconds(2);
 }

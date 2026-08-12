@@ -83,7 +83,11 @@ public sealed partial class App : Application, IDisposable
         // The command line wins for this session, the stored value fills the gap. Neither
         // overwrites the file: what --host says is a start argument, not a change of
         // configuration (Part 9).
-        var host = options.Host ?? loaded.Value.Host ?? "localhost";
+        //
+        // Null now means "nobody said", and since M1b that is a real answer rather than a gap to
+        // fill: discovery finds the control by itself, so falling back to "localhost" would have
+        // been a guess that quietly beats looking (Part 4).
+        var host = options.Host ?? loaded.Value.Host;
         var deviceName = options.DeviceName ?? loaded.Value.DeviceName ?? Environment.MachineName;
 
         using var loggers = LoggerFactory.Create(builder => builder
@@ -96,7 +100,6 @@ public sealed partial class App : Application, IDisposable
 
         _http = new HttpClient();
         _assets = new AssetClient(_http);
-        _hubHttp = new Uri($"http://{host}:{options.Port}/");
 
         DisplayLog.DataRootChosen(_logger, _dataRoot.Path);
         Report(_logger, loaded);
@@ -135,23 +138,7 @@ public sealed partial class App : Application, IDisposable
         // offered to the first hub that answers (Part 4). A stored token that does not decrypt is
         // simply absent - the device pairs again, which is what TryRead returning a value instead
         // of throwing is for.
-        string? token = null;
-
-        if (_settings.ControlId is not null && DeviceTokens.TryRead(_secrets, _settings.Token, out var stored))
-        {
-            token = stored;
-        }
-
-        var hello = new HelloMessage(
-            _device,
-            deviceName,
-            typeof(App).Assembly.GetName().Version?.ToString() ?? "0.0.0",
-            Protocol.Version,
-            [.. monitors.Select(monitor => monitor.Screen)],
-            token,
-            token is null ? _pairingCode : null);
-
-        _ = ConnectAsync(host, options.Port, hello, loggers);
+        _ = RunAsync(host, options.Port, deviceName, [.. monitors.Select(monitor => monitor.Screen)], loggers);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -203,24 +190,145 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    private async Task ConnectAsync(string host, int port, HelloMessage hello, ILoggerFactory loggers)
+    /// <summary>
+    /// Finding a control and staying with it, for as long as this application runs.
+    /// <para>
+    /// A configured host is tried FIRST and is not the only way in: it is a preferred address, not
+    /// an exclusive one, because it changes when the Surface moves between Wi-Fi and its dock. So
+    /// an attempt that fails hands over to discovery, and a connection that worked hands back
+    /// (Part 4).
+    /// </para>
+    /// </summary>
+    private async Task RunAsync(
+        string? preferred,
+        int port,
+        string deviceName,
+        IReadOnlyList<ScreenInfo> screens,
+        ILoggerFactory loggers)
+    {
+        var client = new DisplayClient(loggers.CreateLogger<DisplayClient>());
+        var discovery = new DiscoveryListener(loggers.CreateLogger<DiscoveryListener>());
+        var backoff = new ReconnectBackoff();
+        var tryPreferred = preferred is not null;
+
+        while (!_shutdown.IsCancellationRequested)
+        {
+            var target = tryPreferred
+                ? new Target(preferred!, port)
+                : Found(await FindAsync(discovery, preferred is not null).ConfigureAwait(false));
+
+            // Only the preferred address survives one failure without being earned again.
+            tryPreferred = false;
+
+            if (target is null)
+            {
+                continue;
+            }
+
+            var reached = await ConnectAsync(client, target, deviceName, screens).ConfigureAwait(false);
+
+            if (reached)
+            {
+                // It worked once, so next time it is worth starting from the top again - both the
+                // address and the waiting.
+                backoff.Succeeded();
+                tryPreferred = preferred is not null;
+            }
+
+            if (_shutdown.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var delay = backoff.Next();
+
+            DisplayLog.RetryingIn(_logger, delay);
+            await Task.Delay(delay, _shutdown.Token).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Where to knock. From the beacon's sender, never from what the beacon says about itself.</summary>
+    private sealed record Target(string Host, int Port);
+
+    private static Target? Found(Sighting? sighting) =>
+        sighting is null ? null : new Target(sighting.Host, sighting.Beacon.Port);
+
+    /// <summary>
+    /// Waits for a control to announce itself - unbounded while nothing else is known, briefly
+    /// when a host was configured. Without that bound a control that was merely restarting would
+    /// never be tried again on the address that used to work.
+    /// </summary>
+    private async Task<Sighting?> FindAsync(DiscoveryListener discovery, bool hasPreferred)
+    {
+        using var listening = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
+
+        if (hasPreferred)
+        {
+            listening.CancelAfter(TimeSpan.FromSeconds(5));
+        }
+
+        return await discovery.ListenAsync(_settings.ControlId, listening.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs one connection to the end. True when it actually reached a control.</summary>
+    private async Task<bool> ConnectAsync(
+        DisplayClient client,
+        Target target,
+        string deviceName,
+        IReadOnlyList<ScreenInfo> screens)
     {
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {
             SingleReader = true,
         });
 
-        var client = new DisplayClient(loggers.CreateLogger<DisplayClient>());
-        var hubUri = new Uri($"ws://{host}:{port}{Protocol.DisplayPath}");
+        // Every attempt builds its own Hello. After a pairing this device has a token where it had
+        // a code a moment ago - a message built once at startup would go on introducing this
+        // machine as a stranger for as long as it runs.
+        var hello = Introduction(deviceName, screens);
 
+        _hubHttp = new Uri($"http://{target.Host}:{target.Port}/");
+
+        var hubUri = new Uri($"ws://{target.Host}:{target.Port}{Protocol.DisplayPath}");
         var pump = Task.Run(() => client.RunAsync(hubUri, hello, inbox.Writer, _shutdown.Token));
+        var reached = false;
 
         await foreach (var message in inbox.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
         {
+            reached |= message is WelcomeMessage or PairingPendingMessage or RejectedMessage;
+
             await HandleAsync(message).ConfigureAwait(false);
         }
 
         await pump.ConfigureAwait(false);
+
+        return reached;
+    }
+
+    /// <summary>
+    /// Either the token or the pairing code, never both: what a device brings is what decides how
+    /// the hub treats it (Part 4).
+    /// </summary>
+    private HelloMessage Introduction(string deviceName, IReadOnlyList<ScreenInfo> screens)
+    {
+        string? token = null;
+
+        // The token travels with the control it belongs to: one without the other would be
+        // offered to the first hub that answers. A stored token that does not decrypt is simply
+        // absent - the device pairs again.
+        if (_settings.ControlId is not null && DeviceTokens.TryRead(_secrets, _settings.Token, out var stored))
+        {
+            token = stored;
+        }
+
+        return new HelloMessage(
+            _device,
+            deviceName,
+            typeof(App).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+            Protocol.Version,
+            screens,
+            token,
+            token is null ? _pairingCode : null);
     }
 
     private async Task HandleAsync(ProtocolMessage message)
