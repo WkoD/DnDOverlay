@@ -11,9 +11,15 @@ namespace DnDOverlay.Transport.Tests;
 /// itself: control and display on one machine are a regular setup, and discovery has to work there
 /// without anybody typing an address (Part 2).
 /// <para>
-/// Every test uses its own <c>ControlId</c>, so a control that happens to be running on this
-/// machine cannot make one pass or fail. That is not test scaffolding either - it is exactly the
-/// filter a paired display applies.
+/// Every test that asserts WHICH control answered listens bound to its own <c>ControlId</c>, so a
+/// control that happens to be running on this machine cannot make one pass or fail. That is not
+/// test scaffolding either - it is exactly the filter a paired display applies. The one test that
+/// listens for anybody asserts nothing about who answered, because there any answer is right.
+/// </para>
+/// <para>
+/// The port is shared with everything else on this machine, the Hub's beacon tests included -
+/// <c>dotnet test</c> runs the assemblies in parallel, and those send real datagrams to loopback
+/// here. A test on this port is only sound if a stranger's beacon cannot change its verdict.
 /// </para>
 /// </summary>
 public sealed class DiscoveryListenerTests
@@ -25,7 +31,11 @@ public sealed class DiscoveryListenerTests
         var control = Guid.NewGuid();
         var listener = new DiscoveryListener(NullLogger<DiscoveryListener>.Instance);
 
-        var listening = listener.ListenAsync(boundTo: null, cancellationToken);
+        // Bound to OUR control, and that is not scaffolding: this test asserts which beacon came
+        // back, so it must not be answerable by somebody else's. It used to listen for anybody,
+        // and the Hub's beacon tests - a second assembly, run in parallel by dotnet test, sending
+        // real datagrams to loopback on this very port - occasionally answered it first.
+        var listening = listener.ListenAsync(boundTo: control, cancellationToken);
 
         var sighting = await Announce(
             listening,
@@ -39,6 +49,32 @@ public sealed class DiscoveryListenerTests
         // The address comes from the datagram, never from what the beacon says about itself - a
         // control announcing its own idea of its address would announce the wrong one on every
         // machine with more than one interface (Part 4).
+        Assert.Equal("127.0.0.1", sighting.Host);
+    }
+
+    /// <summary>
+    /// The other half, and the one the case above gave up when it was bound: an UNPAIRED display
+    /// takes whatever it hears first (Part 4).
+    /// <para>
+    /// It deliberately asserts nothing about WHICH control answered. Any beacon is a correct
+    /// answer here, so a stranger on this machine cannot make it wrong - which is exactly what the
+    /// bound case could not say of itself.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task An_unpaired_display_takes_the_first_control_it_hears()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var listener = new DiscoveryListener(NullLogger<DiscoveryListener>.Instance);
+
+        var listening = listener.ListenAsync(boundTo: null, cancellationToken);
+
+        var sighting = await Announce(
+            listening,
+            new Beacon(Guid.NewGuid(), "DM-SURFACE", 47802, Protocol.Version),
+            cancellationToken);
+
+        Assert.NotNull(sighting);
         Assert.Equal("127.0.0.1", sighting.Host);
     }
 
