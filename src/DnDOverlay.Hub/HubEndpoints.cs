@@ -108,6 +108,12 @@ public static class HubEndpoints
     /// socket. One reader, one channel, and the waiting phase simply watches for the channel to
     /// complete.
     /// </para>
+    /// <para>
+    /// The writing side is the same shape and for the same reason: ONE loop out of three queues
+    /// (<see cref="SendQueues"/>), and it starts at the socket rather than at the device. The
+    /// pairing answers, the refusals and the heartbeat all go out while there is no device yet,
+    /// and two concurrent sends on one WebSocket are no more allowed than two receives.
+    /// </para>
     /// </summary>
     private static async Task HandleDisplayAsync(
         HttpContext context,
@@ -143,7 +149,17 @@ public static class HubEndpoints
         // that nobody intends to serve. It is the same trap on both paths - a refusal and a
         // connection displaced by a newer one.
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var reading = ReadIntoAsync(socket, inbox.Writer, logger, lifetime.Token);
+
+        using var outgoing = new SendQueues(socket, address, options.Value, time, logger);
+        var liveness = new Liveness(time, options.Value, outgoing.TrySend);
+
+        // Whoever decides this connection is over - a full state queue, a write that timed out,
+        // a newer connection for the same device - ends it here, in one place, for all of them.
+        using var over = outgoing.Closing.Register(() => lifetime.Cancel());
+
+        var reading = ReadIntoAsync(socket, inbox.Writer, liveness, logger, lifetime.Token);
+        var writing = outgoing.PumpAsync(lifetime.Token);
+        var beating = WatchAsync(liveness, address, options.Value, outgoing, logger, lifetime.Token);
 
         try
         {
@@ -166,12 +182,11 @@ public static class HubEndpoints
             var admitted = await AdmitAsync(
                 hello,
                 address,
-                socket,
+                outgoing,
                 inbox.Reader,
                 connections,
                 pairing,
                 options.Value,
-                time,
                 logger,
                 lifetime.Token).ConfigureAwait(false);
 
@@ -183,18 +198,48 @@ public static class HubEndpoints
             await ServeAsync(
                 hello,
                 admitted,
-                socket,
+                outgoing,
+                liveness,
                 inbox.Reader,
                 scenes,
                 connections,
                 options.Value,
                 logger,
-                lifetime).ConfigureAwait(false);
+                lifetime.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The request was aborted, or this connection was ended while it was being set up.
         }
         finally
         {
             await lifetime.CancelAsync().ConfigureAwait(false);
             await reading.ConfigureAwait(false);
+            await writing.ConfigureAwait(false);
+            await beating.ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Watches the heartbeat and ends the connection when the other end has gone quiet. It is
+    /// started at the socket, so it covers the pairing wait too: without that a dead connection
+    /// would stand in the device list as an open request, and TCP alone would not notice for hours
+    /// (Part 4).
+    /// </summary>
+    private static async Task WatchAsync(
+        Liveness liveness,
+        string address,
+        HubOptions options,
+        SendQueues outgoing,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        await liveness.WatchAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            HubLog.HeartbeatLost(logger, address, options.SilenceBeforeDead);
+            outgoing.RequestClose();
         }
     }
 
@@ -205,19 +250,18 @@ public static class HubEndpoints
     private static async Task<PairedDevice?> AdmitAsync(
         HelloMessage hello,
         string address,
-        WebSocket socket,
+        SendQueues outgoing,
         ChannelReader<ProtocolMessage> inbox,
         DisplayConnections connections,
         PairingDirectory pairing,
         HubOptions options,
-        TimeProvider time,
         ILogger logger,
         CancellationToken cancellationToken)
     {
         if (connections.Count >= options.MaxConnections)
         {
             HubLog.LimitReached(logger, hello.Name, address, "too many connections");
-            await Refuse(socket, RejectionReason.LimitExceeded, cancellationToken).ConfigureAwait(false);
+            await RefuseAsync(outgoing, RejectionReason.LimitExceeded, cancellationToken).ConfigureAwait(false);
             return null;
         }
 
@@ -227,17 +271,17 @@ public static class HubEndpoints
                 // A control token at the display endpoint, or the other way round. The role sits
                 // in our own entry, so this is read rather than believed (Part 4).
                 HubLog.TokenRefused(logger, hello.DeviceId, hello.Name);
-                await Refuse(socket, RejectionReason.InvalidToken, cancellationToken).ConfigureAwait(false);
+                await RefuseAsync(outgoing, RejectionReason.InvalidToken, cancellationToken).ConfigureAwait(false);
                 return null;
 
             case Admission.Admitted admission:
                 return await SettleIdentityAsync(
-                    hello, address, admission.Device, socket, inbox, connections, pairing,
-                    options, time, logger, cancellationToken).ConfigureAwait(false);
+                    hello, address, admission.Device, outgoing, inbox, connections, pairing,
+                    options, logger, cancellationToken).ConfigureAwait(false);
 
             case Admission.Refused refused:
                 Report(logger, hello, address, refused.Reason, pairing.AcceptNewDevices);
-                await Refuse(socket, refused.Reason, cancellationToken).ConfigureAwait(false);
+                await RefuseAsync(outgoing, refused.Reason, cancellationToken).ConfigureAwait(false);
                 return null;
 
             case Admission.Waiting waiting:
@@ -252,7 +296,7 @@ public static class HubEndpoints
                 }
 
                 return await WaitForDecisionAsync(
-                    waiting.Request, socket, inbox, pairing, logger, cancellationToken).ConfigureAwait(false);
+                    waiting.Request, outgoing, inbox, pairing, logger, cancellationToken).ConfigureAwait(false);
 
             default:
                 return null;
@@ -269,12 +313,11 @@ public static class HubEndpoints
         HelloMessage hello,
         string address,
         PairedDevice device,
-        WebSocket socket,
+        SendQueues outgoing,
         ChannelReader<ProtocolMessage> inbox,
         DisplayConnections connections,
         PairingDirectory pairing,
         HubOptions options,
-        TimeProvider time,
         ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -283,7 +326,7 @@ public static class HubEndpoints
             return device;
         }
 
-        if (!await existing.ProbeAsync(options.CloneProbe, time, cancellationToken).ConfigureAwait(false))
+        if (!await existing.ProbeAsync(options.CloneProbe, cancellationToken).ConfigureAwait(false))
         {
             existing.RequestClose();
             HubLog.ConnectionReplaced(logger, hello.DeviceId);
@@ -297,7 +340,7 @@ public static class HubEndpoints
         // dead end there could only be left by hand-editing display.json on a machine without a
         // keyboard (Part 4, Part 7).
         return await WaitForDecisionAsync(
-            pairing.NoteClone(hello, address), socket, inbox, pairing, logger, cancellationToken)
+            pairing.NoteClone(hello, address), outgoing, inbox, pairing, logger, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -308,15 +351,13 @@ public static class HubEndpoints
     /// </summary>
     private static async Task<PairedDevice?> WaitForDecisionAsync(
         PendingRequest request,
-        WebSocket socket,
+        SendQueues outgoing,
         ChannelReader<ProtocolMessage> inbox,
         PairingDirectory pairing,
         ILogger logger,
         CancellationToken cancellationToken)
     {
-        await WebSocketMessages
-            .SendAsync(socket, new PairingPendingMessage(request.Snapshot.PairingCode), cancellationToken)
-            .ConfigureAwait(false);
+        outgoing.TrySend(new PairingPendingMessage(request.Snapshot.PairingCode));
 
         // Whichever comes first: the DM decides, or the device goes away and the read loop closes
         // the channel.
@@ -352,7 +393,7 @@ public static class HubEndpoints
                     HubLog.PairingDenied(logger, request.Snapshot.Device, request.Snapshot.Name);
                 }
 
-                await Refuse(socket, refused.Reason, cancellationToken).ConfigureAwait(false);
+                await RefuseAsync(outgoing, refused.Reason, cancellationToken).ConfigureAwait(false);
 
                 return null;
 
@@ -361,24 +402,21 @@ public static class HubEndpoints
         }
     }
 
-    /// <summary>The part M1a already had: hand over the scenes and keep the socket alive.</summary>
+    /// <summary>The part M1a already had: hand over the scenes and stay for as long as it lasts.</summary>
     private static async Task ServeAsync(
         HelloMessage hello,
         PairedDevice device,
-        WebSocket socket,
+        SendQueues outgoing,
+        Liveness liveness,
         ChannelReader<ProtocolMessage> inbox,
         SceneStore scenes,
         DisplayConnections connections,
         HubOptions options,
         ILogger logger,
-        CancellationTokenSource lifetime)
+        CancellationToken cancellationToken)
     {
         var screenIds = hello.Screens.Select(screen => screen.ScreenId).ToList();
-        await using var connection = new DisplayConnection(device.Device, socket, screenIds, logger);
-
-        // Being displaced by a newer connection ends THIS one, read loop included. Anything less
-        // and the old handler would sit on a socket the hub has already given up on.
-        using var displaced = connection.Closing.Register(() => lifetime.Cancel());
+        var connection = new DisplayConnection(device.Device, screenIds, outgoing, liveness);
 
         connections.Add(connection);
         HubLog.DisplayConnected(logger, device.Device, device.Name, screenIds.Count);
@@ -398,31 +436,16 @@ public static class HubEndpoints
                 connection.TrySend(new SceneSnapshotMessage(screen, scenes.Get(screen)));
             }
 
-            var pump = connection.PumpAsync(lifetime.Token);
-
-            await foreach (var message in inbox.ReadAllAsync(lifetime.Token).ConfigureAwait(false))
+            // Pongs never get here: they are noted where they are heard, because they say nothing
+            // about the session - they say the socket is alive.
+            await foreach (var _ in inbox.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                switch (message)
-                {
-                    case PongMessage:
-                        connection.NotePong();
-                        break;
-
-                    default:
-                        HubLog.UnhandledMessageIgnored(logger, device.Device);
-                        break;
-                }
+                HubLog.UnhandledMessageIgnored(logger, device.Device);
             }
-
-            await pump.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             // Shutdown, a client that went away, or a newer connection for the same device.
-        }
-        catch (WebSocketException exception)
-        {
-            HubLog.SendFailed(logger, exception, device.Device);
         }
         finally
         {
@@ -464,11 +487,21 @@ public static class HubEndpoints
     /// Says why, and then closes properly rather than dropping the socket. The device is meant to
     /// act on the reason - take a fresh identity, ask at the device, wait five minutes - and an
     /// aborted connection would leave it guessing which of those it was (Part 4).
+    /// <para>
+    /// It waits for the send loop to have got the refusal out, because here the message IS the
+    /// point of the connection ending. Writing past the loop would be the shorter way and the
+    /// wrong one: the heartbeat may be sending at that very moment, and two concurrent sends on
+    /// one WebSocket are not allowed.
+    /// </para>
     /// </summary>
-    private static async Task Refuse(WebSocket socket, RejectionReason reason, CancellationToken cancellationToken)
+    private static async Task RefuseAsync(
+        SendQueues outgoing,
+        RejectionReason reason,
+        CancellationToken cancellationToken)
     {
-        await WebSocketMessages.SendAsync(socket, new RejectedMessage(reason), cancellationToken).ConfigureAwait(false);
-        await WebSocketMessages.CloseAsync(socket, cancellationToken).ConfigureAwait(false);
+        outgoing.Finish(new RejectedMessage(reason));
+
+        await outgoing.Drained.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<ProtocolMessage?> NextAsync(
@@ -496,6 +529,7 @@ public static class HubEndpoints
     private static async Task ReadIntoAsync(
         WebSocket socket,
         ChannelWriter<ProtocolMessage> inbox,
+        Liveness liveness,
         ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -526,10 +560,24 @@ public static class HubEndpoints
                     continue;
                 }
 
-                if (message is not null)
+                if (message is null)
                 {
-                    await inbox.WriteAsync(message, cancellationToken).ConfigureAwait(false);
+                    continue;
                 }
+
+                // Anything at all counts as a sign of life: a device that is sending is alive,
+                // whether or not a Pong happened to cross the wire (Part 4).
+                liveness.Note();
+
+                // The Pong stops here. It says nothing about the session - it says this socket is
+                // alive - and passing it on would only get it logged as unhandled.
+                if (message is PongMessage)
+                {
+                    liveness.NotePong();
+                    continue;
+                }
+
+                await inbox.WriteAsync(message, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

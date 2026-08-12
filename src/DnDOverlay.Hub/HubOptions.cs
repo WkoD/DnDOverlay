@@ -53,4 +53,44 @@ public sealed class HubOptions
     /// (Part 4).
     /// </summary>
     public TimeSpan CloneProbe { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// The state queue, by count. Generous enough for a scene with many items arriving in one go;
+    /// beyond that the counterpart is demonstrably taking nothing off the socket (Part 4).
+    /// </summary>
+    public int MaxStateMessages { get; set; } = 256;
+
+    /// <summary>
+    /// And by bytes, because one <c>SceneSnapshot</c> with twenty items weighs as much as a
+    /// hundred small messages. Either ceiling ends the connection on its own.
+    /// </summary>
+    public long MaxStateBytes { get; set; } = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// The transient queue. Part 4 gives <c>TouchPoints</c>, <c>Diagnostics</c> and
+    /// <c>WindowList</c> a replacing slot of one each; until those messages exist there is one
+    /// small queue that drops its oldest, which is the floor under that rule rather than a
+    /// substitute for it (M3, M5).
+    /// </summary>
+    public int MaxTransientMessages { get; set; } = 8;
+
+    /// <summary>
+    /// How long one write may take before the counterpart counts as gone. Longer than any Wi-Fi
+    /// dropout worth keeping a connection for, shorter than a DM's patience (Part 4).
+    /// <para>
+    /// It exists because a peer that holds the connection open and accepts nothing would otherwise
+    /// only be noticed once the queue had filled - late, and after the memory had already been
+    /// spent.
+    /// </para>
+    /// </summary>
+    public TimeSpan WriteTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>The heartbeat's beat, so the connection indicator is right without a noticeable lag.</summary>
+    public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How long the other end may say nothing at all before the connection counts as dead. The
+    /// ceiling for a Wi-Fi dropout that should <b>not</b> be treated as a disconnection (Part 4).
+    /// </summary>
+    public TimeSpan SilenceBeforeDead { get; set; } = TimeSpan.FromSeconds(12);
 }

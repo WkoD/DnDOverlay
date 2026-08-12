@@ -16,4 +16,12 @@
     <ProjectReference Include="..\DnDOverlay.Core\DnDOverlay.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The send queues and the heartbeat are internal: nothing outside the hub writes to a
+         socket. The tests drive them directly all the same, because the two rear queues carry no
+         message yet - progress arrives with M2, the transient traffic with M3 - and a queue that
+         has never had anything in it is a queue nobody has proven (Part 10). -->
+    <InternalsVisibleTo Include="DnDOverlay.Hub.Tests" />
+  </ItemGroup>
+
 </Project>

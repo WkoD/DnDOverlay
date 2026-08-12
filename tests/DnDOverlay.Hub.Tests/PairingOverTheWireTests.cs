@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Threading.Channels;
 using DnDOverlay.Core;
@@ -76,7 +77,7 @@ public sealed class PairingOverTheWireTests
     public async Task A_token_this_control_does_not_know_ends_the_connection()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var hub = await Hub.StartAsync(cancellationToken, Paired());
+        await using var hub = await Hub.StartAsync(cancellationToken, [Paired()]);
         await using var display = await hub.ConnectAsync(Hello(token: "guessed"), answersPing: false, cancellationToken);
 
         var rejected = Assert.IsType<RejectedMessage>(await display.NextAsync(cancellationToken));
@@ -117,7 +118,7 @@ public sealed class PairingOverTheWireTests
     public async Task A_silent_connection_makes_way_for_the_one_that_came_back()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var hub = await Hub.StartAsync(cancellationToken, Paired());
+        await using var hub = await Hub.StartAsync(cancellationToken, [Paired()]);
 
         var crashed = await hub.ConnectAsync(Hello(token: Token), answersPing: false, cancellationToken);
         Assert.IsType<WelcomeMessage>(await crashed.NextAsync(cancellationToken));
@@ -142,7 +143,7 @@ public sealed class PairingOverTheWireTests
     public async Task A_clone_is_laid_in_front_of_the_DM_and_told_to_take_a_fresh_identity()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var hub = await Hub.StartAsync(cancellationToken, Paired());
+        await using var hub = await Hub.StartAsync(cancellationToken, [Paired()]);
 
         await using var original = await hub.ConnectAsync(Hello(token: Token), answersPing: true, cancellationToken);
         Assert.IsType<WelcomeMessage>(await original.NextAsync(cancellationToken));
@@ -161,6 +162,63 @@ public sealed class PairingOverTheWireTests
         Assert.False(original.Closed);
     }
 
+
+    /// <summary>
+    /// The heartbeat covers a connection that is still waiting for the DM, and it has to: an open
+    /// request stands as long as its CONNECTION stands (Part 4). Without a beat there, a display
+    /// PC that was switched off mid-request would sit in the device list as something that is
+    /// knocking - and TCP alone would not notice for hours.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_waiting_device_that_goes_quiet_takes_its_request_with_it()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var hub = await Hub.StartAsync(cancellationToken, tune: Impatient);
+        await using var display = await hub.ConnectAsync(Hello(), answersPing: false, cancellationToken);
+
+        Assert.IsType<PairingPendingMessage>(await display.NextAsync(cancellationToken));
+        Assert.Single(hub.Session.PendingPairings);
+
+        // Nothing is unplugged and nothing is closed at this end: the device is simply mute, which
+        // is exactly what a machine that has been switched off looks like from here.
+        await display.WaitUntilClosedAsync(cancellationToken);
+        await Until(() => hub.Session.PendingPairings.Count == 0, cancellationToken);
+
+        Assert.Empty(hub.Session.RefusedDevices);
+    }
+
+    /// <summary>
+    /// The other direction, and the one that costs more when it is wrong: a device that answers
+    /// stays, however many silence windows pass. A heartbeat that drops healthy connections would
+    /// interrupt the session in front of the group and look like a defect (Part 4).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_device_that_answers_stays_and_is_told_its_round_trip()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var hub = await Hub.StartAsync(cancellationToken, [Paired()], Impatient);
+        await using var display = await hub.ConnectAsync(Hello(token: Token), answersPing: true, cancellationToken);
+
+        Assert.IsType<WelcomeMessage>(await display.NextAsync(cancellationToken));
+
+        // Several beats and several silence windows later it is still there - and the ping brings
+        // back the number the control measured, so both sides show the same latency rather than
+        // each working one out its own way.
+        await Until(() => display.Pings.Any(ping => ping.RoundTripMs is not null), cancellationToken);
+
+        Assert.False(display.Closed);
+        Assert.Equal(1, hub.Connections.Count);
+    }
+
+    /// <summary>
+    /// A beat and a silence window measured in milliseconds rather than seconds. It changes
+    /// nothing about what is being proven - only how long the proof takes.
+    /// </summary>
+    private static void Impatient(HubOptions hub)
+    {
+        hub.HeartbeatInterval = TimeSpan.FromMilliseconds(50);
+        hub.SilenceBeforeDead = TimeSpan.FromMilliseconds(200);
+    }
 
     private static PairedDevice Paired() => new(Device, "TISCH-PC", PairingRole.Display, Token);
 
@@ -208,7 +266,10 @@ public sealed class PairingOverTheWireTests
 
         private Uri Address { get; set; } = null!;
 
-        internal static async Task<Hub> StartAsync(CancellationToken cancellationToken, params PairedDevice[] known)
+        internal static async Task<Hub> StartAsync(
+            CancellationToken cancellationToken,
+            IReadOnlyList<PairedDevice>? known = null,
+            Action<HubOptions>? tune = null)
         {
             var builder = WebApplication.CreateSlimBuilder();
 
@@ -223,12 +284,14 @@ public sealed class PairingOverTheWireTests
 
             builder.Services.AddDnDOverlayHub(hub =>
             {
-                hub.KnownDevices = known;
+                hub.KnownDevices = known ?? [];
 
                 // Shorter than the second of Part 4, and it changes nothing about what is being
                 // proven: the silent side never answers, so waiting longer could only make the
                 // test slower, never different.
                 hub.CloneProbe = TimeSpan.FromMilliseconds(200);
+
+                tune?.Invoke(hub);
             });
 
             var app = builder.Build();
@@ -269,7 +332,12 @@ public sealed class PairingOverTheWireTests
         private readonly CancellationTokenSource _stop = new();
         private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        private readonly ConcurrentQueue<PingMessage> _pings = new();
+
         private Task _pump = Task.CompletedTask;
+
+        /// <summary>The heartbeat as the device sees it, so a test can wait for a beat.</summary>
+        internal IReadOnlyCollection<PingMessage> Pings => _pings;
 
         /// <summary>
         /// Whether the connection has ended - taken from the pump rather than from
@@ -343,9 +411,15 @@ public sealed class PairingOverTheWireTests
 
                     var message = ProtocolJson.Parse(buffer.AsSpan(0, result.Count));
 
-                    if (message is PingMessage && answersPing)
+                    if (message is PingMessage ping)
                     {
-                        await SendAsync(new PongMessage(), _stop.Token);
+                        _pings.Enqueue(ping);
+
+                        if (answersPing)
+                        {
+                            await SendAsync(new PongMessage(), _stop.Token);
+                        }
+
                         continue;
                     }
 

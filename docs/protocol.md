@@ -40,7 +40,7 @@ does not exist here, and the address is typed into a browser by a person standin
 | `Welcome` | control → display | the control's identifier, the **path** assets are served from, and a freshly issued token exactly once |
 | `PairingPending` | control → display | the pairing code, so the device can put its setup screen down |
 | `Rejected` | control → display | why: `Denied` · `InvalidToken` · `LimitExceeded` · `DuplicateDevice` |
-| `Ping` / `Pong` | control ↔ display | heartbeat, and the probe that tells a clone from a restart |
+| `Ping` / `Pong` | control ↔ display | heartbeat, and the probe that tells a clone from a restart; the ping carries the last measured round trip |
 | `SceneSnapshot` | control → display | the complete scene of one screen |
 | `ScenePatch` | control → display | one command of the DM, as operations addressed at screens |
 
@@ -141,6 +141,63 @@ construction.
 The connection to a display does say which device is meant, so the device identifier looks
 redundant there. It is not: the control endpoint (M8) carries the messages of *all* devices over
 *one* connection, and the same message would need a different shape per endpoint.
+
+### Send queues
+
+In front of **every** socket sit three queues, and exactly one loop writes them. Three rather
+than one, because "discard when full" is a property of the channel and not of the message: a
+single queue cannot both drop transient traffic and never drop state. Three rather than two,
+because the feedback *that* something is being transferred must not share a drawer with the touch
+points — under load the first thing to fall away would otherwise be the very display that
+explains the load.
+
+| Queue | Carries | Capacity | When full |
+|---|---|---|---|
+| **state** | everything that has to arrive | 256 messages **and** 8 MB | the connection is treated as dead and closed |
+| **progress** | `AssetProgress` (M2) | 1, replacing | overwritten — the newer reading is the right one |
+| **transient** | `TouchPoints`, `Diagnostics`, `WindowList`, `SpotlightPulse` (M3, M5) | small | oldest dropped, without a word |
+
+They are served in that order, so the precedence arises on its own: under sustained load the
+touch points stop getting a turn while the progress still does, and nothing had to throttle
+either of them explicitly.
+
+Two of the three carry no message yet — the classes are declared and the queues are built
+regardless, because there must be no moment in which a socket is written *without* these rules.
+
+**A full state queue means neither drop nor wait.** It is a deterministic condition, not a time
+window, and it says this connection can no longer be held consistent: it is closed, and the
+ordinary reconnect with its `Hello` and `SceneSnapshot` puts the truth back. Waiting would spread
+the slowest device's backlog across the whole hub. The ceiling is counted in messages **and** in
+bytes, because one `SceneSnapshot` with twenty items weighs as much as a hundred small messages.
+
+**One write may take ten seconds.** A counterpart that holds the connection open and accepts
+nothing would otherwise only be noticed once the queue had filled — late, and after the memory
+had already been spent. The limit cancels the send rather than merely giving up on the wait,
+which aborts the socket; that is the intent.
+
+The queues own the socket, so "exactly one writer" is a property of the construction rather than
+a rule somebody has to keep — and it has to hold from the moment the socket is accepted, because
+the pairing answers, the refusals and the heartbeat all go out while there is no device yet.
+
+### Heartbeat
+
+The control sends `Ping` every **5 seconds** and treats a connection as dead after **12 seconds**
+of silence. The ping carries back the last round trip the control measured, so both sides show
+the same latency instead of each working one out its own way.
+
+**A deadline on silence rather than a count of unanswered pings**, and the difference is not
+cosmetic: a device that is busy sending is alive whether or not a `Pong` happened to cross the
+wire. Anything arriving counts.
+
+**It runs while a pairing request is waiting, too.** An open request stands as long as its
+connection stands — that is what keeps the device list showing only what is knocking right now.
+Without a beat there, a display PC switched off mid-request would sit in that list for hours,
+because TCP alone would not notice.
+
+The same measurement answers the clone probe: a second connection with a valid token gets the
+existing one asked, and it is its **answer** that decides. The two questions differ only in what
+counts as an answer — the heartbeat takes anything, the probe wants a `Pong` to *its* `Ping`,
+because it has to tell one connection from another.
 
 ### Compatibility
 
@@ -270,9 +327,17 @@ the same application that draws.
 | 1040 | `BeaconInterfaceFailed` | Debug | hub |
 | 1041 | `BeaconReachedNobody` | Warning | hub |
 | 1042 | `RetryingIn` | Information | display |
+| 1043 | `StateQueueFull` | Warning | hub |
+| 1044 | `WriteTimedOut` | Warning | hub |
+| 1045 | `HeartbeatLost` | Information | hub |
 
-**Next free: 1043.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
-free at the end of transport's, pairing has 1020–1037 and discovery 1038 onwards.
+**Next free: 1046.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
+1042, and the send side 1043 onwards.
+
+**1006 names an address rather than a device**, and that is not carelessness: the send loop exists
+from the moment the socket is accepted, so at that point there may be no device yet. The same
+holds for 1043–1045.
 
 **Two levels here are deliberate and they are opposites.** `BeaconInterfaceFailed` is Debug: on a
 machine with VPN or Hyper-V adapters one interface refusing is the ordinary state of affairs, and a

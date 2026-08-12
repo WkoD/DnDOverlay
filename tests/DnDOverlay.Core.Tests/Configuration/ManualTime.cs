@@ -23,6 +23,26 @@ internal sealed class ManualTime : TimeProvider
         }
     }
 
+    /// <summary>
+    /// The monotonic reading follows this clock too, and it has to.
+    /// <para>
+    /// <see cref="TimeProvider"/> leaves <see cref="GetTimestamp"/> on the real stopwatch by
+    /// default, so anything measuring an ELAPSED time - the heartbeat's silence deadline, a round
+    /// trip - would quietly ignore <see cref="Advance"/> and the test would prove nothing while
+    /// staying green. Production code is right to use the monotonic reading rather than the wall
+    /// clock; this is what makes that choice testable.
+    /// </para>
+    /// </summary>
+    public override long GetTimestamp()
+    {
+        lock (_gate)
+        {
+            return _now.UtcTicks;
+        }
+    }
+
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
         var timer = new ManualTimer(this, callback, state);

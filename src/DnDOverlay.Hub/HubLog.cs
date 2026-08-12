@@ -15,10 +15,11 @@ namespace DnDOverlay.Hub;
 /// worse than an unknown identifier that at least looks unknown.
 /// </para>
 /// <para>
-/// Next free in this range: <b>1042</b>. 1007–1009 stay unassigned so the first block could still
-/// grow, 1015–1019 belong to Transport, pairing has 1020–1037 (the display writes 1033–1037 - the
-/// range follows the subject, not the assembly), and discovery has 1038 onwards. The catalogue
-/// lives in <c>docs/protocol.md</c>.
+/// Next free in this range: <b>1046</b>. 1007–1009 stay unassigned so the first block could still
+/// grow, 1010–1018 belong to Transport with 1019 left free, pairing has 1020–1037 (the display
+/// writes 1033–1037 - the range follows the subject, not the assembly), discovery has 1038–1041,
+/// the display's backoff 1042, and the send side 1043 onwards. The catalogue lives in
+/// <c>docs/protocol.md</c>.
 /// </para>
 /// </summary>
 internal static partial class HubLog
@@ -65,11 +66,15 @@ internal static partial class HubLog
         Message = "Ignoring a message from {DeviceId} that this build does not handle.")]
     internal static partial void UnhandledMessageIgnored(ILogger logger, DeviceId deviceId);
 
+    /// <summary>
+    /// Named by address, not by device: the send loop exists from the moment the socket is
+    /// accepted, so at this point there may not be a device yet (Part 3, Part 4).
+    /// </summary>
     [LoggerMessage(
         EventId = 1006,
         Level = LogLevel.Information,
-        Message = "The connection to display {DeviceId} ended while sending.")]
-    internal static partial void SendFailed(ILogger logger, Exception exception, DeviceId deviceId);
+        Message = "The connection to {Address} ended while sending.")]
+    internal static partial void SendFailed(ILogger logger, Exception exception, string address);
 
     /// <summary>
     /// Written once per pairing code, never once per connection. An unpaired device on weak Wi-Fi
@@ -215,4 +220,31 @@ internal static partial class HubLog
         Level = LogLevel.Warning,
         Message = "The beacon reached no interface at all - displays will have to be given a host by hand.")]
     internal static partial void BeaconReachedNobody(ILogger logger);
+
+    /// <summary>
+    /// Not "a message was dropped": the state queue never drops anything, so a full one says the
+    /// counterpart has stopped taking what it is given and this connection can no longer be held
+    /// consistent. It is closed, and the ordinary reconnect puts the truth back (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1043,
+        Level = LogLevel.Warning,
+        Message = "{Address} is not taking what it is given ({Queued} messages, {Bytes} bytes queued) - closing.")]
+    internal static partial void StateQueueFull(ILogger logger, string address, int queued, long bytes);
+
+    [LoggerMessage(
+        EventId = 1044,
+        Level = LogLevel.Warning,
+        Message = "A write to {Address} did not complete within {Limit} - closing.")]
+    internal static partial void WriteTimedOut(ILogger logger, string address, TimeSpan limit);
+
+    /// <summary>
+    /// Silence, not a count of unanswered pings: a device that is busy sending is alive whether or
+    /// not a <c>Pong</c> happened to cross the wire.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1045,
+        Level = LogLevel.Information,
+        Message = "{Address} has said nothing for {Silence} - treating the connection as dead.")]
+    internal static partial void HeartbeatLost(ILogger logger, string address, TimeSpan silence);
 }

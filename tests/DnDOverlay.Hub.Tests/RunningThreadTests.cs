@@ -224,12 +224,27 @@ public sealed class RunningThreadTests : IAsyncLifetime
             endOfMessage: true,
             cancellationToken);
 
+    /// <summary>
+    /// Answers the heartbeat and reads past it. A display does exactly this, and without it these
+    /// tests would depend on staying shorter than one beat - which is the kind of assumption that
+    /// holds until the day a machine is slow (Part 4).
+    /// </summary>
     private static async Task<ProtocolMessage?> ReceiveAsync(WebSocket socket, CancellationToken cancellationToken)
     {
         var buffer = new byte[64 * 1024];
-        var result = await socket.ReceiveAsync(buffer.AsMemory(), cancellationToken);
 
-        return ProtocolJson.Parse(buffer.AsSpan(0, result.Count));
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(buffer.AsMemory(), cancellationToken);
+            var message = ProtocolJson.Parse(buffer.AsSpan(0, result.Count));
+
+            if (message is not PingMessage)
+            {
+                return message;
+            }
+
+            await SendAsync(socket, new PongMessage(), cancellationToken);
+        }
     }
 
     private sealed class OneFakeAsset : IAssetSource
