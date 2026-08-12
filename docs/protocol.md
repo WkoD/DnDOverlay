@@ -43,6 +43,7 @@ does not exist here, and the address is typed into a browser by a person standin
 | `Ping` / `Pong` | control ↔ display | heartbeat, and the probe that tells a clone from a restart; the ping carries the last measured round trip |
 | `SceneSnapshot` | control → display | the complete scene of one screen |
 | `ScenePatch` | control → display | one command of the DM, as operations addressed at screens |
+| `LogEntry` | display → control | one log message: identifier, name, level, the device's own timestamp, named values, optional raw text, optional screen |
 
 `Welcome` carries a **path**, never an absolute URL and never host and port. Those come from the
 socket the message arrived on. A remembered base URL is a trap: when the machine moves between
@@ -199,6 +200,41 @@ existing one asked, and it is its **answer** that decides. The two questions dif
 counts as an answer — the heartbeat takes anything, the probe wants a `Pong` to *its* `Ping`,
 because it has to tell one connection from another.
 
+### Log forwarding
+
+Errors travel to where the DM sits; as little as possible stays on the display PC, which stands
+unattended at the table where nobody looks into files. A display sends its entries over the
+connection that is already there — no second channel and no second port.
+
+**An entry is a stable identifier plus named values, never a finished sentence.** A device that
+sent finished text would make what the control shows depend on the language setting of a foreign
+machine. The control renders it in its own language, from the same catalogue, with the three
+fallback stages behind it.
+
+**Two timestamps, and the stream is sorted by the second one.** The entry carries the device's own
+clock; the control notes when it arrived. An unattended machine without internet and with a flat
+coin cell can be hours out, and sorting by its clock would scatter its lines through the nowhere
+of the list instead of putting them next to ours.
+
+**This is the only absolute foreign clock in the protocol, and it is measured the moment it
+appears** — once per connection, and only reported when it is more than a minute out (`1046`).
+Everywhere else time is relative for exactly that reason: touch points carry an age, the round
+trip is measured by the control that sent the ping, the heartbeat watches silence. A wrong clock
+should produce a wrong answer about *itself*, never a plausible one about the world.
+
+**What comes up while nothing can be sent goes out when the connection comes back.** The device
+keeps a bounded ring buffer and a mark of what it has already forwarded; the mark outlives the
+connection, the buffer says how much fell out of it. A pushed batch lands at the end of the
+stream, in its own order — which is what "sorted by arrival" means and is worth knowing before
+somebody reads it as a fault.
+
+**The rate follows the level**: 20 entries a second at Information, 500 at Debug. The documented
+way to look for a fault is to raise a display to `Debug` on purpose, so a fixed rate would bite
+exactly when the DM asked for the flood. Over the limit, entries are dropped and it is said once
+per second (`1047`) — refused and reported, never swallowed.
+
+**The forwarding never logs itself**, or a line about forwarding would produce a line to forward.
+
 ### Compatibility
 
 A differing protocol version **rejects nothing, in either direction**. An old display connects
@@ -330,10 +366,12 @@ the same application that draws.
 | 1043 | `StateQueueFull` | Warning | hub |
 | 1044 | `WriteTimedOut` | Warning | hub |
 | 1045 | `HeartbeatLost` | Information | hub |
+| 1046 | `DeviceClockDiffers` | Warning | hub |
+| 1047 | `LogRateExceeded` | Warning | hub |
 
-**Next free: 1046.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**Next free: 1048.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
-1042, and the send side 1043 onwards.
+1042, the send side 1043–1045, and log forwarding 1046–1047.
 
 **1006 names an address rather than a device**, and that is not carelessness: the send loop exists
 from the moment the socket is accepted, so at that point there may be no device yet. The same
@@ -388,8 +426,14 @@ into one of them would have made the range names stop meaning anything.
 | 4005 | `ConfigurationCreated` | Information | display |
 | 4006 | `ConfigurationReplaced` | Warning | display |
 | 4007 | `KnownDevicesRestored` | Information | control |
+| 4008 | `LogFileFailed` | Error | both |
 
-**Next free: 4008.**
+**Next free: 4009.**
+
+**4008 is the one message built by hand**, without a `[LoggerMessage]`, and it has to be: it says
+that the log file gave up, so routing it through `ILogger` would return straight into the sink
+that is failing. It goes into the ring buffer alone, and from there in front of the DM — a failed
+write must be visible, because from then on every further line is lost.
 
 Both applications say the same thing and still carry their own number: the identifier is the
 contract, and a shared one would make a line in the file ambiguous about who wrote it.

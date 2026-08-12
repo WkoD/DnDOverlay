@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="E1001_DisplayConnected" xml:space="preserve">
+    <value>Display {DeviceId} ({DeviceName}) connected with {ScreenCount} screen(s).</value>
+  </data>
+  <data name="E1002_DisplayDisconnected" xml:space="preserve">
+    <value>Display {DeviceId} disconnected.</value>
+  </data>
+  <data name="E1003_DisplayWithoutHello" xml:space="preserve">
+    <value>A display connected without a Hello and was dropped.</value>
+  </data>
+  <data name="E1004_ProtocolVersionDiffers" xml:space="preserve">
+    <value>Display {DeviceId} speaks protocol {TheirVersion}, we speak {OurVersion} - carrying on.</value>
+  </data>
+  <data name="E1005_UnhandledMessageIgnored" xml:space="preserve">
+    <value>Ignoring a message from {DeviceId} that this build does not handle.</value>
+  </data>
+  <data name="E1006_SendFailed" xml:space="preserve">
+    <value>The connection to {Address} ended while sending.</value>
+  </data>
+  <data name="E1010_Connecting" xml:space="preserve">
+    <value>Connecting to {HubUri}.</value>
+  </data>
+  <data name="E1011_Connected" xml:space="preserve">
+    <value>Connected to control {ControlId}; assets are served from {AssetPath}.</value>
+  </data>
+  <data name="E1012_Disconnected" xml:space="preserve">
+    <value>The connection to {HubUri} ended.</value>
+  </data>
+  <data name="E1013_ConnectFailed" xml:space="preserve">
+    <value>Could not reach {HubUri}.</value>
+  </data>
+  <data name="E1014_UnknownMessageIgnored" xml:space="preserve">
+    <value>Ignoring a message this build does not know.</value>
+  </data>
+  <data name="E1015_ListeningForControls" xml:space="preserve">
+    <value>Listening on UDP {Port} for a control.</value>
+  </data>
+  <data name="E1016_ControlHeard" xml:space="preserve">
+    <value>Heard control {Name} at {Address}, port {Port}.</value>
+  </data>
+  <data name="E1017_ForeignControlIgnored" xml:space="preserve">
+    <value>Ignoring control {ControlId} ({Name}) - this device belongs to another one.</value>
+  </data>
+  <data name="E1018_ListeningFailed" xml:space="preserve">
+    <value>Could not listen on UDP {Port}; a host will have to be given by hand.</value>
+  </data>
+  <data name="E1020_PairingRequested" xml:space="preserve">
+    <value>Pairing request from {DeviceName} at {Address}, code {PairingCode} ({DeviceId}).</value>
+  </data>
+  <data name="E1021_PairingApproved" xml:space="preserve">
+    <value>Pairing allowed for {DeviceName} ({DeviceId}) as {Role}.</value>
+  </data>
+  <data name="E1022_PairingDenied" xml:space="preserve">
+    <value>Pairing denied for {DeviceName} ({DeviceId}).</value>
+  </data>
+  <data name="E1023_PairingWithdrawn" xml:space="preserve">
+    <value>The pairing request from {DeviceId} withdrew itself - the connection ended.</value>
+  </data>
+  <data name="E1024_TokenRefused" xml:space="preserve">
+    <value>{DeviceName} ({DeviceId}) presented a token this control does not know.</value>
+  </data>
+  <data name="E1025_NewDevicesBlocked" xml:space="preserve">
+    <value>{DeviceName} at {Address} knocked while new devices are not being accepted.</value>
+  </data>
+  <data name="E1026_LimitReached" xml:space="preserve">
+    <value>{DeviceName} at {Address} was turned away: {Limit}.</value>
+  </data>
+  <data name="E1027_CloneDetected" xml:space="preserve">
+    <value>{DeviceName} ({DeviceId}) is a clone - the connection under that identity answered. Asking the DM.</value>
+  </data>
+  <data name="E1028_ConnectionReplaced" xml:space="preserve">
+    <value>Display {DeviceId} reconnected; the previous connection was silent and has been replaced.</value>
+  </data>
+  <data name="E1029_FreshIdentityRequested" xml:space="preserve">
+    <value>{DeviceName} ({DeviceId}) was told to take a fresh identity and pair again.</value>
+  </data>
+  <data name="E1030_Unpaired" xml:space="preserve">
+    <value>Pairing withdrawn for {DeviceId} - its token no longer opens anything.</value>
+  </data>
+  <data name="E1031_RejectionCleared" xml:space="preserve">
+    <value>The rejection of {DeviceId} was taken back; its next attempt is an ordinary request.</value>
+  </data>
+  <data name="E1032_MessageIgnored" xml:space="preserve">
+    <value>A message this build does not understand was ignored.</value>
+  </data>
+  <data name="E1033_PairingPending" xml:space="preserve">
+    <value>Waiting for the DM to allow this device. Pairing code {PairingCode}.</value>
+  </data>
+  <data name="E1034_Paired" xml:space="preserve">
+    <value>Paired with control {ControlId}; the token is stored.</value>
+  </data>
+  <data name="E1035_TokenUnknown" xml:space="preserve">
+    <value>This control does not know this device any more. The pairing stays until it is reset AT the device.</value>
+  </data>
+  <data name="E1036_FreshIdentityTaken" xml:space="preserve">
+    <value>The DeviceId collided with a device that is already connected - taking a fresh identity {DeviceId} and pairing again.</value>
+  </data>
+  <data name="E1037_PairingRefused" xml:space="preserve">
+    <value>The control turned this device away: {Reason}.</value>
+  </data>
+  <data name="E1038_BeaconStarted" xml:space="preserve">
+    <value>Announcing this control on UDP {Port}, every couple of seconds.</value>
+  </data>
+  <data name="E1039_BeaconStopped" xml:space="preserve">
+    <value>The discovery beacon has stopped.</value>
+  </data>
+  <data name="E1040_BeaconInterfaceFailed" xml:space="preserve">
+    <value>The beacon could not go out over {Address}.</value>
+  </data>
+  <data name="E1041_BeaconReachedNobody" xml:space="preserve">
+    <value>The beacon reached no interface at all - displays will have to be given a host by hand.</value>
+  </data>
+  <data name="E1042_RetryingIn" xml:space="preserve">
+    <value>Trying again in {Delay}.</value>
+  </data>
+  <data name="E1043_StateQueueFull" xml:space="preserve">
+    <value>{Address} is not taking what it is given ({Queued} messages, {Bytes} bytes queued) - closing.</value>
+  </data>
+  <data name="E1044_WriteTimedOut" xml:space="preserve">
+    <value>A write to {Address} did not complete within {Limit} - closing.</value>
+  </data>
+  <data name="E1045_HeartbeatLost" xml:space="preserve">
+    <value>{Address} has said nothing for {Silence} - treating the connection as dead.</value>
+  </data>
+  <data name="E1046_DeviceClockDiffers" xml:space="preserve">
+    <value>The clock of {DeviceName} is {Difference} away from ours - its own timestamps read accordingly.</value>
+  </data>
+  <data name="E1047_LogRateExceeded" xml:space="preserve">
+    <value>{DeviceName} sent more than {Limit} log entries a second at {Level}; the surplus was dropped.</value>
+  </data>
+
+  <!-- 3000-3999 · Display: what is on a screen, and why is it or is it not? -->
+
+  <data name="E3001_ScreenFound" xml:space="preserve">
+    <value>Screen {ScreenId} ({Label}): {Size} at {Dpi} DPI.</value>
+  </data>
+  <data name="E3002_NoScreens" xml:space="preserve">
+    <value>Windows reports no screen to play on.</value>
+  </data>
+  <data name="E3003_OverlayOpened" xml:space="preserve">
+    <value>Overlay on {ScreenId} opened ({Mode}).</value>
+  </data>
+  <data name="E3004_UnknownScreenDiscarded" xml:space="preserve">
+    <value>Discarding an operation for screen {ScreenId}, which this device does not have.</value>
+  </data>
+  <data name="E3005_AssetFailed" xml:space="preserve">
+    <value>Could not load asset {AssetId}.</value>
+  </data>
+  <data name="E3006_AssetDecoded" xml:space="preserve">
+    <value>Asset {AssetId} decoded at {Width}×{Height}.</value>
+  </data>
+
+  <!-- 4000-4999 · Operations: what a process does to itself. -->
+
+  <data name="E4001_DataRootChosen" xml:space="preserve">
+    <value>Data root: {Path}</value>
+  </data>
+  <data name="E4002_DataRootChosen" xml:space="preserve">
+    <value>Data root: {Path}</value>
+  </data>
+  <data name="E4003_ConfigurationCreated" xml:space="preserve">
+    <value>No control.json yet - created one, control {ControlId}.</value>
+  </data>
+  <data name="E4004_ConfigurationReplaced" xml:space="preserve">
+    <value>control.json was unreadable. Set aside as {SetAside}; starting with defaults, so paired devices have to be allowed again.</value>
+  </data>
+  <data name="E4005_ConfigurationCreated" xml:space="preserve">
+    <value>No display.json yet - created one, device {DeviceId}.</value>
+  </data>
+  <data name="E4006_ConfigurationReplaced" xml:space="preserve">
+    <value>display.json was unreadable. Set aside as {SetAside}; this device starts with a new identity and has to be paired again - or reassigned in the control.</value>
+  </data>
+  <data name="E4007_KnownDevicesRestored" xml:space="preserve">
+    <value>{Restored} paired device(s) restored, {Dropped} dropped because the token did not decrypt.</value>
+  </data>
+  <data name="E4008_LogFileFailed" xml:space="preserve">
+    <value>The log file under {Path} could not be written; logging carries on in memory only.</value>
+  </data>
+</root>

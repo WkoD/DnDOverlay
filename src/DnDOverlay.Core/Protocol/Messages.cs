@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using DnDOverlay.Core.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Core.Protocol;
 
@@ -25,6 +27,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(PongMessage), "Pong")]
 [JsonDerivedType(typeof(SceneSnapshotMessage), "SceneSnapshot")]
 [JsonDerivedType(typeof(ScenePatchMessage), "ScenePatch")]
+[JsonDerivedType(typeof(LogEntryMessage), "LogEntry")]
 public abstract record ProtocolMessage;
 
 /// <summary>
@@ -168,6 +171,72 @@ public sealed record SceneSnapshotMessage(ScreenRef Screen, SceneState Scene) : 
 
 /// <summary>One command of the DM, as one patch over possibly several screens.</summary>
 public sealed record ScenePatchMessage(ScenePatch Patch) : ProtocolMessage;
+
+/// <summary>
+/// One log message on its way to where the DM sits. Errors travel to him; as little as possible
+/// stays on the display PC, which stands unattended at the table where nobody looks into files
+/// (Part 8).
+/// <para>
+/// It carries a stable identifier and NAMED VALUES, never a finished sentence. A device that sent
+/// finished text would make what the control shows depend on the language setting of a foreign
+/// machine - and the control renders it in its own language, from the same catalogue, with the
+/// three fallback stages behind it.
+/// </para>
+/// </summary>
+/// <param name="At">
+/// The device's own clock. It is the ONE absolute foreign time in the whole protocol, and it is
+/// measured against ours the moment it arrives: an unattended machine without internet and with a
+/// flat coin cell can be hours out. Everywhere else - touch point age, round trip, silence
+/// deadline - time is relative for exactly that reason, because a wrong clock would otherwise
+/// produce a plausible and wrong answer about the world instead of about itself.
+/// </param>
+/// <param name="Screen">
+/// The screen this is about, where there is one. Optional and additive (rule 7): an entry without
+/// it belongs to the device, an older display sends none at all, and an identifier the control
+/// does not know falls back to the device rather than being discarded (Part 8).
+/// </param>
+public sealed record LogEntryMessage(
+    int EventId,
+    string EventName,
+    LogLevel Level,
+    DateTimeOffset At,
+    IReadOnlyList<LogValue> Values,
+    string? RawText = null,
+    ScreenId? Screen = null) : ProtocolMessage
+{
+    /// <summary>
+    /// Structural over the value list, for the same reason <see cref="HelloMessage"/> is: a record
+    /// compares list members by reference, so a message that went through the wire would never
+    /// equal the one that was sent - and the round-trip test is what makes that visible.
+    /// </summary>
+    public bool Equals(LogEntryMessage? other) =>
+        other is not null
+        && EventId == other.EventId
+        && string.Equals(EventName, other.EventName, StringComparison.Ordinal)
+        && Level == other.Level
+        && At == other.At
+        && string.Equals(RawText, other.RawText, StringComparison.Ordinal)
+        && Screen == other.Screen
+        && Values.SequenceEqual(other.Values);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(EventId);
+        hash.Add(EventName, StringComparer.Ordinal);
+        hash.Add(Level);
+        hash.Add(At);
+        hash.Add(RawText, StringComparer.Ordinal);
+        hash.Add(Screen);
+
+        foreach (var value in Values)
+        {
+            hash.Add(value);
+        }
+
+        return hash.ToHashCode();
+    }
+}
 
 /// <summary>Constants that both ends agree on.</summary>
 public static class Protocol

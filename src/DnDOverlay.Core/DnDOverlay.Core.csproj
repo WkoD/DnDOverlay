@@ -9,4 +9,12 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Core's first and only package, and it is the framework's own abstraction rather than a
+         library: the log provider lives here because BOTH applications need it and Core is the
+         one thing they share, and ILogger is the seam the whole of Part 8 is built on. The sink
+         itself is hand-written - see Logging/LogFile.cs for why. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
 </Project>

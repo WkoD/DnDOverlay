@@ -32,26 +32,37 @@ public sealed class DisplayClient
         Uri hubUri,
         HelloMessage hello,
         ChannelWriter<ProtocolMessage> inbox,
+        Channel<ProtocolMessage> outbox,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(hubUri);
         ArgumentNullException.ThrowIfNull(hello);
         ArgumentNullException.ThrowIfNull(inbox);
+        ArgumentNullException.ThrowIfNull(outbox);
 
         using var socket = new ClientWebSocket();
+        using var over = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        Task sending = Task.CompletedTask;
 
         try
         {
             TransportLog.Connecting(_logger, hubUri);
             await socket.ConnectAsync(hubUri, cancellationToken).ConfigureAwait(false);
 
+            // Sent before the loops start, while nothing else can be writing. Everything after
+            // this goes through the outbox, because two concurrent sends on one WebSocket are no
+            // more allowed here than they are in the hub - which is why the Pong below is queued
+            // rather than written where it is answered.
             await socket.SendAsync(
                 ProtocolJson.Serialise(hello),
                 WebSocketMessageType.Text,
                 endOfMessage: true,
                 cancellationToken).ConfigureAwait(false);
 
-            await ReceiveLoopAsync(socket, inbox, cancellationToken).ConfigureAwait(false);
+            sending = SendLoopAsync(socket, outbox.Reader, over.Token);
+
+            await ReceiveLoopAsync(socket, inbox, outbox.Writer, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -63,14 +74,47 @@ public sealed class DisplayClient
         }
         finally
         {
+            await over.CancelAsync().ConfigureAwait(false);
+            outbox.Writer.TryComplete();
+
+            await sending.ConfigureAwait(false);
+
             inbox.TryComplete();
             TransportLog.Disconnected(_logger, hubUri);
+        }
+    }
+
+    /// <summary>
+    /// The one writer on this socket. Everything the display says after the Hello passes here -
+    /// the Pong and the forwarded log entries - so that "exactly one sender" is a property of the
+    /// construction rather than a rule somebody has to remember.
+    /// </summary>
+    private static async Task SendLoopAsync(
+        ClientWebSocket socket,
+        ChannelReader<ProtocolMessage> outbox,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var message in outbox.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await socket.SendAsync(
+                    ProtocolJson.Serialise(message),
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or WebSocketException)
+        {
+            // The connection ended. The receive side reports it; saying it twice would be noise.
         }
     }
 
     private async Task ReceiveLoopAsync(
         ClientWebSocket socket,
         ChannelWriter<ProtocolMessage> inbox,
+        ChannelWriter<ProtocolMessage> outbox,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -109,11 +153,7 @@ public sealed class DisplayClient
             // and silence is the answer that replaces it (Part 4).
             if (message is PingMessage)
             {
-                await socket.SendAsync(
-                    ProtocolJson.Serialise(new PongMessage()),
-                    WebSocketMessageType.Text,
-                    endOfMessage: true,
-                    cancellationToken).ConfigureAwait(false);
+                outbox.TryWrite(new PongMessage());
             }
 
             if (message is not null)

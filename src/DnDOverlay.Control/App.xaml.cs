@@ -1,6 +1,7 @@
 using System.Windows;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
+using DnDOverlay.Core.Logging;
 using DnDOverlay.Hub;
 using DnDOverlay.Platform.Windows;
 using Microsoft.AspNetCore.Builder;
@@ -24,6 +25,7 @@ public sealed partial class App : Application, IDisposable
 {
     private WebApplication? _host;
     private ConfigurationFile<ControlConfiguration>? _configuration;
+    private ProcessLog? _log;
     private DataRoot _dataRoot;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -67,10 +69,28 @@ public sealed partial class App : Application, IDisposable
         var asset = DemoAsset.Create();
         var builder = WebApplication.CreateBuilder();
 
+        // One provider per process, registered unconditionally and never taken out again - which
+        // is not a matter of taste: ILoggerFactory has AddProvider and no counterpart, so a level
+        // that changes while the process runs has to live INSIDE the provider (Part 6, Part 8).
+        _log = new ProcessLog(
+            LogIdentity.Of(typeof(App).Assembly, Core.Protocol.Protocol.Version),
+            _dataRoot.Logs,
+            LogFileLimits.Control,
+            TimeProvider.System);
+
         builder.Logging.ClearProviders();
+        builder.Logging.AddProvider(_log);
         builder.Logging.AddDebug();
         builder.Logging.AddSimpleConsole();
-        builder.Logging.SetMinimumLevel(LogLevel.Debug);
+
+        // Trace at the factory so that OUR level is the effective gate and can be moved at run
+        // time; the factory's own filters are fixed when it is built.
+        builder.Logging.SetMinimumLevel(LogLevel.Trace);
+
+        // The control hosts Kestrel, so the framework's own messages arrive in the same provider.
+        // At Information that is request noise in the DM's file; what is worth having is what goes
+        // wrong - a taken port, a socket that will not bind.
+        builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 
         // Kestrel listens on ALL interfaces. The selection is made by the firewall rule anyway,
         // and binding to "the right" address breaks the moment the Surface goes into its dock
@@ -91,6 +111,11 @@ public sealed partial class App : Application, IDisposable
         });
 
         builder.Services.AddSingleton<IAssetSource>(asset);
+
+        // Registered so the hub can put FORWARDED entries into the same log as our own - one
+        // stream out of everybody's lines (Part 8). The hub asks for it optionally and runs
+        // without one, which is what keeps it a library rather than a part of this application.
+        builder.Services.AddSingleton(_log);
 
         _host = builder.Build();
 
@@ -133,7 +158,14 @@ public sealed partial class App : Application, IDisposable
         base.OnExit(e);
     }
 
-    public void Dispose() => _configuration?.Dispose();
+    public void Dispose()
+    {
+        _configuration?.Dispose();
+
+        // Nothing is buffered, so this closes a handle rather than saving anything: crash safety
+        // is a property of writing through, not of a shutdown hook (Part 8).
+        _log?.Dispose();
+    }
 
     /// <summary>
     /// Says what reading the file did. A replaced configuration must be visible, not quiet: the

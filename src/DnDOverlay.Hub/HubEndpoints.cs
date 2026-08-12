@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading.Channels;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Logging;
 using DnDOverlay.Core.Protocol;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -203,8 +204,13 @@ public static class HubEndpoints
                 inbox.Reader,
                 scenes,
                 connections,
+                // Optional on purpose: the hub is a library and must run without one. Where a
+                // process log is registered - which is every real control - forwarded entries land
+                // in the same file and the same ring buffer as its own (Part 8).
+                context.RequestServices.GetService<ProcessLog>(),
                 options.Value,
                 logger,
+                time,
                 lifetime.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -411,8 +417,10 @@ public static class HubEndpoints
         ChannelReader<ProtocolMessage> inbox,
         SceneStore scenes,
         DisplayConnections connections,
+        ProcessLog? processLog,
         HubOptions options,
         ILogger logger,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         var screenIds = hello.Screens.Select(screen => screen.ScreenId).ToList();
@@ -436,10 +444,18 @@ public static class HubEndpoints
                 connection.TrySend(new SceneSnapshotMessage(screen, scenes.Get(screen)));
             }
 
+            var relay = new LogRelay(processLog, time, logger, device.Device, device.Name);
+
             // Pongs never get here: they are noted where they are heard, because they say nothing
             // about the session - they say the socket is alive.
-            await foreach (var _ in inbox.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            await foreach (var message in inbox.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
+                if (message is LogEntryMessage entry)
+                {
+                    relay.Take(entry);
+                    continue;
+                }
+
                 HubLog.UnhandledMessageIgnored(logger, device.Device);
             }
         }

@@ -156,3 +156,76 @@ They were taken on one machine. The display machines this project is frugal for 
 box driving a projector, a tablet at the table — are unmeasured, and for them the software
 column above remains a possibility rather than a curiosity. Every device therefore measures and
 reports its own frame time.
+
+## Logging
+
+Every message goes through `ILogger` — declared once with `[LoggerMessage]`, so the number is
+checked at compile time and the placeholders are named rather than positional. What sits behind
+it is **one provider per process**, hand-written, in `DnDOverlay.Core`.
+
+.NET ships five sinks — console, debug, event log, event source, trace source — and no file
+sink; that gap is why Serilog and NLog exist, and Part 8 named Serilog for it. It is not what got
+built, and the reason is not a dislike of the package:
+
+- **A provider has to exist either way.** The ring buffer that feeds the tray list, the log panel
+  and the forwarding to the control is an `ILoggerProvider` and must keep entries **structured**
+  rather than as text. Once it exists, the file behind it is a `FileStream` instead of a list.
+- **The promise is easier to keep than to configure.** Rotation follows size and nothing else;
+  with a library it hangs on four options of which one — a time limit — must deliberately stay
+  unset, and a later "that seems sensible" would break it quietly. Here there is no time limit
+  that could be set.
+- **It is where it can be tested.** The sink sits in a library rather than in the two WPF
+  applications, which have no test project.
+
+Four properties are taken straight from Serilog's file sink, because they are decisions rather
+than lines of code: **it never throws** (a logger that throws takes its caller with it, and on the
+display that caller is the UI thread), **it writes through** rather than buffering (the lines that
+matter most are the ones just before a crash), **a file that cannot be opened rolls to the next
+name** instead of giving up, and **the first failure is reported once** and then it stays quiet.
+
+Two are deliberately not taken: an asynchronous writer — Serilog itself does not make its file
+sink asynchronous either — and shared-file mode, which solves a problem two processes writing two
+different files do not have.
+
+### One knob, two thresholds
+
+| | decides | default |
+|---|---|---|
+| `LogLevel` | what is produced at all → ring buffer **and** file | Information |
+| forwarding level | what goes over the wire to the control | Warning |
+
+**Both applications write a file, and the display's is on from the start.** Part 8 had it off by
+default, as a "diagnostic log" to be switched on when something goes wrong. That does not work:
+**a log that has to be turned on cannot record what happened before it was turned on** — and a
+display PC's most valuable failures are its startup failures, on a machine with no keyboard. Worse,
+the case it exists for is the one where nothing gets through, so the remote switch needs exactly
+the connection that is missing. What differs between the two applications is now only the size
+budget: 10 MB × 10 for the control, 5 MB × 5 for the display.
+
+**The level lives inside the provider, not around it.** `ILoggerFactory` has `AddProvider` and no
+counterpart, so a file that comes and goes cannot be a provider that comes and goes — and the DM
+raises a display to `Debug` from the far side of the house while the fault is happening.
+
+### A line, and what makes it worth having
+
+```
+# DnDOverlay.Control 0.1.0 · protocol 1 · UI en · system de-DE
+# 2026-08-12T14:31:07+02:00 · pid 24180 · started
+2026-08-12T14:31:09.880+02:00  Warning  Control  1024 TokenRefused  TISCH-PC (aaaa…0001) presented a token this control does not know.  {DeviceId=aaaa…0001, DeviceName=TISCH-PC}
+```
+
+The two header lines are written on every **open** — not only when a file is created. Rotation
+follows size, so the oldest retained file may contain no process start at all; and on a restart
+into an existing file the second header is what separates one run from the next, which after an
+update is the difference between two versions in one file and a riddle. They begin with `#`
+because every log line carries an identifier and its values, and these carry none: they are not
+events.
+
+The source column says **who wrote it**, never who is talked about. A hub line naming a device
+belongs to the control, and the device is one of its values — anything else would file pairing
+decisions under the device that was just turned away.
+
+Foreign text — an exception message, a message from a framework that has no catalogue entry —
+travels as raw text and is shown unchanged. It is cleaned of line breaks and control characters
+**where it comes in**, once: that is hardening, not tidiness, or a crafted device name would write
+lines of its own into the file, a forged header line among them.

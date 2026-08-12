@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
+using DnDOverlay.Core.Logging;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Platform.Windows;
 using DnDOverlay.Transport;
@@ -40,6 +41,9 @@ public sealed partial class App : Application, IDisposable
     private readonly string _pairingCode = PairingCodes.Create();
 
     private ILogger<App> _logger = null!;
+    private ILoggerFactory? _loggers;
+    private ProcessLog? _log;
+    private LogForwarding? _forwarding;
     private ConfigurationFile<DisplayConfiguration>? _configuration;
     private DisplayConfiguration _settings = new();
     private DataRoot _dataRoot;
@@ -90,12 +94,32 @@ public sealed partial class App : Application, IDisposable
         var host = options.Host ?? loaded.Value.Host;
         var deviceName = options.DeviceName ?? loaded.Value.DeviceName ?? Environment.MachineName;
 
-        using var loggers = LoggerFactory.Create(builder => builder
-            .SetMinimumLevel(LogLevel.Debug)
+        // One provider, registered once and never taken out - ILoggerFactory has AddProvider and
+        // no counterpart, so the level a display is raised to from the far side of the house has
+        // to live INSIDE it (Part 6, Part 8). The file is on from the start and not switched on
+        // when it is wanted: a log that has to be turned on cannot record what happened before it
+        // was turned on, and a display PC's most valuable failures are its startup failures.
+        _log = new ProcessLog(
+            LogIdentity.Of(typeof(App).Assembly, Protocol.Version),
+            _dataRoot.Logs,
+            LogFileLimits.Display,
+            TimeProvider.System);
+
+        // Held in a field, not in a using: the connection loop below outlives OnStartup, and a
+        // factory disposed at the end of this method would take the log file with it.
+        _loggers = LoggerFactory.Create(builder => builder
+            .SetMinimumLevel(LogLevel.Trace)
+            .AddProvider(_log)
             .AddDebug()
             .AddSimpleConsole());
 
-        _logger = loggers.CreateLogger<App>();
+        _logger = _loggers.CreateLogger<App>();
+
+        // Warning by default: the file keeps everything this device produces, the wire carries
+        // what is worth the DM's attention. Settable per device from the control in M1b's next
+        // step, over ConfigUpdate (Part 6).
+        _forwarding = new LogForwarding(_log, LogLevel.Warning);
+
         _device = new DeviceId(loaded.Value.DeviceId);
 
         _http = new HttpClient();
@@ -138,7 +162,7 @@ public sealed partial class App : Application, IDisposable
         // offered to the first hub that answers (Part 4). A stored token that does not decrypt is
         // simply absent - the device pairs again, which is what TryRead returning a value instead
         // of throwing is for.
-        _ = RunAsync(host, options.Port, deviceName, [.. monitors.Select(monitor => monitor.Screen)], loggers);
+        _ = RunAsync(host, options.Port, deviceName, [.. monitors.Select(monitor => monitor.Screen)], _loggers);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -160,6 +184,11 @@ public sealed partial class App : Application, IDisposable
 
         // Anything outstanding goes to disk before the process does (Part 6).
         _configuration?.Flush();
+
+        // The log needs no flushing - it writes through - so this only closes handles, and the
+        // factory has to go before the provider it holds.
+        _loggers?.Dispose();
+        _log?.Dispose();
     }
 
     /// <summary>
@@ -289,8 +318,21 @@ public sealed partial class App : Application, IDisposable
 
         _hubHttp = new Uri($"http://{target.Host}:{target.Port}/");
 
+        // Bounded, and written to with a wait rather than a drop: a stalled socket must slow the
+        // forwarding down, not lose entries. What is then left over piles up in the ring buffer,
+        // which is bounded in its turn and says how much it lost.
+        var outbox = Channel.CreateBounded<ProtocolMessage>(new BoundedChannelOptions(256)
+        {
+            SingleReader = true,
+        });
+
         var hubUri = new Uri($"ws://{target.Host}:{target.Port}{Protocol.DisplayPath}");
-        var pump = Task.Run(() => client.RunAsync(hubUri, hello, inbox.Writer, _shutdown.Token));
+        var pump = Task.Run(() => client.RunAsync(hubUri, hello, inbox.Writer, outbox, _shutdown.Token));
+
+        // Runs for the length of this connection; the mark it reads from survives it, so whatever
+        // came up while there was none goes out now (Part 8).
+        var forwarding = Task.Run(() => _forwarding!.RunAsync(outbox.Writer, _shutdown.Token));
+
         var reached = false;
 
         await foreach (var message in inbox.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
@@ -300,7 +342,10 @@ public sealed partial class App : Application, IDisposable
             await HandleAsync(message).ConfigureAwait(false);
         }
 
+        outbox.Writer.TryComplete();
+
         await pump.ConfigureAwait(false);
+        await forwarding.ConfigureAwait(false);
 
         return reached;
     }

@@ -9,13 +9,24 @@ namespace DnDOverlay.Core.Tests.Architecture;
 /// </summary>
 public sealed class ProjectStructureTests
 {
+    /// <summary>
+    /// Core knows no other project of ours, and of the outside world it knows exactly one thing:
+    /// the framework's logging abstraction.
+    /// <para>
+    /// It had none at all until M1b, and the exception is named rather than relaxed. The log
+    /// provider lives in Core because BOTH applications need it and Core is the one thing they
+    /// share; <c>ILogger</c> is the seam the whole of Part 8 is built on, and the sink behind it is
+    /// hand-written precisely so that nothing further comes in. A second package here is a
+    /// decision, and this test is what makes it one.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Core_references_nothing()
+    public void Core_references_nothing_but_the_logging_abstraction()
     {
         var core = RepositoryLayout.SourceProjects["DnDOverlay.Core"];
 
         Assert.Empty(core.ProjectReferences);
-        Assert.Empty(core.PackageReferences);
+        Assert.Equal(["Microsoft.Extensions.Logging.Abstractions"], core.PackageReferences);
     }
 
     [Theory]

@@ -15,11 +15,11 @@ namespace DnDOverlay.Hub;
 /// worse than an unknown identifier that at least looks unknown.
 /// </para>
 /// <para>
-/// Next free in this range: <b>1046</b>. 1007–1009 stay unassigned so the first block could still
+/// Next free in this range: <b>1048</b>. 1007–1009 stay unassigned so the first block could still
 /// grow, 1010–1018 belong to Transport with 1019 left free, pairing has 1020–1037 (the display
 /// writes 1033–1037 - the range follows the subject, not the assembly), discovery has 1038–1041,
-/// the display's backoff 1042, and the send side 1043 onwards. The catalogue lives in
-/// <c>docs/protocol.md</c>.
+/// the display's backoff 1042, the send side 1043–1045, and log forwarding 1046–1047. The
+/// catalogue lives in <c>docs/protocol.md</c>.
 /// </para>
 /// </summary>
 internal static partial class HubLog
@@ -247,4 +247,33 @@ internal static partial class HubLog
         Level = LogLevel.Information,
         Message = "{Address} has said nothing for {Silence} - treating the connection as dead.")]
     internal static partial void HeartbeatLost(ILogger logger, string address, TimeSpan silence);
+
+    /// <summary>
+    /// Said once per connection, and only when it is worth saying. An unattended display PC
+    /// without internet and with a flat coin cell can be hours out; without this line its
+    /// forwarded entries look like they were written at a plausible but wrong time, and its own
+    /// diagnostic file - which somebody may hand over later - looks the same (Part 8).
+    /// <para>
+    /// Measured against the two timestamps a <c>LogEntry</c> carries anyway. There is deliberately
+    /// no timestamp on any other message: an absolute foreign clock is not a usable quantity, and
+    /// a field carrying one would eventually be used for ordering or for age, both of which break
+    /// on exactly the machine this line is about.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1046,
+        Level = LogLevel.Warning,
+        Message = "The clock of {DeviceName} is {Difference} away from ours - its own timestamps read accordingly.")]
+    internal static partial void DeviceClockDiffers(ILogger logger, string deviceName, TimeSpan difference);
+
+    /// <summary>
+    /// The rate follows the level, because the documented way to look for a fault is to raise a
+    /// display to <c>Debug</c> on purpose - a fixed rate would bite precisely when the DM asked
+    /// for the flood (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1047,
+        Level = LogLevel.Warning,
+        Message = "{DeviceName} sent more than {Limit} log entries a second at {Level}; the surplus was dropped.")]
+    internal static partial void LogRateExceeded(ILogger logger, string deviceName, int limit, LogLevel level);
 }
