@@ -50,7 +50,7 @@ public static class StageCover
     /// </summary>
     public static IReadOnlyList<ScreenId> CoveredBy(nint window, IReadOnlyList<MonitorInfo> monitors)
     {
-        if (window == 0 || Native.IsIconic(window) || !Native.GetWindowRect(window, out var rect))
+        if (window == 0 || Native.IsIconic(window) || !Frame(window, out var rect))
         {
             return [];
         }
@@ -58,6 +58,27 @@ public static class StageCover
         return Covered(
             (rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top),
             monitors);
+    }
+
+    /// <summary>
+    /// The rectangle a person sees, not the one the window manager keeps.
+    /// <para>
+    /// <c>GetWindowRect</c> includes the invisible drop-shadow border since Windows 10 - about
+    /// seven pixels left, right and bottom. Measured at the table: a window snapped flush against
+    /// the edge of the middle monitor blocked its neighbour, because those seven pixels reached
+    /// into it. The DM sees a screen go dark that nothing is lying on.
+    /// </para>
+    /// <para>
+    /// <c>GetWindowRect</c> stays as the fallback: the DWM call can fail, and being seven pixels
+    /// too generous is a far better answer than none at all.
+    /// </para>
+    /// </summary>
+    private static bool Frame(nint window, out Native.RectL rect)
+    {
+        var size = System.Runtime.InteropServices.Marshal.SizeOf<Native.RectL>();
+
+        return Native.DwmGetWindowAttribute(window, Native.DwmwaExtendedFrameBounds, out rect, size) == 0
+            || Native.GetWindowRect(window, out rect);
     }
 
     /// <summary>

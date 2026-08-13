@@ -59,6 +59,22 @@ internal static unsafe partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool IsIconic(nint window);
 
+    /// <summary>
+    /// The rectangle the eye sees, which is NOT what <c>GetWindowRect</c> returns: since Windows 10
+    /// that one includes the invisible drop-shadow border, about seven pixels to the left, right
+    /// and bottom. A window snapped flush against the edge of a monitor therefore reaches seven
+    /// pixels into the next one, and anything asking "which screens does this lie on" answers with
+    /// one screen too many.
+    /// <para>
+    /// The plan names this trap for the foreign windows of Part 6; it is the same trap here, and
+    /// the same answer.
+    /// </para>
+    /// </summary>
+    internal const int DwmwaExtendedFrameBounds = 9;
+
+    [LibraryImport("dwmapi.dll")]
+    internal static partial int DwmGetWindowAttribute(nint window, int attribute, out RectL value, int size);
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     internal struct DevMode
     {

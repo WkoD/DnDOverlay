@@ -84,6 +84,17 @@ public sealed partial class App : Application, IDisposable
         ArgumentNullException.ThrowIfNull(e);
         base.OnStartup(e);
 
+        // Before anything can open a window, because WPF's default would end this process the
+        // moment the LAST overlay closes - and a display with no window at all is not an ending
+        // here, it is a documented state: every screen starts Inactive and puts nothing anywhere
+        // (Part 3).
+        //
+        // Measured, not feared: maximising the control over the last two screens closed both
+        // overlays and the display went away with them. The silent start escapes it only by
+        // accident - WPF checks when a window CLOSES, and at startup none was ever open. Setting
+        // all screens inactive from the control would have done the same thing.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         var options = DisplayOptions.Parse(e.Args);
 
         // Handed in, never fetched from inside a library (rule 10). From here every further
