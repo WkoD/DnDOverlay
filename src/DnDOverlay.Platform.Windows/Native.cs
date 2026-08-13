@@ -36,6 +36,29 @@ internal static unsafe partial class Native
         internal int Y;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct RectL
+    {
+        internal int Left;
+        internal int Top;
+        internal int Right;
+        internal int Bottom;
+    }
+
+    /// <summary>
+    /// The window in PHYSICAL pixels of the virtual desktop - the same space the monitor bounds
+    /// come in, so the two can be compared without a DPI calculation anywhere. Asking WPF for the
+    /// rectangle would give device-independent units and need one, per monitor, at mixed scaling:
+    /// three chances to be wrong for no gain.
+    /// </summary>
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetWindowRect(nint window, out RectL rect);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsIconic(nint window);
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     internal struct DevMode
     {

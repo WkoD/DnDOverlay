@@ -34,6 +34,7 @@ internal sealed class MainWindow : Window, IDisposable
     private DevicesWindow? _devices;
     private NetworkWindow? _network;
     private NetworkPanel? _welcome;
+    private StageGuard? _guard;
 
     internal MainWindow(
         ISessionApi session,
@@ -81,6 +82,10 @@ internal sealed class MainWindow : Window, IDisposable
 
         Content = panel;
 
+        // Built with the window and fed from the subscription below - a second stream would take
+        // events away from this one, and the device list is half its input (Part 4).
+        _guard = new StageGuard(this, session, Environment.MachineName);
+
         Closed += (_, _) => Dispose();
 
         _ = ListenAsync();
@@ -92,6 +97,7 @@ internal sealed class MainWindow : Window, IDisposable
         _listening.Cancel();
         _listening.Dispose();
         _welcome?.Dispose();
+        _guard?.Dispose();
         _log.Dispose();
     }
 
@@ -142,6 +148,7 @@ internal sealed class MainWindow : Window, IDisposable
     private void Show(IReadOnlyList<DeviceView> devices)
     {
         Welcome(devices.Count == 0);
+        _guard?.Knows(devices);
 
         var entries = devices
             .SelectMany(device => device.Screens)
