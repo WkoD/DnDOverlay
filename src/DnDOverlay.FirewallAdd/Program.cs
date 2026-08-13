@@ -1,11 +1,14 @@
 using DnDOverlay.Firewall;
 
-// Delete first, then add - see FirewallRule.Add for why "set rule" is the wrong shape. The
-// deletion is allowed to fail: on a fresh machine there is nothing to remove, and netsh answers
-// that with a non-zero code. Swallowing it here is what keeps the first run from failing.
+// Delete first, then add - see FirewallRule.Add for why "set rule" is the wrong shape, and
+// FirewallRule.Delete for why it goes by path. The deletion is allowed to fail: on a fresh machine
+// there is nothing to remove, and netsh answers that with a non-zero code. Swallowing it here is
+// what keeps the first run from failing.
 FirewallRule.Delete();
 
-var added = FirewallRule.Add();
+// Home and domain. The public variant is a separate executable, because that is the difference the
+// UAC prompt has to be able to name (Part 9).
+var added = FirewallRule.Add(FirewallRule.HomeProfiles);
 
 FirewallRule.Report("Added", added);
 

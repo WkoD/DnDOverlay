@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The one Windows-bound test project, and it is deliberately narrow: what it covers are PURE
+       functions over data that Windows has already handed over - the verdict on a firewall rule,
+       which profiles a rule gets written for, which networks it would cover, and how the helpers
+       derive their rule name.
+
+       What it expressly does NOT cover is reading the firewall (COM, and content only with
+       elevation) or whether a rule actually bites - the latter cannot be tested by any machine at
+       all, because loopback never passes the inbound firewall. That belongs to the two-machine
+       hand-run and stays there (Part 11).
+
+       Windows-bound because the subject is, so it is not in the Linux filter. FirewallRule.cs is
+       LINKED rather than referenced, exactly as it is into the three helpers: a project reference
+       would make a helper into a library and give up the name in the elevation prompt, which the
+       architecture test forbids for good reason (Part 9). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DnDOverlay.Platform.Windows\DnDOverlay.Platform.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\DnDOverlay.Firewall.Shared\FirewallRule.cs" Link="FirewallRule.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -1,8 +1,11 @@
 using DnDOverlay.Firewall;
 
-// Removes EVERY rule of our name, not one - that is the point of having this at all. Duplicates
-// are what a repeated "add" used to leave behind, and what the control's reachability view
-// reports when it finds more than one (Part 7, Part 9).
+// Removes EVERY inbound rule for this program path - ours, the ones Windows wrote when the "allow
+// access?" box was answered or dismissed, and anything somebody built by hand. That breadth is the
+// point rather than a side effect: a block rule left behind by a dismissed box beats every allow
+// beside it, and a removal that went by name would walk straight past it (Part 9).
+//
+// The caller says so before it elevates. "Remove" means remove.
 var removed = FirewallRule.Delete();
 
 FirewallRule.Report("Removed", removed);

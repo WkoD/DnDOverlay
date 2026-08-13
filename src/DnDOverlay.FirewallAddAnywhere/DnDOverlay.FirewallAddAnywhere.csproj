@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The third firewall helper, and the reason it is a third executable rather than a flag on
+       the first: THE UAC PROMPT NAMES THE PROGRAM. This one writes a rule that also covers public
+       networks - which means it applies in every hotel, café and conference network the machine
+       ever joins, permanently. That is exactly the difference a person must be able to see at the
+       moment rights are being asked for, and a single helper that decided by reading the current
+       profile would show the same name for both acts (Part 9).
+
+       Everything else is identical to FirewallAdd: no arguments, no references, the decision made
+       inside the program, and the shared source file linked rather than referenced. Which of the
+       two the control launches is decided in the control, after the DM has read the warning - but
+       what each one DOES is fixed at compile time and cannot be steered from outside. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DnDOverlay.Firewall</RootNamespace>
+    <AssemblyName>DnDOverlay.FirewallAddAnywhere</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\DnDOverlay.Firewall.Shared\FirewallRule.cs" Link="FirewallRule.cs" />
+  </ItemGroup>
+
+</Project>

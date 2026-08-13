@@ -23,12 +23,14 @@
        directory whether it is installed or in a build folder (Part 9). -->
   <ItemGroup>
     <ProjectReference Include="..\DnDOverlay.FirewallAdd\DnDOverlay.FirewallAdd.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DnDOverlay.FirewallAddAnywhere\DnDOverlay.FirewallAddAnywhere.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\DnDOverlay.FirewallRemove\DnDOverlay.FirewallRemove.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <Target Name="CopyFirewallHelpers" AfterTargets="Build">
     <ItemGroup>
       <FirewallHelperFile Include="$(MSBuildThisFileDirectory)..\DnDOverlay.FirewallAdd\bin\$(Configuration)\$(TargetFramework)\DnDOverlay.FirewallAdd.*" />
+      <FirewallHelperFile Include="$(MSBuildThisFileDirectory)..\DnDOverlay.FirewallAddAnywhere\bin\$(Configuration)\$(TargetFramework)\DnDOverlay.FirewallAddAnywhere.*" />
       <FirewallHelperFile Include="$(MSBuildThisFileDirectory)..\DnDOverlay.FirewallRemove\bin\$(Configuration)\$(TargetFramework)\DnDOverlay.FirewallRemove.*" />
     </ItemGroup>
     <Copy SourceFiles="@(FirewallHelperFile)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />

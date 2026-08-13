@@ -150,19 +150,45 @@ public sealed class ProjectStructureTests
     /// The one rule that makes the third category worth having: the platform project is for the
     /// applications, and for nobody else. A library that reached into it would be Windows-bound
     /// through the back door, and a test project that did would stop the Linux job dead.
+    /// <para>
+    /// <b>Except a test project that is itself Windows-bound</b> - and the exception is safe only
+    /// because it is the SAME list that keeps such a project out of the Linux filter
+    /// (<see cref="RepositoryLayout.WindowsBoundTests"/>). The two cannot drift apart: a project
+    /// added here is thereby forbidden there, and one taken out here fails the filter rule instead.
+    /// The reason given above - "would stop the Linux job dead" - does not apply to a project the
+    /// Linux job never builds.
+    /// </para>
     /// </summary>
     [Fact]
-    public void Neither_a_library_nor_a_test_reaches_into_the_platform_project()
+    public void Neither_a_library_nor_a_platform_neutral_test_reaches_into_the_platform_project()
     {
         var offenders = RepositoryLayout.Libraries
             .Select(name => RepositoryLayout.SourceProjects[name])
-            .Concat(RepositoryLayout.TestProjects.Values)
+            .Concat(RepositoryLayout.TestProjects.Values
+                .Where(project => !RepositoryLayout.WindowsBoundTests.Contains(project.Name, StringComparer.Ordinal)))
             .Where(project => project.ProjectReferences.Intersect(
                 RepositoryLayout.Platform, StringComparer.Ordinal).Any())
             .Select(project => project.Name)
             .ToList();
 
         Assert.Empty(offenders);
+    }
+
+    /// <summary>
+    /// And the counterpart, so the exception above cannot be used to smuggle anything in: a test
+    /// project declared Windows-bound has to actually be one. Without this, adding a name to
+    /// <see cref="RepositoryLayout.WindowsBoundTests"/> would be a way to take a platform-neutral
+    /// project out of the Linux job silently - the quietest way for a net to fail (Part 2).
+    /// </summary>
+    [Fact]
+    public void A_test_project_declared_Windows_bound_targets_Windows()
+    {
+        foreach (var name in RepositoryLayout.WindowsBoundTests)
+        {
+            var framework = Assert.Single(RepositoryLayout.TestProjects[name].TargetFrameworks);
+
+            Assert.Equal("net10.0-windows", framework);
+        }
     }
 
     /// <summary>The platform project may know Core and nothing else - it produces Core types.</summary>
@@ -280,7 +306,8 @@ public sealed class ProjectStructureTests
 
         var shouldBeCovered = RepositoryLayout.SourceProjects.Values
             .Where(project => !RepositoryLayout.WindowsBound.Contains(project.Name, StringComparer.Ordinal))
-            .Concat(RepositoryLayout.TestProjects.Values)
+            .Concat(RepositoryLayout.TestProjects.Values
+                .Where(project => !RepositoryLayout.WindowsBoundTests.Contains(project.Name, StringComparer.Ordinal)))
             .Select(project => project.Name)
             .ToList();
 
@@ -290,9 +317,9 @@ public sealed class ProjectStructureTests
 
         Assert.Empty(missing);
 
-        // And the other way round: nothing Windows-bound may be in it. Those projects target
-        // net10.0-windows and fail on Linux with NETSDK1100 - measured, not assumed.
-        foreach (var windowsBound in RepositoryLayout.WindowsBound)
+        // And the other way round: nothing Windows-bound may be in it - test projects included.
+        // Those target net10.0-windows and fail on Linux with NETSDK1100 - measured, not assumed.
+        foreach (var windowsBound in RepositoryLayout.WindowsBound.Concat(RepositoryLayout.WindowsBoundTests))
         {
             Assert.DoesNotContain(windowsBound + ".csproj", filter, StringComparison.Ordinal);
         }

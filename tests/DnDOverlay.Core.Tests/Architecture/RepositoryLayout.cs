@@ -44,30 +44,48 @@ internal static class RepositoryLayout
     ];
 
     /// <summary>
-    /// The fourth category: the two firewall helpers, and they are a category for the same reason
-    /// the platform project is one - not an exception inside a rule.
+    /// The fourth category: the firewall helpers, and they are a category for the same reason the
+    /// platform project is one - not an exception inside a rule.
     /// <para>
-    /// Two executables rather than one with two modes, because <b>the UAC prompt names the
+    /// Separate executables rather than one with modes, because <b>the UAC prompt names the
     /// program</b>: a prompt reading <c>DnDOverlay.FirewallRemove.exe</c> says what is about to
     /// happen at the moment rights are being asked for, while one showing "Windows Command
     /// Processor" - what calling netsh directly would show - is a prompt nobody reads before
-    /// clicking. Neither takes arguments, so there is nothing an unprivileged caller could steer
-    /// (Part 9).
+    /// clicking. That is also why there are three rather than two: writing a rule that covers
+    /// PUBLIC networks is a different act from writing one for home, and the difference has to be
+    /// visible where rights are granted. None of them takes arguments, so there is nothing an
+    /// unprivileged caller could steer (Part 9).
     /// </para>
     /// <para>
-    /// <b>The price is named:</b> these two get no tests. A test project on them would not run on
-    /// Linux, so they buy sameness by construction rather than provability - the same trade the
-    /// platform project makes.
+    /// <b>What is tested of them is what can be:</b> the rule name they derive is a pure function
+    /// and is covered in the Windows test project, through the same LINKED source file they share.
+    /// Their netsh calls are not - those need elevation, so they are carried by the hand-run.
     /// </para>
     /// </summary>
     internal static readonly string[] Helpers =
     [
         "DnDOverlay.FirewallAdd",
+        "DnDOverlay.FirewallAddAnywhere",
         "DnDOverlay.FirewallRemove",
     ];
 
     /// <summary>Everything under src/ that is Windows-bound - platform, apps and the helpers.</summary>
     internal static readonly string[] WindowsBound = [.. Platform, .. Applications, .. Helpers];
+
+    /// <summary>
+    /// Test projects that are Windows-bound, and therefore not in the Linux filter either.
+    /// <para>
+    /// It has to be a category for the same reason <see cref="Platform"/> is one: the filter rule
+    /// otherwise demands that every test project be built on Linux, where this one fails with
+    /// NETSDK1100 - and an exception written inside a rule explains itself to nobody later. What
+    /// it covers is Windows firewall judgement, which is a Windows subject; moving it to a neutral
+    /// project to gain a second platform would put a foreign body in Core (Part 2, Part 11).
+    /// </para>
+    /// </summary>
+    internal static readonly string[] WindowsBoundTests =
+    [
+        "DnDOverlay.Platform.Windows.Tests",
+    ];
 
     internal static DirectoryInfo RepositoryRoot { get; } = FindRepositoryRoot();
 

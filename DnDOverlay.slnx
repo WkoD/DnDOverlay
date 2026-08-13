@@ -5,6 +5,7 @@
     <Project Path="src/DnDOverlay.Core/DnDOverlay.Core.csproj" />
     <Project Path="src/DnDOverlay.Display/DnDOverlay.Display.csproj" />
     <Project Path="src/DnDOverlay.FirewallAdd/DnDOverlay.FirewallAdd.csproj" />
+    <Project Path="src/DnDOverlay.FirewallAddAnywhere/DnDOverlay.FirewallAddAnywhere.csproj" />
     <Project Path="src/DnDOverlay.FirewallRemove/DnDOverlay.FirewallRemove.csproj" />
     <Project Path="src/DnDOverlay.Hub/DnDOverlay.Hub.csproj" />
     <Project Path="src/DnDOverlay.Imaging/DnDOverlay.Imaging.csproj" />
@@ -16,6 +17,7 @@
     <Project Path="tests/DnDOverlay.Core.Tests/DnDOverlay.Core.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Hub.Tests/DnDOverlay.Hub.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Imaging.Tests/DnDOverlay.Imaging.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.Platform.Windows.Tests/DnDOverlay.Platform.Windows.Tests.csproj" />
     <Project Path="tests/DnDOverlay.TestData/DnDOverlay.TestData.csproj" />
     <Project Path="tests/DnDOverlay.Transport.Tests/DnDOverlay.Transport.Tests.csproj" />
   </Folder>

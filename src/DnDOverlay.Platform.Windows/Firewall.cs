@@ -1,6 +1,4 @@
 using System.Collections;
-using System.Globalization;
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace DnDOverlay.Platform.Windows;
@@ -26,12 +24,47 @@ public enum FirewallProfiles
     All = 0x7FFFFFFF,
 }
 
+/// <summary>
+/// What a rule does when it matches - <c>NET_FW_ACTION</c>, and the field whose absence used to
+/// make the reachability view say the opposite of the truth.
+/// <para>
+/// Windows writes a BLOCK rule when the "allow access?" box is dismissed rather than accepted -
+/// measured, not assumed - and a block beats every allow. Without this, such a rule was shown as
+/// "applies now", in green, on a machine where nothing got through (Part 9).
+/// </para>
+/// </summary>
+public enum FirewallAction
+{
+    /// <summary><c>NET_FW_ACTION_BLOCK</c>.</summary>
+    Block = 0,
+
+    /// <summary><c>NET_FW_ACTION_ALLOW</c>.</summary>
+    Allow = 1,
+}
+
 /// <summary>One rule of ours, as it stands out there.</summary>
 /// <param name="Program">
 /// What it lets through. A rule is program-based rather than port-based because the port is
 /// configurable, so this is the field that says whether it still points anywhere real (Part 9).
 /// </param>
-public sealed record FirewallRuleView(string Name, string? Program, bool Enabled, FirewallProfiles Profiles);
+public sealed record FirewallRuleView(
+    string Name,
+    string? Program,
+    bool Enabled,
+    FirewallProfiles Profiles,
+    FirewallAction Action);
+
+/// <summary>
+/// One network this machine is connected to, by the name Windows shows for it and the category it
+/// was classified as.
+/// <para>
+/// <b>Networks rather than adapters</b>, and that is not a compromise: the DM recognises his table
+/// network by its name, and the classification - which is what decides whether a rule bites - hangs
+/// on the network, not on the card. It is also the only form obtainable through late binding; the
+/// adapter identifier is a GUID return value that IDispatch will not hand over.
+/// </para>
+/// </summary>
+public sealed record NetworkView(string Name, FirewallProfiles Category);
 
 /// <summary>
 /// What the reachability view found. <see cref="Rules"/> may hold none, one, or several - and
@@ -93,18 +126,11 @@ public static class Firewall
         ArgumentException.ThrowIfNullOrEmpty(namePrefix);
         ArgumentException.ThrowIfNullOrEmpty(program);
 
-        var type = Type.GetTypeFromProgID(PolicyProgId, throwOnError: false);
-
-        if (type is null)
-        {
-            return FirewallState.Unknown;
-        }
-
         object? policy = null;
 
         try
         {
-            policy = Activator.CreateInstance(type);
+            policy = Com.Create(PolicyProgId);
 
             if (policy is null)
             {
@@ -112,8 +138,8 @@ public static class Firewall
             }
 
             return new FirewallState(
-                (FirewallProfiles)Number(Get(policy, "CurrentProfileTypes")),
-                Ours(Get(policy, "Rules"), namePrefix, program));
+                (FirewallProfiles)Com.Number(Com.Get(policy, "CurrentProfileTypes")),
+                Ours(Com.Get(policy, "Rules"), namePrefix, program));
         }
         catch (COMException)
         {
@@ -129,7 +155,7 @@ public static class Firewall
         }
         finally
         {
-            Release(policy);
+            Com.Release(policy);
         }
     }
 
@@ -152,12 +178,13 @@ public static class Firewall
             {
                 try
                 {
-                    if (Get(rule, "Name") is not string name || Number(Get(rule, "Direction")) != Inbound)
+                    if (Com.Get(rule, "Name") is not string name
+                        || Com.Number(Com.Get(rule, "Direction")) != Inbound)
                     {
                         continue;
                     }
 
-                    var application = Get(rule, "ApplicationName") as string;
+                    var application = Com.Get(rule, "ApplicationName") as string;
 
                     // Ours by name, or ours by what it lets through. Paths are compared without
                     // regard to case because Windows writes its own rules in lower case.
@@ -170,47 +197,21 @@ public static class Firewall
                     found.Add(new FirewallRuleView(
                         name,
                         application,
-                        Get(rule, "Enabled") is bool enabled && enabled,
-                        (FirewallProfiles)Number(Get(rule, "Profiles"))));
+                        Com.Get(rule, "Enabled") is bool enabled && enabled,
+                        (FirewallProfiles)Com.Number(Com.Get(rule, "Profiles")),
+                        (FirewallAction)Com.Number(Com.Get(rule, "Action"))));
                 }
                 finally
                 {
-                    Release(rule);
+                    Com.Release(rule);
                 }
             }
         }
         finally
         {
-            Release(rules);
+            Com.Release(rules);
         }
 
         return found;
-    }
-
-    /// <summary>
-    /// Late binding rather than declared COM interfaces, and the reason is the vtable: a hand-written
-    /// <c>[ComImport]</c> declaration has to list every member in exact order, and a mistake there is
-    /// not a compile error but a call into the wrong slot. Through IDispatch the name is the
-    /// contract, and a member that is not there raises <see cref="MissingMemberException"/> where it
-    /// can be answered.
-    /// </summary>
-    private static object? Get(object target, string member) =>
-        target.GetType().InvokeMember(
-            member,
-            BindingFlags.GetProperty,
-            binder: null,
-            target,
-            args: null,
-            CultureInfo.InvariantCulture);
-
-    private static int Number(object? value) =>
-        value is null ? 0 : Convert.ToInt32(value, CultureInfo.InvariantCulture);
-
-    private static void Release(object? instance)
-    {
-        if (instance is not null && Marshal.IsComObject(instance))
-        {
-            _ = Marshal.ReleaseComObject(instance);
-        }
     }
 }
