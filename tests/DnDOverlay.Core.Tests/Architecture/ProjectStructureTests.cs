@@ -149,23 +149,22 @@ public sealed class ProjectStructureTests
     /// <summary>
     /// The one rule that makes the third category worth having: the platform project is for the
     /// applications, and for nobody else. A library that reached into it would be Windows-bound
-    /// through the back door, and a test project that did would stop the Linux job dead.
+    /// through the back door.
     /// <para>
-    /// <b>Except a test project that is itself Windows-bound</b> - and the exception is safe only
-    /// because it is the SAME list that keeps such a project out of the Linux filter
-    /// (<see cref="RepositoryLayout.WindowsBoundTests"/>). The two cannot drift apart: a project
-    /// added here is thereby forbidden there, and one taken out here fails the filter rule instead.
-    /// The reason given above - "would stop the Linux job dead" - does not apply to a project the
-    /// Linux job never builds.
+    /// <b>The tests of the platform project itself are not an exception to this</b> - they are what
+    /// a test project is for. The rule describes how ordinary projects may depend on one another;
+    /// a test project is explicitly responsible for its own subject, and
+    /// <see cref="RepositoryLayout.SubjectOf"/> is what says which that is.
     /// </para>
     /// </summary>
     [Fact]
-    public void Neither_a_library_nor_a_platform_neutral_test_reaches_into_the_platform_project()
+    public void Nobody_but_the_applications_and_its_own_tests_reaches_into_the_platform_project()
     {
         var offenders = RepositoryLayout.Libraries
             .Select(name => RepositoryLayout.SourceProjects[name])
             .Concat(RepositoryLayout.TestProjects.Values
-                .Where(project => !RepositoryLayout.WindowsBoundTests.Contains(project.Name, StringComparer.Ordinal)))
+                .Where(project => !RepositoryLayout.Platform.Contains(
+                    RepositoryLayout.SubjectOf(project.Name), StringComparer.Ordinal)))
             .Where(project => project.ProjectReferences.Intersect(
                 RepositoryLayout.Platform, StringComparer.Ordinal).Any())
             .Select(project => project.Name)
@@ -175,8 +174,7 @@ public sealed class ProjectStructureTests
     }
 
     /// <summary>
-    /// And the counterpart, so the exception above cannot be used to smuggle anything in: a test
-    /// project declared Windows-bound has to actually be one. Without this, adding a name to
+    /// A test project declared Windows-bound has to actually be one. Without this, adding a name to
     /// <see cref="RepositoryLayout.WindowsBoundTests"/> would be a way to take a platform-neutral
     /// project out of the Linux job silently - the quietest way for a net to fail (Part 2).
     /// </summary>
@@ -189,6 +187,22 @@ public sealed class ProjectStructureTests
 
             Assert.Equal("net10.0-windows", framework);
         }
+    }
+
+    /// <summary>
+    /// The counterpart to <see cref="RepositoryLayout.SubjectOf"/>: a test project has a subject
+    /// that exists. Otherwise a typo in a project name would quietly widen every rule that grants
+    /// a test project access to its own subject - it would simply match nothing.
+    /// </summary>
+    [Fact]
+    public void Every_test_project_is_named_after_a_project_that_exists()
+    {
+        var orphans = RepositoryLayout.TestProjects.Keys
+            .Where(name => name.EndsWith(".Tests", StringComparison.Ordinal))
+            .Where(name => !RepositoryLayout.SourceProjects.ContainsKey(RepositoryLayout.SubjectOf(name)))
+            .ToList();
+
+        Assert.Empty(orphans);
     }
 
     /// <summary>The platform project may know Core and nothing else - it produces Core types.</summary>
@@ -222,8 +236,13 @@ public sealed class ProjectStructureTests
 
     /// <summary>
     /// Nobody may take a helper as a library. It is an executable whose whole point is the name in
-    /// the elevation prompt; calling into it as code would give that up without anyone noticing,
-    /// and a test project that did would stop the Linux job dead.
+    /// the elevation prompt; calling into it as code would give that up without anyone noticing.
+    /// <para>
+    /// <b>This is the one rule a test project gets no exception from</b> - unlike the platform
+    /// project, where reaching into one's own subject is the normal case. A helper has nothing a
+    /// reference could reach that a linked source file cannot, and the reference would cost the
+    /// property the helpers exist for (Part 9).
+    /// </para>
     /// </summary>
     [Fact]
     public void Neither_a_library_nor_a_test_reaches_into_a_firewall_helper()

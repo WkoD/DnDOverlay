@@ -94,8 +94,8 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
 
         // Last, because it is the only one that waits on anything.
         _listening.Text = await ListeningAsync().ConfigureAwait(true)
-            ? "The hub is listening. That says the process is up - it cannot say the port is open, "
-                + "because a request from this machine to its own address never passes the firewall."
+            ? "The hub is listening. Whether the port is open cannot be said from here - a request "
+                + "to this machine's own address never passes the firewall."
             : "The hub is NOT answering on this machine. Nothing else here matters until it does.";
     }
 
@@ -241,10 +241,9 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
 
             if (anywhere && !Confirm(
                 "Allow on public networks?",
-                "This rule also covers PUBLIC networks. It will apply in every foreign network this "
-                + "machine ever joins - hotel, conference, café - permanently, and not only at the "
-                + "table.\n\nIf this is your home network, classifying it as private is the better "
-                + "way: the rule then needs no public part at all." + also))
+                "This rule also covers PUBLIC networks. It applies in every foreign network this "
+                + "machine joins, until it is removed.\n\nIf this is your home network, classify it "
+                + "as private instead - the rule then needs no public part." + also))
             {
                 return;
             }
@@ -264,8 +263,8 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
             // First, and before any counting: a block beats every allow beside it, so how many
             // rules there are is the second question.
             _rules.Children.Add(Line(
-                "A rule BLOCKS this program. Nothing gets through while it stands, no matter what "
-                + "else is set - remove the rules for this program and set it again.",
+                "A rule BLOCKS this program. A block beats every allow, so nothing gets through "
+                + "until it is removed.",
                 Brushes.Firebrick));
         }
         else if (judged.Count == 0)
@@ -311,7 +310,7 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
 
         _rules.Children.Add(Line(
             "One of these rules covers PUBLIC networks. It applies in every foreign network this "
-            + "machine joins, not only at the table - deliberate, and worth knowing.",
+            + "machine joins.",
             Brushes.DarkOrange));
     }
 
@@ -384,9 +383,9 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
                 "Remove every rule for this program?",
                 "Every inbound firewall rule pointing at\n\n"
                 + $"    {Environment.ProcessPath}\n\n"
-                + "will be removed - the one we set, the ones Windows wrote when it asked whether to "
-                + "allow access, and any you built yourself. They are listed above.\n\n"
-                + "Afterwards nothing on another machine gets through until a rule is set again."))
+                + "will be removed: ours, the ones Windows wrote, and any built by hand. They are "
+                + "listed above.\n\nAfterwards no other machine gets through until a rule is set "
+                + "again."))
             {
                 Elevate("DnDOverlay.FirewallRemove.exe");
             }

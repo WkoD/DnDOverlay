@@ -73,19 +73,40 @@ internal static class RepositoryLayout
     internal static readonly string[] WindowsBound = [.. Platform, .. Applications, .. Helpers];
 
     /// <summary>
-    /// Test projects that are Windows-bound, and therefore not in the Linux filter either.
+    /// Test projects that are Windows-bound, and therefore not in the Linux filter.
     /// <para>
-    /// It has to be a category for the same reason <see cref="Platform"/> is one: the filter rule
-    /// otherwise demands that every test project be built on Linux, where this one fails with
-    /// NETSDK1100 - and an exception written inside a rule explains itself to nobody later. What
-    /// it covers is Windows firewall judgement, which is a Windows subject; moving it to a neutral
-    /// project to gain a second platform would put a foreign body in Core (Part 2, Part 11).
+    /// This list is about the TARGET FRAMEWORK and nothing else. A test project may reach into the
+    /// project it tests without appearing here - see <see cref="SubjectOf"/> - so the two concerns
+    /// stay apart: what a test project may reference is one question, and which platform can build
+    /// it is another.
     /// </para>
     /// </summary>
     internal static readonly string[] WindowsBoundTests =
     [
         "DnDOverlay.Platform.Windows.Tests",
     ];
+
+    /// <summary>
+    /// The project a test project is about, by the naming convention: <c>X.Tests</c> tests
+    /// <c>X</c>.
+    /// <para>
+    /// <b>A test project reaching into its own subject is not an exception to any rule</b> - it is
+    /// what a test project is for. The structure rules describe how ORDINARY projects may depend
+    /// on one another; a test project is a special case that is explicitly responsible for exactly
+    /// one of them. Without this the rules would have to carry a named exception per test project,
+    /// and each one would look like a concession rather than the normal case.
+    /// </para>
+    /// <para>
+    /// <b>The firewall helpers are the one place where it does not hold</b>, and deliberately so:
+    /// nobody may reference them, a test project included, because referencing an executable as a
+    /// library gives up the name in the elevation prompt. What is testable of them is reached
+    /// through a LINKED source file instead (Part 9).
+    /// </para>
+    /// </summary>
+    internal static string SubjectOf(string testProject) =>
+        testProject.EndsWith(".Tests", StringComparison.Ordinal)
+            ? testProject[..^".Tests".Length]
+            : testProject;
 
     internal static DirectoryInfo RepositoryRoot { get; } = FindRepositoryRoot();
 

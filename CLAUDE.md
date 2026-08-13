@@ -17,6 +17,13 @@ Loaded into every session. Keep it short — it is the entry point, not the docu
 
 - **Everything developer-facing is English** — identifiers, comments, commits, docs. The
   interface is English and German, English as the neutral resource.
+- **Interface text and log messages are precise and short. No filler.** Every sentence tells
+  the reader something they cannot already see: what is the case, what follows from it, what
+  to do about it. A clause that restates the sentence before it, comments on the situation
+  ("deliberate, and worth knowing") or pads it with examples is cut. This applies to labels,
+  confirmations, verdicts and `[LoggerMessage]` templates alike — a log line is read when
+  something is wrong, and filler is what stands between the reader and the fact.
+  *Comments and docs are the opposite case: there, the reasoning is the content.*
 - **Dependency direction**: `Core` knows nobody · `Hub`, `Campaign`, `Imaging`, `Transport`
   know only `Core` · `Control` and `Display` sit outside. **`Hub` and `Campaign` do not know
   each other** — the arrangement belongs to the hub, the material to the campaign.
