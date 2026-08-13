@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Logging;
 using DnDOverlay.Hub;
 
 namespace DnDOverlay.Control;
@@ -21,11 +23,13 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly PairingDesk _pairing;
     private readonly DemoAsset _asset;
     private readonly Uri _address;
+    private readonly LogList _log;
     private readonly CancellationTokenSource _listening = new();
     private readonly ListBox _list = new() { Margin = new Thickness(0, 0, 0, 8), MinHeight = 160 };
     private readonly ComboBox _state = new() { Width = 160, Margin = new Thickness(0, 0, 8, 0) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Border _firstRun = new() { Margin = new Thickness(0, 0, 0, 12) };
+    private readonly StackPanel _notices = new() { Margin = new Thickness(0, 0, 0, 12) };
 
     private DevicesWindow? _devices;
     private NetworkWindow? _network;
@@ -35,16 +39,18 @@ internal sealed class MainWindow : Window, IDisposable
         ISessionApi session,
         PairingDesk pairing,
         DemoAsset asset,
-        Uri address)
+        Uri address,
+        ProcessLog log)
     {
         _session = session;
         _pairing = pairing;
         _asset = asset;
         _address = address;
+        _log = new LogList(log, "Control") { Height = 200 };
 
         Title = "DnDOverlay - M1b";
         Width = 620;
-        Height = 520;
+        Height = 760;
 
         var send = new Button { Content = "Send the image to the selected screen", Padding = new Thickness(12, 8, 12, 8) };
         send.Click += OnSend;
@@ -59,6 +65,7 @@ internal sealed class MainWindow : Window, IDisposable
         });
 
         panel.Children.Add(Windows());
+        panel.Children.Add(_notices);
         panel.Children.Add(_firstRun);
         panel.Children.Add(new TextBlock
         {
@@ -70,6 +77,7 @@ internal sealed class MainWindow : Window, IDisposable
         panel.Children.Add(StateRow());
         panel.Children.Add(send);
         panel.Children.Add(_status);
+        panel.Children.Add(_log);
 
         Content = panel;
 
@@ -84,6 +92,7 @@ internal sealed class MainWindow : Window, IDisposable
         _listening.Cancel();
         _listening.Dispose();
         _welcome?.Dispose();
+        _log.Dispose();
     }
 
     /// <summary>
@@ -154,6 +163,57 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         _list.SelectedIndex = selected >= 0 && selected < _list.Items.Count ? selected : 0;
+    }
+
+    /// <summary>
+    /// Says something the DM has to read, beside the stage rather than in front of it.
+    /// <para>
+    /// Not a message box, and that is the point rather than a matter of taste: what is reported
+    /// here is true for the rest of the evening, and a dialog is gone the moment it is clicked
+    /// away - usually before it was read. It stands until it is dismissed, and the control stays
+    /// operable underneath it (Part 3, Part 7).
+    /// </para>
+    /// <para>
+    /// M1b has one caller: a replaced configuration. That one may not be quiet, because it costs
+    /// every pairing - the displays come back as unknown devices, and being told beats finding out
+    /// at the table (Part 6).
+    /// </para>
+    /// </summary>
+    internal void Notify(string text)
+    {
+        var message = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 12, 0),
+        };
+
+        var dismiss = new Button
+        {
+            Content = "OK",
+            Padding = new Thickness(12, 2, 12, 2),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+
+        var row = new DockPanel { LastChildFill = true };
+
+        DockPanel.SetDock(dismiss, Dock.Right);
+        row.Children.Add(dismiss);
+        row.Children.Add(message);
+
+        var notice = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0xFF, 0xF4, 0xCE)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0xB5, 0x8A, 0x00)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(0, 0, 0, 8),
+            Child = row,
+        };
+
+        dismiss.Click += (_, _) => _notices.Children.Remove(notice);
+
+        _notices.Children.Add(notice);
     }
 
     /// <summary>

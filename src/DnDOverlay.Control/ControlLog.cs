@@ -28,15 +28,18 @@ internal static partial class ControlLog
     internal static partial void ConfigurationCreated(ILogger logger, Guid controlId);
 
     /// <summary>
-    /// Loud on purpose. control.json holds the known devices and their tokens, so a replacement
-    /// means every display has to be paired again - and hearing that beats discovering it at
-    /// the table (Part 6).
+    /// Loud on purpose, and louder since a hand run showed the half that was missing. control.json
+    /// holds the known devices and their tokens, so a replacement means every display has to be
+    /// paired again - but it also carries the <c>ControlId</c>, and a new one means the displays
+    /// <b>discard this control's beacons</b> and never knock at all. "Allowed again" alone reads
+    /// like "they will be back in a minute", and they will not (Part 4, Part 6).
     /// </summary>
     [LoggerMessage(
         EventId = 4004,
         Level = LogLevel.Warning,
-        Message = "control.json was unreadable. Set aside as {SetAside}; starting with defaults, "
-                  + "so paired devices have to be allowed again.")]
+        Message = "control.json was unreadable. Set aside as {SetAside}; starting with defaults "
+                  + "and a new identity, so paired displays will not find this control by "
+                  + "themselves - their pairing has to be reset at each device.")]
     internal static partial void ConfigurationReplaced(ILogger logger, string setAside);
 
     /// <summary>
@@ -50,4 +53,16 @@ internal static partial class ControlLog
         Level = LogLevel.Information,
         Message = "{Restored} paired device(s) restored, {Dropped} dropped because the token did not decrypt.")]
     internal static partial void KnownDevicesRestored(ILogger logger, int restored, int dropped);
+
+    /// <summary>
+    /// The one startup fault that stops everything: without its hub this application has nothing
+    /// to do. It carries the number AND the file to change it in, because a line that only says
+    /// "in use" leaves the reader exactly where they were (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4009,
+        Level = LogLevel.Error,
+        Message = "Port {Port} is already in use - another control is probably running. Change "
+                  + "\"Port\" in {Path} to start a second one.")]
+    internal static partial void PortTaken(ILogger logger, Exception exception, int port, string path);
 }

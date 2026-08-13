@@ -27,6 +27,8 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     private static readonly DeviceId Plugged = new(Guid.Parse("cccccccc-0000-0000-0000-000000000003"));
     private static readonly DeviceId Talkative = new(Guid.Parse("cccccccc-0000-0000-0000-000000000004"));
     private static readonly DeviceId Returning = new(Guid.Parse("cccccccc-0000-0000-0000-000000000005"));
+    private static readonly DeviceId Asked = new(Guid.Parse("cccccccc-0000-0000-0000-000000000006"));
+    private static readonly DeviceId Bystander = new(Guid.Parse("cccccccc-0000-0000-0000-000000000007"));
 
     private static readonly ScreenId First = new(@"\\?\DISPLAY#WIRE#1");
     private static readonly ScreenId Second = new(@"\\?\DISPLAY#WIRE#2");
@@ -47,6 +49,8 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
             new PairedDevice(Plugged, "TISCH-PC", PairingRole.Display, Token),
             new PairedDevice(Talkative, "TISCH-PC", PairingRole.Display, Token),
             new PairedDevice(Returning, "TISCH-PC", PairingRole.Display, Token),
+            new PairedDevice(Asked, "TISCH-PC", PairingRole.Display, Token),
+            new PairedDevice(Bystander, "BEAMER-PC", PairingRole.Display, Token),
         ]);
 
         // Registered although no test here fetches an asset - and that is not belt and braces.
@@ -122,6 +126,51 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
         Assert.Equal(SuppressReason.ControlWindow, suppressed.Command!.Suppress);
         Assert.Equal(ScreenState.Blackout, suppressed.Command.State);
         Assert.Equal(ScreenState.Blackout, session.Screens.Single(view => view.Screen == target).State);
+    }
+
+    /// <summary>
+    /// "Which one are you?" goes to the device that was asked and to no other. With two devices of
+    /// two screens each this is the only thing that says which tile is which physical screen, and
+    /// a second table lighting up with names would be exactly the confusion it exists to end
+    /// (Part 6).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task Identifying_screens_reaches_that_device_and_no_other()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var asked = await ConnectAsync(Asked, [Info(First), Info(Second)], cancellationToken);
+        using var bystander = await ConnectAsync(Bystander, [Info(First)], cancellationToken);
+
+        await ReceiveAsync<ConfigUpdateMessage>(asked, cancellationToken);
+        await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
+
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+
+        await session.IdentifyScreensAsync(Asked, cancellationToken);
+
+        // It carries nothing: arriving IS the whole message, and the device names its own screens.
+        await ReceiveAsync<IdentifyScreensMessage>(asked, cancellationToken);
+
+        // What the bystander must NOT have got is proven without waiting for a silence: give it
+        // something it definitely will get, and assert that this is the next thing to arrive.
+        await session.SetScreenStateAsync(new ScreenRef(Bystander, First), ScreenState.Blackout, cancellationToken);
+
+        var next = await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
+
+        Assert.Equal(ScreenState.Blackout, Assert.Single(next.Update.Screens).Command!.State);
+    }
+
+    /// <summary>
+    /// A device that is switched off is simply not asked. Unlike a setting - which is kept and goes
+    /// out with the next connection - an identification is only ever worth anything now.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task Identifying_a_device_that_is_not_connected_does_nothing()
+    {
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+
+        await session.IdentifyScreensAsync(Asked, TestContext.Current.CancellationToken);
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using DnDOverlay.Core;
 using DnDOverlay.Platform.Windows;
 using CoreRect = DnDOverlay.Core.Rect;
@@ -24,17 +25,63 @@ namespace DnDOverlay.Display;
 /// </summary>
 internal sealed class OverlayWindow : Window
 {
+    /// <summary>
+    /// How long the name stands when the DM asks which screen is which. A few seconds (Part 6):
+    /// long enough to walk round the table and look, short enough that it is gone again before
+    /// anybody wonders how to get rid of it.
+    /// </summary>
+    private static readonly TimeSpan ShowNameFor = TimeSpan.FromSeconds(4);
+
     private readonly MonitorInfo _monitor;
     private readonly bool _windowed;
     private readonly Canvas _stage = new() { Background = null };
+    private readonly TextBlock _name;
+    private readonly Border _nameplate;
+    private readonly DispatcherTimer _naming;
 
     internal OverlayWindow(MonitorInfo monitor, bool windowed)
     {
         _monitor = monitor;
         _windowed = windowed;
 
+        _name = new TextBlock
+        {
+            FontSize = 64,
+            FontWeight = FontWeights.Bold,
+            Foreground = Brushes.White,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        _nameplate = new Border
+        {
+            Child = _name,
+            Background = new SolidColorBrush(Color.FromArgb(0xC8, 0, 0, 0)),
+            Padding = new Thickness(48, 32, 48, 32),
+            CornerRadius = new CornerRadius(12),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+
+            // Pass-through is the property this window exists for. A plate that answered the
+            // hit test would swallow clicks meant for MapTool underneath it, for four seconds,
+            // in the middle of a room being set up.
+            IsHitTestVisible = false,
+        };
+
+        _naming = new DispatcherTimer { Interval = ShowNameFor };
+        _naming.Tick += (_, _) => Hide(_nameplate);
+
+        // A grid over the canvas rather than another item on it: the name belongs above every
+        // image and is not part of the scene. Background stays null, so the layer costs no
+        // hit testing (mode A, above).
+        var root = new Grid { Background = null };
+
+        root.Children.Add(_stage);
+        root.Children.Add(_nameplate);
+
         Title = monitor.Screen.Label;
-        Content = _stage;
+        Content = root;
         Background = null;
         ShowInTaskbar = windowed;
 
@@ -61,6 +108,30 @@ internal sealed class OverlayWindow : Window
     }
 
     internal ScreenId ScreenId => _monitor.Screen.ScreenId;
+
+    /// <summary>
+    /// Shows this screen's effective name, large, for a few seconds. Pressing again restarts the
+    /// few seconds rather than queueing a second showing - the DM presses twice when they are not
+    /// sure they saw it, and the answer to that is a longer look, not two.
+    /// </summary>
+    internal void Identify(string label)
+    {
+        _name.Text = label;
+        _nameplate.Visibility = Visibility.Visible;
+
+        _naming.Stop();
+        _naming.Start();
+    }
+
+    private static void Hide(UIElement plate) => plate.Visibility = Visibility.Collapsed;
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // A running timer holds this window alive and would tick into a closed one.
+        _naming.Stop();
+
+        base.OnClosed(e);
+    }
 
     /// <summary>
     /// Draws the scene. Everything goes through <see cref="Layout.ItemToRect"/> - the table, the

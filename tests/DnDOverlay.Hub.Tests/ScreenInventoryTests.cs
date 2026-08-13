@@ -1,5 +1,6 @@
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Hub.Tests;
 
@@ -195,6 +196,44 @@ public sealed class ScreenInventoryTests
 
         Assert.Equal(ParkEdge.Top, screen.Settings!.ParkEdge);
         Assert.Null(screen.Settings.Placement);
+    }
+
+    /// <summary>
+    /// The same cross case for the DEVICE-scope half, and it needs its own test: the per-screen
+    /// settings and the per-device ones are reconciled by different code, so one of the two can
+    /// grow a field the other forgets - and a forgotten field does not fail, it silently drops a
+    /// value (Part 4, Part 6).
+    /// </summary>
+    [Fact]
+    public void Each_side_keeps_the_device_key_it_changed()
+    {
+        var catalog = new ScreenCatalog();
+
+        var reported = catalog.Report(Device, [Info(Screen)], reported: null);
+
+        // The control sends the screens to sleep while the device is off.
+        catalog.Departed(Device, reported.Presence);
+        catalog.Change(Device, new DeviceSettings(KeepAwake: false));
+
+        // The device comes back and reports that IT was raised to Debug at the table.
+        catalog.Report(
+            Device,
+            [Info(Screen)],
+            new ConfigUpdate([], new DeviceSettings(Level: LogLevel.Debug)));
+
+        var update = catalog.Drain(Device);
+
+        // Neither side overran the other - that is what the test is for.
+        Assert.Equal(false, update.Device!.KeepAwake);
+        Assert.Equal(LogLevel.Debug, update.Device.Level);
+
+        // The second assertion is worth reading twice, because it differs from the per-screen
+        // half above, where a reported value stays out of the next delta. The device half has no
+        // baseline of its own - the pending set doubles as the memory - so what the device
+        // reported comes straight back at it once. It is its own value, so nothing changes at the
+        // device; what it costs is that the control forgets these values after the drain. That
+        // becomes a real gap in M5b, where the device band has to SHOW the current value, and it
+        // is written down here rather than left to be rediscovered there.
     }
 
     /// <summary>Where BOTH changed the same key, the control wins - and that is all it wins.</summary>

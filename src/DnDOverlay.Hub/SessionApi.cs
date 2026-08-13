@@ -326,6 +326,20 @@ public sealed class SessionApi : ISessionApi, IDisposable
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default)
+    {
+        // No gate and no catalogue: this changes nothing that could be read back. A device that is
+        // switched off gets nothing - unlike a setting, which is kept and goes out with the next
+        // connection, an identification is only ever worth anything now.
+        if (_connections.TryGet(device, out var connection))
+        {
+            _ = connection.TrySend(new IdentifyScreensMessage());
+        }
+
+        return Task.CompletedTask;
+    }
+
     /// <summary>
     /// Sends what is outstanding for this device - but only if it is here. What is not sent stays
     /// pending, which is the whole reason a screen can be set while its display PC is off

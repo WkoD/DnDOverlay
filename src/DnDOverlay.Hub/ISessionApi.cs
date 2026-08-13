@@ -77,6 +77,17 @@ public interface ISessionApi
     Task ApplyConfigAsync(DeviceId device, ConfigUpdate update, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Makes every overlay of one device show its own name, large, for a few seconds (Part 6).
+    /// <para>
+    /// With two devices of two screens each there is otherwise nothing that says which tile is
+    /// which physical screen - the names are the DM's own and the identifiers behind them never
+    /// appear in any surface (Part 3). It is a moment, not a state: nothing is stored, nothing is
+    /// undone, and a device that is not connected is simply not asked.
+    /// </para>
+    /// </summary>
+    Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Everything a surface shows, as one stream: the device tree, the scenes, the pairing desk and
     /// the log.
     /// <para>

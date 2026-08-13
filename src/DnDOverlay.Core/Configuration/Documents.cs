@@ -173,7 +173,7 @@ public sealed record DisplayConfiguration : IConfigurationDocument
     /// What concerns the process rather than one of its windows - written in full for the same
     /// reason.
     /// </summary>
-    public DeviceSettings Device { get; init; } = new(LogLevel.Information, LogLevel.Warning);
+    public DeviceSettings Device { get; init; } = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true);
 }
 
 /// <summary>The stored parameters of one screen, keyed by the identifier the device derives.</summary>

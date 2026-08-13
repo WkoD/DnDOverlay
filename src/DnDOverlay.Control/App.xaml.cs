@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
@@ -134,12 +135,19 @@ public sealed partial class App : Application, IDisposable
         _host.UseWebSockets();
         _host.MapDnDOverlayHub();
 
-        await _host.StartAsync().ConfigureAwait(true);
-
         var logger = _host.Services.GetRequiredService<ILogger<App>>();
 
+        // Said BEFORE the port is taken, not after. A start that dies at the socket still has to
+        // have recorded where it looked and what it found there - otherwise the one run whose log
+        // matters most is the one that wrote nothing.
         ControlLog.DataRootChosen(logger, _dataRoot.Path);
         Report(logger, loaded);
+
+        if (!await ListeningAsync(logger, loaded.Value.Port).ConfigureAwait(true))
+        {
+            return;
+        }
+
         ControlLog.KnownDevicesRestored(logger, restored.Devices.Count, restored.Dropped);
 
         var session = _host.Services.GetRequiredService<ISessionApi>();
@@ -155,10 +163,63 @@ public sealed partial class App : Application, IDisposable
             session,
             new PairingDesk(session, secrets, _settings, TimeProvider.System),
             asset,
-            new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"));
+            new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
+            _log);
 
         MainWindow = window;
         window.Show();
+
+        // Beside the stage, once the stage exists. The log line above is for later; this is for
+        // now - a replacement costs every pairing, and a DM who is not told simply finds his
+        // tables gone and looks for the fault in the network (Part 6, Part 7).
+        if (loaded.Outcome is ConfigurationOutcome.Replaced)
+        {
+            window.Notify(
+                $"control.json was unreadable and was set aside as {loaded.SetAside ?? "(not kept)"}. "
+                + "This control started with defaults - and with a new identity, so paired displays "
+                + "discard its announcements and will not appear here by themselves. Reset the "
+                + "pairing at each device, then allow it again.");
+        }
+    }
+
+    /// <summary>
+    /// Starts listening, or says why it cannot.
+    /// <para>
+    /// A taken port is the one startup fault that is worth a dialog: nothing of this application
+    /// works without its hub, so there is no surface left to report into - and the DM would
+    /// otherwise be left with a program that flashes and disappears. It names the number and what
+    /// to do about it, because "the port is in use" alone leaves the reader exactly where they were
+    /// (Part 4).
+    /// </para>
+    /// </summary>
+    private async Task<bool> ListeningAsync(ILogger logger, int port)
+    {
+        try
+        {
+            await _host!.StartAsync().ConfigureAwait(true);
+
+            return true;
+        }
+        catch (IOException exception)
+        {
+            // What Kestrel throws when the address is already taken - the SocketException is the
+            // inner one, and catching the outer keeps this from depending on which of the two
+            // layers reports first.
+            ControlLog.PortTaken(logger, exception, port, _dataRoot.ControlConfiguration);
+
+            _ = MessageBox.Show(
+                $"Port {port} is already in use.\n\n"
+                + "Another DnDOverlay control is probably running already - look for its window "
+                + $"before starting a second one. Otherwise change \"Port\" in {_dataRoot.ControlConfiguration} "
+                + "and start again; the displays find the new one by themselves.",
+                "DnDOverlay",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+
+            Shutdown();
+
+            return false;
+        }
     }
 
     protected override async void OnExit(ExitEventArgs e)

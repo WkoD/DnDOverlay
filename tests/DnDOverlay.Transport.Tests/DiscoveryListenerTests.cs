@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Transport;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DnDOverlay.Transport.Tests;
@@ -137,6 +139,61 @@ public sealed class DiscoveryListenerTests
         Assert.Equal(control, sighting.Beacon.ControlId);
     }
 
+    /// <summary>
+    /// The counterpart to the test above, and it exists because of a dead end a hand run found: a
+    /// control whose <c>control.json</c> was replaced comes back with a NEW identifier, so its own
+    /// displays discard it here — no <c>Hello</c>, no rejection, no entry anywhere. The filter
+    /// stays as it is (loosening it is the attack it prevents); what has to hold is that it can be
+    /// READ.
+    /// <para>
+    /// So: the first sighting of each strange control is named at Information, every one after it
+    /// falls back to Debug. Both halves matter — without the first the dead end is silent, and
+    /// without the second a household with two controls writes a line every two seconds.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_strange_control_is_named_once_and_after_that_kept_quiet()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mine = Guid.NewGuid();
+        var stranger = Guid.NewGuid();
+        var log = new Captured();
+        var listener = new DiscoveryListener(log);
+
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var listening = listener.ListenAsync(boundTo: mine, stop.Token);
+
+        using (var sender = Sender())
+        {
+            var datagram = DiscoveryJson.Serialise(new Beacon(stranger, "SOMEBODY-ELSE", 47800, Protocol.Version));
+
+            // Until it has been named once: the socket may not be bound when the first datagram
+            // goes out. Repeating is what a beacon does anyway, every two seconds.
+            while (log.Count(1048, stranger) == 0)
+            {
+                await sender.SendAsync(datagram, Target(), cancellationToken);
+                await Task.Delay(25, cancellationToken);
+            }
+
+            // And now the repeats, which must not name it a second time.
+            for (var i = 0; i < 5; i++)
+            {
+                await sender.SendAsync(datagram, Target(), cancellationToken);
+                await Task.Delay(25, cancellationToken);
+            }
+        }
+
+        await stop.CancelAsync();
+
+        Assert.Null(await listening);
+
+        // Counted over OUR stranger alone. This port carries the beacons of every other test
+        // assembly running in parallel, so a count over all entries would be a coin toss.
+        Assert.Equal(1, log.Count(1048, stranger));
+        Assert.True(log.Count(1017, stranger) > 0, "the repeats have to be written, only at Debug");
+    }
+
     [Fact(Timeout = 30_000)]
     public async Task Giving_up_the_search_answers_with_nothing()
     {
@@ -197,4 +254,35 @@ public sealed class DiscoveryListenerTests
     }
 
     private static IPEndPoint Target() => new(IPAddress.Loopback, Protocol.DiscoveryPort);
+
+    /// <summary>
+    /// Keeps what was written, so a test can assert about the LEVEL a thing was said at rather
+    /// than only about what happened. Thread-safe because the listener writes from its own task.
+    /// </summary>
+    private sealed class Captured : ILogger<DiscoveryListener>
+    {
+        private readonly ConcurrentQueue<(int Id, string Message)> _entries = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            ArgumentNullException.ThrowIfNull(formatter);
+
+            _entries.Enqueue((eventId.Id, formatter(state, exception)));
+        }
+
+        internal int Count(int eventId, Guid mentioning) =>
+            _entries.Count(entry =>
+                entry.Id == eventId
+                && entry.Message.Contains(mentioning.ToString(), StringComparison.OrdinalIgnoreCase));
+    }
 }

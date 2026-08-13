@@ -30,6 +30,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(LogEntryMessage), "LogEntry")]
 [JsonDerivedType(typeof(ScreensChangedMessage), "ScreensChanged")]
 [JsonDerivedType(typeof(ConfigUpdateMessage), "ConfigUpdate")]
+[JsonDerivedType(typeof(IdentifyScreensMessage), "IdentifyScreens")]
 public abstract record ProtocolMessage;
 
 /// <summary>
@@ -327,6 +328,21 @@ public sealed record ScreensChangedMessage(IReadOnlyList<ScreenInfo> Screens) : 
 /// </para>
 /// </summary>
 public sealed record ConfigUpdateMessage(ConfigUpdate Update) : ProtocolMessage;
+
+/// <summary>
+/// "Say which one you are": every overlay of this device shows its effective name, large, for a
+/// few seconds - the same text that stands on its tile (Part 6).
+/// <para>
+/// It carries nothing. The device knows its own screens and what each of them is called, and a
+/// list from the control would be a second copy of the names that could disagree with the first.
+/// </para>
+/// <para>
+/// <b>State rather than transient</b>, unlike the pulse it otherwise resembles. Transient exists
+/// to protect rank 1 while the table is busy; this is pressed while a room is being set up, when
+/// nothing is going on at all - and a press that silently does nothing is worse than a late one.
+/// </para>
+/// </summary>
+public sealed record IdentifyScreensMessage : ProtocolMessage;
 
 /// <summary>Constants that both ends agree on.</summary>
 public static class Protocol

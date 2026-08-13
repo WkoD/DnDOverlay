@@ -150,10 +150,9 @@ public sealed class ScreenCatalog
             // it was away goes on top.
             if (reported?.Device is { } device_ && !device_.IsEmpty)
             {
-                _pendingDevice.TryGetValue(device, out var mine);
-                _pendingDevice[device] = new DeviceSettings(
-                    mine?.Level ?? device_.Level,
-                    mine?.ForwardAtLeast ?? device_.ForwardAtLeast);
+                _pendingDevice[device] = _pendingDevice.TryGetValue(device, out var mine)
+                    ? DeviceSettings.Merge(older: device_, newer: mine)
+                    : device_;
             }
 
             result = new InventoryChange(added, missing, changed, presence);
@@ -323,7 +322,7 @@ public sealed class ScreenCatalog
         lock (_gate)
         {
             _pendingDevice[device] = _pendingDevice.TryGetValue(device, out var known)
-                ? new DeviceSettings(settings.Level ?? known.Level, settings.ForwardAtLeast ?? known.ForwardAtLeast)
+                ? DeviceSettings.Merge(older: known, newer: settings)
                 : settings;
         }
 

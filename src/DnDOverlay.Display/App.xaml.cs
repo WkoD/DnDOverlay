@@ -27,6 +27,13 @@ namespace DnDOverlay.Display;
 public sealed partial class App : Application, IDisposable
 {
     private readonly Dictionary<ScreenId, OverlayWindow> _windows = [];
+
+    /// <summary>
+    /// The names the DM gave, apart from the hardware. <c>_monitors</c> holds what Windows says
+    /// and its <c>Label</c> is therefore always the default one; laying the custom name over it
+    /// here keeps the default available for the moment a name is taken away again (Part 6).
+    /// </summary>
+    private readonly Dictionary<ScreenId, string> _names = [];
     private readonly Dictionary<ScreenRef, SceneState> _scenes = [];
     private readonly Dictionary<ScreenId, ScreenContext> _contexts = [];
     private readonly Dictionary<ScreenId, MonitorInfo> _monitors = [];
@@ -51,6 +58,7 @@ public sealed partial class App : Application, IDisposable
 
     private ILogger<App> _logger = null!;
     private ILoggerFactory? _loggers;
+    private WakeLock? _wake;
     private ProcessLog? _log;
     private LogForwarding? _forwarding;
     private ConfigurationFile<DisplayConfiguration>? _configuration;
@@ -142,6 +150,14 @@ public sealed partial class App : Application, IDisposable
         _log.Level = loaded.Value.Device.Level ?? LogLevel.Information;
         _forwarding = new LogForwarding(_log, loaded.Value.Device.ForwardAtLeast ?? LogLevel.Warning);
 
+        // Nothing is held yet - it takes a connection as well, and there is none. The parameter is
+        // set here so that a device which has never met a control still carries what it was told
+        // at the table across a restart (Part 6).
+        _wake = new WakeLock(Dispatcher, holding => DisplayLog.WakeLockChanged(_logger, holding))
+        {
+            Wanted = loaded.Value.Device.KeepAwake ?? true,
+        };
+
         _device = new DeviceId(loaded.Value.DeviceId);
 
         _http = new HttpClient();
@@ -219,6 +235,13 @@ public sealed partial class App : Application, IDisposable
                 ? settings.ApplyTo(context)
                 : context;
 
+            // A name given at the table has to survive a restart without a control, or naming
+            // locally would be a sham - the same argument as for every other parameter (Part 6).
+            if (settings?.CustomName is { Length: > 0 } custom)
+            {
+                _names[id] = custom;
+            }
+
             _states.TryAdd(id, new ScreenCommand(ScreenState.Inactive));
         }
 
@@ -262,7 +285,39 @@ public sealed partial class App : Application, IDisposable
     }
 
     private IReadOnlyList<ScreenInfo> Inventory() =>
-        [.. _monitors.Values.Select(monitor => monitor.Screen)];
+        [.. _monitors.Values.Select(Named)];
+
+    /// <summary>
+    /// One screen as it is CALLED: the custom name where there is one, the default from the
+    /// hardware otherwise. <see cref="ScreenInfo.Label"/> always carries the effective name, so
+    /// both sides show the same text without either of them deciding the rule for itself
+    /// (Part 3, Part 6).
+    /// </summary>
+    /// <summary>
+    /// Shows every overlay its own name, so the DM can tell which tile is which physical screen
+    /// (Part 6).
+    /// <para>
+    /// Only screens that HAVE an overlay - an inactive one has no window to show it on, and
+    /// putting one there to answer the question would break the promise that the DM gave that
+    /// screen back to Windows (Part 3).
+    /// </para>
+    /// </summary>
+    private void Identify()
+    {
+        foreach (var (screen, window) in _windows)
+        {
+            window.Identify(_monitors.TryGetValue(screen, out var monitor)
+                ? Named(monitor).Label
+                : screen.Value);
+        }
+
+        DisplayLog.ScreensIdentified(_logger, _windows.Count);
+    }
+
+    private ScreenInfo Named(MonitorInfo monitor) =>
+        _names.TryGetValue(monitor.Screen.ScreenId, out var custom)
+            ? monitor.Screen with { Label = custom, CustomName = custom }
+            : monitor.Screen;
 
     /// <summary>
     /// Takes a <c>ConfigUpdate</c> from the control: the settings it changed, and how each screen
@@ -281,6 +336,17 @@ public sealed partial class App : Application, IDisposable
             if (screen.Settings is { IsEmpty: false } settings && _contexts.TryGetValue(screen.Screen, out var context))
             {
                 _contexts[screen.Screen] = settings.ApplyTo(context);
+
+                // Null means unchanged on the wire, so an EMPTY name is how one is taken away
+                // again - and the default underneath is still there to fall back to.
+                if (settings.CustomName is { Length: > 0 } name)
+                {
+                    _names[screen.Screen] = name;
+                }
+                else if (settings.CustomName is not null)
+                {
+                    _names.Remove(screen.Screen);
+                }
             }
 
             if (screen.Command is { } command)
@@ -297,6 +363,7 @@ public sealed partial class App : Application, IDisposable
         {
             _log!.Level = device.Level ?? _log.Level;
             _forwarding!.AtLeast = device.ForwardAtLeast ?? _forwarding.AtLeast;
+            _wake!.Wanted = device.KeepAwake ?? _wake.Wanted;
         }
 
         Remember();
@@ -326,9 +393,9 @@ public sealed partial class App : Application, IDisposable
             [
                 .. _contexts.Select(pair => new ScreenPreferences(
                     pair.Key.Value,
-                    ScreenSettings.Of(pair.Value, _monitors.GetValueOrDefault(pair.Key)?.Screen.CustomName))),
+                    ScreenSettings.Of(pair.Value, _names.GetValueOrDefault(pair.Key)))),
             ],
-            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast),
+            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted),
         };
 
         _configuration.Save(_settings);
@@ -399,6 +466,10 @@ public sealed partial class App : Application, IDisposable
 
         _shutdown.Dispose();
         _http?.Dispose();
+
+        // Before the dispatcher stops - the request is held on the UI thread, and a thread that is
+        // gone cannot be asked to let go.
+        _wake?.Dispose();
 
         // Anything outstanding goes to disk before the process does (Part 6).
         _configuration?.Flush();
@@ -556,8 +627,17 @@ public sealed partial class App : Application, IDisposable
         {
             reached |= message is WelcomeMessage or PairingPendingMessage or RejectedMessage;
 
+            // Something arriving is the proof the socket stands, and it is the only one to be had
+            // here: the task above returns long before ClientWebSocket has finished connecting.
+            // Repeating it costs nothing - the lock only acts when the answer changes.
+            _wake!.Connected = true;
+
             await HandleAsync(message).ConfigureAwait(false);
         }
+
+        // Let go on the way out, not on the way back in: from here the screens may go dark, which
+        // is the right answer for a table nobody is playing on any more.
+        _wake!.Connected = false;
 
         _outbox = null;
         outbox.Writer.TryComplete();
@@ -620,9 +700,9 @@ public sealed partial class App : Application, IDisposable
                 [
                     .. _contexts.Select(pair => new ScreenConfigUpdate(
                         pair.Key,
-                        ScreenSettings.Of(pair.Value, _monitors.GetValueOrDefault(pair.Key)?.Screen.CustomName))),
+                        ScreenSettings.Of(pair.Value, _names.GetValueOrDefault(pair.Key)))),
                 ],
-                new DeviceSettings(_log?.Level, _forwarding?.AtLeast)),
+                new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted)),
 
             // What this device still has on its screens. A control that has just restarted takes
             // it over, and only where it has no scene of its own - which is the one exception to
@@ -665,6 +745,10 @@ public sealed partial class App : Application, IDisposable
                 // Onto the UI thread: this opens and closes windows, and everything here arrives
                 // on the connection task.
                 await Dispatcher.InvokeAsync(() => Apply(update.Update));
+                break;
+
+            case IdentifyScreensMessage:
+                await Dispatcher.InvokeAsync(Identify);
                 break;
 
             default:

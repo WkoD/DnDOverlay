@@ -237,9 +237,9 @@ public sealed record ScreenSettings(
 /// The delta over what belongs to the DEVICE rather than to one of its screens - the parameters
 /// that concern the PROCESS, not a window (Part 6).
 /// <para>
-/// M1b has the two that exist: what the device produces at all, and what of it is worth the wire.
-/// The rest of the table - image store, wake lock, foreign windows, language - arrives with the
-/// milestone that builds it.
+/// M1b has the three that exist: what the device produces at all, what of it is worth the wire,
+/// and whether it keeps its screens awake. The rest of the table - image store, foreign windows,
+/// language - arrives with the milestone that builds it.
 /// </para>
 /// </summary>
 /// <param name="Level">
@@ -248,11 +248,37 @@ public sealed record ScreenSettings(
 /// and the reason the message rate limit follows the level instead of being fixed (Part 4).
 /// </param>
 /// <param name="ForwardAtLeast">What of it goes over the wire. Warning by default.</param>
-public sealed record DeviceSettings(LogLevel? Level = null, LogLevel? ForwardAtLeast = null)
+/// <param name="KeepAwake">
+/// Whether the device holds its screens on while it is connected. On by default, and switchable
+/// from afar because the one machine it matters on is the one nobody is sitting at (Part 6).
+/// </param>
+public sealed record DeviceSettings(
+    LogLevel? Level = null,
+    LogLevel? ForwardAtLeast = null,
+    bool? KeepAwake = null)
 {
     /// <summary>Whether this delta says anything at all. Not serialised - see ScreenSettings.</summary>
     [JsonIgnore]
-    public bool IsEmpty => Level is null && ForwardAtLeast is null;
+    public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null;
+
+    /// <summary>
+    /// Two deltas laid over one another, the newer winning field by field.
+    /// <para>
+    /// It lives here and not at either call site because there are two of them - the baseline a
+    /// <c>Hello</c> brings and a change from the control - and a field added to the record has to
+    /// reach both or the one that was forgotten silently drops it (rule "exactly once").
+    /// </para>
+    /// </summary>
+    public static DeviceSettings Merge(DeviceSettings older, DeviceSettings newer)
+    {
+        ArgumentNullException.ThrowIfNull(older);
+        ArgumentNullException.ThrowIfNull(newer);
+
+        return new DeviceSettings(
+            newer.Level ?? older.Level,
+            newer.ForwardAtLeast ?? older.ForwardAtLeast,
+            newer.KeepAwake ?? older.KeepAwake);
+    }
 }
 
 /// <summary>

@@ -60,7 +60,7 @@
       "type": "coreclr",
       "request": "launch",
       "program": "${workspaceFolder}/src/DnDOverlay.Display/bin/Debug/net10.0-windows/DnDOverlay.Display.exe",
-      "args": ["--windowed", "--data", "dev-data"],
+      "args": ["--data", "dev-data"],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
       "stopAtEntry": false,

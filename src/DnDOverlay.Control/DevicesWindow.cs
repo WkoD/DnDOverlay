@@ -52,6 +52,8 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         panel.Children.Add(Heading("Devices"));
         panel.Children.Add(_tree);
+        panel.Children.Add(Naming());
+        panel.Children.Add(Waking());
 
         panel.Children.Add(Heading("Turned away"));
         panel.Children.Add(_refused);
@@ -158,11 +160,18 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         foreach (var device in devices)
         {
-            var node = new TreeViewItem { Header = Describe(device), IsExpanded = true };
+            // The device rides along on both levels, so selecting a screen answers "which device"
+            // as well as selecting the device does - the grips below act on the machine.
+            var node = new TreeViewItem
+            {
+                Header = Describe(device),
+                IsExpanded = true,
+                Tag = device,
+            };
 
             foreach (var screen in device.Screens)
             {
-                node.Items.Add(new TreeViewItem { Header = Describe(screen) });
+                node.Items.Add(new TreeViewItem { Header = Describe(screen), Tag = device });
             }
 
             _tree.Items.Add(node);
@@ -262,6 +271,95 @@ internal sealed class DevicesWindow : Window, IDisposable
         await decision(entry.Request).ConfigureAwait(true);
 
         _status.Text = $"Decided about {entry.Request.Name}.";
+    }
+
+    /// <summary>
+    /// "Which one are you?" - every overlay of the selected device shows its own name for a few
+    /// seconds (Part 6). With two devices of two screens each it is the only answer there is: the
+    /// names are the DM's own, and the identifiers behind them appear in no surface (Part 3).
+    /// <para>
+    /// In M4 this moves into the tile's screen context menu, where the DM already is. Here it sits
+    /// under the tree because there are no tiles yet.
+    /// </para>
+    /// </summary>
+    private Button Naming()
+    {
+        var button = new Button
+        {
+            Content = "Show the screen names on the selected device",
+            Padding = new Thickness(12, 6, 12, 6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+
+        button.Click += async (_, _) =>
+        {
+            if ((_tree.SelectedItem as TreeViewItem)?.Tag is not DeviceView device)
+            {
+                _status.Text = "Select a device first.";
+                return;
+            }
+
+            // Said rather than left to a button that does nothing: a device that is switched off
+            // has no overlay to show anything on, and the grip is silent by nature.
+            if (!device.Connected)
+            {
+                _status.Text = $"{device.Name} is not connected.";
+                return;
+            }
+
+            await _session.IdentifyScreensAsync(device.Device).ConfigureAwait(true);
+            _status.Text = $"{device.Name} is showing its screen names.";
+        };
+
+        return button;
+    }
+
+    /// <summary>
+    /// Whether that device holds its screens on. Part 6 asks for it to be switchable from afar, and
+    /// this is the machine the demand is written for: nobody is sitting at a display PC to notice
+    /// that its table went dark.
+    /// <para>
+    /// Two buttons rather than a checkbox, and that is deliberate for now: the value lives in the
+    /// device and does not travel back in <see cref="DeviceView"/>, so a box would have to show a
+    /// state it does not know. The band that shows the real value is built in M5b out of the shared
+    /// parameter description, together with the other nine device-scope parameters (Part 6, Part 7).
+    /// </para>
+    /// </summary>
+    private StackPanel Waking()
+    {
+        var keep = new Button { Content = "Keep the screens awake", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var sleep = new Button { Content = "Let them sleep", Padding = new Thickness(12, 6, 12, 6) };
+
+        keep.Click += (_, _) => WakeAsync(keep: true);
+        sleep.Click += (_, _) => WakeAsync(keep: false);
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+
+        row.Children.Add(keep);
+        row.Children.Add(sleep);
+
+        return row;
+    }
+
+    private async void WakeAsync(bool keep)
+    {
+        if ((_tree.SelectedItem as TreeViewItem)?.Tag is not DeviceView device)
+        {
+            _status.Text = "Select a device first.";
+            return;
+        }
+
+        // Sent whether or not the device is connected. What is set here stands in control.json and
+        // goes out with the next ConfigUpdate - without that the remote configuration would be
+        // useless exactly when it is wanted, before the display PC is switched on (Part 7).
+        await _session
+            .ApplyConfigAsync(device.Device, new ConfigUpdate([], new DeviceSettings(KeepAwake: keep)))
+            .ConfigureAwait(true);
+
+        _status.Text = keep
+            ? $"{device.Name} keeps its screens awake."
+            : $"{device.Name} lets its screens sleep.";
     }
 
     /// <summary>

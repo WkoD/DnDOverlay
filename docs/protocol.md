@@ -46,6 +46,15 @@ does not exist here, and the address is typed into a browser by a person standin
 | `LogEntry` | display → control | one log message: identifier, name, level, the device's own timestamp, named values, optional raw text, optional screen |
 | `ScreensChanged` | display → control | a new screen inventory after a hot-plug or a resolution change — facts only |
 | `ConfigUpdate` | control **↔** display | changed display parameters as a **delta**; from the control additionally the screen wish and the transient finding |
+| `IdentifyScreens` | control → display | nothing — every overlay of that device shows its own name, large, for a few seconds |
+
+`IdentifyScreens` carries no payload on purpose: the device knows its own screens and what each of
+them is called, and a list of names from the control would be a second copy that could disagree
+with the first. It is **state rather than transient**, unlike the pulse it otherwise resembles —
+transient exists to protect rank 1 while the table is busy, and this is pressed while a room is
+being set up, when a press that silently does nothing would be worse than a late one. Screens
+without an overlay show nothing: an inactive one was given back to Windows, and answering the
+question there would break that promise.
 
 `Welcome` carries a **path**, never an absolute URL and never host and port. Those come from the
 socket the message arrived on. A remembered base URL is a trap: when the machine moves between
@@ -123,6 +132,17 @@ that worked hands back.
 **A paired display discards foreign beacons.** It belongs to *its* control — the address cannot
 tell controls apart, and a second control in the same network is no invention.
 
+**And that rule has a sharp edge, found in a hand run rather than reasoned out.** A control whose
+`control.json` had to be replaced comes back with a **new identifier**, so its own displays treat
+it as a stranger. They never send a `Hello`, which means the answer designed for exactly this
+case — *a token that is valid nowhere*, below — is **never reached**: no rejection, no question at
+the device, no entry in any list. Both sides go quiet, and each of them is behaving correctly.
+
+Nothing is loosened for it, because loosening it *is* the attack the rule prevents. What was
+added is that it can be read: the display says the first sighting of each strange control out loud
+(1048), and the control says at startup that its identity is new and that the pairing has to be
+reset **at each device**. The way out stays a hand at the display — "reset pairing" in its tray.
+
 **Reconnecting waits one second, doubling to thirty, with spread.** The spread is not cosmetic:
 after a control restarts, every display in the house lost its connection in the same moment, and
 without it they would all knock again in the same instant. A connection that came up resets the
@@ -191,6 +211,13 @@ sides changed the *same* key, the control wins — and that is the only thing it
 The counter-check that explains the sign of all this: a device that has never seen a control is
 fully settable at the table and keeps its settings across restarts. Were it to lose them at the
 first `ConfigUpdate`, local operation would be a sham.
+
+**Beside the per-screen parameters there is a device-scope half** — what concerns the process
+rather than one of its windows. It carries three things so far: the level the device *writes*,
+what of it is worth the wire, and whether it **keeps its screens awake**. The last is held only
+while a connection stands: a display PC shows a still picture for an hour at a time and Windows
+cannot tell that from an idle machine, so the request is made when a control is there and dropped
+the moment it is gone — which is the right answer for a table nobody is playing on any more.
 
 ### The scene is transient — and it is handed over
 
@@ -481,10 +508,20 @@ the same application that draws.
 | 1045 | `HeartbeatLost` | Information | hub |
 | 1046 | `DeviceClockDiffers` | Warning | hub |
 | 1047 | `LogRateExceeded` | Warning | hub |
+| 1048 | `UnknownControlHeard` | Information | transport |
 
-**Next free: 1048.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**Next free: 1049.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
 1042, the send side 1043–1045, and log forwarding 1046–1047.
+
+**1017 and 1048 are the same finding at two levels, and the pair exists because of a dead end.**
+A display discards the beacons of any control it is not bound to — that is the rule that keeps a
+forged beacon from unbinding it. But a control whose `control.json` was replaced comes back with a
+**new `ControlId`**, so its own displays discard it too: no `Hello` is ever sent, the remedy below
+(*a token that is valid nowhere*) is never reached, and the control lists no device at all. 1048
+says the first sighting of each strange control out loud so that this is readable rather than
+silent; the repeats fall back to 1017 at Debug, which is what keeps a household with two controls
+from writing a line every two seconds.
 
 **1006 names an address rather than a device**, and that is not carelessness: the send loop exists
 from the moment the socket is accepted, so at that point there may be no device yet. The same
@@ -532,10 +569,17 @@ later is not a notification but the trail: *did this device ever knock, and what
 | 3015 | `OverlayClosed` | Information |
 | 3016 | `ScreensReported` | Information |
 | 3017 | `SettingsApplied` | Information |
+| 3018 | `ScreensIdentified` | Information |
+| 3019 | `WakeLockChanged` | Information |
 
-**Next free: 3018.**
+**Next free: 3020.**
 
-Of these, 3007–3014 are written by the **hub** and 3015–3017 by the **display** — the range
+3019 sits in the display range although what it changes is a process-wide flag — the subject of
+the sentence is whether a screen stays lit, and that is what decides the range. Both directions
+are worth the same line, and the second one more than the first: from the room, a device that was
+*told* to let go looks exactly like one that failed to hold on.
+
+Of these, 3007–3014 are written by the **hub** and 3015–3019 by the **display** — the range
 follows the subject of the sentence, never the assembly it is written in. Only one of the three
 inventory findings is a warning, and that is the point of telling them apart: a missing screen
 loses nothing, a new one is a fact, and a screen whose **metrics changed** has had its images
@@ -557,8 +601,9 @@ into one of them would have made the range names stop meaning anything.
 | 4006 | `ConfigurationReplaced` | Warning | display |
 | 4007 | `KnownDevicesRestored` | Information | control |
 | 4008 | `LogFileFailed` | Error | both |
+| 4009 | `PortTaken` | Error | control |
 
-**Next free: 4009.**
+**Next free: 4010.**
 
 **4008 is the one message built by hand**, without a `[LoggerMessage]`, and it has to be: it says
 that the log file gave up, so routing it through `ILogger` would return straight into the sink

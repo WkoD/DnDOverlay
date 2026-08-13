@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using DnDOverlay.Core.Protocol;
@@ -28,6 +29,14 @@ public sealed record Sighting(Beacon Beacon, IPAddress Address)
 public sealed class DiscoveryListener
 {
     private readonly ILogger<DiscoveryListener> _logger;
+
+    /// <summary>
+    /// Which strange controls have already been reported, so each is said once rather than every
+    /// two seconds. It lives on the listener and not in a call, because the reconnect loop calls
+    /// <see cref="ListenAsync"/> again and again - a set inside would report the same control on
+    /// every pass and be no quieter than no set at all.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, byte> _strangers = new();
 
     public DiscoveryListener(ILogger<DiscoveryListener> logger) => _logger = logger;
 
@@ -66,7 +75,20 @@ public sealed class DiscoveryListener
 
                 if (boundTo is { } control && beacon.ControlId != control)
                 {
-                    TransportLog.ForeignControlIgnored(_logger, beacon.ControlId, beacon.Name);
+                    // The first sighting of each strange control is said out loud, the repeats are
+                    // not. Without the first, a control whose configuration was replaced is
+                    // invisible to this device for ever and nothing anywhere says why (1048); with
+                    // every one of them, a household with two controls writes a line every two
+                    // seconds. The set is what buys both.
+                    if (_strangers.TryAdd(beacon.ControlId, 0))
+                    {
+                        TransportLog.UnknownControlHeard(_logger, beacon.ControlId, beacon.Name, control);
+                    }
+                    else
+                    {
+                        TransportLog.ForeignControlIgnored(_logger, beacon.ControlId, beacon.Name);
+                    }
+
                     continue;
                 }
 

@@ -66,6 +66,30 @@ internal static partial class TransportLog
     internal static partial void ForeignControlIgnored(ILogger logger, Guid controlId, string name);
 
     /// <summary>
+    /// The FIRST time a particular strange control is heard, said out loud - and it took a hand
+    /// run to find out why that matters.
+    /// <para>
+    /// A control whose <c>control.json</c> was replaced comes back with a NEW <c>ControlId</c>, so
+    /// its beacons are discarded here like any stranger's. The remedy Part 4 describes - the
+    /// control answering with <c>Rejected("token unknown")</c> and the device asking whether to
+    /// reset - is never reached, because no <c>Hello</c> is ever sent. Without this line the whole
+    /// thing is silent on both sides: the control lists no device, the display searches for ever,
+    /// and 1017 sits below the level anybody runs at.
+    /// </para>
+    /// <para>
+    /// Once per control, not once per beacon: the repeats stay at 1017, which is what keeps a
+    /// household with two controls from writing a line every two seconds.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1048,
+        Level = LogLevel.Information,
+        Message = "Control {ControlId} ({Name}) is announcing itself, but this device belongs to "
+                  + "{BoundTo}. If that control was set up again, the pairing has to be reset AT "
+                  + "this device.")]
+    internal static partial void UnknownControlHeard(ILogger logger, Guid controlId, string name, Guid boundTo);
+
+    /// <summary>
     /// Not fatal: the way through is the host by hand, which is a documented path and not a
     /// stopgap (Part 4, Part 9).
     /// </summary>

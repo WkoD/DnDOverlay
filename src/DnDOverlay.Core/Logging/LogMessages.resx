@@ -155,6 +155,9 @@
   <data name="E1047_LogRateExceeded" xml:space="preserve">
     <value>{DeviceName} sent more than {Limit} log entries a second at {Level}; the surplus was dropped.</value>
   </data>
+  <data name="E1048_UnknownControlHeard" xml:space="preserve">
+    <value>Control {ControlId} ({Name}) is announcing itself, but this device belongs to {BoundTo}. If that control was set up again, the pairing has to be reset AT this device.</value>
+  </data>
 
   <!-- 3000-3999 · Display: what is on a screen, and why is it or is it not? -->
 
@@ -209,6 +212,12 @@
   <data name="E3017_SettingsApplied" xml:space="preserve">
     <value>Applied settings for {ScreenCount} screen(s) from the control.</value>
   </data>
+  <data name="E3018_ScreensIdentified" xml:space="preserve">
+    <value>Showing the screen name on {ScreenCount} overlay(s).</value>
+  </data>
+  <data name="E3019_WakeLockChanged" xml:space="preserve">
+    <value>Screen wake lock held: {Holding}.</value>
+  </data>
 
   <!-- 4000-4999 · Operations: what a process does to itself. -->
 
@@ -222,7 +231,7 @@
     <value>No control.json yet - created one, control {ControlId}.</value>
   </data>
   <data name="E4004_ConfigurationReplaced" xml:space="preserve">
-    <value>control.json was unreadable. Set aside as {SetAside}; starting with defaults, so paired devices have to be allowed again.</value>
+    <value>control.json was unreadable. Set aside as {SetAside}; starting with defaults and a new identity, so paired displays will not find this control by themselves - their pairing has to be reset at each device.</value>
   </data>
   <data name="E4005_ConfigurationCreated" xml:space="preserve">
     <value>No display.json yet - created one, device {DeviceId}.</value>
@@ -235,5 +244,8 @@
   </data>
   <data name="E4008_LogFileFailed" xml:space="preserve">
     <value>The log file under {Path} could not be written; logging carries on in memory only.</value>
+  </data>
+  <data name="E4009_PortTaken" xml:space="preserve">
+    <value>Port {Port} is already in use - another control is probably running. Change "Port" in {Path} to start a second one.</value>
   </data>
 </root>

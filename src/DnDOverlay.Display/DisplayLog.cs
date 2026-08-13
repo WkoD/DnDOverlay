@@ -76,6 +76,32 @@ internal static partial class DisplayLog
     internal static partial void SettingsApplied(ILogger logger, int screenCount);
 
     /// <summary>
+    /// Worth a line although it changes nothing: it is the one grip whose whole result is
+    /// something a person has to SEE, so a run where nobody saw it needs to be told apart from one
+    /// where nothing was sent. The count says which - a screen without an overlay shows nothing.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3018,
+        Level = LogLevel.Information,
+        Message = "Showing the screen name on {ScreenCount} overlay(s).")]
+    internal static partial void ScreensIdentified(ILogger logger, int screenCount);
+
+    /// <summary>
+    /// Both directions are worth the same line, and the second one more than the first: a table
+    /// that darkens in the middle of a scene is the fault this exists to prevent, and from the
+    /// room a device that was TOLD to let go looks exactly like one that failed to hold on.
+    /// <para>
+    /// Display range although the request is a process-wide flag: the range follows the subject of
+    /// the sentence, and the subject here is whether a screen stays lit (Part 8).
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3019,
+        Level = LogLevel.Information,
+        Message = "Screen wake lock held: {Holding}.")]
+    internal static partial void WakeLockChanged(ILogger logger, bool holding);
+
+    /// <summary>
     /// Said out loud on purpose: a development run and an installed copy differ in exactly this
     /// one path, and a run that quietly used the wrong root would be indistinguishable from a
     /// correct one until it had already touched the DM's own configuration (Part 9).

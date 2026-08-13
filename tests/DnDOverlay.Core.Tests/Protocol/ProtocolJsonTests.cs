@@ -44,7 +44,7 @@ public sealed class ProtocolJsonTests
             PairingCode: null,
             Settings: new ConfigUpdate(
                 [new ScreenConfigUpdate(Screen.Screen, ScreenSettings.Of(Context, "Touch table"))],
-                new DeviceSettings(LogLevel.Debug, LogLevel.Warning)),
+                new DeviceSettings(LogLevel.Debug, LogLevel.Warning, KeepAwake: true)),
             Scenes: [new ScreenScene(Screen.Screen, Build.SceneWith(Build.Item()))]),
 
         new ScreensChangedMessage(
@@ -57,7 +57,11 @@ public sealed class ProtocolJsonTests
                     new ScreenSettings(ParkEdge: ParkEdge.Bottom),
                     new ScreenCommand(ScreenState.Diagnostic, SuppressReason.ControlWindow)),
             ],
-            new DeviceSettings(ForwardAtLeast: LogLevel.Debug))),
+            new DeviceSettings(ForwardAtLeast: LogLevel.Debug, KeepAwake: false))),
+
+        // Carries nothing, and that is the statement: the device knows its own screens and what
+        // each is called, so a list from the control would be a second copy of the names (Part 6).
+        new IdentifyScreensMessage(),
     ];
 
     public static TheoryData<ProtocolMessage> AllMessages() => [.. Messages];
@@ -79,6 +83,7 @@ public sealed class ProtocolJsonTests
     [InlineData("ScenePatch")]
     [InlineData("ScreensChanged")]
     [InlineData("ConfigUpdate")]
+    [InlineData("IdentifyScreens")]
     public void The_wire_names_are_the_ones_the_plan_promises(string wireName)
     {
         var payloads = Messages
