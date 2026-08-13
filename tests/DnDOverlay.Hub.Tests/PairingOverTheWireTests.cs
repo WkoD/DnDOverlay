@@ -213,11 +213,24 @@ public sealed class PairingOverTheWireTests
     /// <summary>
     /// A beat and a silence window measured in milliseconds rather than seconds. It changes
     /// nothing about what is being proven - only how long the proof takes.
+    /// <para>
+    /// <b>The silence window has a floor, and 200 ms was below it.</b> The clock starts when the
+    /// socket is ACCEPTED, the pairing wait included - deliberately, because that is what makes
+    /// "what is in the list is knocking right now" true (see <c>Liveness</c>). So everything the
+    /// client still has to do afterwards - finish the handshake, serialise, send the Hello - falls
+    /// inside the window, and on a loaded CI runner that overran 200 ms: the hub declared the
+    /// connection dead before the Hello arrived, and the test failed while SENDING it.
+    /// </para>
+    /// <para>
+    /// A second is therefore a margin against machine load, not a property under test. It costs
+    /// one test about a second and none of them anything else - the round-trip test waits on the
+    /// beat, not on this.
+    /// </para>
     /// </summary>
     private static void Impatient(HubOptions hub)
     {
-        hub.HeartbeatInterval = TimeSpan.FromMilliseconds(50);
-        hub.SilenceBeforeDead = TimeSpan.FromMilliseconds(200);
+        hub.HeartbeatInterval = TimeSpan.FromMilliseconds(200);
+        hub.SilenceBeforeDead = TimeSpan.FromSeconds(1);
     }
 
     private static PairedDevice Paired() => new(Device, "TISCH-PC", PairingRole.Display, Token);
