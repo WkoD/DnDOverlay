@@ -15,13 +15,22 @@ namespace DnDOverlay.Hub;
 public sealed record PairedDevice(DeviceId Device, string Name, PairingRole Role, string Token);
 
 /// <summary>What the DM sees while a device is waiting, and what he compares with the table.</summary>
+/// <param name="BroughtUnknownToken">
+/// This device presented a token this control does not know - almost always its own display after
+/// the control lost <c>control.json</c>. It is a REQUEST rather than a rejection, because the
+/// rejection led nowhere: the way out it pointed at needs a hand at a machine that has no keyboard
+/// (Part 4). The gate is unchanged - nobody gets in without the DM either way; what changed is
+/// whether he is offered the decision at all. Said in the row, because "knows this control" and
+/// "brand new" are different things to be looking at.
+/// </param>
 public sealed record PendingPairing(
     DeviceId Device,
     string Name,
     string PairingCode,
     string Address,
     DateTimeOffset FirstSeen,
-    bool IsClone);
+    bool IsClone,
+    bool BroughtUnknownToken = false);
 
 /// <summary>
 /// A device that was turned away, kept with its reason.
@@ -197,6 +206,8 @@ public sealed class PairingDirectory
         {
             // A valid token goes in without a question. Looked up by device and compared in
             // constant time, so a wrong guess gives nothing away (Part 4).
+            var unknownToken = false;
+
             if (hello.Token is not null)
             {
                 if (_paired.TryGetValue(hello.DeviceId, out var known)
@@ -206,8 +217,16 @@ public sealed class PairingDirectory
                     return new Admission.Admitted(known);
                 }
 
-                Note(address, now);
-                return Refuse(hello, RejectionReason.InvalidToken, now);
+                // NOT turned away - it falls through into the ordinary pairing path below.
+                // Rejecting was the old answer, and it led nowhere: the way out it pointed at is a
+                // hand at a machine that has no keyboard, and after a replaced control.json that
+                // would be every display in the flat (Part 4).
+                //
+                // Nothing is loosened by it. Everything below still applies - a device the DM
+                // rejected stays rejected, the gate "accept new devices" still holds, and the rate
+                // limit still counts this as a failed attempt, so token guessing is no cheaper
+                // than it was.
+                unknownToken = true;
             }
 
             // Once rejected, a device stays rejected until the DM takes it back. Asking him again
@@ -242,6 +261,7 @@ public sealed class PairingDirectory
                     Name = hello.Name,
                     Address = address,
                     PairingCode = hello.PairingCode ?? existing.Snapshot.PairingCode,
+                    BroughtUnknownToken = unknownToken,
                 };
 
                 return new Admission.Waiting(existing, IsNew: false);
@@ -252,7 +272,9 @@ public sealed class PairingDirectory
                 return Refuse(hello, RejectionReason.LimitExceeded, now);
             }
 
-            return new Admission.Waiting(Open(hello, address, now, isClone: false), IsNew: true);
+            return new Admission.Waiting(
+                Open(hello, address, now, isClone: false, unknownToken),
+                IsNew: true);
         }
     }
 
@@ -445,7 +467,12 @@ public sealed class PairingDirectory
         }
     }
 
-    private PendingRequest Open(HelloMessage hello, string address, DateTimeOffset now, bool isClone)
+    private PendingRequest Open(
+        HelloMessage hello,
+        string address,
+        DateTimeOffset now,
+        bool isClone,
+        bool unknownToken = false)
     {
         var request = new PendingRequest(new PendingPairing(
             hello.DeviceId,
@@ -453,7 +480,8 @@ public sealed class PairingDirectory
             hello.PairingCode ?? "----",
             address,
             now,
-            isClone));
+            isClone,
+            unknownToken));
 
         _pending[hello.DeviceId] = request;
 

@@ -55,6 +55,19 @@ public sealed partial class App : Application, IDisposable
 
         var loaded = _configuration.Load(() => new ControlConfiguration());
 
+        // A replaced file must not cost this control its identity, or its own displays would treat
+        // it as a stranger and never knock again (Part 4, Part 6). Recovered here rather than
+        // inside Load, because only THIS document has an identity worth keeping - display.json
+        // loses a DeviceId, and that is healed by "reassign device" instead.
+        var recovered = false;
+
+        if (loaded.Outcome is ConfigurationOutcome.Replaced
+            && ControlIdentity.TryRecover(loaded.SetAside, out var identity))
+        {
+            loaded = loaded with { Value = loaded.Value with { ControlId = identity } };
+            recovered = true;
+        }
+
         // One owner for the file, several callers: pairing, the screen inventory and later the
         // view state all change it, and separate copies would silently overwrite one another.
         _settings = new ControlSettings(_configuration, loaded.Value);
@@ -141,7 +154,7 @@ public sealed partial class App : Application, IDisposable
         // have recorded where it looked and what it found there - otherwise the one run whose log
         // matters most is the one that wrote nothing.
         ControlLog.DataRootChosen(logger, _dataRoot.Path);
-        Report(logger, loaded);
+        Report(logger, loaded, recovered);
 
         if (!await ListeningAsync(logger, loaded.Value.Port).ConfigureAwait(true))
         {
@@ -174,11 +187,16 @@ public sealed partial class App : Application, IDisposable
         // tables gone and looks for the fault in the network (Part 6, Part 7).
         if (loaded.Outcome is ConfigurationOutcome.Replaced)
         {
-            window.Notify(
-                $"control.json was unreadable and was set aside as {loaded.SetAside ?? "(not kept)"}. "
-                + "This control started with defaults - and with a new identity, so paired displays "
-                + "discard its announcements and will not appear here by themselves. Reset the "
-                + "pairing at each device, then allow it again.");
+            // Two quite different messages, and the difference is a walk through the flat.
+            window.Notify(recovered
+                ? $"control.json was unreadable and was set aside as {loaded.SetAside ?? "(not kept)"}. "
+                    + "The identity of this control was recovered from it, so the paired displays find "
+                    + "it again by themselves - they arrive as pairing requests, because their tokens "
+                    + "went with the file. Allow them here; nothing has to be done at the devices."
+                : $"control.json was unreadable and was set aside as {loaded.SetAside ?? "(not kept)"}. "
+                    + "This control started with defaults - and with a new identity, so paired displays "
+                    + "discard its announcements and will not appear here by themselves. Call for "
+                    + "orphaned devices, or reset the pairing at each device.");
         }
     }
 
@@ -272,12 +290,16 @@ public sealed partial class App : Application, IDisposable
     /// has to be paired again - and being told that at the table is the difference between a
     /// puzzle and a task (Part 6).
     /// </summary>
-    private static void Report(ILogger logger, ConfigurationLoad<ControlConfiguration> loaded)
+    private static void Report(ILogger logger, ConfigurationLoad<ControlConfiguration> loaded, bool recovered)
     {
         switch (loaded.Outcome)
         {
             case ConfigurationOutcome.Created:
                 ControlLog.ConfigurationCreated(logger, loaded.Value.ControlId);
+                break;
+
+            case ConfigurationOutcome.Replaced when recovered:
+                ControlLog.IdentityRecovered(logger, loaded.SetAside ?? "(not kept)", loaded.Value.ControlId);
                 break;
 
             case ConfigurationOutcome.Replaced:

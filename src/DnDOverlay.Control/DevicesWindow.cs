@@ -430,10 +430,21 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// </summary>
     private sealed record PendingEntry(PendingPairing Request)
     {
-        public override string ToString() =>
-            Request.IsClone
-                ? $"{Request.Name} at {Request.Address} - same DeviceId as a device that is already connected"
-                : $"{Request.Name} at {Request.Address}, code {Request.PairingCode}";
+        public override string ToString() => Request switch
+        {
+            { IsClone: true } =>
+                $"{Request.Name} at {Request.Address} - same DeviceId as a device that is already connected",
+
+            // Said, because it changes what the DM is looking at: this is almost always his own
+            // display after the control lost control.json, not a stranger. The code still stands
+            // beside it - a device that knows this control is the one an impostor would imitate
+            // (Part 4).
+            { BroughtUnknownToken: true } =>
+                $"{Request.Name} at {Request.Address}, code {Request.PairingCode} - brought a token "
+                + "this control does not know",
+
+            _ => $"{Request.Name} at {Request.Address}, code {Request.PairingCode}",
+        };
     }
 
     /// <summary>

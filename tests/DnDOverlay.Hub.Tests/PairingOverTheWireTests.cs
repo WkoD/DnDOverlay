@@ -73,20 +73,32 @@ public sealed class PairingOverTheWireTests
         await again.NextAsync<SceneSnapshotMessage>(cancellationToken);
     }
 
+    /// <summary>
+    /// The whole way through, over a real socket: a token this control does not know keeps the
+    /// connection OPEN and waits, instead of ending it. That is the case a replaced
+    /// <c>control.json</c> produces on every display at once, and ending the connection there sent
+    /// the DM to every machine in the flat (Part 4).
+    /// </summary>
     [Fact(Timeout = 30_000)]
-    public async Task A_token_this_control_does_not_know_ends_the_connection()
+    public async Task A_token_this_control_does_not_know_waits_for_the_DM_instead_of_ending_it()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var hub = await Hub.StartAsync(cancellationToken, [Paired()]);
         await using var display = await hub.ConnectAsync(Hello(token: "guessed"), answersPing: false, cancellationToken);
 
-        var rejected = Assert.IsType<RejectedMessage>(await display.NextAsync(cancellationToken));
+        Assert.IsType<PairingPendingMessage>(await display.NextAsync(cancellationToken));
 
-        Assert.Equal(RejectionReason.InvalidToken, rejected.Reason);
-        await display.WaitUntilClosedAsync(cancellationToken);
+        var pending = Assert.Single(hub.Session.PendingPairings);
 
-        // It stays visible with its reason instead of simply disappearing (Part 4, Part 7).
-        Assert.Equal(RejectionReason.InvalidToken, Assert.Single(hub.Session.RefusedDevices).Reason);
+        Assert.True(pending.BroughtUnknownToken);
+        Assert.Empty(hub.Session.RefusedDevices);
+
+        // Allowed at the control, and the device is in - without anybody having gone anywhere.
+        await hub.Session.ApprovePairingAsync(pending.Device, "fresh-token", PairingRole.Display, cancellationToken);
+
+        var welcome = Assert.IsType<WelcomeMessage>(await display.NextAsync(cancellationToken));
+
+        Assert.Equal("fresh-token", welcome.Token);
     }
 
     /// <summary>
@@ -254,7 +266,10 @@ public sealed class PairingOverTheWireTests
             Protocol.Version,
             [new ScreenInfo(new ScreenId(@"\\?\DISPLAY#TEST#1"), "TISCH-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true)],
             token,
-            token is null ? "4271" : null);
+
+            // Always, token or not - see the directory tests: an unknown token is a request now,
+            // and a request without a code cannot be compared with the table (Part 4).
+            "4271");
 
     /// <summary>
     /// Polls for a state the hub reaches on its own schedule. A fixed sleep would be either flaky

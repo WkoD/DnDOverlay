@@ -473,10 +473,18 @@ public static class HubEndpoints
             // A freshly issued token travels exactly once, in the answer to the pairing the DM
             // just allowed. By the time it goes out the control has already written it to disk -
             // ApprovePairingAsync is called after the file, not before (Part 7).
+            //
+            // The condition is "did NOT arrive with the valid one", not "brought none at all", and
+            // the difference is a loop rather than a nicety: since an unknown token is a pairing
+            // request (Part 4), a device can be approved while holding a STALE token. Asking only
+            // whether it brought one would send it away without the new one - so it would come
+            // back with the stale one, be laid in front of the DM again, and again, for ever.
             connection.TrySend(new WelcomeMessage(
                 options.ControlId,
                 Protocol.AssetPath,
-                hello.Token is null ? device.Token : null));
+                hello.Token is not null && DeviceTokens.Matches(hello.Token, device.Token)
+                    ? null
+                    : device.Token));
 
             TakeOver(hello, device.Device, scenes, events, logger);
 

@@ -668,8 +668,15 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
-    /// Either the token or the pairing code, never both: what a device brings is what decides how
-    /// the hub treats it (Part 4).
+    /// The token decides how the hub treats this device - but the pairing code travels ALWAYS,
+    /// and that is a change worth its sentence.
+    /// <para>
+    /// A token this control does not know is a pairing request now rather than a rejection
+    /// (Part 4), and a request the DM cannot check against the table would be the worst of both:
+    /// he would be allowing a device by its name, which is exactly what an impostor would supply.
+    /// The code is no secret - it stands large on the display - so carrying it costs nothing and
+    /// keeps the comparison possible in the one case that needs it most.
+    /// </para>
     /// </summary>
     private HelloMessage Introduction(string deviceName)
     {
@@ -690,7 +697,7 @@ public sealed partial class App : Application, IDisposable
             Protocol.Version,
             Inventory(),
             token,
-            token is null ? _pairingCode : null,
+            _pairingCode,
 
             // The baseline of the two-sided configuration: the FULL effective set, so the control
             // can take it over and only then send what it changed while this device was away. The

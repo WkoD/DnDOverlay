@@ -28,19 +28,32 @@ internal static partial class ControlLog
     internal static partial void ConfigurationCreated(ILogger logger, Guid controlId);
 
     /// <summary>
-    /// Loud on purpose, and louder since a hand run showed the half that was missing. control.json
-    /// holds the known devices and their tokens, so a replacement means every display has to be
-    /// paired again - but it also carries the <c>ControlId</c>, and a new one means the displays
-    /// <b>discard this control's beacons</b> and never knock at all. "Allowed again" alone reads
-    /// like "they will be back in a minute", and they will not (Part 4, Part 6).
+    /// The bad half of a replacement, and it is the one that costs a walk through the flat: with
+    /// the identity gone, this control's own displays treat it as a stranger and never knock at
+    /// all. "Allowed again" alone would read like "they will be back in a minute", and they will
+    /// not (Part 4, Part 6).
     /// </summary>
     [LoggerMessage(
         EventId = 4004,
         Level = LogLevel.Warning,
         Message = "control.json was unreadable. Set aside as {SetAside}; starting with defaults "
                   + "and a new identity, so paired displays will not find this control by "
-                  + "themselves - their pairing has to be reset at each device.")]
+                  + "themselves - call for orphaned devices, or reset the pairing at each device.")]
     internal static partial void ConfigurationReplaced(ILogger logger, string setAside);
+
+    /// <summary>
+    /// The good half, and it deserves its own line rather than silence: an identity that came back
+    /// is the difference between one grip here and a walk to every display PC. Said out loud so
+    /// that a run which kept it can be told from one that did not - the two look identical at the
+    /// moment they happen and quite different ten minutes later.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4010,
+        Level = LogLevel.Warning,
+        Message = "control.json was unreadable. Set aside as {SetAside}; the identity {ControlId} "
+                  + "was recovered from it, so paired displays find this control again - they "
+                  + "arrive as pairing requests, because their tokens went with the file.")]
+    internal static partial void IdentityRecovered(ILogger logger, string setAside, Guid controlId);
 
     /// <summary>
     /// How much of the pairing survived the start. A dropped token means the profile changed -

@@ -70,7 +70,7 @@ entirely by what the `Hello` carries:
 |---|---|
 | a **valid token** | in, without a question. The normal case at every power-on |
 | **no token**, a pairing code | **waiting** — unless the device was rejected before, new devices are not being accepted, or a limit says no |
-| a token **we do not know** | `Rejected(InvalidToken)`, and the device stays visible with that reason |
+| a token **we do not know** | **waiting**, marked as having brought one — not a rejection (below) |
 | a valid token whose **device is already connected** | the hub asks the connection it has and waits a second — silence replaces it, an answer makes it a clone |
 
 Four things about this are load-bearing, and each of them is the answer to a failure that would
@@ -87,10 +87,20 @@ otherwise be unfixable at the table:
   up a second display PC. He can take it on as its own device, which tells it to make itself a
   fresh identity and pair regularly; the control only says the identity collides, so the rule that
   every device creates its own stays intact.
-- **`InvalidToken` does not unbind anything by itself.** The beacon is unauthenticated, so a forged
-  control answering every `Hello` this way would unbind every display in the house and could then
-  adopt them. It takes a tap at the device — and that tap is the hurdle an attacker on the network
-  cannot take.
+- **A token we do not know is laid in front of the DM, not turned away** — for the same reason as
+  the clone, and it took a hand run to see it. Rejecting it pointed at a way out that needs a hand
+  at the device, and the case that produces it is a replaced `control.json`, which produces it on
+  **every display at once**: machines that are flat on a table, in a cupboard, on a wall. The gate
+  does not move — nobody gets in without the DM either way; what changed is whether he is offered
+  the decision at all. A rejected device stays rejected, the "accept new devices" gate still holds,
+  and a failed token still counts against the rate limit, so guessing is no cheaper than it was.
+
+  **Two consequences follow, and both are easy to get wrong.** The pairing code now travels *with*
+  a token as well — a request the DM cannot compare against the table would leave him allowing a
+  device by its name, which is exactly what an impostor would supply. And the `Welcome` carries the
+  new token whenever the device did **not** arrive with the valid one, rather than whenever it
+  brought none: a device approved while holding a *stale* token would otherwise never learn the new
+  one, come back with the stale one, and be laid in front of the DM again for ever.
 
 **Tokens** come from `RandomNumberGenerator`, are compared with `CryptographicOperations.FixedTimeEquals`
 and are stored encrypted at both ends. The **role** — display or control — sits in our own entry
@@ -134,14 +144,25 @@ tell controls apart, and a second control in the same network is no invention.
 
 **And that rule has a sharp edge, found in a hand run rather than reasoned out.** A control whose
 `control.json` had to be replaced comes back with a **new identifier**, so its own displays treat
-it as a stranger. They never send a `Hello`, which means the answer designed for exactly this
-case — *a token that is valid nowhere*, below — is **never reached**: no rejection, no question at
-the device, no entry in any list. Both sides go quiet, and each of them is behaving correctly.
+it as a stranger. They never send a `Hello`: no rejection, no question at the device, no entry in
+any list. Both sides go quiet, and each of them is behaving correctly.
 
-Nothing is loosened for it, because loosening it *is* the attack the rule prevents. What was
-added is that it can be read: the display says the first sighting of each strange control out loud
-(1048), and the control says at startup that its identity is new and that the pairing has to be
-reset **at each device**. The way out stays a hand at the display — "reset pairing" in its tray.
+**The filter is not loosened, because loosening it *is* the attack it prevents.** The answer is to
+stop producing the situation, and it comes in two halves:
+
+- **The control keeps its identity.** A replaced `control.json` is set aside rather than deleted,
+  and the `ControlId` is recovered from it — from a document that merely carries a newer
+  `schemaVersion`, or out of the bytes of a damaged one. Then the displays find it again by
+  themselves and arrive as pairing requests, because their tokens went with the file. Only the
+  identity is recovered, never the content.
+- **Where it is gone for good**, a display can still be called for — see *Wenn das Control nicht
+  wiederkommt* in the plan: a control asks for orphaned devices, and a display answers only if it
+  lost its own ungracefully and has been without one for longer than the rescue mark's deadline.
+  Nothing happens without somebody pressing something.
+
+Either way it is readable rather than silent: the display says the first sighting of each strange
+control out loud (1048), and the control says at startup whether its identity survived (4010) or
+not (4004) — two lines whose difference is a walk through the flat.
 
 **Reconnecting waits one second, doubling to thirty, with spread.** The spread is not cosmetic:
 after a control restarts, every display in the house lost its connection in the same moment, and
@@ -602,8 +623,14 @@ into one of them would have made the range names stop meaning anything.
 | 4007 | `KnownDevicesRestored` | Information | control |
 | 4008 | `LogFileFailed` | Error | both |
 | 4009 | `PortTaken` | Error | control |
+| 4010 | `IdentityRecovered` | Warning | control |
 
-**Next free: 4010.**
+**Next free: 4011.**
+
+**4004 and 4010 are the two halves of the same event**, and the difference between them is a walk
+through the flat: with the identity recovered the displays find this control again by themselves,
+without it they treat it as a stranger and never knock. Both are warnings — the file is gone
+either way — but only one of them ends in something to do at every device.
 
 **4008 is the one message built by hand**, without a `[LoggerMessage]`, and it has to be: it says
 that the log file gave up, so routing it through `ILogger` would return straight into the sink

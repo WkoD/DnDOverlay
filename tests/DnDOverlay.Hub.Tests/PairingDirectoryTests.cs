@@ -70,23 +70,63 @@ public sealed class PairingDirectoryTests
     }
 
     /// <summary>
-    /// A <c>Rejected</c> ends the connection, so without an entry the device would vanish from the
-    /// list although it is running and has a problem (Part 4).
+    /// A token this control does not know is laid in front of the DM, not turned away - and the
+    /// reason is that turning it away led nowhere. The way out it pointed at is a hand at the
+    /// device, and after a replaced <c>control.json</c> that would be every display in the flat, on
+    /// machines that have no keyboard (Part 4).
+    /// <para>
+    /// The gate does not move: nobody gets in without the DM either way. What changed is whether
+    /// he is offered the decision at all.
+    /// </para>
     /// </summary>
     [Fact]
-    public void A_token_we_do_not_know_is_refused_and_stays_visible()
+    public void A_token_we_do_not_know_becomes_a_request_rather_than_a_refusal()
     {
         var directory = Directory(new PairedDevice(Device, "TISCH-PC", PairingRole.Display, "s3cret"));
 
-        var admission = Assert.IsType<Admission.Refused>(directory.Consider(Hello(token: "guessed"), "10.0.0.7"));
+        var waiting = Assert.IsType<Admission.Waiting>(directory.Consider(Hello(token: "guessed"), "10.0.0.7"));
 
-        Assert.Equal(RejectionReason.InvalidToken, admission.Reason);
+        Assert.True(waiting.IsNew);
+        Assert.Empty(directory.Refused);
 
-        var refused = Assert.Single(directory.Refused);
+        var pending = Assert.Single(directory.Pending);
 
-        Assert.Equal(RejectionReason.InvalidToken, refused.Reason);
-        Assert.Equal("TISCH-PC", refused.Name);
+        Assert.Equal("TISCH-PC", pending.Name);
+
+        // Said in the row, because it changes what the DM is looking at - almost always his own
+        // display after the control lost its file, not a stranger.
+        Assert.True(pending.BroughtUnknownToken);
+
+        // And the code travels even with a token, or he would be allowing a device by its name -
+        // exactly what an impostor would supply.
+        Assert.Equal("4271", pending.PairingCode);
+    }
+
+    /// <summary>
+    /// The loosening above must not leak into the neighbours, so the three stand together: a
+    /// device the DM turned away stays turned away even when it brings a token, and the gate
+    /// "accept new devices" still holds.
+    /// </summary>
+    [Fact]
+    public void An_unknown_token_does_not_reopen_what_the_DM_closed()
+    {
+        var directory = Directory(new PairedDevice(Device, "TISCH-PC", PairingRole.Display, "s3cret"));
+
+        _ = directory.Consider(Hello(), "10.0.0.7");
+        directory.Reject(Device);
+
+        var refused = Assert.IsType<Admission.Refused>(directory.Consider(Hello(token: "guessed"), "10.0.0.7"));
+
+        Assert.Equal(RejectionReason.Denied, refused.Reason);
         Assert.Empty(directory.Pending);
+
+        // And with the gate shut, a token gets no further than anything else.
+        var open = Directory(new PairedDevice(Device, "TISCH-PC", PairingRole.Display, "s3cret"));
+
+        open.AcceptNewDevices = false;
+
+        Assert.IsType<Admission.Refused>(open.Consider(Hello(token: "guessed"), "10.0.0.7"));
+        Assert.Empty(open.Pending);
     }
 
     [Fact]
@@ -251,9 +291,13 @@ public sealed class PairingDirectoryTests
 
         Assert.True(directory.Unpair(Device));
 
-        var refused = Assert.IsType<Admission.Refused>(directory.Consider(Hello(token: "s3cret"), "10.0.0.7"));
+        // It no longer opens anything - which is the point - and the device lands where an unknown
+        // one lands: in front of the DM. Unpairing takes the token away, it does not ban the
+        // device; banning is what rejecting is for (Part 4).
+        var waiting = Assert.IsType<Admission.Waiting>(directory.Consider(Hello(token: "s3cret"), "10.0.0.7"));
 
-        Assert.Equal(RejectionReason.InvalidToken, refused.Reason);
+        Assert.True(waiting.Request.Snapshot.BroughtUnknownToken);
+        Assert.Empty(directory.Refused);
     }
 
     /// <summary>
@@ -304,7 +348,11 @@ public sealed class PairingDirectoryTests
             Protocol.Version,
             [new ScreenInfo(new ScreenId(@"\\?\DISPLAY#TEST#1"), "TISCH-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true)],
             token,
-            token is null ? "4271" : null);
+
+            // The code travels ALWAYS, token or not: a device whose token this control does not
+            // know is a pairing request now, and one the DM cannot compare with the table would
+            // leave him allowing a device by its name (Part 4).
+            "4271");
 
     private static PairingDirectory Directory(
         PairedDevice? paired = null,

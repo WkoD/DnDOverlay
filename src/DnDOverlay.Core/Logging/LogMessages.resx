@@ -248,4 +248,7 @@
   <data name="E4009_PortTaken" xml:space="preserve">
     <value>Port {Port} is already in use - another control is probably running. Change "Port" in {Path} to start a second one.</value>
   </data>
+  <data name="E4010_IdentityRecovered" xml:space="preserve">
+    <value>control.json was unreadable. Set aside as {SetAside}; the identity {ControlId} was recovered from it, so paired displays find this control again - they arrive as pairing requests, because their tokens went with the file.</value>
+  </data>
 </root>
