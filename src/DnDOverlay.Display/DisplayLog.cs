@@ -187,4 +187,17 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Trying again in {Delay}.")]
     internal static partial void RetryingIn(ILogger logger, TimeSpan delay);
+
+    /// <summary>
+    /// The loop that looks for a control died. Nothing else in this process notices - the windows
+    /// stay, the scene stays, and the device simply never connects again - so this line is the only
+    /// thing standing between a silent failure and a fault somebody can act on. On a machine nobody
+    /// is sitting at, a silence is the worst shape a fault can take (Part 1).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1049,
+        Level = LogLevel.Error,
+        Message = "The search for a control ended unexpectedly - this device will not connect again "
+                  + "until it is restarted.")]
+    internal static partial void ConnectionLoopFailed(ILogger logger, Exception exception);
 }

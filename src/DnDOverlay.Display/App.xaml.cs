@@ -195,7 +195,15 @@ public sealed partial class App : Application, IDisposable
         // offered to the first hub that answers (Part 4). A stored token that does not decrypt is
         // simply absent - the device pairs again, which is what TryRead returning a value instead
         // of throwing is for.
-        _ = RunAsync(host, options.Port, deviceName, _loggers);
+        // Fire and forget - but not forgotten. A faulted task nobody observes takes the whole
+        // reconnect with it in silence: the device keeps its overlays, keeps showing what it shows,
+        // and never looks for a control again, with not one line to say why. That is the worst
+        // shape a fault can take on a machine nobody is sitting at (Part 1).
+        _ = RunAsync(host, options.Port, deviceName, _loggers).ContinueWith(
+            loop => DisplayLog.ConnectionLoopFailed(_logger, loop.Exception!),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
     }
 
     /// <summary>
@@ -617,9 +625,17 @@ public sealed partial class App : Application, IDisposable
         // this connection stands.
         _outbox = outbox.Writer;
 
-        // Runs for the length of this connection; the mark it reads from survives it, so whatever
-        // came up while there was none goes out now (Part 8).
-        var forwarding = Task.Run(() => _forwarding!.RunAsync(outbox.Writer, _shutdown.Token));
+        // Runs for the length of THIS CONNECTION, and the token has to say so - not the one that
+        // means "the application is going away". The forwarder parks in a wait that only a new log
+        // entry wakes; with the shutdown token it would still be parked there long after the socket
+        // was gone, and the await below would hold this method for ever. That is not a leak, it is
+        // the reconnect: RunAsync never comes round again, and the device sits with its overlays
+        // and never looks for a control any more.
+        using var connected = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
+
+        // The mark it reads from survives the connection, so whatever came up while there was none
+        // goes out with the next one (Part 8).
+        var forwarding = Task.Run(() => _forwarding!.RunAsync(outbox.Writer, connected.Token));
 
         var reached = false;
 
@@ -641,6 +657,10 @@ public sealed partial class App : Application, IDisposable
 
         _outbox = null;
         outbox.Writer.TryComplete();
+
+        // Completing the channel does not reach the forwarder - it is waiting on the ring buffer,
+        // not on the channel - so the connection has to say out loud that it is over.
+        await connected.CancelAsync().ConfigureAwait(false);
 
         await pump.ConfigureAwait(false);
         await forwarding.ConfigureAwait(false);

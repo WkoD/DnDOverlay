@@ -530,8 +530,14 @@ the same application that draws.
 | 1046 | `DeviceClockDiffers` | Warning | hub |
 | 1047 | `LogRateExceeded` | Warning | hub |
 | 1048 | `UnknownControlHeard` | Information | transport |
+| 1049 | `ConnectionLoopFailed` | Error | display |
 
-**Next free: 1049.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**1049 is the line that exists because its absence was the fault.** The loop that looks for a
+control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
+the windows stay, the scene stays, and the device never connects again, without one line to say
+why. On a machine nobody is sitting at, a silence is the worst shape a fault can take.
+
+**Next free: 1050.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
 1042, the send side 1043–1045, and log forwarding 1046–1047.
 

@@ -158,6 +158,9 @@
   <data name="E1048_UnknownControlHeard" xml:space="preserve">
     <value>Control {ControlId} ({Name}) is announcing itself, but this device belongs to {BoundTo}. If that control was set up again, the pairing has to be reset AT this device.</value>
   </data>
+  <data name="E1049_ConnectionLoopFailed" xml:space="preserve">
+    <value>The search for a control ended unexpectedly - this device will not connect again until it is restarted.</value>
+  </data>
 
   <!-- 3000-3999 · Display: what is on a screen, and why is it or is it not? -->
 

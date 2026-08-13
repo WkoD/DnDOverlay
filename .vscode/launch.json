@@ -6,6 +6,12 @@
   // touches the regularly installed copy on the same machine: configuration, campaigns,
   // image cache and logs all move into the project (Part 9). dev-data/ is git-ignored.
   //
+  // NO --windowed anywhere any more, on purpose. The hand runs are what these entries are for,
+  // and half of what they have to show only exists on a real overlay: identify, the rescue mark,
+  // transparency over MapTool, the blackout curtain. Windowed mode is itself a per-screen display
+  // parameter (Part 6) and is switched THERE when it is what is being tested - the start argument
+  // was only ever the quick way to it.
+  //
   // The installed Control has to be closed: the single-instance mutex does not allow a
   // second one, it brings the running window to the front.
   //
@@ -25,7 +31,7 @@
       "request": "launch",
       "preLaunchTask": "build",
       "program": "${workspaceFolder}/src/DnDOverlay.Control/bin/Debug/net10.0-windows/DnDOverlay.Control.exe",
-      "args": ["--windowed", "--data", "dev-data"],
+      "args": ["--data", "dev-data"],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
       "stopAtEntry": false
@@ -36,7 +42,7 @@
       "request": "launch",
       "preLaunchTask": "build",
       "program": "${workspaceFolder}/src/DnDOverlay.Display/bin/Debug/net10.0-windows/DnDOverlay.Display.exe",
-      "args": ["--windowed", "--data", "dev-data"],
+      "args": ["--data", "dev-data"],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
       "stopAtEntry": false
@@ -49,7 +55,7 @@
       "type": "coreclr",
       "request": "launch",
       "program": "${workspaceFolder}/src/DnDOverlay.Control/bin/Debug/net10.0-windows/DnDOverlay.Control.exe",
-      "args": ["--windowed", "--data", "dev-data"],
+      "args": ["--data", "dev-data"],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
       "stopAtEntry": false,
