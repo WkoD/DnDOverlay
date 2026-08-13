@@ -116,7 +116,11 @@ internal sealed class StageGuard : IDisposable
         var covered = Covered();
         var wanted = new HashSet<ScreenRef>();
 
-        foreach (var device in _devices.Where(Here))
+        // Asked afresh, like the monitors: docking changes both, and a cached answer would be the
+        // one that was true before the dock.
+        var own = LocalAddresses.Enumerate();
+
+        foreach (var device in _devices.Where(device => Here(device, own)))
         {
             foreach (var screen in device.Screens.Where(screen => covered.Contains(screen.Screen.Screen)))
             {
@@ -153,10 +157,13 @@ internal sealed class StageGuard : IDisposable
     /// a <see cref="ScreenId"/> would not either, because two machines from one disk image can
     /// report the very same device instance path (Part 3). Without this the control would suppress
     /// a stranger's table because its monitor happens to carry the same path as ours.
+    /// <para>
+    /// <b>Not the loopback interface</b>, although the plan said so - measured, a display on this
+    /// very machine connects to the LAN address, because it takes whichever beacon it hears first
+    /// and the beacon goes out on every interface. The rule that holds is the wider one, and it is
+    /// no weaker: an address this machine answers on cannot belong to another machine.
+    /// </para>
     /// </summary>
-    private static bool Here(DeviceView device) =>
-        device.Connected
-        && device.Address is { } address
-        && IPAddress.TryParse(address, out var ip)
-        && IPAddress.IsLoopback(ip);
+    private static bool Here(DeviceView device, IReadOnlyList<LocalAddress> own) =>
+        device.Connected && LocalAddresses.IsThisMachine(device.Address, own);
 }

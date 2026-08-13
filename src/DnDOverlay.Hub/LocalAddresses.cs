@@ -83,4 +83,43 @@ public static class LocalAddresses
 
     /// <summary>Both steps at once - what the reachability view shows.</summary>
     public static IReadOnlyList<LocalAddress> Preferred() => Preferred(Enumerate());
+
+    /// <summary>
+    /// Whether a connected device is running on THIS machine - the question behind "a screen the
+    /// control window lies on gets no overlay" (Part 2).
+    /// <para>
+    /// The plan said this was answered by the loopback interface, and <b>measured it is not</b>: a
+    /// display on the same machine takes whichever beacon it hears first, and the beacon goes out
+    /// on every interface. A display three centimetres away therefore connects to
+    /// <c>192.168.178.23</c> as readily as to <c>127.0.0.1</c>, and a loopback test finds it in
+    /// neither case reliably. The sound rule is the wider one: <b>an address this machine answers
+    /// on cannot belong to another machine.</b>
+    /// </para>
+    /// <para>
+    /// A pure function over what was handed in, so the decision is testable without a network card
+    /// - and it has to be tested, because the wiring around it lives in the WPF application where
+    /// nothing runs.
+    /// </para>
+    /// </summary>
+    /// <param name="address">What the hub recorded for that connection, or <see langword="null"/>.</param>
+    /// <param name="own">This machine's addresses, from <see cref="Enumerate"/>.</param>
+    public static bool IsThisMachine(string? address, IReadOnlyList<LocalAddress> own)
+    {
+        ArgumentNullException.ThrowIfNull(own);
+
+        if (!IPAddress.TryParse(address, out var peer))
+        {
+            return false;
+        }
+
+        // Kestrel reports an IPv4 peer on a dual-stack socket as ::ffff:192.168.178.23, and the
+        // enumeration collects plain IPv4. Without unwrapping, the comparison below silently never
+        // matches - the same shape of fault as the loopback assumption it replaces.
+        if (peer.IsIPv4MappedToIPv6)
+        {
+            peer = peer.MapToIPv4();
+        }
+
+        return IPAddress.IsLoopback(peer) || own.Any(local => local.Address.Equals(peer));
+    }
 }
