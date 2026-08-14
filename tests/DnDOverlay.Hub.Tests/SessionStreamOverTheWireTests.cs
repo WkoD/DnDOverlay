@@ -109,9 +109,17 @@ public sealed class SessionStreamOverTheWireTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        var socket = await ConnectAsync(Leaving, [Info(First)], cancellationToken);
-
+        // Subscribed BEFORE the device connects, and the opening picture waited for - only then is
+        // the arrival guaranteed to be an EVENT rather than something the picture already
+        // contained. The other way round is a race the test cannot win: if the hub registers the
+        // device first, its connection is in the opening picture and no DevicesChanged follows,
+        // so the wait runs into its timeout. Windows won that race for weeks; a loaded Linux
+        // runner lost it, twice.
         await using var stream = Listen(cancellationToken);
+
+        _ = await NextAsync<SessionEvent.Opening>(stream);
+
+        var socket = await ConnectAsync(Leaving, [Info(First)], cancellationToken);
 
         _ = await NextAsync<SessionEvent.DevicesChanged>(
             stream,
