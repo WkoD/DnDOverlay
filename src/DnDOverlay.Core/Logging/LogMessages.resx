@@ -254,4 +254,10 @@
   <data name="E4010_IdentityRecovered" xml:space="preserve">
     <value>control.json was unreadable. Set aside as {SetAside}; the identity {ControlId} was recovered from it, so paired displays find this control again - they arrive as pairing requests, because their tokens went with the file.</value>
   </data>
+  <data name="E4011_UnhandledFault" xml:space="preserve">
+    <value>Unhandled fault on {Where} - this control is going down.</value>
+  </data>
+  <data name="E4012_UnhandledFault" xml:space="preserve">
+    <value>Unhandled fault on {Where} - this display is going down.</value>
+  </data>
 </root>

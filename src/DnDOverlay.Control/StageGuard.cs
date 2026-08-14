@@ -58,6 +58,12 @@ internal sealed class StageGuard : IDisposable
         _window.SizeChanged += OnMoved;
         _window.StateChanged += OnMoved;
         _window.DpiChanged += OnMoved;
+
+        // Coming to the front is the one change that must NOT wait out the debounce. Whatever way
+        // back the DM took - Alt+Tab, the taskbar, starting the control a second time - his window
+        // arrives UNDERNEATH an always-on-top overlay, so for as long as this waits he is looking
+        // at a screen that does not show what he just asked for. Everything else may settle.
+        _window.Activated += OnRaised;
     }
 
     /// <summary>
@@ -84,6 +90,7 @@ internal sealed class StageGuard : IDisposable
         _window.SizeChanged -= OnMoved;
         _window.StateChanged -= OnMoved;
         _window.DpiChanged -= OnMoved;
+        _window.Activated -= OnRaised;
 
         _debounce.Stop();
 
@@ -103,6 +110,8 @@ internal sealed class StageGuard : IDisposable
         _debounce.Stop();
         _debounce.Start();
     }
+
+    private void OnRaised(object? sender, EventArgs e) => Recompute();
 
     private void Recompute()
     {

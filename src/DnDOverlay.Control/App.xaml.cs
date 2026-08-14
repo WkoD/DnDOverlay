@@ -150,6 +150,10 @@ public sealed partial class App : Application, IDisposable
 
         var logger = _host.Services.GetRequiredService<ILogger<App>>();
 
+        // As early as there is somewhere to write to. Everything after this point can fail loudly;
+        // before it, a fault is the silence that cost us a diagnosis once already.
+        LastWords.Listen(this, logger);
+
         // Said BEFORE the port is taken, not after. A start that dies at the socket still has to
         // have recorded where it looked and what it found there - otherwise the one run whose log
         // matters most is the one that wrote nothing.

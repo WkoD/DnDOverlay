@@ -189,6 +189,17 @@ internal static partial class DisplayLog
     internal static partial void RetryingIn(ILogger logger, TimeSpan delay);
 
     /// <summary>
+    /// The same last word as the control's 4011, with its own number because the ranges are global
+    /// and the two say different things about different machines. On a display PC it matters more:
+    /// nobody is sitting in front of it to see the process go.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4012,
+        Level = LogLevel.Critical,
+        Message = "Unhandled fault on {Where} - this display is going down.")]
+    internal static partial void UnhandledFault(ILogger logger, Exception exception, string where);
+
+    /// <summary>
     /// The loop that looks for a control died. Nothing else in this process notices - the windows
     /// stay, the scene stays, and the device simply never connects again - so this line is the only
     /// thing standing between a silent failure and a fault somebody can act on. On a machine nobody

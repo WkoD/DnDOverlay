@@ -154,6 +154,10 @@ public sealed partial class App : Application, IDisposable
 
         _logger = _loggers.CreateLogger<App>();
 
+        // As early as there is somewhere to write to - and earlier here than anywhere, because a
+        // display PC has nobody in front of it to notice that it went.
+        LastWords.Listen(this, _logger);
+
         // Two knobs, not three: what the device WRITES - into the ring buffer and the file alike -
         // and what of it is worth the wire. Both are settable per device from the control, which
         // is the documented way to hunt a fault: raise this display to Debug from the far side of

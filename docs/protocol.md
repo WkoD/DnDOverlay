@@ -630,8 +630,17 @@ into one of them would have made the range names stop meaning anything.
 | 4008 | `LogFileFailed` | Error | both |
 | 4009 | `PortTaken` | Error | control |
 | 4010 | `IdentityRecovered` | Warning | control |
+| 4011 | `UnhandledFault` | Critical | control |
+| 4012 | `UnhandledFault` | Critical | display |
 
-**Next free: 4011.**
+**Next free: 4013.**
+
+**4011 and 4012 catch nothing** — the fault still ends the run. What they prevent is a run that ends
+*mutely*: measured, a control went away with exit code -1 while its log stopped mid-sentence, and a
+hand run that had just found a real fault could say nothing about it beyond "it was gone". Three
+doors are watched, because a fault leaves through whichever one it started behind: the UI thread,
+any other thread, and a task nobody awaited. The last is the quietest — since .NET 4.5 it does not
+end the process at all, so without a line it is invisible for ever.
 
 **4004 and 4010 are the two halves of the same event**, and the difference between them is a walk
 through the flat: with the identity recovered the displays find this control again by themselves,

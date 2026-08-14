@@ -78,4 +78,19 @@ internal static partial class ControlLog
         Message = "Port {Port} is already in use - another control is probably running. Change "
                   + "\"Port\" in {Path} to start a second one.")]
     internal static partial void PortTaken(ILogger logger, Exception exception, int port, string path);
+
+    /// <summary>
+    /// The last line before the process goes. It does not catch anything - the fault still ends the
+    /// run - it only makes sure the run said what happened.
+    /// <para>
+    /// Written because of what it cost to be without it: the control died with exit code -1 and the
+    /// file ended mid-sentence, so a hand run that had found a real fault could say nothing about
+    /// it beyond "it was gone". A crash nobody can read is a crash nobody can fix (Part 1).
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4011,
+        Level = LogLevel.Critical,
+        Message = "Unhandled fault on {Where} - this control is going down.")]
+    internal static partial void UnhandledFault(ILogger logger, Exception exception, string where);
 }
