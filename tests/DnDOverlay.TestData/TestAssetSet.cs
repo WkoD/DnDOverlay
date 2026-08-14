@@ -17,12 +17,48 @@ namespace DnDOverlay.TestData;
 /// hard stop on a promised one.
 /// </param>
 /// <param name="Crafted">The files built byte by byte, without Magick.</param>
+/// <param name="Tokens">The MapTool token containers, in both generations.</param>
 public sealed record TestAssetSet(
     string Directory,
     ImmutableDictionary<string, string> Promised,
     ImmutableDictionary<string, string> Tolerated,
     ImmutableArray<string> SkippedTolerated,
-    CraftedSet Crafted);
+    CraftedSet Crafted,
+    TokenSet Tokens);
+
+/// <summary>
+/// The five cases Part 10 asks for, plus the second container GENERATION and the two ways an
+/// extension can lie. All of them come into being the same way rather than two by hand and the
+/// rest derived from them.
+/// </summary>
+/// <param name="WithPortrait">
+/// Portrait and map token, in the shape of a 2024 token. The portrait is told apart by its
+/// measurements, 400x600 against the map token's 100x100 - never by a hash and never by a MapTool
+/// version, so the token may be rebuilt at any time without the assertion turning false.
+/// </param>
+/// <param name="Legacy">
+/// The same content in the shape of a 2009 token: no entry carrying an extension, and the image
+/// base64-encoded INSIDE the note. An unpacker written to Part 5's table alone answers "not found"
+/// here - which is the correction this file exists to hold in place.
+/// </param>
+/// <param name="WithoutPortrait">Map token only: the fallback, not a rejection.</param>
+/// <param name="WithoutImage">Neither: a rejection with a reason, never a wrong image.</param>
+/// <param name="ZipBomb">A few kilobytes on disk, 32 MB of <c>content.xml</c> unpacked.</param>
+/// <param name="ExternalEntity">
+/// A DTD that reads a local file and reaches the network - both shut by prohibiting DTDs and by a
+/// null resolver, which this file proves rather than assumes.
+/// </param>
+/// <param name="Renamed">A genuine token under a <c>.zip</c> name.</param>
+/// <param name="Foreign">An ordinary archive under the token name.</param>
+public sealed record TokenSet(
+    string WithPortrait,
+    string Legacy,
+    string WithoutPortrait,
+    string WithoutImage,
+    string ZipBomb,
+    string ExternalEntity,
+    string Renamed,
+    string Foreign);
 
 /// <summary>
 /// The files that are pure byte work: they must be malformed, forged or dangerous in a way no

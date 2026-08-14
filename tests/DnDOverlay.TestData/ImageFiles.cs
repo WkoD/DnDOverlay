@@ -37,9 +37,15 @@ internal static class ImageFiles
         ("XCF", MagickFormat.Xcf, ".xcf"),
     ];
 
-    internal static (ImmutableDictionary<string, string> Promised,
-                     ImmutableDictionary<string, string> Tolerated,
-                     ImmutableArray<string> Skipped) Write(string directory)
+    /// <summary>What one pass wrote, including the two images the token containers carry.</summary>
+    internal sealed record Written(
+        ImmutableDictionary<string, string> Promised,
+        ImmutableDictionary<string, string> Tolerated,
+        ImmutableArray<string> Skipped,
+        string Portrait,
+        string MapToken);
+
+    internal static Written Write(string directory)
     {
         var promised = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
 
@@ -56,7 +62,7 @@ internal static class ImageFiles
         WriteSimple(directory, "layered.psd", MagickFormat.Psd);
         WritePanorama(directory);
         WriteJpegWithGpsExif(directory);
-        WriteTokenImages(directory);
+        var (portrait, mapToken) = WriteTokenImages(directory);
 
         var tolerated = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
         var skipped = ImmutableArray.CreateBuilder<string>();
@@ -80,7 +86,8 @@ internal static class ImageFiles
             }
         }
 
-        return (promised.ToImmutable(), tolerated.ToImmutable(), skipped.ToImmutable());
+        return new Written(
+            promised.ToImmutable(), tolerated.ToImmutable(), skipped.ToImmutable(), portrait, mapToken);
     }
 
     private static MagickImage Canvas(IMagickColor<byte> colour, uint width = Side, uint height = Side)
@@ -223,15 +230,22 @@ internal static class ImageFiles
     /// by a hash and never by a MapTool version - the token is built by us and may be rebuilt at
     /// any time without the assertion turning false (Part 5).
     /// </summary>
-    private static void WriteTokenImages(string directory)
+    private static (string Portrait, string MapToken) WriteTokenImages(string directory)
     {
+        var portraitPath = Path.Combine(directory, "token-portrait.png");
+        var mapPath = Path.Combine(directory, "token-map.png");
+
         using (var portrait = Canvas(MagickColors.MediumPurple, PortraitWidth, PortraitHeight))
         {
-            portrait.Write(Path.Combine(directory, "token-portrait.png"), MagickFormat.Png);
+            portrait.Write(portraitPath, MagickFormat.Png);
         }
 
-        using var map = Canvas(MagickColors.OliveDrab, MapTokenSide, MapTokenSide);
-        map.Write(Path.Combine(directory, "token-map.png"), MagickFormat.Png);
+        using (var map = Canvas(MagickColors.OliveDrab, MapTokenSide, MapTokenSide))
+        {
+            map.Write(mapPath, MagickFormat.Png);
+        }
+
+        return (portraitPath, mapPath);
     }
 
     /// <summary>

@@ -49,7 +49,9 @@ public static class TestAssets
         // The crafted half borrows one genuine PNG: the file with the lying extension has to be a
         // real image, and the truncated one has to be a real image cut in half.
         var crafted = CraftedFiles.Write(directory, images.Promised["PNG"]);
+        var tokens = TokenFiles.Write(directory, images.Portrait, images.MapToken);
 
-        return new TestAssetSet(directory, images.Promised, images.Tolerated, images.Skipped, crafted);
+        return new TestAssetSet(
+            directory, images.Promised, images.Tolerated, images.Skipped, crafted, tokens);
     }
 }
