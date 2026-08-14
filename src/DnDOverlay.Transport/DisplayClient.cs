@@ -119,8 +119,8 @@ public sealed class DisplayClient
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            var payload = await WebSocketMessages
-                .ReceiveAsync(socket, cancellationToken)
+            var payload = await WebSocketFraming
+                .ReceiveAsync(socket, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             if (payload is null)

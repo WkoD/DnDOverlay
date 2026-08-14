@@ -21,9 +21,6 @@ namespace DnDOverlay.Hub;
 /// </summary>
 public static class HubEndpoints
 {
-    /// <summary>A ceiling for one incoming message. The full limits table follows in M1b.</summary>
-    private const int MaxMessageBytes = 4 * 1024 * 1024;
-
     /// <summary>Registers everything the hub owns.</summary>
     public static IServiceCollection AddDnDOverlayHub(
         this IServiceCollection services,
@@ -813,8 +810,8 @@ public static class HubEndpoints
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var payload = await WebSocketMessages
-                    .ReceiveAsync(socket, MaxMessageBytes, cancellationToken)
+                var payload = await WebSocketFraming
+                    .ReceiveAsync(socket, cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
 
                 if (payload is null)

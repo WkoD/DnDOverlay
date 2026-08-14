@@ -160,7 +160,7 @@ internal sealed class SendQueues : IDisposable
 
                 if (_finishing)
                 {
-                    await WebSocketMessages.CloseAsync(_socket, cancellationToken).ConfigureAwait(false);
+                    await WebSocketFraming.CloseAsync(_socket, cancellationToken).ConfigureAwait(false);
                     return;
                 }
             }
