@@ -416,6 +416,11 @@ per second (`1047`) — refused and reported, never swallowed.
 
 **The forwarding never logs itself**, or a line about forwarding would produce a line to forward.
 
+**Raw text is defused on the way in, a second time.** An entry may carry an exception message, and
+it was already cleaned where it was written — but that was on another machine. A device is trusted,
+not infallible: line breaks and control characters are replaced before writing, or a crafted name
+or exception message could write lines of its own into the DM's file.
+
 ### Compatibility
 
 A differing protocol version **rejects nothing, in either direction**. An old display connects
