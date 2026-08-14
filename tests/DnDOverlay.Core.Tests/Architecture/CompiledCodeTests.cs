@@ -120,6 +120,103 @@ public sealed class CompiledCodeTests
         Assert.Empty(offenders);
     }
 
+    /// <summary>
+    /// Nothing reaches ImageMagick without passing the coder policy first (Part 5).
+    /// <para>
+    /// This is the half of the promise that can regress: somebody adds a method to the codec later
+    /// and forgets the guard. Nothing fails - it works, the hardening is simply absent for that one
+    /// path, and the URL import stops being separated from a remote control.
+    /// </para>
+    /// <para>
+    /// The other half - that a policy applied too LATE is caught - cannot be asserted from IL and
+    /// is not tried here: <c>CoderPolicy.Apply</c> proves its own effect by touching a denied coder
+    /// (Part 5). And the end-to-end case, a process that never applies it at all, needs a second
+    /// process; it is due with the codec's start-up path in M2b.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Nothing_reaches_ImageMagick_without_passing_the_coder_policy()
+    {
+        const string Imaging = "DnDOverlay.Imaging";
+        const string Gate = "DnDOverlay.Imaging.CoderPolicy::EnsureApplied";
+
+        using var module = ModuleDefinition.ReadModule(
+            Path.Combine(AppContext.BaseDirectory, Imaging + ".dll"));
+
+        var methods = module.GetTypes().SelectMany(type => type.Methods).ToList();
+
+        // A renamed gate would turn this whole rule into a no-op that passes for ever. It has to
+        // be there before anything is concluded from its absence (Part 11, "a test that never
+        // failed is unproven").
+        Assert.Contains(
+            methods,
+            method => $"{method.DeclaringType.FullName}::{method.Name}" == Gate);
+
+        var offenders = new List<string>();
+
+        foreach (var type in module.GetTypes().Where(type => type.FullName != "DnDOverlay.Imaging.CoderPolicy"))
+        {
+            foreach (var method in type.Methods.Where(method => method.IsPublic && method.HasBody))
+            {
+                var reached = Reachable(method);
+
+                if (reached.Any(TouchesImageMagick) && !reached.Contains(Gate, StringComparer.Ordinal))
+                {
+                    offenders.Add($"{type.FullName}.{method.Name} reaches ImageMagick without {Gate}");
+                }
+            }
+        }
+
+        Assert.Empty(offenders);
+    }
+
+    private static bool TouchesImageMagick(string member) =>
+        member.StartsWith("ImageMagick.", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Every member a method can reach without leaving this assembly. Following the calls rather
+    /// than looking at one body matters: a public method that hands the work to a private helper
+    /// would otherwise look innocent, and that is the shape the code naturally takes.
+    /// </summary>
+    private static HashSet<string> Reachable(MethodDefinition entry)
+    {
+        var reached = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<MethodDefinition>();
+        var pending = new Queue<MethodDefinition>();
+
+        pending.Enqueue(entry);
+        seen.Add(entry);
+
+        while (pending.Count > 0)
+        {
+            var current = pending.Dequeue();
+
+            if (!current.HasBody)
+            {
+                continue;
+            }
+
+            foreach (var called in current.Body.Instructions
+                         .Select(instruction => instruction.Operand)
+                         .OfType<MethodReference>())
+            {
+                reached.Add($"{called.DeclaringType.FullName}::{called.Name}");
+
+                // Resolving only succeeds inside this assembly, which is exactly the boundary we
+                // want: foreign code is a leaf, ours is followed.
+                var definition = called as MethodDefinition
+                                 ?? (called.DeclaringType.Scope == entry.Module ? called.Resolve() : null);
+
+                if (definition is not null && definition.Module == entry.Module && seen.Add(definition))
+                {
+                    pending.Enqueue(definition);
+                }
+            }
+        }
+
+        return reached;
+    }
+
     private static bool IsWindowsOnly(string assemblyName) =>
         assemblyName.StartsWith("Microsoft.Win32.Registry", StringComparison.Ordinal)
         || assemblyName.StartsWith("System.Security.Cryptography.ProtectedData", StringComparison.Ordinal)

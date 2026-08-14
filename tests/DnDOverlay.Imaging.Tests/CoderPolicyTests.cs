@@ -13,8 +13,15 @@ public sealed class CoderPolicyTests(TestDataFixture fixture)
     private readonly TestAssetSet _assets = fixture.Assets;
 
     /// <summary>
-    /// The decisive one: the policy has to bite even when our own format check is skipped. The
-    /// test calls Magick directly and FORCES the format, so nothing but the policy can stop it.
+    /// The script coders are refused even when our own format check is skipped: the test calls
+    /// Magick directly and FORCES the format, so no code of ours is in the way.
+    /// <para>
+    /// What this does NOT prove is that OUR policy is what refuses them. Measured while building
+    /// the self-check in <see cref="CoderPolicy"/>: Magick.NET denies MVG and MSL in its own
+    /// defaults already, so this test passes with our policy and without it. The end state is
+    /// worth asserting - it is the guarantee Part 11 asks for - but the proof that our list is in
+    /// force is <see cref="ACoderLeftOffTheListIsRefused"/>, which uses a coder the defaults allow.
+    /// </para>
     /// </summary>
     [Theory]
     [InlineData(MagickFormat.Mvg)]
@@ -37,17 +44,20 @@ public sealed class CoderPolicyTests(TestDataFixture fixture)
             () => new MagickImage("http://example.invalid/pixel.png").Dispose());
 
     /// <summary>
-    /// A positive list that lets everything through would pass every test above by accident. This
-    /// is the counter-check that it is a list at all: a raster coder deliberately left off it is
-    /// refused, with the policy's own exception rather than a missing-format one.
+    /// The one test that proves OUR list is in force. A positive list that let everything through
+    /// would pass the two above by accident, because Magick's own defaults already deny what they
+    /// ask about.
+    /// <para>
+    /// PostScript is the counter-example that settles it: measured, this build writes 5766 bytes
+    /// of it WITHOUT our policy, and refuses it with the policy's own exception once ours is in
+    /// force. So a refusal here can only come from our list.
+    /// </para>
     /// </summary>
     [Fact]
     public void ACoderLeftOffTheListIsRefused()
     {
         using var image = new MagickImage(_assets.Promised["PNG"]);
 
-        // PostScript is a raster-capable coder this build carries; it is off the list because it
-        // runs through Ghostscript (Part 5).
         Assert.Throws<MagickPolicyErrorException>(() => image.ToByteArray(MagickFormat.Ps));
     }
 

@@ -10,9 +10,16 @@ namespace DnDOverlay.Imaging;
 /// It is not a setting on an image but PROCESS-WIDE STATE, and it has to stand before the first
 /// image operation. Measured, because the failure is silent: applied after a single
 /// <c>MagickImage</c> had been constructed, the policy had NO effect at all - a coder left off the
-/// list still wrote. Nothing is reported, nothing throws, and only the hardening is missing. That
-/// is the whole reason for <see cref="EnsureApplied"/>: a forgotten policy must fail loudly at the
-/// first image rather than never.
+/// list still wrote. Nothing is reported, nothing throws, and only the hardening is missing.
+/// </para>
+/// <para>
+/// Two guards, because there are two ways to end up unhardened, and they need different answers.
+/// <see cref="EnsureApplied"/> catches the FORGOTTEN policy: every entrance to the codec passes
+/// through it, so a missing call fails loudly at the first image rather than never. <see
+/// cref="Apply"/> catches the LATE one, which is the more dangerous of the two and the one
+/// measured here - it would sail past any check for "was Apply called?", because it was. So Apply
+/// does not report success on the strength of having run; it touches a denied coder and treats
+/// anything but a refusal as a failure.
 /// </para>
 /// <para>
 /// The owner is the application, in its start-up before the first call into the codec - the same
@@ -61,14 +68,13 @@ public static class CoderPolicy
     private static bool _applied;
 
     /// <summary>
-    /// Applies the policy, once per process. Calling it again is harmless and does nothing - there
-    /// is one policy text, so a second call cannot widen anything.
-    /// <para>
-    /// It must run before ANY use of ImageMagick in this process. That cannot be asserted from
-    /// here: ImageMagick offers no way to ask whether it has already been initialised, and a
-    /// policy applied too late fails silently rather than loudly.
-    /// </para>
+    /// Applies the policy, once per process, and then PROVES that it took effect. Calling it again
+    /// is harmless and does nothing - there is one policy text, so a second call cannot widen
+    /// anything.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The policy was set but has no effect, which means ImageMagick was already in use.
+    /// </exception>
     public static void Apply()
     {
         lock (Gate)
@@ -82,8 +88,60 @@ public static class CoderPolicy
             files.Policy.Data = PolicyXml;
             MagickNET.Initialize(files);
 
+            ProveItTookEffect();
+
             _applied = true;
         }
+    }
+
+    /// <summary>
+    /// Touches a coder that MUST be refused, and treats anything else as a failure.
+    /// <para>
+    /// This closes the hole that <see cref="EnsureApplied"/> does not: the dangerous case is not a
+    /// forgotten policy but a LATE one. Measured - applied after a single image had been
+    /// constructed, the policy had no effect whatsoever, and a check for "was Apply called?" would
+    /// have waved it through. ImageMagick offers no way to ask whether it has already been
+    /// initialised, so the only honest question is the one asked here: does the policy bite?
+    /// </para>
+    /// <para>
+    /// The probe has to be a coder OUR list denies and Magick's own defaults allow, and finding
+    /// that out took a measurement. The obvious choice was MVG - the scripting coder this whole
+    /// construction is about - and it is the wrong one: <b>Magick.NET already refuses MVG and MSL
+    /// by default</b>, with the same policy exception. A probe on MVG therefore passes whether our
+    /// policy took effect or not, and the guard was silently useless until this was measured.
+    /// </para>
+    /// <para>
+    /// MIFF is ImageMagick's own native format: never absent, harmless, written in microseconds,
+    /// and off our list. Measured, it writes 462 bytes without our policy and is refused with it -
+    /// so it can tell the two apart, which is the only property that matters here.
+    /// </para>
+    /// </summary>
+    private static void ProveItTookEffect()
+    {
+        try
+        {
+            using var probe = new MagickImage(MagickColors.Black, 1, 1);
+            probe.ToByteArray(MagickFormat.Miff);
+        }
+        catch (MagickPolicyErrorException)
+        {
+            return;
+        }
+        catch (MagickException ex)
+        {
+            // Refused, but not by the policy. That is not the answer we asked for - and the repair
+            // is to move the probe to another denied coder, never to drop the check.
+            throw new InvalidOperationException(
+                "The coder policy could not be proved: the probe was refused by something other "
+                + "than the policy. Pick another coder that this build writes and our list denies, "
+                + "rather than dropping the check (Part 5).",
+                ex);
+        }
+
+        throw new InvalidOperationException(
+            "The ImageMagick coder policy was set but has NO effect - a denied coder still ran. "
+            + "This happens when ImageMagick was already used in this process: the policy is "
+            + "process-wide state and must be applied before the first image operation (Part 5).");
     }
 
     /// <summary>
