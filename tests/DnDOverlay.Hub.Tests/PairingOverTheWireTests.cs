@@ -250,6 +250,9 @@ public sealed class PairingOverTheWireTests
     /// <summary>There is no stock here; these tests are about who may connect, not about images.</summary>
     private sealed class NoAssets : IAssetSource
     {
+        public bool TryOpenThumb(AssetId id, int width, out Stream data, out string contentType) =>
+            TryOpen(id, out data, out contentType);
+
         public bool TryOpen(AssetId id, out Stream data, out string contentType)
         {
             data = Stream.Null;

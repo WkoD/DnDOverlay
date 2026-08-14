@@ -379,9 +379,10 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
             return false;
         }
 
-        public bool TryOpenThumb(AssetId id, int width, out Stream data)
+        public bool TryOpenThumb(AssetId id, int width, out Stream data, out string contentType)
         {
             data = Stream.Null;
+            contentType = string.Empty;
 
             return false;
         }

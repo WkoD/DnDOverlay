@@ -148,6 +148,32 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     }
 
     /// <inheritdoc />
+    public bool TryOpenThumb(AssetId id, int width, out Stream data, out string contentType)
+    {
+        data = Stream.Null;
+        contentType = string.Empty;
+
+        // Same gate as the full picture, and for the same reason: this identifier comes off the
+        // wire, and the path is built from it (Part 4, Part 5).
+        if (!id.IsWellFormed || width <= 0)
+        {
+            return false;
+        }
+
+        var file = ThumbnailPath(id);
+
+        if (!File.Exists(file))
+        {
+            return false;
+        }
+
+        data = File.OpenRead(file);
+        contentType = "image/png";
+
+        return true;
+    }
+
+    /// <inheritdoc />
     public Task<IngestResult> IngestAsync(
         ReadOnlyMemory<byte> source, string proposedName, CancellationToken cancellationToken = default)
     {

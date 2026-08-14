@@ -331,6 +331,49 @@ public sealed class PairingDirectory
         return settled;
     }
 
+    /// <summary>
+    /// Finds the paired device holding this token, for the HTTP side. Returns
+    /// <see langword="null"/> when no device of that role has it.
+    /// <para>
+    /// Looked up BY TOKEN rather than by device, because that is what an <c>Authorization</c>
+    /// header carries - and the token travels in the header rather than in the query, so that it
+    /// does not end up in access logs and proxy caches (Part 4).
+    /// </para>
+    /// <para>
+    /// The role is required rather than reported, and the difference matters: asking "which
+    /// device is this?" and then checking the role invites the check being forgotten at the next
+    /// call site. A control token must not fetch assets as a device any more than a display token
+    /// may open the control socket (Part 11).
+    /// </para>
+    /// <para>
+    /// Every candidate is compared, and the loop does not stop at the first match - a comparison
+    /// that returns early tells an attacker how far they got, and the whole point of the constant-
+    /// time compare would be given away one level up.
+    /// </para>
+    /// </summary>
+    public PairedDevice? Authenticate(string? token, PairingRole role)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            PairedDevice? found = null;
+
+            foreach (var candidate in _paired.Values)
+            {
+                if (candidate.Role == role && DeviceTokens.Matches(token, candidate.Token))
+                {
+                    found = candidate;
+                }
+            }
+
+            return found;
+        }
+    }
+
     /// <summary>Turns a waiting device away and keeps it visible with its reason.</summary>
     public bool Reject(DeviceId device)
     {

@@ -287,6 +287,9 @@ public sealed class LogForwardingOverTheWireTests
 
     private sealed class NoAssets : IAssetSource
     {
+        public bool TryOpenThumb(AssetId id, int width, out Stream data, out string contentType) =>
+            TryOpen(id, out data, out contentType);
+
         public bool TryOpen(AssetId id, out Stream data, out string contentType)
         {
             data = Stream.Null;

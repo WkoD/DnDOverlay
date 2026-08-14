@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -90,6 +91,7 @@ public static class HubEndpoints
         endpoints.MapGet(Protocol.HealthPath, () => Results.Text("running"));
 
         endpoints.MapGet($"{Protocol.AssetPath}/{{id}}", ServeAssetAsync);
+        endpoints.MapGet($"{Protocol.AssetPath}/{{id}}/thumb", ServeThumbnailAsync);
         endpoints.Map(Protocol.DisplayPath, HandleDisplayAsync);
 
         return endpoints;
@@ -101,8 +103,65 @@ public static class HubEndpoints
     /// classic way to read arbitrary files off the DM's machine - with a valid token, so from
     /// any paired device (Part 4, Part 5).
     /// </summary>
-    private static async Task ServeAssetAsync(HttpContext context, string id, IAssetSource assets)
+    private static Task ServeAssetAsync(
+        HttpContext context, string id, IAssetSource assets, PairingDirectory pairing) =>
+        ServeAsync(context, id, pairing, (assetId, out data, out type) => assets.TryOpen(assetId, out data, out type));
+
+    /// <summary>
+    /// Serves the thumbnail, which is what lets a picture STAND at its place within a second while
+    /// the full one is still on its way (Part 10). The width in the query is a wish: what comes
+    /// back is the step the stock holds.
+    /// </summary>
+    private static Task ServeThumbnailAsync(
+        HttpContext context, string id, IAssetSource assets, PairingDirectory pairing)
     {
+        var width = int.TryParse(
+            context.Request.Query["w"], NumberStyles.None, CultureInfo.InvariantCulture, out var wanted)
+            ? wanted
+            : DefaultThumbnailWidth;
+
+        return ServeAsync(
+            context, id, pairing,
+            (assetId, out data, out type) => assets.TryOpenThumb(assetId, width, out data, out type));
+    }
+
+    private delegate bool OpenAsset(AssetId id, out Stream data, out string contentType);
+
+    /// <summary>
+    /// The width used when the caller names none. Not a limit and not a promise - only what to ask
+    /// the stock for when the question was left open.
+    /// </summary>
+    private const int DefaultThumbnailWidth = 256;
+
+    /// <summary>
+    /// The two asset routes share everything that matters, so they share it here rather than
+    /// twice: the token, then the identifier, then the bytes.
+    /// <para>
+    /// <b>The token comes from the <c>Authorization</c> header</b>, never from the query - a query
+    /// parameter lands in access logs, proxy caches and browser history, and this one is the whole
+    /// of a device's identity (Part 4). Until M2 the endpoint asked for nothing at all, which made
+    /// the stock of an open campaign readable by anyone on the network who could guess a hash.
+    /// </para>
+    /// <para>
+    /// <b>The role is required, not merely read.</b> A control token must not fetch as a device,
+    /// exactly as a display token may not open the control socket - the same separation, on the
+    /// route that came later (Part 11).
+    /// </para>
+    /// <para>
+    /// <b>The identifier is validated before it touches anything resembling a path.</b> Without
+    /// that, <c>GET /assets/..%5C..%5Cwindows%5C…</c> is the classic way to read arbitrary files
+    /// off the DM's machine - and now with a valid token, so from any paired device.
+    /// </para>
+    /// </summary>
+    private static async Task ServeAsync(
+        HttpContext context, string id, PairingDirectory pairing, OpenAsset open)
+    {
+        if (pairing.Authenticate(BearerToken(context.Request), PairingRole.Display) is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
         var assetId = new AssetId(id);
 
         if (!assetId.IsWellFormed)
@@ -111,7 +170,7 @@ public static class HubEndpoints
             return;
         }
 
-        if (!assets.TryOpen(assetId, out var data, out var contentType))
+        if (!open(assetId, out var data, out var contentType))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
@@ -122,6 +181,15 @@ public static class HubEndpoints
             context.Response.ContentType = contentType;
             await data.CopyToAsync(context.Response.Body, context.RequestAborted).ConfigureAwait(false);
         }
+    }
+
+    private static string? BearerToken(HttpRequest request)
+    {
+        const string Scheme = "Bearer ";
+
+        var header = request.Headers.Authorization.ToString();
+
+        return header.StartsWith(Scheme, StringComparison.Ordinal) ? header[Scheme.Length..] : null;
     }
 
     /// <summary>

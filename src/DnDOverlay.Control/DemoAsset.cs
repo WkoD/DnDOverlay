@@ -31,6 +31,19 @@ internal sealed class DemoAsset : IAssetSource
 
     internal AssetRef Reference { get; }
 
+    /// <summary>
+    /// No thumbnail. The stand-in exists so the running thread could be walked before Campaign and
+    /// Imaging did; a preview belongs to the real stock, and this type is due to disappear with it
+    /// (M2, checks/M2.md).
+    /// </summary>
+    public bool TryOpenThumb(AssetId id, int width, out Stream data, out string contentType)
+    {
+        data = Stream.Null;
+        contentType = string.Empty;
+
+        return false;
+    }
+
     /// <inheritdoc />
     public bool TryOpen(AssetId id, out Stream data, out string contentType)
     {

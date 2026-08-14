@@ -15,8 +15,7 @@ namespace DnDOverlay.Core;
 /// that the hub never reaches Campaign directly.
 /// </para>
 /// <para>
-/// The thumbnail half (<c>TryOpenThumb</c>) and the upload direction (<c>IAssetSink</c>) join in
-/// the milestones that serve them - M2 and M8.
+/// The upload direction is <see cref="IAssetSink"/>, and it joins in M8 what this one does in M2.
 /// </para>
 /// </summary>
 public interface IAssetSource
@@ -27,4 +26,17 @@ public interface IAssetSource
     /// (Part 5). The caller owns the stream.
     /// </summary>
     bool TryOpen(AssetId id, out Stream data, out string contentType);
+
+    /// <summary>
+    /// Opens a thumbnail, which is what makes a picture STAND at its place inside a second even
+    /// when the full one is still coming (Part 5, Part 10).
+    /// <para>
+    /// <paramref name="width"/> is a wish rather than a demand: thumbnails are made once and kept,
+    /// so what comes back is the step the stock holds. Serving a different one is right - the
+    /// caller wants something to show, not a particular number of pixels - and generating on
+    /// demand would put the most noticeable delay of all exactly where the promise of a second
+    /// lives.
+    /// </para>
+    /// </summary>
+    bool TryOpenThumb(AssetId id, int width, out Stream data, out string contentType);
 }

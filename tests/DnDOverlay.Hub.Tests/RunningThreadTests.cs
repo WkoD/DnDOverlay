@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text;
 using DnDOverlay.Core;
@@ -33,8 +34,16 @@ public sealed class RunningThreadTests : IAsyncLifetime
     /// </summary>
     private const string Token = "a-token-that-was-issued-earlier";
 
+    /// <summary>
+    /// A paired device of the OTHER role. It exists so that "only a display token opens the stock"
+    /// can be shown rather than assumed - without it the role check would be untested and a plain
+    /// "is this token known?" would pass every test here (Part 11).
+    /// </summary>
+    private const string ControlToken = "a-control-token-that-was-issued-earlier";
+
     private static readonly DeviceId FirstDevice = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"));
     private static readonly DeviceId SecondDevice = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"));
+    private static readonly DeviceId ControlDevice = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003"));
 
     private WebApplication _app = null!;
     private Uri _http = null!;
@@ -50,6 +59,7 @@ public sealed class RunningThreadTests : IAsyncLifetime
         [
             new PairedDevice(FirstDevice, "TEST-PC", PairingRole.Display, Token),
             new PairedDevice(SecondDevice, "TEST-PC", PairingRole.Display, Token),
+            new PairedDevice(ControlDevice, "SURFACE", PairingRole.Control, ControlToken),
         ]);
         builder.Services.AddSingleton<IAssetSource>(new OneFakeAsset());
 
@@ -91,25 +101,100 @@ public sealed class RunningThreadTests : IAsyncLifetime
     [InlineData("NOTHEXNOTHEXNOTHEXNOTHEXNOTHEXNOTHEXNOTHEXNOTHEXNOTHEXNOTHEXNOTH")]
     public async Task An_identifier_that_is_not_a_hash_is_refused(string id)
     {
-        using var http = new HttpClient();
+        // WITH a valid token, and that is the point of it being here: since the endpoint asks for
+        // one, a request without a token is turned away at the door and the identifier is never
+        // looked at. The test would still be green and would be proving the wrong check.
+        var response = await Fetch($"{Protocol.AssetPath}/{id}", Token);
 
-        var response = await http.GetAsync(
-            new Uri(_http, $"{Protocol.AssetPath}/{id}"),
-            TestContext.Current.CancellationToken);
-
-        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
     public async Task The_bytes_of_a_known_asset_can_be_fetched()
     {
-        using var http = new HttpClient();
+        var response = await Fetch($"{Protocol.AssetPath}/{Asset.Value}", Token);
 
-        var bytes = await http.GetByteArrayAsync(
-            new Uri(_http, $"{Protocol.AssetPath}/{Asset.Value}"),
-            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
+        var bytes = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
         Assert.Equal(OneFakeAsset.Payload.Length, bytes.Length);
+    }
+
+    /// <summary>
+    /// The thumbnail is what makes a picture STAND at its place inside a second while the full one
+    /// is still coming (Part 10). The width is a wish - what comes back is the step the stock has.
+    /// </summary>
+    [Fact]
+    public async Task A_thumbnail_is_served_and_is_not_the_full_picture()
+    {
+        var response = await Fetch($"{Protocol.AssetPath}/{Asset.Value}/thumb?w=256", Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var bytes = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(OneFakeAsset.Thumbnail.Length, bytes.Length);
+    }
+
+    /// <summary>
+    /// The stock of an open campaign is not readable by whoever is on the network. Until this was
+    /// built the endpoint asked for nothing at all, and a guessed hash was enough (Part 4).
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not-the-token")]
+    public async Task Without_the_right_token_no_asset_is_served(string? token)
+    {
+        var response = await Fetch($"{Protocol.AssetPath}/{Asset.Value}", token);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Role separation, on the route that came later: a control token is a valid token and still
+    /// does not open the stock, exactly as a display token does not open the control socket
+    /// (Part 11).
+    /// </summary>
+    [Fact]
+    public async Task A_control_token_does_not_open_the_stock()
+    {
+        var response = await Fetch($"{Protocol.AssetPath}/{Asset.Value}", ControlToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>An identifier that is well formed but unknown is a plain miss, not a refusal.</summary>
+    [Fact]
+    public async Task A_well_formed_but_unknown_identifier_is_a_miss()
+    {
+        var response = await Fetch($"{Protocol.AssetPath}/{new string('b', AssetId.Length)}", Token);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    /// <summary>
+    /// The token travels in the header, never in the query - a query parameter lands in access
+    /// logs, proxy caches and browser history, and this one is the whole of a device's identity
+    /// (Part 4). So the query form has to NOT work.
+    /// </summary>
+    [Fact]
+    public async Task The_token_is_not_accepted_as_a_query_parameter()
+    {
+        var response = await Fetch($"{Protocol.AssetPath}/{Asset.Value}?token={Token}", token: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    private async Task<HttpResponseMessage> Fetch(string path, string? token)
+    {
+        using var http = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_http, path));
+
+        if (token is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        return await http.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -273,6 +358,23 @@ public sealed class RunningThreadTests : IAsyncLifetime
     private sealed class OneFakeAsset : IAssetSource
     {
         internal static byte[] Payload { get; } = Encoding.UTF8.GetBytes("not really a png, but bytes are bytes");
+
+        internal static byte[] Thumbnail { get; } = Encoding.UTF8.GetBytes("a smaller pile of bytes");
+
+        public bool TryOpenThumb(AssetId id, int width, out Stream data, out string contentType)
+        {
+            if (id != Asset)
+            {
+                data = Stream.Null;
+                contentType = string.Empty;
+                return false;
+            }
+
+            data = new MemoryStream(Thumbnail, writable: false);
+            contentType = "image/png";
+
+            return true;
+        }
 
         public bool TryOpen(AssetId id, out Stream data, out string contentType)
         {
