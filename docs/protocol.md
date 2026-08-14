@@ -387,10 +387,21 @@ coin cell can be hours out, and sorting by its clock would scatter its lines thr
 of the list instead of putting them next to ours.
 
 **This is the only absolute foreign clock in the protocol, and it is measured the moment it
-appears** — once per connection, and only reported when it is more than a minute out (`1046`).
-Everywhere else time is relative for exactly that reason: touch points carry an age, the round
-trip is measured by the control that sent the ping, the heartbeat watches silence. A wrong clock
-should produce a wrong answer about *itself*, never a plausible one about the world.
+appears** — on the first entry a connection forwards, and only reported when it is more than a
+minute out (`1046`). Everywhere else time is relative for exactly that reason: touch points carry
+an age, the round trip is measured by the control that sent the ping, the heartbeat watches
+silence. A wrong clock should produce a wrong answer about *itself*, never a plausible one about
+the world.
+
+**Which is why the notice is a convenience and not a promise, and it is worth saying why.** A
+device that forwards nothing — the ordinary evening at the default level — is never measured, and
+that is fine: a foreign clock that never crosses the wire cannot mislead anybody here. Where it
+*does* cross, it is already visible without any notice at all, because every forwarded line in the
+control's file carries the device stamp beside the arrival one. And nothing on a display runs on
+the wall clock: the heartbeat, the backoff, the rate window and the log rotation are all monotonic
+or size-based, so a machine that is two hours out behaves exactly like one that is not. What is
+wrong is the reading of its own diagnostic file — and wrong by a **constant** amount within one
+run, so durations and order inside that file still hold.
 
 **What comes up while nothing can be sent goes out when the connection comes back.** The device
 keeps a bounded ring buffer and a mark of what it has already forwarded; the mark outlives the
