@@ -46,6 +46,20 @@ Loaded into every session. Keep it short — it is the entry point, not the docu
 4. Overwrite the snapshot under `.claude/plans/` from `plan/`; it is the only backup, because
    `plan/` is git-ignored.
 
+## Committing
+
+**Write the message to a file and use `git commit -F <file>`.** Not `-m` with a multi-line string.
+
+The reason is a mistake that is easy to make and impossible to see afterwards: `@'…'@` is a
+PowerShell here-string, and this repository is worked on through **both** shells. In bash the same
+characters are not a here-string at all — they concatenate a literal `@` with a quoted string, and
+the commit goes through with `@` as its **subject line** and the real subject one line below. Bash
+heredocs (`<<'EOF'`) fare no better: they are refused when a command is chained.
+
+Nothing about the tool result says so. `git commit` reports success, the push succeeds, and on a
+protected branch it can no longer be repaired — amending would need a force-push, which is
+blocked, rightly. **So verify rather than assume:** `git log -1 --format=%B` after committing.
+
 ## Commands
 
 ```
