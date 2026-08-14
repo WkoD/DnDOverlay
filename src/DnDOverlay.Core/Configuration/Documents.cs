@@ -16,17 +16,28 @@ namespace DnDOverlay.Core.Configuration;
 /// It grows with the milestones: known devices and tokens arrive with pairing, the screen wishes
 /// and the ScreenContext per screen with the screen inventory, the view state with the stage.
 /// </para>
+/// <para>
+/// <b>Plain setters rather than <c>init</c>, and that is not a style slip.</b> With <c>init</c>
+/// the JSON source generator builds the object through an object initializer - <c>ObjectCreator</c>
+/// is null and every property is marked <c>IsMemberInitializer</c> - which assigns EVERY member,
+/// including the ones the file does not mention. Property initializers are then dead: a missing
+/// <c>controlId</c> read back as <c>Guid.Empty</c>, a missing list as null, a missing enum as its
+/// first value. That takes the ground out from under everything additive (rule 7), because a
+/// build that adds a setting meets older files on every machine that updates. Measured, not
+/// deduced; guarded by <c>ConfigurationDefaultsTests</c>. The price is a mutable record, and it is
+/// the cheaper half of the trade.
+/// </para>
 /// </summary>
 public sealed record ControlConfiguration : IConfigurationDocument
 {
     /// <inheritdoc/>
-    public int SchemaVersion { get; init; } = ConfigurationSchema.Version;
+    public int SchemaVersion { get; set; } = ConfigurationSchema.Version;
 
     /// <summary>
     /// Identifies this control for as long as it exists. Created once, then never again - a
     /// display stays bound to it, and the address will not do for that (Part 4).
     /// </summary>
-    public Guid ControlId { get; init; } = Guid.NewGuid();
+    public Guid ControlId { get; set; } = Guid.NewGuid();
 
     /// <summary>
     /// The TCP port Kestrel binds on all interfaces.
@@ -36,14 +47,14 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// act on that requires somewhere to put the new one (Part 4, Part 7).
     /// </para>
     /// </summary>
-    public int Port { get; init; } = Protocol.Protocol.DefaultPort;
+    public int Port { get; set; } = Protocol.Protocol.DefaultPort;
 
     /// <summary>
     /// Every device the DM has ever allowed, with its token. This is the file the whole pairing
     /// hangs on: without it every display would introduce itself as a stranger after one restart
     /// of the control (Part 4, Part 7).
     /// </summary>
-    public IReadOnlyList<KnownDevice> KnownDevices { get; init; } = [];
+    public IReadOnlyList<KnownDevice> KnownDevices { get; set; } = [];
 
     /// <summary>
     /// Every screen the control has ever been told about, with the DM's wish and everything a
@@ -56,7 +67,29 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// fall away (Part 3, Part 7).
     /// </para>
     /// </summary>
-    public IReadOnlyList<KnownScreen> KnownScreens { get; init; } = [];
+    public IReadOnlyList<KnownScreen> KnownScreens { get; set; } = [];
+
+    /// <summary>
+    /// How much this control writes into its own file - the counterpart to
+    /// <see cref="DisplayConfiguration.Device"/>'s level, and it exists for the same reason.
+    /// <para>
+    /// Without it the control is the one process whose level cannot be moved at all: a display can
+    /// be raised to <see cref="LogLevel.Debug"/> from here or at the device, while the control
+    /// itself sits at Information for ever. That is not symmetry for its own sake - it decides
+    /// whether a line written at Debug can ever be read, and a line nobody can read is one that
+    /// was delivered dead (Part 8).
+    /// </para>
+    /// <para>
+    /// <b>One value, not the device's three.</b> <c>ForwardAtLeast</c> has no meaning here - the
+    /// control forwards nothing, it receives - and keeping a screen awake is a display's business.
+    /// Reusing <c>DeviceSettings</c> would put two keys into this file that mean nothing in it.
+    /// </para>
+    /// <para>
+    /// Additive: a file written before this existed simply has no such key and reads as
+    /// Information, so the schema version stays where it is.
+    /// </para>
+    /// </summary>
+    public LogLevel LogLevel { get; set; } = LogLevel.Information;
 }
 
 /// <summary>
@@ -111,24 +144,30 @@ public sealed record KnownDevice(
 /// a state set locally applies to the running session only. A field that is authoritative in one
 /// direction and must not be read in the other eventually gets read (Part 3).
 /// </para>
+/// <para>
+/// Plain setters rather than <c>init</c>, for the reason given at
+/// <see cref="ControlConfiguration"/> - and here the cost of getting it wrong is the highest in
+/// the system: a missing <c>deviceId</c> would read as <c>Guid.Empty</c>, and every display PC in
+/// the house would carry the same identity.
+/// </para>
 /// </summary>
 public sealed record DisplayConfiguration : IConfigurationDocument
 {
     /// <inheritdoc/>
-    public int SchemaVersion { get; init; } = ConfigurationSchema.Version;
+    public int SchemaVersion { get; set; } = ConfigurationSchema.Version;
 
     /// <summary>
     /// Created on the first start and kept. Losing it means losing the identity - which is
     /// exactly the price named in <see cref="ConfigurationOutcome.Replaced"/>, and the reason
     /// "reassign device" exists in the control (Part 7).
     /// </summary>
-    public Guid DeviceId { get; init; } = Guid.NewGuid();
+    public Guid DeviceId { get; set; } = Guid.NewGuid();
 
     /// <summary>
     /// The display name of this device. Null until somebody sets one, which the installer may do
     /// through <c>NAME=</c> - by filling a gap, never by writing over what is there (Part 9).
     /// </summary>
-    public string? DeviceName { get; init; }
+    public string? DeviceName { get; set; }
 
     /// <summary>
     /// A host entered by hand or supplied by the installer through <c>HOST=</c>.
@@ -137,13 +176,13 @@ public sealed record DisplayConfiguration : IConfigurationDocument
     /// because the address changes when the Surface moves between Wi-Fi and its dock (Part 4).
     /// </para>
     /// </summary>
-    public string? Host { get; init; }
+    public string? Host { get; set; }
 
     /// <summary>
     /// The control this device is paired with, or null while it is unpaired. Set when pairing is
     /// allowed and cleared only by "reset pairing" at the device (Part 4, Part 6).
     /// </summary>
-    public Guid? ControlId { get; init; }
+    public Guid? ControlId { get; set; }
 
     /// <summary>
     /// The device token, encrypted through <see cref="ISecretStore"/> - never in the clear, for
@@ -154,7 +193,7 @@ public sealed record DisplayConfiguration : IConfigurationDocument
     /// be offered to the first hub that answers.
     /// </para>
     /// </summary>
-    public string? Token { get; init; }
+    public string? Token { get; set; }
 
     /// <summary>
     /// Every display parameter, per screen. It is here because Part 6 requires every setting to
@@ -167,13 +206,13 @@ public sealed record DisplayConfiguration : IConfigurationDocument
     /// settable without collecting the defaults from somewhere else.
     /// </para>
     /// </summary>
-    public IReadOnlyList<ScreenPreferences> Screens { get; init; } = [];
+    public IReadOnlyList<ScreenPreferences> Screens { get; set; } = [];
 
     /// <summary>
     /// What concerns the process rather than one of its windows - written in full for the same
     /// reason.
     /// </summary>
-    public DeviceSettings Device { get; init; } = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true);
+    public DeviceSettings Device { get; set; } = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true);
 }
 
 /// <summary>The stored parameters of one screen, keyed by the identifier the device derives.</summary>

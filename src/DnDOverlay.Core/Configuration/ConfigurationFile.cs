@@ -75,7 +75,13 @@ public sealed class ConfigurationFile<T> : IDisposable, IAsyncDisposable
         try
         {
             var text = File.ReadAllBytes(Path);
-            var value = JsonSerializer.Deserialize(text, _typeInfo);
+
+            // A byte order mark is not damage, and the reader would treat it as such: Utf8JsonReader
+            // refuses to start on one. These files are expressly hand-edited - the installer writes
+            // into display.json and the DM may open it (Part 9) - and half the editors on Windows
+            // put a mark in front when they save. Without this line that costs a display PC its
+            // identity for a keystroke that changed nothing.
+            var value = JsonSerializer.Deserialize(Unmarked(text), _typeInfo);
 
             if (value is not null && value.SchemaVersion <= ConfigurationSchema.Version)
             {
@@ -93,6 +99,12 @@ public sealed class ConfigurationFile<T> : IDisposable, IAsyncDisposable
 
         return new ConfigurationLoad<T>(createDefault(), ConfigurationOutcome.Replaced, SetAsideBroken());
     }
+
+    private static ReadOnlySpan<byte> ByteOrderMark => [0xEF, 0xBB, 0xBF];
+
+    /// <summary>The same bytes without a leading UTF-8 byte order mark, if there was one.</summary>
+    private static ReadOnlySpan<byte> Unmarked(ReadOnlySpan<byte> text) =>
+        text.StartsWith(ByteOrderMark) ? text[ByteOrderMark.Length..] : text;
 
     /// <summary>
     /// Remembers a change and schedules the write. Cheap enough to call on every keystroke -

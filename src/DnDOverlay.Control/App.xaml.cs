@@ -98,6 +98,11 @@ public sealed partial class App : Application, IDisposable
             LogFileLimits.Control,
             TimeProvider.System);
 
+        // Set before the first line is written, because the first lines are the ones that explain
+        // a start that went wrong. It is the same wiring the display has for its own level - and
+        // without it the control would be the only process that cannot be turned up at all.
+        _log.Level = loaded.Value.LogLevel;
+
         builder.Logging.ClearProviders();
         builder.Logging.AddProvider(_log);
         builder.Logging.AddDebug();

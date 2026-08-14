@@ -1,5 +1,6 @@
 using System.Text;
 using DnDOverlay.Core.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Core.Tests.Configuration;
 
@@ -133,6 +134,11 @@ public sealed class ConfigurationFileTests : IDisposable
     /// A file from a NEWER build is treated exactly like an unreadable one. The hard "no" of
     /// Part 3 protects a campaign, whose content cannot be reconstructed; a configuration can be
     /// recreated with defaults, and refusing to start would be the worse trade.
+    /// <para>
+    /// Written <b>without</b> an explicit encoding on purpose, which is not a detail here: with
+    /// <c>Encoding.UTF8</c> the file gets a byte order mark, and this test used to pass on that
+    /// instead of on the version - it would have gone green with the version check taken out.
+    /// </para>
     /// </summary>
     [Fact]
     public void A_file_from_a_newer_build_is_set_aside_too()
@@ -140,14 +146,80 @@ public sealed class ConfigurationFileTests : IDisposable
         Directory.CreateDirectory(_directory);
         File.WriteAllText(
             Path0,
-            $$"""{"schemaVersion":{{ConfigurationSchema.Version + 1}},"port":40000}""",
-            Encoding.UTF8);
+            $$"""{"schemaVersion":{{ConfigurationSchema.Version + 1}},"port":40000}""");
 
         using var file = Store(TimeProvider.System);
         var loaded = file.Load(() => new ControlConfiguration { Port = 47800 });
 
         Assert.Equal(ConfigurationOutcome.Replaced, loaded.Outcome);
         Assert.Equal(47800, loaded.Value.Port);
+    }
+
+    /// <summary>
+    /// The control can be turned up too, and it took the M1c hand run to notice it could not: a
+    /// line written at Debug in the hub was one nobody could ever read, because the control gates
+    /// its own file at Information and had no setting to lower it (Part 8).
+    /// </summary>
+    [Fact]
+    public void The_control_can_be_turned_up_like_a_display()
+    {
+        Directory.CreateDirectory(_directory);
+
+        using (var writing = Store(TimeProvider.System))
+        {
+            writing.Save(new ControlConfiguration { LogLevel = LogLevel.Debug });
+            writing.Flush();
+        }
+
+        Assert.Contains("\"logLevel\"", File.ReadAllText(Path0), StringComparison.Ordinal);
+
+        using var file = Store(TimeProvider.System);
+
+        Assert.Equal(LogLevel.Debug, file.Load(() => new ControlConfiguration()).Value.LogLevel);
+    }
+
+    /// <summary>
+    /// Additive, so a file written before the setting existed reads unchanged and the schema
+    /// version stays where it is (rule 7).
+    /// </summary>
+    [Fact]
+    public void A_file_without_the_setting_reads_as_information()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(
+            Path0,
+            $$"""{"schemaVersion":{{ConfigurationSchema.Version}},"port":40404}""");
+
+        using var file = Store(TimeProvider.System);
+        var loaded = file.Load(() => new ControlConfiguration());
+
+        Assert.Equal(ConfigurationOutcome.Loaded, loaded.Outcome);
+        Assert.Equal(40404, loaded.Value.Port);
+        Assert.NotEqual(Guid.Empty, loaded.Value.ControlId);
+        Assert.Equal(LogLevel.Information, loaded.Value.LogLevel);
+    }
+
+    /// <summary>
+    /// A byte order mark is not damage. These files are hand-edited by design - the installer
+    /// writes into display.json and the DM may open it (Part 9) - and half the editors on Windows
+    /// put a mark in front when they save. Treating that as a broken file costs a display PC its
+    /// identity for a keystroke that changed nothing.
+    /// </summary>
+    [Fact]
+    public void A_byte_order_mark_is_not_a_broken_file()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(
+            Path0,
+            $$"""{"schemaVersion":{{ConfigurationSchema.Version}},"port":40404}""",
+            Encoding.UTF8);
+
+        using var file = Store(TimeProvider.System);
+        var loaded = file.Load(() => new ControlConfiguration());
+
+        Assert.Equal(ConfigurationOutcome.Loaded, loaded.Outcome);
+        Assert.Equal(40404, loaded.Value.Port);
+        Assert.Null(loaded.SetAside);
     }
 
     /// <summary>
