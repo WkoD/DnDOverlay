@@ -161,6 +161,9 @@
   <data name="E1049_ConnectionLoopFailed" xml:space="preserve">
     <value>The search for a control ended unexpectedly - this device will not connect again until it is restarted.</value>
   </data>
+  <data name="E1050_BeaconTargetsChanged" xml:space="preserve">
+    <value>Beacon now goes out over {Count} address(es): {Targets}.</value>
+  </data>
 
   <!-- 3000-3999 · Display: what is on a screen, and why is it or is it not? -->
 

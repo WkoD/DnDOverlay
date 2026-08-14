@@ -15,13 +15,15 @@ namespace DnDOverlay.Hub;
 /// worse than an unknown identifier that at least looks unknown.
 /// </para>
 /// <para>
-/// Next free in the connection range: <b>1048</b>; in the display range, which the screen
+/// Next free in the connection range: <b>1051</b>; in the display range, which the screen
 /// inventory writes into because the range follows the SUBJECT rather than the assembly:
 /// <b>3018</b>. 1007–1009 stay unassigned so the first block could still
 /// grow, 1010–1018 belong to Transport with 1019 left free, pairing has 1020–1037 (the display
 /// writes 1033–1037 - the range follows the subject, not the assembly), discovery has 1038–1041,
-/// the display's backoff 1042, the send side 1043–1045, and log forwarding 1046–1047. The
-/// catalogue lives in <c>docs/protocol.md</c>.
+/// the display's backoff 1042, the send side 1043–1045, log forwarding 1046–1047, the stranger
+/// heard by Transport 1048 and the display's connection loop 1049. <b>1050 belongs to discovery
+/// and does not adjoin it</b> - a number is never moved to keep a range tidy, because the number
+/// is the contract and tidiness is not. The catalogue lives in <c>docs/protocol.md</c>.
 /// </para>
 /// </summary>
 internal static partial class HubLog
@@ -195,6 +197,17 @@ internal static partial class HubLog
         Level = LogLevel.Information,
         Message = "Announcing this control on UDP {Port}, every couple of seconds.")]
     internal static partial void BeaconStarted(ILogger logger, int port);
+
+    /// <summary>
+    /// Where the beacon goes, written only when it changes. Debug, because it repeats every two
+    /// seconds and is worth reading at exactly two moments: at startup, and when the machine's
+    /// addresses move (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1050,
+        Level = LogLevel.Debug,
+        Message = "Beacon now goes out over {Count} address(es): {Targets}.")]
+    internal static partial void BeaconTargetsChanged(ILogger logger, int count, string targets);
 
     [LoggerMessage(
         EventId = 1039,

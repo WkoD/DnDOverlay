@@ -22,6 +22,15 @@ public sealed class DiscoveryBeacon : BackgroundService
     private readonly TimeProvider _time;
     private readonly ILogger<DiscoveryBeacon> _logger;
 
+    /// <summary>
+    /// What the last round went out to, so a change can be said out loud and a repetition cannot.
+    /// <para>
+    /// Null until the first round, which is what makes the first one a change: the list is then
+    /// written once at startup and after that only when something actually moves.
+    /// </para>
+    /// </summary>
+    private string? _lastTargets;
+
     public DiscoveryBeacon(IOptions<HubOptions> options, TimeProvider time, ILogger<DiscoveryBeacon> logger)
     {
         _options = options;
@@ -59,8 +68,11 @@ public sealed class DiscoveryBeacon : BackgroundService
     private void Announce(byte[] beacon)
     {
         var reached = 0;
+        var targets = Targets().ToList();
 
-        foreach (var target in Targets())
+        Note(targets);
+
+        foreach (var target in targets)
         {
             try
             {
@@ -81,6 +93,38 @@ public sealed class DiscoveryBeacon : BackgroundService
         {
             HubLog.BeaconReachedNobody(_logger);
         }
+    }
+
+    /// <summary>
+    /// Writes down where the beacon goes - but only when that changes.
+    /// <para>
+    /// "Every suitable interface, not the first" is the one promise in discovery that could not be
+    /// read anywhere: a start line says the beacon runs, a failure line says one interface would
+    /// not carry it, and silence says at least one did. None of them answers *where it went* - and
+    /// the failure this guards against is the quietest one the system has, because a display PC
+    /// that never hears anything simply stays still (Part 4).
+    /// </para>
+    /// <para>
+    /// Only on a change, because the beacon goes out every two seconds and a line per round would
+    /// bury the file it is meant to explain. A change is exactly the interesting moment anyway:
+    /// docking, Wi-Fi going on or off, a VPN coming up. The first round counts as one, so the list
+    /// stands once at startup.
+    /// </para>
+    /// </summary>
+    private void Note(List<(IPAddress From, IPAddress To)> targets)
+    {
+        // Formatted before the comparison rather than after: the text IS the identity here, so
+        // there is no second notion of "the same set" that could drift from what gets printed.
+        var written = string.Join(", ", targets.Select(target => $"{target.From} -> {target.To}"));
+
+        if (string.Equals(written, _lastTargets, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastTargets = written;
+
+        HubLog.BeaconTargetsChanged(_logger, targets.Count, written);
     }
 
     /// <summary>

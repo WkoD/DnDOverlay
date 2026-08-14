@@ -551,15 +551,26 @@ the same application that draws.
 | 1047 | `LogRateExceeded` | Warning | hub |
 | 1048 | `UnknownControlHeard` | Information | transport |
 | 1049 | `ConnectionLoopFailed` | Error | display |
+| 1050 | `BeaconTargetsChanged` | Debug | hub |
 
 **1049 is the line that exists because its absence was the fault.** The loop that looks for a
 control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
 the windows stay, the scene stays, and the device never connects again, without one line to say
 why. On a machine nobody is sitting at, a silence is the worst shape a fault can take.
 
-**Next free: 1050.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**1050 is the answer to the one discovery promise that could not be read.** "Every suitable
+interface, not the first" was, until a hand run asked for it, an assertion with nothing behind it:
+the start line says the beacon runs, the failure line says one interface would not carry it, and
+silence says at least one did — none of them says *where it went*. It is written only when the set
+of targets changes, so it stands once at startup and then exactly at the interesting moments: a
+dock, Wi-Fi going on or off, a VPN coming up. Debug, because the beacon repeats every two seconds
+and a line per round would bury the file it is meant to explain.
+
+**Next free: 1051.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
-1042, the send side 1043–1045, and log forwarding 1046–1047.
+1042, the send side 1043–1045, and log forwarding 1046–1047. **1050 belongs to discovery without
+adjoining it** — a number is never moved to keep a range tidy, because the number is the contract
+and the tidiness is not.
 
 **1017 and 1048 are the same finding at two levels, and the pair exists because of a dead end.**
 A display discards the beacons of any control it is not bound to — that is the rule that keeps a
