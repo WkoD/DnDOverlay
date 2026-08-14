@@ -565,9 +565,9 @@ public sealed partial class App : Application, IDisposable
                 continue;
             }
 
-            var reached = await ConnectAsync(client, target, deviceName).ConfigureAwait(false);
+            var attempt = await ConnectAsync(client, target, deviceName).ConfigureAwait(false);
 
-            if (reached)
+            if (attempt is Attempt.Worthwhile)
             {
                 // It worked once, so next time it is worth starting from the top again - both the
                 // address and the waiting.
@@ -580,7 +580,11 @@ public sealed partial class App : Application, IDisposable
                 return;
             }
 
-            var delay = backoff.Next();
+            // A refusal steps out of the growing wait entirely. It used to count as "reached" and
+            // therefore RESET the wait to one second, so a rejected device knocked once a second
+            // for as long as it ran - the tightest loop the code can produce, at the one moment
+            // where nothing is going to change without a person (Part 4).
+            var delay = attempt is Attempt.Refused ? backoff.Refused() : backoff.Next();
 
             DisplayLog.RetryingIn(_logger, delay);
             await Task.Delay(delay, _shutdown.Token).ConfigureAwait(false);
@@ -610,8 +614,35 @@ public sealed partial class App : Application, IDisposable
         return await discovery.ListenAsync(_settings.ControlId, listening.Token).ConfigureAwait(false);
     }
 
-    /// <summary>Runs one connection to the end. True when it actually reached a control.</summary>
-    private async Task<bool> ConnectAsync(DisplayClient client, Target target, string deviceName)
+    /// <summary>
+    /// What one connection amounted to - and with it, how long to wait before the next.
+    /// <para>
+    /// Three values rather than the "did it reach a control" it used to be, because a control that
+    /// answers can answer three quite different things, and only one of them is worth trying again
+    /// straight away.
+    /// </para>
+    /// </summary>
+    private enum Attempt
+    {
+        /// <summary>
+        /// Nobody answered - or a control answered <b>not now</b>. A limit that was reached is a
+        /// state of the hub and passes on its own, so the growing wait is exactly right for it.
+        /// </summary>
+        Fruitless,
+
+        /// <summary>
+        /// It worked, or the device just changed the question it is asking: a clone that was told
+        /// its identity collides has made itself a fresh one, so the next attempt is a new
+        /// question and not a repetition.
+        /// </summary>
+        Worthwhile,
+
+        /// <summary>A control said no. Only a person takes that back.</summary>
+        Refused,
+    }
+
+    /// <summary>Runs one connection to the end, and says what it amounted to.</summary>
+    private async Task<Attempt> ConnectAsync(DisplayClient client, Target target, string deviceName)
     {
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {
@@ -652,11 +683,21 @@ public sealed partial class App : Application, IDisposable
         // goes out with the next one (Part 8).
         var forwarding = Task.Run(() => _forwarding!.RunAsync(outbox.Writer, connected.Token));
 
-        var reached = false;
+        var attempt = Attempt.Fruitless;
 
         await foreach (var message in inbox.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
         {
-            reached |= message is WelcomeMessage or PairingPendingMessage or RejectedMessage;
+            attempt = message switch
+            {
+                WelcomeMessage or PairingPendingMessage => Attempt.Worthwhile,
+                RejectedMessage refusal => refusal.Reason switch
+                {
+                    RejectionReason.DuplicateDevice => Attempt.Worthwhile,
+                    RejectionReason.LimitExceeded => Attempt.Fruitless,
+                    _ => Attempt.Refused,
+                },
+                _ => attempt,
+            };
 
             // Something arriving is the proof the socket stands, and it is the only one to be had
             // here: the task above returns long before ClientWebSocket has finished connecting.
@@ -680,7 +721,7 @@ public sealed partial class App : Application, IDisposable
         await pump.ConfigureAwait(false);
         await forwarding.ConfigureAwait(false);
 
-        return reached;
+        return attempt;
     }
 
     /// <summary>

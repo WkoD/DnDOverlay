@@ -102,6 +102,15 @@ otherwise be unfixable at the table:
   brought none: a device approved while holding a *stale* token would otherwise never learn the new
   one, come back with the stale one, and be laid in front of the DM again for ever.
 
+**A rejection is waited out in minutes, not in seconds.** A refused device keeps knocking — it has
+to, or "last seen 3 minutes ago" in the device list would mean nothing and taking a rejection back
+would have nobody to reach. But it knocks about every five minutes, and that distance is its own:
+it neither grows with repetition nor resets the backoff a real network fault is building up,
+because what it waits for is a person changing their mind. Two rejections are told apart from it:
+a **limit** that was reached is a state of the hub and passes on its own, so it takes the ordinary
+growing wait, and a **collision** with a device that is already connected has the clone make itself
+a fresh identity, which makes the next attempt a new question rather than a repetition.
+
 **Tokens** come from `RandomNumberGenerator`, are compared with `CryptographicOperations.FixedTimeEquals`
 and are stored encrypted at both ends. The **role** — display or control — sits in our own entry
 and is never parsed out of the token: a display token at the control endpoint is refused, and the

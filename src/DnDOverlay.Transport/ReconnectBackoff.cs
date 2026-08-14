@@ -18,6 +18,7 @@ public sealed class ReconnectBackoff
 {
     private static readonly TimeSpan First = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan Ceiling = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan Rejection = TimeSpan.FromMinutes(5);
 
     private readonly Random _spread;
 
@@ -45,6 +46,23 @@ public sealed class ReconnectBackoff
     /// two-second hiccup.
     /// </summary>
     public void Succeeded() => _next = First;
+
+    /// <summary>
+    /// The wait after a control said no - five minutes, and deliberately not the growing one.
+    /// <para>
+    /// A refusal is a decision, and a second does not change it. Knocking again straight away
+    /// gets the device no further and says nothing new; what it does is write the same refusal
+    /// into both logs until the rejection looks like a defect. Measured in a hand run, where the
+    /// refused device came back about once a second and buried everything else.
+    /// </para>
+    /// <para>
+    /// It neither grows nor resets the ordinary count, because what it waits for is a person
+    /// rather than a network - long enough that a rejection is felt, short enough that the DM
+    /// changing his mind is not spent waiting (Part 4). The spread stays for the reason it exists
+    /// at all: several devices can be turned away in the same minute.
+    /// </para>
+    /// </summary>
+    public TimeSpan Refused() => Rejection * (0.8 + (_spread.NextDouble() * 0.4));
 
     private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
 }
