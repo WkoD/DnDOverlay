@@ -23,6 +23,18 @@
   // nothing themselves; those two are hidden from the dropdown. The visible Control and Display
   // keep their own preLaunchTask, because in the two-machine run each machine carries only one
   // role (M1c).
+  //
+  // THE COMPOUND STOPS BOTH - "stopAll": true, and it stays that way. It cost two false findings
+  // in one evening: a hand run where the display "was not running any more", and a control that
+  // seemed to die with exit code -1 when the display was stopped. Neither was real.
+  //
+  // It stays because the alternative is worse: without it, stopping one session leaves the other
+  // running, and a stray control keeps port 47800 - so the next F5 meets a taken port instead.
+  //
+  // WHAT FOLLOWS FROM IT: a hand run that has to stop ONE process - "stop the control, mangle the
+  // configuration, start it again" - uses the two visible entries as separate sessions, never the
+  // compound. The proof that the other one really is still alive is its log: after a control
+  // restart a live display writes 1042 RetryingIn. Without that line the run proves nothing.
 
   "configurations": [
     {
