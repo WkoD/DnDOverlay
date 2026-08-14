@@ -109,15 +109,9 @@ public sealed class SessionStreamOverTheWireTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        // Subscribed BEFORE the device connects, and the opening picture waited for - only then is
-        // the arrival guaranteed to be an EVENT rather than something the picture already
-        // contained. The other way round is a race the test cannot win: if the hub registers the
-        // device first, its connection is in the opening picture and no DevicesChanged follows,
-        // so the wait runs into its timeout. Windows won that race for weeks; a loaded Linux
-        // runner lost it, twice.
-        await using var stream = Listen(cancellationToken);
-
-        _ = await NextAsync<SessionEvent.Opening>(stream);
+        // Listening BEFORE the device connects - see ListenAsync for why that order is the whole
+        // difference between an event and a picture.
+        await using var stream = await ListenAsync(cancellationToken);
 
         var socket = await ConnectAsync(Leaving, [Info(First)], cancellationToken);
 
@@ -162,9 +156,7 @@ public sealed class SessionStreamOverTheWireTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        await using var stream = Listen(cancellationToken);
-
-        _ = await NextAsync<SessionEvent.Opening>(stream);
+        await using var stream = await ListenAsync(cancellationToken);
 
         using var socket = await ConnectAsync(
             Carrying,
@@ -178,11 +170,36 @@ public sealed class SessionStreamOverTheWireTests : IAsyncLifetime
         Assert.Equal("Grimmbart", Assert.IsType<ImageItem>(Assert.Single(replaced.Scene.Items)).Name);
     }
 
+    /// <summary>
+    /// Subscribes and hands back the raw stream, opening picture and all. Only a test that is
+    /// ABOUT the opening picture wants this one - everything else wants <see cref="ListenAsync"/>.
+    /// </summary>
     private IAsyncEnumerator<SessionEvent> Listen(CancellationToken cancellationToken) =>
         _app.Services
             .GetRequiredService<ISessionApi>()
             .Subscribe(cancellationToken)
             .GetAsyncEnumerator(cancellationToken);
+
+    /// <summary>
+    /// Subscribes and swallows the opening picture, so a test can watch for CHANGES - and it
+    /// exists because doing that by hand is where the mistake gets made.
+    /// <para>
+    /// Whoever waits for an event has to be listening first. Subscribe after the thing has
+    /// happened and its announcement is not an event at all: it sits in the opening picture, no
+    /// change follows, and the wait runs to its timeout. Measured twice, both times on a loaded
+    /// Linux runner while Windows had passed the same test for weeks. The in-memory sibling of
+    /// this file has had this helper all along; this one had it missing, and exactly one test paid
+    /// for it.
+    /// </para>
+    /// </summary>
+    private async Task<IAsyncEnumerator<SessionEvent>> ListenAsync(CancellationToken cancellationToken)
+    {
+        var stream = Listen(cancellationToken);
+
+        _ = await NextAsync<SessionEvent.Opening>(stream);
+
+        return stream;
+    }
 
     /// <summary>
     /// Reads until the event this test is about arrives, passing over whatever else the hub has to
