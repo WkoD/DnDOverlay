@@ -24,6 +24,19 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DnDOverlay.Hub\DnDOverlay.Hub.csproj" />
+
+    <!-- The OTHER side of the wire, and it is here for one reason: the seam.
+         A test project reaches into its own subject as a matter of course; reaching into a second
+         one is a decision, and this is what paid for it. The asset endpoint gained a token
+         requirement, AssetClient knew nothing about it, and BOTH test suites stayed green - each
+         brings its own counterpart, so neither ever met the other. The display fetched nothing for
+         a whole commit, and it looked like an ordinary failed download.
+
+         Transport does not reference the hub and must not: the client has no business knowing what
+         serves it. So the seam test lives on this side. A stub of the endpoint inside
+         Transport.Tests would be worthless - it would prove the client SENDS a header, not that
+         the hub ACCEPTS it. -->
+    <ProjectReference Include="..\..\src\DnDOverlay.Transport\DnDOverlay.Transport.csproj" />
   </ItemGroup>
 
   <ItemGroup>

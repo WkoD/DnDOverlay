@@ -45,21 +45,21 @@ internal static class ImageFiles
         string Portrait,
         string MapToken);
 
-    internal static Written Write(string directory)
+    internal static Written Write(string directory, IReadOnlySet<string> withheld)
     {
         var promised = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
 
-        promised.Add("PNG", WritePngWithAlpha(directory));
-        promised.Add("JPEG", WriteJpeg(directory));
-        promised.Add("GIF", WriteAnimatedGif(directory));
-        promised.Add("BMP", WriteSimple(directory, "plain.bmp", MagickFormat.Bmp));
-        promised.Add("WebP", WriteSimple(directory, "still.webp", MagickFormat.WebP));
-        promised.Add("AVIF", WriteSimple(directory, "still.avif", MagickFormat.Avif));
+        promised.Add("PNG", WritePngWithAlpha(directory, withheld));
+        promised.Add("JPEG", WriteJpeg(directory, withheld));
+        promised.Add("GIF", WriteAnimatedGif(directory, withheld));
+        promised.Add("BMP", WriteSimple(directory, "plain.bmp", MagickFormat.Bmp, withheld));
+        promised.Add("WebP", WriteSimple(directory, "still.webp", MagickFormat.WebP, withheld));
+        promised.Add("AVIF", WriteSimple(directory, "still.avif", MagickFormat.Avif, withheld));
 
         // Not promised, but part of the positive list of Part 11 step 13 - and cheap here.
-        WriteAnimatedWebP(directory);
-        WriteSimple(directory, "scan.tiff", MagickFormat.Tiff);
-        WriteSimple(directory, "layered.psd", MagickFormat.Psd);
+        WriteAnimatedWebP(directory, withheld);
+        WriteSimple(directory, "scan.tiff", MagickFormat.Tiff, withheld);
+        WriteSimple(directory, "layered.psd", MagickFormat.Psd, withheld);
         WritePanorama(directory);
         WriteJpegWithGpsExif(directory);
         var (portrait, mapToken) = WriteTokenImages(directory);
@@ -76,11 +76,18 @@ internal static class ImageFiles
             // take the opposite route and throw out of WriteSimple with their name.
             try
             {
+                if (withheld.Contains(name))
+                {
+                    // Withheld on the tolerated side has to be FOLLOWED BY NOTHING: reported, not
+                    // fatal. That asymmetry is the whole reason there are two ranks (Part 5).
+                    throw new InvalidOperationException("withheld: " + name);
+                }
+
                 using var image = Canvas(MagickColors.SteelBlue);
                 image.Write(path, format);
                 tolerated.Add(name, path);
             }
-            catch (MagickException)
+            catch (Exception ex) when (ex is MagickException or InvalidOperationException)
             {
                 skipped.Add(name);
             }
@@ -93,16 +100,18 @@ internal static class ImageFiles
     private static MagickImage Canvas(IMagickColor<byte> colour, uint width = Side, uint height = Side)
         => new(colour, width, height);
 
-    private static string WriteSimple(string directory, string fileName, MagickFormat format)
+    private static string WriteSimple(
+        string directory, string fileName, MagickFormat format, IReadOnlySet<string> withheld)
     {
         var path = Path.Combine(directory, fileName);
 
         try
         {
+            Withhold(format, withheld);
             using var image = Canvas(MagickColors.SteelBlue);
             image.Write(path, format);
         }
-        catch (MagickException ex)
+        catch (Exception ex) when (ex is MagickException or InvalidOperationException)
         {
             throw Missing(format, ex);
         }
@@ -111,18 +120,19 @@ internal static class ImageFiles
     }
 
     /// <summary>PNG carries the alpha channel that decides the output format (Part 5).</summary>
-    private static string WritePngWithAlpha(string directory)
+    private static string WritePngWithAlpha(string directory, IReadOnlySet<string> withheld)
     {
         var path = Path.Combine(directory, "alpha.png");
 
         try
         {
+            Withhold(MagickFormat.Png, withheld);
             using var image = Canvas(MagickColors.Transparent);
             using var opaque = Canvas(MagickColors.Firebrick, Side / 2, Side / 2);
             image.Composite(opaque, 16, 16, CompositeOperator.Over);
             image.Write(path, MagickFormat.Png);
         }
-        catch (MagickException ex)
+        catch (Exception ex) when (ex is MagickException or InvalidOperationException)
         {
             throw Missing(MagickFormat.Png, ex);
         }
@@ -130,16 +140,17 @@ internal static class ImageFiles
         return path;
     }
 
-    private static string WriteJpeg(string directory)
+    private static string WriteJpeg(string directory, IReadOnlySet<string> withheld)
     {
         var path = Path.Combine(directory, "photo.jpg");
 
         try
         {
+            Withhold(MagickFormat.Jpeg, withheld);
             using var image = Canvas(MagickColors.Goldenrod);
             image.Write(path, MagickFormat.Jpeg);
         }
-        catch (MagickException ex)
+        catch (Exception ex) when (ex is MagickException or InvalidOperationException)
         {
             throw Missing(MagickFormat.Jpeg, ex);
         }
@@ -151,16 +162,17 @@ internal static class ImageFiles
     /// Animated, with frame times - both belong to the promise, and a still GIF would prove
     /// neither (Part 11).
     /// </summary>
-    private static string WriteAnimatedGif(string directory)
+    private static string WriteAnimatedGif(string directory, IReadOnlySet<string> withheld)
     {
         var path = Path.Combine(directory, "animated.gif");
 
         try
         {
+            Withhold(MagickFormat.Gif, withheld);
             using var frames = Frames();
             frames.Write(path, MagickFormat.Gif);
         }
-        catch (MagickException ex)
+        catch (Exception ex) when (ex is MagickException or InvalidOperationException)
         {
             throw Missing(MagickFormat.Gif, ex);
         }
@@ -168,16 +180,17 @@ internal static class ImageFiles
         return path;
     }
 
-    private static void WriteAnimatedWebP(string directory)
+    private static void WriteAnimatedWebP(string directory, IReadOnlySet<string> withheld)
     {
         var path = Path.Combine(directory, "animated.webp");
 
         try
         {
+            Withhold(MagickFormat.WebP, withheld);
             using var frames = Frames();
             frames.Write(path, MagickFormat.WebP);
         }
-        catch (MagickException ex)
+        catch (Exception ex) when (ex is MagickException or InvalidOperationException)
         {
             throw Missing(MagickFormat.WebP, ex);
         }
@@ -254,7 +267,20 @@ internal static class ImageFiles
     /// promise green: the generator would leave WebP out, the parcours would stop checking WebP,
     /// everything would pass, and the README would go on promising it (Part 5, Part 10).
     /// </summary>
-    private static InvalidOperationException Missing(MagickFormat format, MagickException inner)
+    /// <summary>
+    /// The stand-in for a build that lost a coder. Thrown from inside the same try as the real
+    /// write, so the withheld case takes the SAME path as a genuine failure rather than a
+    /// short-cut past it.
+    /// </summary>
+    private static void Withhold(MagickFormat format, IReadOnlySet<string> withheld)
+    {
+        if (withheld.Contains(format.ToString()))
+        {
+            throw new InvalidOperationException("withheld: " + format);
+        }
+    }
+
+    private static InvalidOperationException Missing(MagickFormat format, Exception inner)
         => new(
             $"This Magick build cannot write {format}, which is a promised format "
             + $"({string.Join(", ", TestAssets.MandatoryFormats)}). Either the package goes back, "

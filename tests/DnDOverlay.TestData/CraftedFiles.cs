@@ -20,6 +20,11 @@ internal static class CraftedFiles
 
     private const uint ForgedSide = 60000;
 
+    /// <summary>
+    /// Above the default frame limit of 500, so the file is refused rather than merely large.
+    /// </summary>
+    internal const int ManyFrames = 600;
+
     internal static CraftedSet Write(string directory, string genuinePngPath)
     {
         var disguised = Path.Combine(directory, "disguised.png");
@@ -69,7 +74,10 @@ internal static class CraftedFiles
         var bomb = Path.Combine(directory, "small-bomb.png");
         File.WriteAllBytes(bomb, Bomb());
 
-        return new CraftedSet(disguised, svg, mislabelled, truncated, heic, forged, bomb);
+        var frames = Path.Combine(directory, "many-frames.gif");
+        File.WriteAllBytes(frames, ManyFrameGif());
+
+        return new CraftedSet(disguised, svg, mislabelled, truncated, heic, forged, bomb, frames);
     }
 
     /// <summary>
@@ -115,6 +123,45 @@ internal static class CraftedFiles
         WriteChunk(png, "IEND"u8, []);
 
         return png.ToArray();
+    }
+
+    /// <summary>
+    /// Six hundred frames of one pixel - the bomb in the FRAME dimension. It sits under every byte
+    /// and pixel limit and decodes like six hundred pictures, which is the case Part 5 names and
+    /// no size check can see.
+    /// <para>
+    /// Byte work, and measured rather than assumed: written through the encoder the same six
+    /// hundred frames cost <b>8.5 seconds on every single test run</b> - the stock went from 1.6 to
+    /// over 10 seconds. Assembled by hand it is fourteen kilobytes and instant. This is exactly the
+    /// reason Part 10 puts the bombs in the byte half: an encoder is the wrong tool for a file
+    /// whose point is its structure.
+    /// </para>
+    /// </summary>
+    private static byte[] ManyFrameGif()
+    {
+        var gif = new MemoryStream();
+
+        gif.Write("GIF89a"u8);
+
+        // Logical screen: 1x1, a global colour table of two entries.
+        gif.Write([1, 0, 1, 0, 0x80, 0, 0]);
+        gif.Write([0, 0, 0, 0xFF, 0xFF, 0xFF]);
+
+        for (var n = 0; n < ManyFrames; n++)
+        {
+            // Graphic control extension - this is what carries the frame time.
+            gif.Write([0x21, 0xF9, 0x04, 0x00, 0x02, 0x00, 0x00, 0x00]);
+
+            // Image descriptor at 0,0, size 1x1, no local colour table.
+            gif.Write([0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0x00]);
+
+            // The smallest possible LZW payload: clear, one pixel, end of information.
+            gif.Write([0x02, 0x02, 0x44, 0x01, 0x00]);
+        }
+
+        gif.WriteByte(0x3B);
+
+        return gif.ToArray();
     }
 
     private static byte[] Header(uint width, uint height, byte colourType)

@@ -95,6 +95,10 @@ public sealed record TokenSet(
 /// one breaks the real ones. A full-size bomb exists nowhere in the automated stock - building it
 /// would push some 3.6 GB through a deflate stream on every single <c>dotnet test</c>.
 /// </param>
+/// <param name="ManyFrames">
+/// Six hundred frames of one pixel - the bomb in the FRAME dimension, which sits under every byte
+/// and pixel limit and decodes like six hundred pictures (Part 5).
+/// </param>
 public sealed record CraftedSet(
     string ScriptDisguisedAsPng,
     string SvgWithExternalReference,
@@ -102,4 +106,5 @@ public sealed record CraftedSet(
     string Truncated,
     string HeicStub,
     string ForgedHeaderBomb,
-    string SmallBomb);
+    string SmallBomb,
+    string ManyFrames);

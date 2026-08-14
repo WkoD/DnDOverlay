@@ -68,6 +68,13 @@ public sealed partial class App : Application, IDisposable
     private AssetClient _assets = null!;
     private Uri _hubHttp = null!;
     private string _assetPath = Protocol.AssetPath;
+
+    /// <summary>
+    /// The token of the running session, decrypted, for the asset fetches - the stock has been
+    /// behind it since M2 (Part 4). Held rather than read per call, because reading means DPAPI
+    /// and that is not a thing to do per image; dropped when the pairing is reset.
+    /// </summary>
+    private string? _sessionToken;
     private DeviceId _device;
     private string _deviceName = string.Empty;
     private bool _windowed;
@@ -766,6 +773,11 @@ public sealed partial class App : Application, IDisposable
             token = stored;
         }
 
+        // Kept for the asset fetches. The Welcome may hand out a fresh one right after this, and
+        // the handler below replaces it - the picture path and the socket must never disagree
+        // about which token is current.
+        _sessionToken = token;
+
         return new HelloMessage(
             _device,
             deviceName,
@@ -850,6 +862,11 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
+        // The asset fetches use it too, and they start as soon as the first scene arrives - which
+        // is right after this. Setting it only on the next start-up would leave a freshly paired
+        // device fetching with the token it no longer has (Part 4).
+        _sessionToken = welcome.Token;
+
         _settings = _settings with
         {
             ControlId = welcome.ControlId,
@@ -932,7 +949,7 @@ public sealed partial class App : Application, IDisposable
             try
             {
                 var bytes = await _assets
-                    .GetAsync(_hubHttp, _assetPath, item.AssetId, _shutdown.Token)
+                    .GetAsync(_hubHttp, _assetPath, item.AssetId, _sessionToken!, _shutdown.Token)
                     .ConfigureAwait(false);
 
                 var decoded = Decode(bytes);

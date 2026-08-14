@@ -122,13 +122,18 @@ public sealed class TokenContainer(TokenLimits? limits = null)
                 ImageRejection.Unreadable, "This file is not a readable archive.", ex);
         }
 
-        if (archive.Entries.Count > _limits.MaxEntries)
+        // Read BEFORE disposing. Asking a disposed archive for its count throws, and the message
+        // that names the number is exactly what the refusal is for - so the tidy-looking order
+        // would have replaced a stated reason with an ObjectDisposedException.
+        var entries = archive.Entries.Count;
+
+        if (entries > _limits.MaxEntries)
         {
             archive.Dispose();
 
             throw Refuse(
-                $"This archive holds {archive.Entries.Count} entries, which is beyond anything a token "
-                + $"has (limit {_limits.MaxEntries}).");
+                $"This archive holds {entries} entries, which is beyond anything a token has "
+                + $"(limit {_limits.MaxEntries}).");
         }
 
         return archive;

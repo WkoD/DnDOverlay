@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net.Http.Headers;
 using DnDOverlay.Core;
 
 namespace DnDOverlay.Transport;
@@ -25,17 +27,61 @@ public sealed class AssetClient
 
     public AssetClient(HttpClient http) => _http = http;
 
-    /// <summary>Downloads one asset. Throws when it is not there - the caller decides what that costs.</summary>
-    public async Task<byte[]> GetAsync(
+    /// <summary>
+    /// Downloads one asset. Throws when it is not there - the caller decides what that costs.
+    /// </summary>
+    /// <param name="token">
+    /// The device's token, and it is REQUIRED: since M2 the stock is behind it, or anyone on the
+    /// network who could guess a hash would read the open campaign (Part 4).
+    /// <para>
+    /// It travels with the call rather than sitting on the client, for the same reason the address
+    /// does: both belong to the live connection. A token parked on a shared <c>HttpClient</c>
+    /// would also go out to every other host that client ever talks to.
+    /// </para>
+    /// <para>
+    /// In the header, never in the query - a query parameter lands in access logs, proxy caches
+    /// and browser history, and this one is the whole of the device's identity.
+    /// </para>
+    /// </param>
+    public Task<byte[]> GetAsync(
         Uri hubBaseAddress,
         string assetPath,
         AssetId id,
-        CancellationToken cancellationToken = default)
+        string token,
+        CancellationToken cancellationToken = default) =>
+        FetchAsync(hubBaseAddress, $"{assetPath.TrimEnd('/')}/{id.Value}", token, cancellationToken);
+
+    /// <summary>
+    /// Downloads the thumbnail, which is what lets a picture stand at its place within a second
+    /// while the full one is still coming (Part 5, Part 10). The width is a wish - what comes back
+    /// is the step the stock holds.
+    /// </summary>
+    public Task<byte[]> GetThumbnailAsync(
+        Uri hubBaseAddress,
+        string assetPath,
+        AssetId id,
+        int width,
+        string token,
+        CancellationToken cancellationToken = default) =>
+        FetchAsync(
+            hubBaseAddress,
+            string.Create(
+                CultureInfo.InvariantCulture, $"{assetPath.TrimEnd('/')}/{id.Value}/thumb?w={width}"),
+            token,
+            cancellationToken);
+
+    private async Task<byte[]> FetchAsync(
+        Uri hubBaseAddress, string path, string token, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(hubBaseAddress);
+        ArgumentException.ThrowIfNullOrEmpty(token);
 
-        var address = new Uri(hubBaseAddress, $"{assetPath.TrimEnd('/')}/{id.Value}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(hubBaseAddress, path));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        return await _http.GetByteArrayAsync(address, cancellationToken).ConfigureAwait(false);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
     }
 }

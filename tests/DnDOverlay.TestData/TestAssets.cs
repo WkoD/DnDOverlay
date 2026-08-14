@@ -33,7 +33,13 @@ public static class TestAssets
     /// <exception cref="InvalidOperationException">
     /// A mandatory format could not be written, or the coder policy is not in force.
     /// </exception>
-    public static TestAssetSet Build(string directory)
+    /// <param name="withheld">
+    /// Format names this run must pretend it cannot write - the stand-in for a library update that
+    /// drops one. It is a capability of the GENERATOR because the check that needs it has no other
+    /// way in: "the promise cannot shrink silently" is only testable if a format can be taken away
+    /// (Part 5, Part 10).
+    /// </param>
+    public static TestAssetSet Build(string directory, IReadOnlySet<string>? withheld = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
@@ -44,7 +50,7 @@ public static class TestAssets
 
         Directory.CreateDirectory(directory);
 
-        var images = ImageFiles.Write(directory);
+        var images = ImageFiles.Write(directory, withheld ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
         // The crafted half borrows one genuine PNG: the file with the lying extension has to be a
         // real image, and the truncated one has to be a real image cut in half.

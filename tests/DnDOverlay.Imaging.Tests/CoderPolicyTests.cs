@@ -53,12 +53,15 @@ public sealed class CoderPolicyTests(TestDataFixture fixture)
     /// force. So a refusal here can only come from our list.
     /// </para>
     /// </summary>
-    [Fact]
-    public void ACoderLeftOffTheListIsRefused()
+    [Theory]
+    [InlineData(MagickFormat.Ps)]
+    [InlineData(MagickFormat.Pdf)]
+    [InlineData(MagickFormat.Eps)]
+    public void ACoderLeftOffTheListIsRefused(MagickFormat format)
     {
         using var image = new MagickImage(_assets.Promised["PNG"]);
 
-        Assert.Throws<MagickPolicyErrorException>(() => image.ToByteArray(MagickFormat.Ps));
+        Assert.Throws<MagickPolicyErrorException>(() => image.ToByteArray(format));
     }
 
     /// <summary>
