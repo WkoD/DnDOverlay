@@ -19,4 +19,16 @@
     <PackageReference Include="Magick.NET-Q8-AnyCPU" />
   </ItemGroup>
 
+  <!-- The ONE thing it takes from src/: the coder policy, which the fixture has to apply before
+       the first generated file (Part 5). The policy is process-wide ImageMagick state, not our
+       codec - "not through Imaging" above is said about WRITING formats, and that is unchanged:
+       every image below is written straight through Magick.NET.
+
+       Keeping the policy here instead would be a second copy of the one decision that must not
+       have one; handing it in per test project would turn the guarantee into a wiring convention
+       that fails silently when somebody forgets it. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DnDOverlay.Imaging\DnDOverlay.Imaging.csproj" />
+  </ItemGroup>
+
 </Project>
