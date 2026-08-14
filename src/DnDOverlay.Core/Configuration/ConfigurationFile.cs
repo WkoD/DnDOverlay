@@ -201,22 +201,9 @@ public sealed class ConfigurationFile<T> : IDisposable, IAsyncDisposable
         var value = _pending;
         _pending = null;
 
-        var directory = System.IO.Path.GetDirectoryName(Path);
-
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        // Write beside it, then replace. File.Move maps onto a single rename call of the
-        // operating system and is atomic everywhere; File.Replace is built around Windows
-        // semantics, carries a backup copy and does not give the same guarantee elsewhere.
-        // Pinned here because "atomic" is otherwise a word every call site redeems its own way,
-        // and the difference would never show on a development machine (Part 6).
-        var temporary = Path + ".tmp";
-
-        File.WriteAllBytes(temporary, JsonSerializer.SerializeToUtf8Bytes(value, _typeInfo));
-        File.Move(temporary, Path, overwrite: true);
+        // The rule itself lives in AtomicFile, once for the whole program - the stock writes
+        // image files the same way, and two redemptions of the word "atomic" would drift.
+        AtomicFile.Write(Path, JsonSerializer.SerializeToUtf8Bytes(value, _typeInfo));
     }
 
     /// <summary>
