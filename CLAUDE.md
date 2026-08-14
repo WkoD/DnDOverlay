@@ -46,6 +46,13 @@ Loaded into every session. Keep it short — it is the entry point, not the docu
 4. Overwrite the snapshot under `.claude/plans/` from `plan/`; it is the only backup, because
    `plan/` is git-ignored.
 
+## Working directory
+
+This repository is an **additional** working directory, not the primary one. A shell's directory
+can end up back at the primary one between calls — a relative path then fails with "project file
+does not exist", which reads like a missing file rather than a wrong directory. Prefer absolute
+paths, or set the directory in the same call that uses it.
+
 ## Committing
 
 **Write the message to a file and use `git commit -F <file>`.** Not `-m` with a multi-line string.

@@ -16,6 +16,13 @@ same machine by itself.
 - VS Code with the recommended extensions (see `.vscode/extensions.json`); no Visual Studio
   and no Windows SDK are required
 
+**Check the feature band, not just the major version.** `global.json` rolls forward over patches
+only, so an SDK from a *later* feature band does not satisfy it — `winget` installs the newest,
+and on a machine set up months after this was written that can be the wrong one. The build then
+fails with "compatible SDK not found", which reads like a broken project rather than a missing
+install. Run `dotnet --list-sdks`, compare the middle number with `global.json`, and install the
+exact version if it differs (`winget install Microsoft.DotNet.SDK.10 --version <version>`).
+
 ## The three commands
 
 ```
