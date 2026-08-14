@@ -199,13 +199,19 @@ internal static partial class HubLog
     internal static partial void BeaconStarted(ILogger logger, int port);
 
     /// <summary>
-    /// Where the beacon goes, written only when it changes. Debug, because it repeats every two
-    /// seconds and is worth reading at exactly two moments: at startup, and when the machine's
-    /// addresses move (Part 4).
+    /// Where the beacon goes, written only when it changes.
+    /// <para>
+    /// <b>Information, not Debug</b> - and the reason is the change filter itself. Debug was the
+    /// first answer, on the grounds that the beacon repeats every two seconds; but once the line
+    /// is written only when the set of addresses moves, it cannot repeat at all, and it shares
+    /// that property with 1038 and 1039, which are Information for exactly the same reason. It
+    /// also has to be: the control gates its own file at Information and has no setting to lower
+    /// it, so a Debug line here would be one nobody could ever read (Part 8).
+    /// </para>
     /// </summary>
     [LoggerMessage(
         EventId = 1050,
-        Level = LogLevel.Debug,
+        Level = LogLevel.Information,
         Message = "Beacon now goes out over {Count} address(es): {Targets}.")]
     internal static partial void BeaconTargetsChanged(ILogger logger, int count, string targets);
 

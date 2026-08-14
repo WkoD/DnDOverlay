@@ -110,6 +110,10 @@ public sealed class DiscoveryBeacon : BackgroundService
     /// docking, Wi-Fi going on or off, a VPN coming up. The first round counts as one, so the list
     /// stands once at startup.
     /// </para>
+    /// <para>
+    /// That filter is also what makes the line <b>Information</b> rather than Debug: what would
+    /// have justified Debug is a repetition that cannot happen any more (Part 8).
+    /// </para>
     /// </summary>
     private void Note(List<(IPAddress From, IPAddress To)> targets)
     {

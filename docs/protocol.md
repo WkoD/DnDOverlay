@@ -551,7 +551,7 @@ the same application that draws.
 | 1047 | `LogRateExceeded` | Warning | hub |
 | 1048 | `UnknownControlHeard` | Information | transport |
 | 1049 | `ConnectionLoopFailed` | Error | display |
-| 1050 | `BeaconTargetsChanged` | Debug | hub |
+| 1050 | `BeaconTargetsChanged` | Information | hub |
 
 **1049 is the line that exists because its absence was the fault.** The loop that looks for a
 control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
@@ -563,8 +563,14 @@ interface, not the first" was, until a hand run asked for it, an assertion with 
 the start line says the beacon runs, the failure line says one interface would not carry it, and
 silence says at least one did — none of them says *where it went*. It is written only when the set
 of targets changes, so it stands once at startup and then exactly at the interesting moments: a
-dock, Wi-Fi going on or off, a VPN coming up. Debug, because the beacon repeats every two seconds
-and a line per round would bury the file it is meant to explain.
+dock, Wi-Fi going on or off, a VPN coming up.
+
+**It is Information, and that took a second look.** Debug was the obvious answer — the beacon
+repeats every two seconds, and a line per round would bury the file it is meant to explain. But
+the change filter has already taken the repetition away, which is the same ground on which 1038
+and 1039 are Information. And it has to be: **the control gates its own file at Information and
+has no setting to lower it**, so a Debug line in the hub is one that can never be read. Measured
+the hard way — the first cut was Debug, and the line simply was not there.
 
 **Next free: 1051.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
