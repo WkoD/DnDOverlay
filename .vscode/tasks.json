@@ -9,6 +9,24 @@
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": "$msCompile"
     },
+    // One project each, and that is what the two visible launch entries use. Building the whole
+    // solution to start ONE of the two applications is what broke: the other one is running, its
+    // output folder cannot be written, and the task fails - so the application that was perfectly
+    // buildable never starts. A project build only ever writes into its own output.
+    {
+      "label": "build control",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["build", "src/DnDOverlay.Control/DnDOverlay.Control.csproj"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build display",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["build", "src/DnDOverlay.Display/DnDOverlay.Display.csproj"],
+      "problemMatcher": "$msCompile"
+    },
     {
       "label": "test",
       "type": "shell",

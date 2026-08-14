@@ -16,13 +16,25 @@
   // second one, it brings the running window to the front.
   //
   // THE COMPOUND BUILDS ONCE, AND THAT IS ALL THE FOUR ENTRIES BELOW ARE FOR.
-  // A preLaunchTask on both members runs "build" twice per F5. That is tidiness, not a fix:
-  // measured, the second run is harmless - an incremental build with nothing to do takes about a
-  // second and rewrites no output file, so it never meets a file the first process is holding.
-  // The compound therefore builds once, up front, and launches two configurations that build
-  // nothing themselves; those two are hidden from the dropdown. The visible Control and Display
-  // keep their own preLaunchTask, because in the two-machine run each machine carries only one
-  // role (M1c).
+  // A preLaunchTask on both members would run the build twice per F5. The compound therefore
+  // builds the whole solution once, up front, and launches two configurations that build nothing
+  // themselves; those two are hidden from the dropdown. It may build the solution because it also
+  // STOPS both - nothing of ours is running while it builds.
+  //
+  // THE TWO VISIBLE ENTRIES BUILD THEIR OWN PROJECT, NOT THE SOLUTION, AND THAT IS A FIX.
+  // They used to build the solution too, on the measured grounds that an incremental build with
+  // nothing to do rewrites no output file and so never meets a file the running process holds.
+  // That assumption is true only while the other application's output folder is IN SYNC - and it
+  // is self-perpetuating once it is not: starting the Display built the Control as well, the copy
+  // into the Control's output could not happen because the Control was running, the task ended
+  // with exit code 1, and VS Code refused to start a Display that had just built perfectly well.
+  // The way out was to stop the Control and build once - which is the opposite of what the entry
+  // is for. Measured on the second machine in M1c; on the first the folder happened to be in sync
+  // and it never showed.
+  //
+  // A project build only ever writes into its own output, so the two can no longer collide. What
+  // it costs is that starting one application no longer compiles the other - which is right: the
+  // other one is not being restarted either.
   //
   // THE COMPOUND STOPS BOTH - "stopAll": true, and it stays that way. It cost two false findings
   // in one evening: a hand run where the display "was not running any more", and a control that
@@ -41,7 +53,7 @@
       "name": "Control",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build",
+      "preLaunchTask": "build control",
       "program": "${workspaceFolder}/src/DnDOverlay.Control/bin/Debug/net10.0-windows/DnDOverlay.Control.exe",
       "args": ["--data", "dev-data"],
       "cwd": "${workspaceFolder}",
@@ -52,7 +64,7 @@
       "name": "Display",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build",
+      "preLaunchTask": "build display",
       "program": "${workspaceFolder}/src/DnDOverlay.Display/bin/Debug/net10.0-windows/DnDOverlay.Display.exe",
       "args": ["--data", "dev-data"],
       "cwd": "${workspaceFolder}",
