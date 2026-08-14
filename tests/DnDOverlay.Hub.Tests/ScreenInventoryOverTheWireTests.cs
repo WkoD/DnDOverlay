@@ -193,16 +193,24 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
 
         await ReceiveAsync<WelcomeMessage>(socket, cancellationToken);
 
-        var session = _app.Services.GetRequiredService<ISessionApi>();
-        var scene = await session.GetSceneAsync(target, cancellationToken);
-
-        Assert.Equal(item, Assert.Single(scene.Items));
-
-        // And the snapshot the hub sends back is that same scene - taken over, then put through.
+        // The SNAPSHOT is the barrier here, not the Welcome, and that is the whole point of this
+        // ordering: the hub answers the Hello before it takes the scene over, so a question asked
+        // between the two can legitimately find nothing. The snapshot goes out afterwards, which
+        // makes it the first moment at which there is an answer to have.
+        //
+        // Found on a loaded Linux runner, where it failed while Windows had passed it for weeks -
+        // on nothing but the order in which two continuations happened to be scheduled. A test
+        // that waits for the wrong message is green by luck, which is worse than red.
         var snapshot = await ReceiveAsync<SceneSnapshotMessage>(socket, cancellationToken);
 
         Assert.Equal(target, snapshot.Screen);
         Assert.Equal(item, Assert.Single(snapshot.Scene.Items));
+
+        // And the hub holds what it sent - taken over, not merely echoed.
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+        var scene = await session.GetSceneAsync(target, cancellationToken);
+
+        Assert.Equal(item, Assert.Single(scene.Items));
     }
 
     /// <summary>
