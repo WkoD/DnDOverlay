@@ -69,7 +69,7 @@ public sealed class DecodeLimitTests(TestDataFixture fixture)
             ResourceLimits.Disk = 0;
 
             var rejected = Assert.Throws<ImageRejectedException>(
-                () => codec.Normalise(File.ReadAllBytes(_assets.Crafted.SmallBomb)));
+                () => codec.Normalise(File.ReadAllBytes(_assets.Crafted.DecodedBomb)));
 
             Assert.Equal(ImageRejection.Aborted, rejected.Reason);
         }
@@ -97,9 +97,47 @@ public sealed class DecodeLimitTests(TestDataFixture fixture)
             ResourceLimits.Area = 64 * 64;
             ResourceLimits.Memory = 1024 * 1024;
 
+            var result = codec.Normalise(File.ReadAllBytes(_assets.Crafted.DecodedBomb));
+
+            Assert.Equal(2000, result.PixelWidth);
+        }
+        finally
+        {
+            (ResourceLimits.Area, ResourceLimits.Memory, ResourceLimits.Disk) = (area, memory, disk);
+        }
+    }
+
+    /// <summary>
+    /// <b>The hole the PNG pass-through opens, written down so that it cannot be forgotten.</b>
+    /// Since M2b a still PNG travels on unchanged - the re-encode cost 11.6 s on a real 24 MB
+    /// picture - and the consequence is that <b>the second net never sees a PNG</b>: there is no
+    /// decode on this side to be stopped. The very same bomb that the limits stop in a decoded
+    /// format goes straight through as a PNG, with the limits set as small as they will go.
+    /// <para>
+    /// It is not a gap in the guard, and that is the whole reason it is acceptable: PNG says its
+    /// size in <c>IHDR</c> and cannot decode to any other, so the FIRST net - which reads exactly
+    /// that header - is sufficient for size. What is genuinely given up is the decode as an
+    /// acceptance test: a PNG whose pixel data is broken is now discovered at the table rather than
+    /// at the control (Part 5, hand-run of M2b).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void APngNeverReachesTheSecondNetAtAll()
+    {
+        var (area, memory, disk) = (ResourceLimits.Area, ResourceLimits.Memory, ResourceLimits.Disk);
+
+        try
+        {
+            var codec = new MagickCodec();
+
+            ResourceLimits.Area = 64 * 64;
+            ResourceLimits.Memory = 1024 * 1024;
+            ResourceLimits.Disk = 0;
+
             var result = codec.Normalise(File.ReadAllBytes(_assets.Crafted.SmallBomb));
 
             Assert.Equal(2000, result.PixelWidth);
+            Assert.Equal("png", result.Format);
         }
         finally
         {

@@ -62,6 +62,8 @@ internal static class ImageFiles
         WriteSimple(directory, "layered.psd", MagickFormat.Psd, withheld);
         WritePanorama(directory);
         WriteJpegWithGpsExif(directory);
+        WritePngWithGpsAndText(directory);
+        WritePngWithQuirks(directory);
         var (portrait, mapToken) = WriteTokenImages(directory);
 
         var tolerated = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
@@ -236,6 +238,56 @@ internal static class ImageFiles
         image.SetProfile(exif);
 
         image.Write(Path.Combine(directory, "gps.jpg"), MagickFormat.Jpeg);
+    }
+
+    /// <summary>
+    /// The PNG counter-part of <c>gps.jpg</c>, and it exists because the PNG path stopped
+    /// re-encoding: a picture that travels on unchanged carries whatever was written into it, so
+    /// the byte-wise strip is now the ONLY thing between a holiday photo's coordinates and the
+    /// table (Part 5, Part 11 step 13).
+    /// <para>
+    /// It carries all three shapes the format has for text - EXIF in <c>eXIf</c>, a plain
+    /// <c>tEXt</c> comment and the writing software - because they are separate chunks and a strip
+    /// that caught only one would look right.
+    /// </para>
+    /// </summary>
+    private static void WritePngWithGpsAndText(string directory)
+    {
+        using var image = Canvas(MagickColors.RebeccaPurple);
+
+        var exif = new ExifProfile();
+        exif.SetValue(ExifTag.GPSLatitudeRef, "N");
+        exif.SetValue(ExifTag.GPSLatitude, [new Rational(52), new Rational(31), new Rational(12)]);
+        exif.SetValue(ExifTag.GPSLongitudeRef, "E");
+        exif.SetValue(ExifTag.GPSLongitude, [new Rational(13), new Rational(24), new Rational(36)]);
+        image.SetProfile(exif);
+
+        image.SetAttribute("Comment", "taken at home, 52.52 13.41");
+        image.SetAttribute("Software", "a camera nobody should learn about");
+
+        image.Write(Path.Combine(directory, "gps.png"), MagickFormat.Png);
+    }
+
+    /// <summary>
+    /// A PNG with the properties the re-encode used to flatten: <b>16 bits per channel</b>,
+    /// <b>interlaced</b> and carrying an alpha channel. Passing PNGs through means the display's
+    /// decoder now sees them as they were written, and this is the file that says whether it can.
+    /// <para>
+    /// It is the widening of the codec-to-WIC seam written down as a file - the seam that had
+    /// already caught one thing this project believed and had not measured.
+    /// </para>
+    /// </summary>
+    private static void WritePngWithQuirks(string directory)
+    {
+        using var image = Canvas(MagickColors.Transparent);
+        using var opaque = Canvas(MagickColors.Goldenrod, Side / 2, Side / 2);
+
+        image.Composite(opaque, 8, 8, CompositeOperator.Over);
+
+        image.Depth = 16;
+        image.Settings.Interlace = Interlace.Png;
+
+        image.Write(Path.Combine(directory, "quirky.png"), MagickFormat.Png);
     }
 
     /// <summary>

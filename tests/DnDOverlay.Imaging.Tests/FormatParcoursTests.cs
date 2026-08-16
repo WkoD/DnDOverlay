@@ -99,6 +99,104 @@ public sealed class FormatParcoursTests(TestDataFixture fixture)
     }
 
     /// <summary>
+    /// PNG stays PNG and is NOT re-encoded either, and this is the assertion that pays for it. The
+    /// change was made for TIME - a 24 MB PNG cost 11.6 s to decode and re-encode, measured with the
+    /// real files at a hand run of M2b - and the price of that speed is that the source bytes
+    /// travel on, so the byte-wise strip is now the only thing between a photograph's coordinates
+    /// and the table.
+    /// <para>
+    /// All three shapes of text are asserted separately, because they are separate chunks: EXIF in
+    /// <c>eXIf</c>, a comment in <c>tEXt</c> and the writing software beside it. A strip that
+    /// caught only one of them would look right.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void APngKeepsItsPixelsAndLosesItsGpsTrail()
+    {
+        var source = File.ReadAllBytes(Path.Combine(_assets.Directory, "gps.png"));
+
+        Assert.True(HasChunk(source, "eXIf"), "the generated file carries no EXIF to begin with");
+        Assert.True(HasChunk(source, "tEXt"), "the generated file carries no text chunk to begin with");
+
+        var result = _codec.Normalise(source);
+
+        Assert.Equal("png", result.Format);
+        Assert.False(HasChunk(result.Bytes, "eXIf"), "the EXIF chunk survived");
+        Assert.False(HasChunk(result.Bytes, "tEXt"), "the text chunk survived");
+        Assert.False(HasChunk(result.Bytes, "tIME"), "the timestamp survived");
+
+        // The picture itself is untouched, and this is the half that says "not re-encoded": the
+        // compressed image data is identical, byte for byte. A re-encode produces different IDAT
+        // bytes even at identical pixels, so this fails the moment the pass-through is lost.
+        Assert.Equal(Chunk(source, "IDAT"), Chunk(result.Bytes, "IDAT"));
+
+        // And the ones that decide how it LOOKS are still there. Stripping everything blindly would
+        // be the tidier line of code and would quietly damage pictures.
+        Assert.True(HasChunk(result.Bytes, "IHDR"));
+        Assert.True(HasChunk(result.Bytes, "IEND"));
+    }
+
+    /// <summary>
+    /// The properties the re-encode used to flatten now reach the display's decoder as they were
+    /// written: 16 bits per channel, interlaced, with an alpha channel. This is the codec-to-WIC
+    /// seam getting WIDER, which is the cost of the pass-through - and the seam is where this
+    /// project has already been wrong once.
+    /// <para>
+    /// Here only our own half is asserted - that the file comes through unchanged and still reads
+    /// as a PNG of the right size. Whether WIC can decode it is the other half and belongs where
+    /// WIC is, in the rendering tests.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void An_unusual_png_travels_on_as_it_was_written()
+    {
+        var source = File.ReadAllBytes(Path.Combine(_assets.Directory, "quirky.png"));
+
+        var result = _codec.Normalise(source);
+
+        Assert.Equal("png", result.Format);
+        Assert.Equal(Chunk(source, "IDAT"), Chunk(result.Bytes, "IDAT"));
+
+        var probe = _codec.Probe(result.Bytes);
+
+        Assert.Equal(1, probe.Frames);
+        Assert.Equal("PNG", probe.Format);
+    }
+
+    /// <summary>Whether a PNG carries a chunk of this type at all.</summary>
+    private static bool HasChunk(ReadOnlySpan<byte> png, string type) => Walk(png, type) is not null;
+
+    /// <summary>The data of the FIRST chunk of that type, for comparing one file against another.</summary>
+    private static byte[] Chunk(ReadOnlySpan<byte> png, string type) =>
+        Walk(png, type) ?? throw new InvalidOperationException($"no {type} chunk");
+
+    private static byte[]? Walk(ReadOnlySpan<byte> png, string wanted)
+    {
+        var position = 8;
+
+        while (position + 12 <= png.Length)
+        {
+            var length = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(png.Slice(position, 4));
+
+            if (position + 12L + length > png.Length)
+            {
+                return null;
+            }
+
+            var type = System.Text.Encoding.ASCII.GetString(png.Slice(position + 4, 4));
+
+            if (type.Equals(wanted, StringComparison.Ordinal))
+            {
+                return png.Slice(position + 8, (int)length).ToArray();
+            }
+
+            position += 12 + (int)length;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The tolerated outcome, on its own. It is taken in like any other and reported as not
     /// assured - and what is in the stock afterwards is PNG, so the format never reaches a device.
     /// </summary>

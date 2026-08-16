@@ -123,6 +123,24 @@ public sealed class MagickCodec : IImageCodec
                     stripped, "jpg", probe.PixelWidth, probe.PixelHeight, false, probe.Format, standing);
             }
 
+            // PNG stays PNG the same way, and the reason is TIME rather than quality. Measured with
+            // the real files (hand-run of M2b): a 24 MB PNG at 4616×6000 cost 11.6 s to decode and
+            // re-encode, and came out LARGER than the source. The DM waited those seconds before
+            // the picture existed at all.
+            //
+            // Nothing about the output contract moves: PNG is already one of the two formats that
+            // leave here, so this changes whether we re-encode and not what we produce (Part 5).
+            // What it does change is that odd-but-valid PNGs - 16 bit, interlaced, palette with
+            // transparency - now reach the display's decoder as they were written instead of
+            // flattened, which is why the codec-to-WIC seam test carries them.
+            if (IsStillPng(source.Span, probe))
+            {
+                var stripped = PngChunks.StripMetadata(source.Span);
+
+                return new NormalisedImage(
+                    stripped, "png", probe.PixelWidth, probe.PixelHeight, false, probe.Format, standing);
+            }
+
             return IsMoving(probe)
                 ? Moving(source, probe, standing)
                 : Still(source, probe, standing);
@@ -261,6 +279,20 @@ public sealed class MagickCodec : IImageCodec
 
     private static bool IsMoving(ImageProbe probe) =>
         probe.Frames > 1 && AnimationFormats.Contains(probe.Format);
+
+    /// <summary>
+    /// A PNG that does not move, and therefore one whose bytes can travel on unchanged.
+    /// <para>
+    /// The single-frame condition is what keeps an APNG out. More than one frame takes the moving
+    /// path and becomes GIF; should a build ever report an animated PNG as plain <c>PNG</c> with
+    /// several frames, it falls to the still path below and is FLATTENED, which is what happens
+    /// today. Passing it through half-stripped would be the worse of the two.
+    /// </para>
+    /// </summary>
+    private static bool IsStillPng(ReadOnlySpan<byte> source, ImageProbe probe) =>
+        probe.Frames == 1
+        && probe.Format.Equals("PNG", StringComparison.OrdinalIgnoreCase)
+        && PngChunks.LooksLikePng(source);
 
     private static bool IsJpegWithoutTransparency(ReadOnlySpan<byte> source, ImageProbe probe) =>
         probe.Frames == 1

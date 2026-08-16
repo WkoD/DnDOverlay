@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
+using ImageMagick;
 
 namespace DnDOverlay.TestData;
 
@@ -74,10 +75,21 @@ internal static class CraftedFiles
         var bomb = Path.Combine(directory, "small-bomb.png");
         File.WriteAllBytes(bomb, Bomb());
 
+        // The same bomb in a format that is DECODED on the way in. Since M2b the PNG path hands
+        // its bytes through untouched, so a PNG never reaches the decode limits at all - and a
+        // test that still used one would be measuring nothing while looking exactly as green
+        // (Guide C9). Written through the encoder rather than by hand because the point here is
+        // the decode, not the structure: a uniform 2000x2000 area is a few hundred bytes as GIF.
+        var decoded = Path.Combine(directory, "small-bomb.gif");
+        using (var image = new MagickImage(Bomb()))
+        {
+            image.Write(decoded, MagickFormat.Gif);
+        }
+
         var frames = Path.Combine(directory, "many-frames.gif");
         File.WriteAllBytes(frames, ManyFrameGif());
 
-        return new CraftedSet(disguised, svg, mislabelled, truncated, heic, forged, bomb, frames);
+        return new CraftedSet(disguised, svg, mislabelled, truncated, heic, forged, bomb, decoded, frames);
     }
 
     /// <summary>

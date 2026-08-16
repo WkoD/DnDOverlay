@@ -31,6 +31,8 @@ public sealed class CodecToWicSeamTests(TestDataFixture fixture)
     /// </summary>
     [Theory]
     [InlineData("alpha.png")]
+    [InlineData("gps.png")]
+    [InlineData("quirky.png")]
     [InlineData("plain.bmp")]
     [InlineData("still.webp")]
     [InlineData("still.avif")]
@@ -47,6 +49,39 @@ public sealed class CodecToWicSeamTests(TestDataFixture fixture)
 
         // The size is the assertion, not the absence of an exception: both sides have to be
         // talking about the same picture.
+        Assert.Equal(normalised.PixelWidth, decoded.PixelWidth);
+        Assert.Equal(normalised.PixelHeight, decoded.PixelHeight);
+    }
+
+    /// <summary>
+    /// The passed-through PNG, and it is the newer half of the same trade. Since M2b a still PNG is
+    /// not re-encoded either - the re-encode cost <b>11.6 s</b> on a real 24 MB picture, measured at
+    /// the table - so what leaves the codec is the original file with chunks cut out of it by our
+    /// own byte surgery.
+    /// <para>
+    /// <b>This is the seam getting wider, and that is the cost of the change.</b> Until now every
+    /// PNG reaching a display had been through Magick's encoder and came out plain: eight bits a
+    /// channel, not interlaced. <c>quirky.png</c> is neither - it is 16 bit, interlaced and carries
+    /// an alpha channel - and it now reaches WIC exactly as it was written. The assertion is the
+    /// SIZE rather than the absence of an exception, because a decoder that quietly produced one
+    /// pixel would pass that.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_passed_through_png_is_read_by_the_display_as_it_was_written()
+    {
+        var source = File.ReadAllBytes(Path.Combine(_assets.Directory, "quirky.png"));
+        var normalised = _codec.Normalise(source);
+
+        // The pass-through itself, asserted here too: this test is worthless if the codec quietly
+        // went back to re-encoding, and then it would be green for a reason that has nothing to do
+        // with WIC.
+        Assert.True(
+            normalised.Bytes.Length < source.Length,
+            "nothing was stripped - the picture may have been re-encoded instead of passed through");
+
+        var decoded = PictureDecoder.Decode(normalised.Bytes);
+
         Assert.Equal(normalised.PixelWidth, decoded.PixelWidth);
         Assert.Equal(normalised.PixelHeight, decoded.PixelHeight);
     }

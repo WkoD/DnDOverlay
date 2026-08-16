@@ -95,6 +95,12 @@ public sealed record TokenSet(
 /// one breaks the real ones. A full-size bomb exists nowhere in the automated stock - building it
 /// would push some 3.6 GB through a deflate stream on every single <c>dotnet test</c>.
 /// </param>
+/// <param name="DecodedBomb">
+/// The same bomb in a format that is DECODED on the way in. Since M2b the PNG path hands its bytes
+/// through untouched (the re-encode cost 11.6 s on a real 24 MB picture), so <see cref="SmallBomb"/>
+/// never reaches the decode limits at all - and a test that still used one for them would measure
+/// nothing while looking exactly as green.
+/// </param>
 /// <param name="ManyFrames">
 /// Six hundred frames of one pixel - the bomb in the FRAME dimension, which sits under every byte
 /// and pixel limit and decodes like six hundred pictures (Part 5).
@@ -107,4 +113,5 @@ public sealed record CraftedSet(
     string HeicStub,
     string ForgedHeaderBomb,
     string SmallBomb,
+    string DecodedBomb,
     string ManyFrames);
