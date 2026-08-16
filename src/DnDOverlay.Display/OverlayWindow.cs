@@ -422,7 +422,12 @@ internal sealed class OverlayWindow : Window
         // let its stream go.
         var canMove = admitted && bytes is not null;
 
-        var action = PictureTransition.Next(mount.State, mount.Showing, asset, canMove, paused);
+        // The identifier alone would say "nothing changed" when the sharp picture lands on top of
+        // the blurred stand-in - both carry the same one. So the bitmap itself is part of the
+        // question, and it is compared by identity: two decodes of one picture are two objects, and
+        // the second is the one that has to go up.
+        var action = PictureTransition.Next(
+            mount.State, mount.Showing, asset, ReferenceEquals(mount.Applied, source), canMove, paused);
 
         switch (action)
         {
@@ -455,6 +460,7 @@ internal sealed class OverlayWindow : Window
         }
 
         mount.Showing = asset;
+        mount.Applied = source;
         mount.State = PictureTransition.After(mount.State, action);
     }
 
@@ -536,6 +542,12 @@ internal sealed class OverlayWindow : Window
         internal Border? Caption { get; set; }
 
         internal AssetId? Showing { get; set; }
+
+        /// <summary>
+        /// The bitmap that was last put up here. Kept beside the identifier because one asset has
+        /// more than one rendering over its life - the thumbnail stand-in and then the original.
+        /// </summary>
+        internal ImageSource? Applied { get; set; }
 
         internal PictureState State { get; set; } = PictureState.Nothing;
     }

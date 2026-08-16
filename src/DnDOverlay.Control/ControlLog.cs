@@ -1,3 +1,4 @@
+using DnDOverlay.Core;
 using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Control;
@@ -93,4 +94,41 @@ internal static partial class ControlLog
         Level = LogLevel.Critical,
         Message = "Unhandled fault on {Where} - this control is going down.")]
     internal static partial void UnhandledFault(ILogger logger, Exception exception, string where);
+
+    /// <summary>
+    /// The first line in the asset range, and it exists because its absence was a dead end. Twelve
+    /// pictures were taken in at a hand run of M2b and the control's log held <b>not one word</b>
+    /// about any of them - so "it takes a few seconds and I do not know why" could not be answered
+    /// from the trail at all, only by measuring afterwards on a second machine.
+    /// <para>
+    /// It carries the duration, because that is the whole question. Measured with the real files:
+    /// a 24 MB PNG at 4616×6000 costs <b>11.6 s to normalise</b> and 1.1 s for the thumbnail, while
+    /// a 2 MB JPEG costs 1 ms - the JPEG path hands the bytes through and the PNG path decodes and
+    /// re-encodes. Without the number in the line, the two look the same from the outside.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 2001,
+        Level = LogLevel.Information,
+        Message = "Took {Name} in as {AssetId} ({PixelWidth}×{PixelHeight}, {Bytes} bytes) in {Milliseconds} ms.")]
+    internal static partial void AssetTakenIn(
+        ILogger logger,
+        string name,
+        string assetId,
+        int pixelWidth,
+        int pixelHeight,
+        long bytes,
+        long milliseconds);
+
+    /// <summary>
+    /// A refusal is not a fault of the process and not a silence either - the DM is told at the
+    /// panel, and the trail says the same thing, so a picture that "did not work" can be looked up
+    /// afterwards (Part 5, Part 8).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 2002,
+        Level = LogLevel.Information,
+        Message = "{Name} was not taken in: {Reason} - {Detail}")]
+    internal static partial void AssetRefused(
+        ILogger logger, string name, ImageRejection reason, string detail);
 }

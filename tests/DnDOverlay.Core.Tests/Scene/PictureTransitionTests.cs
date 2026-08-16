@@ -25,7 +25,7 @@ public sealed class PictureTransitionTests
     {
         Assert.Equal(
             PictureAction.Leave,
-            PictureTransition.Next(PictureState.Moving, Same, Same, admitted: true, paused: false));
+            PictureTransition.Next(PictureState.Moving, Same, Same, sameRendering: true, admitted: true, paused: false));
     }
 
     /// <summary>
@@ -41,14 +41,57 @@ public sealed class PictureTransitionTests
     public void A_pause_holds_where_a_refusal_freezes()
     {
         var paused = PictureTransition.Next(
-            PictureState.Moving, Same, Same, admitted: false, paused: true);
+            PictureState.Moving, Same, Same, sameRendering: true, admitted: false, paused: true);
 
         var refused = PictureTransition.Next(
-            PictureState.Moving, Same, Same, admitted: false, paused: false);
+            PictureState.Moving, Same, Same, sameRendering: true, admitted: false, paused: false);
 
         Assert.Equal(PictureAction.Hold, paused);
         Assert.Equal(PictureAction.Freeze, refused);
         Assert.NotEqual(paused, refused);
+    }
+
+    /// <summary>
+    /// The sharp picture replaces the blurred stand-in although the asset is the same. One asset
+    /// arrives <b>twice</b> - the thumbnail first, so a picture stands at its place within a second,
+    /// and the original after it (Part 5) - and both carry the same identifier.
+    /// <para>
+    /// Measured at the table (hand-run of M2b, second round, step 17): with two pictures sent in
+    /// quick succession, one of them stayed blurred for good. Comparing identifiers alone answered
+    /// "nothing changed" to the very arrival the two-step exists for.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_second_rendering_of_the_same_asset_is_a_different_picture()
+    {
+        Assert.Equal(
+            PictureAction.Freeze,
+            PictureTransition.Next(
+                PictureState.Still, Same, Same, sameRendering: false, admitted: false, paused: false));
+
+        // And the counter-check, so this is not merely "Freeze whenever asked": the SAME rendering
+        // of the same asset is still left alone, which is what keeps a scene of thirty photographs
+        // free to redraw.
+        Assert.Equal(
+            PictureAction.Leave,
+            PictureTransition.Next(
+                PictureState.Still, Same, Same, sameRendering: true, admitted: false, paused: false));
+    }
+
+    /// <summary>
+    /// A second rendering does restart a running animation, and that is the deliberate answer where
+    /// the two rules meet: the picture itself has changed, and showing the old frames of a picture
+    /// that is no longer there would be worse than the restart step 24 was about. It cannot arise
+    /// today - the bytes an animation runs on only ever come with the original - but one of the two
+    /// rules had to win, and it is written down rather than left to the order of the ifs.
+    /// </summary>
+    [Fact]
+    public void A_second_rendering_restarts_even_a_running_animation()
+    {
+        Assert.Equal(
+            PictureAction.Start,
+            PictureTransition.Next(
+                PictureState.Moving, Same, Same, sameRendering: false, admitted: true, paused: false));
     }
 
     /// <summary>Un-pausing carries the animation on rather than building a new one.</summary>
@@ -57,7 +100,7 @@ public sealed class PictureTransitionTests
     {
         Assert.Equal(
             PictureAction.Resume,
-            PictureTransition.Next(PictureState.Held, Same, Same, admitted: true, paused: false));
+            PictureTransition.Next(PictureState.Held, Same, Same, sameRendering: true, admitted: true, paused: false));
     }
 
     /// <summary>
@@ -74,11 +117,11 @@ public sealed class PictureTransitionTests
 
         Assert.Equal(
             PictureAction.Start,
-            PictureTransition.Next(state, before, Same, admitted: true, paused: false));
+            PictureTransition.Next(state, before, Same, sameRendering: true, admitted: true, paused: false));
 
         Assert.Equal(
             PictureAction.Freeze,
-            PictureTransition.Next(state, before, Same, admitted: false, paused: false));
+            PictureTransition.Next(state, before, Same, sameRendering: true, admitted: false, paused: false));
     }
 
     /// <summary>
@@ -93,7 +136,7 @@ public sealed class PictureTransitionTests
     {
         Assert.Equal(
             PictureAction.Leave,
-            PictureTransition.Next(PictureState.Still, Same, Same, admitted: false, paused));
+            PictureTransition.Next(PictureState.Still, Same, Same, sameRendering: true, admitted: false, paused));
     }
 
     /// <summary>
@@ -106,7 +149,7 @@ public sealed class PictureTransitionTests
     {
         Assert.Equal(
             PictureAction.Start,
-            PictureTransition.Next(PictureState.Still, Same, Same, admitted: true, paused: false));
+            PictureTransition.Next(PictureState.Still, Same, Same, sameRendering: true, admitted: true, paused: false));
     }
 
     /// <summary>

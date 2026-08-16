@@ -613,9 +613,24 @@ later is not a notification but the trail: *did this device ever knock, and what
 
 ### 2000–2999 · Assets
 
-*(none yet — the ingest arrives in M2)*
+| Id | Name | Level |
+|---|---|---|
+| 2001 | `AssetTakenIn` | Information |
+| 2002 | `AssetRefused` | Information |
 
-**Next free: 2001.**
+**Next free: 2003.**
+
+**2001 carries a duration, and that is the point of it.** The range stood empty through M2a and
+M2b, and a hand run showed what that cost: twelve pictures were taken into a campaign and the
+control's log held not one word about any of them, so *"it takes a few seconds and I do not know
+why"* could not be answered from the trail — only by measuring afterwards. Measured with the real
+files: a 24 MB PNG at 4616×6000 costs **11.6 s** to normalise and 1.1 s for its thumbnail, a 2 MB
+JPEG costs 1 ms. The JPEG path hands the bytes through, the PNG path decodes and re-encodes, and
+from the outside the two are indistinguishable without the number.
+
+**2002 is Information and not Warning.** A refused picture is the hardening working — the DM is
+told at the panel and the trail says the same. A warning would put a correct refusal on the same
+footing as a fault, and the file is read for faults.
 
 ### 3000–3999 · Display
 

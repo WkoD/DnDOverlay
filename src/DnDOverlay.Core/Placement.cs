@@ -4,10 +4,11 @@ namespace DnDOverlay.Core;
 /// Where a new image lands when the DM did not aim at a spot.
 /// <para>
 /// This is computed in the HUB, not in the control, and that is a decision rather than a
-/// convenience: placement means looking for a free spot - reading the state and writing it in
-/// the same breath. Were it to live in the control, the paste hotkey, the inventory double tap
-/// and later a mobile device could work out the SAME slot and lay two images exactly on top of
-/// each other (Part 3).
+/// convenience: placement reads the scene and writes it in the same breath. Were it to live in the
+/// control, the paste hotkey, the inventory double tap and later a mobile device would each read
+/// the same scene, work out the same place and lay two images exactly on top of each other
+/// (Part 3). That the rule is now a plain count rather than a search makes the collision MORE
+/// likely, not less - two controls counting the same five items both answer "the sixth place".
 /// </para>
 /// </summary>
 public static class Placement
@@ -48,25 +49,38 @@ public static class Placement
     }
 
     /// <summary>
-    /// Side by side from the top left; a full row moves one row down, the bottom edge starts
-    /// over from the top. Ported from <c>OlPane.addImage</c> with one correction: occupied slots
-    /// are skipped.
+    /// The shape the grid is measured in. Cells are the same size whatever is put in them, and that
+    /// size has to come from somewhere - <c>Scale</c> gives the height, and 4:3 is the shape the
+    /// parameter table's numbers were reckoned against.
     /// <para>
-    /// "Skipped" is what makes the mode usable when images arrive quickly - without it the
-    /// second image lands on the first whenever the first was moved out of its slot by hand.
+    /// It is a REFERENCE and not a promise about the picture: a portrait sits inside its cell with
+    /// air on both sides, a wide one fills it and may reach a little past it. What it buys is that
+    /// the grid does not change shape with every picture.
+    /// </para>
+    /// </summary>
+    private const double ReferenceAspectRatio = 4d / 3d;
+
+    /// <summary>
+    /// A fixed grid, filled in reading order, over and over. Six places on a 1080p table at the
+    /// size a picture arrives in: the seventh picture goes back to the first place, the eighth to
+    /// the second.
+    /// <para>
+    /// <b>Nothing is searched for and nothing is skipped</b>, and that is a correction the table
+    /// forced twice (hand-run of M2b, steps 16). The ported <c>OlPane.addImage</c> looked for a free
+    /// place, which sounds helpful and is not: where a picture lands then depends on where every
+    /// other picture happens to lie, so the same action gives a different answer each time and the
+    /// DM cannot learn it. Predictable beats clever - the cost is that a picture may land on one
+    /// that was dragged onto its place, and that is the DM's own doing and undoable in one drag.
     /// </para>
     /// <para>
-    /// <b>When nothing is free the slots start over from the top</b>, and that is a correction the
-    /// table forced (hand-run of M2b, step 16). The first version let the FIRST slot win, so from
-    /// the moment the grid was full every further picture landed on exactly the same spot - a
-    /// growing stack that looked like flow was broken. Starting over spreads the second pass across
-    /// the same slots in the same order, so the pictures stay reachable one by one. Overlapping
-    /// remains the lesser evil against refusing to show the image at all; WHERE it overlaps is what
-    /// changed.
+    /// <b>The cells are the same size for every picture</b>, which is the other half of the same
+    /// correction. Deriving the grid from the picture being placed gave every shape its own grid,
+    /// so nothing lined up with anything - measured at the table as "the placement looks odd". Now
+    /// each picture is CENTRED in its cell, so rows and columns line up whatever shape arrives.
     /// </para>
     /// <para>
-    /// The row is exactly as high as the picture. The Java version's second correction - extra
-    /// room for the caption - is gone with the caption having moved inside the image.
+    /// The row is exactly as high as a picture. The Java version's second correction - extra room
+    /// for the caption - is gone with the caption having moved inside the image.
     /// </para>
     /// </summary>
     private static Point Flow(
@@ -75,53 +89,61 @@ public static class Placement
         double height,
         ScreenContext screen)
     {
-        var slots = Slots(width, height);
+        var cells = Cells(screen);
 
-        if (slots.Count == 0)
+        if (cells.Count == 0)
         {
-            // The item is larger than the screen: there is no grid to speak of.
+            // A screen that holds not one cell - the arrival size is larger than the table itself.
             return new Point(0.5, 0.5);
         }
 
-        var occupied = scene.Items
-            .Select(item => Layout.ItemToRect(item, screen))
-            .ToList();
+        var cell = cells[scene.Items.Count % cells.Count];
 
-        foreach (var slot in slots)
-        {
-            if (!occupied.Any(taken => Overlaps(slot, taken)))
-            {
-                return Centre(slot);
-            }
-        }
-
-        // Counted over the items already lying here, so a full grid of six is followed by the
-        // seventh in slot one, the eighth in slot two, and so on round again.
-        return Centre(slots[scene.Items.Count % slots.Count]);
+        return new Point(
+            Inside(cell.X + (cell.Width / 2), width),
+            Inside(cell.Y + (cell.Height / 2), height));
     }
 
     /// <summary>
-    /// The grid, in reading order. It depends only on the size of the picture being placed, which
-    /// is why two pictures of different shapes see different grids - each is laid out against the
-    /// slots IT fits in.
+    /// The grid, in reading order. It depends on the SCREEN alone - the arrival size and the
+    /// screen's own shape - so every picture sees the same one.
     /// </summary>
-    private static List<Rect> Slots(double width, double height)
+    private static List<Rect> Cells(ScreenContext screen)
     {
-        var slots = new List<Rect>();
+        var cells = new List<Rect>();
+
+        var height = screen.ScaleOnLoad;
+
+        if (height <= 0)
+        {
+            return cells;
+        }
+
+        // Normalised height is a fraction of the screen height and normalised width a fraction of
+        // the screen WIDTH, so the reference shape travels through both aspect ratios - the same
+        // trap Layout keeps warning about, and the reason 0.4 gives six cells on 16:9 and would
+        // give four on 21:9.
+        var width = screen.AspectRatio <= 0
+            ? height * ReferenceAspectRatio
+            : height * ReferenceAspectRatio / screen.AspectRatio;
 
         for (var y = Gap; y + height <= 1 - Gap + double.Epsilon; y += height + Gap)
         {
             for (var x = Gap; x + width <= 1 - Gap + double.Epsilon; x += width + Gap)
             {
-                slots.Add(new Rect(x, y, width, height));
+                cells.Add(new Rect(x, y, width, height));
             }
         }
 
-        return slots;
+        return cells;
     }
 
-    private static Point Centre(Rect slot) =>
-        new(slot.X + (slot.Width / 2), slot.Y + (slot.Height / 2));
+    /// <summary>
+    /// Holds a centre far enough from the edge that the picture lies wholly on the table. A picture
+    /// wider than the screen has no such place and goes to the middle, where the most of it shows.
+    /// </summary>
+    private static double Inside(double centre, double extent) =>
+        extent >= 1 ? 0.5 : Math.Clamp(centre, extent / 2, 1 - (extent / 2));
 
     /// <summary>Stacked from the centre with a growing offset, wrapping before it leaves the screen.</summary>
     private static Point Cascade(SceneState scene, double width, double height)
@@ -135,12 +157,5 @@ public static class Placement
         var y = Math.Clamp(0.5 + offset - (MaxSteps * CascadeStep / 2), height / 2, 1 - (height / 2));
 
         return new Point(x, y);
-    }
-
-    private static bool Overlaps(Rect a, Rect b)
-    {
-        var overlap = a.Intersect(b);
-
-        return overlap.Width > 0 && overlap.Height > 0;
     }
 }

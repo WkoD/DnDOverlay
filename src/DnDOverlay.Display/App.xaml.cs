@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Channels;
@@ -37,7 +38,14 @@ public sealed partial class App : Application, IDisposable
     private readonly Dictionary<ScreenRef, SceneState> _scenes = [];
     private readonly Dictionary<ScreenId, ScreenContext> _contexts = [];
     private readonly Dictionary<ScreenId, MonitorInfo> _monitors = [];
-    private readonly Dictionary<AssetId, ImageSource> _images = [];
+
+    /// <summary>
+    /// The decoded pictures. <b>Concurrent, and that is not belt and braces:</b> decoding runs on
+    /// the connection task while the ring redraws on the UI thread beside it, so this table is
+    /// written and read at the same time by construction. A plain dictionary torn mid-resize is a
+    /// hang on the UI thread with nothing pointing at the cause.
+    /// </summary>
+    private readonly ConcurrentDictionary<AssetId, ImageSource> _images = new();
 
     /// <summary>
     /// The delivered bytes of the pictures that MOVE, and only of those.
@@ -48,7 +56,7 @@ public sealed partial class App : Application, IDisposable
     /// something.
     /// </para>
     /// </summary>
-    private readonly Dictionary<AssetId, byte[]> _moving = [];
+    private readonly ConcurrentDictionary<AssetId, byte[]> _moving = new();
 
     /// <summary>
     /// How often the load readings go out - 4 Hz, the upper end of Part 4's "2 to 4". A ring is
@@ -1083,8 +1091,8 @@ public sealed partial class App : Application, IDisposable
 
         foreach (var asset in _images.Keys.Where(asset => !wanted.Contains(asset)).ToList())
         {
-            _images.Remove(asset);
-            _moving.Remove(asset);
+            _images.TryRemove(asset, out _);
+            _moving.TryRemove(asset, out _);
         }
 
         // The file may stay - the store keeps what it has room for, because a picture that comes

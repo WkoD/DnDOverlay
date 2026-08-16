@@ -51,7 +51,7 @@ internal sealed class MainWindow : Window, IDisposable
         _address = address;
         _log = new LogList(log, "Control") { Height = 200 };
 
-        _stage = new StagePanel(session, stock, Selected, _status);
+        _stage = new StagePanel(session, stock, Selected, _status, log.CreateLogger("Control"));
 
         Title = "DnDOverlay - M2b";
         Width = 620;

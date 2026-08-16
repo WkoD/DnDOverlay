@@ -83,6 +83,17 @@ public static class PictureTransition
     /// What to do with a place that currently shows <paramref name="showing"/> in state
     /// <paramref name="state"/>, when it should show <paramref name="wanted"/>.
     /// </summary>
+    /// <param name="sameRendering">
+    /// Whether what is mounted is still the same <b>rendering</b> of that asset.
+    /// <para>
+    /// The identifier alone is <b>not</b> the identity, and that is measured rather than foreseen
+    /// (hand-run of M2b, second round, step 17): one asset arrives <b>twice</b> - the thumbnail
+    /// first, so the picture stands at its place blurred within a second, and the original after it
+    /// (Part 5). Both carry the same <see cref="AssetId"/>. Comparing identifiers alone therefore
+    /// answers "nothing changed" to the very arrival the whole two-step exists for, and the table
+    /// keeps the blurred one for good.
+    /// </para>
+    /// </param>
     /// <param name="admitted">Whether <see cref="AnimationBudget"/> lets this one move.</param>
     /// <param name="paused">
     /// Whether the DM stopped it. This is what tells a pause apart from a refusal: both end with a
@@ -93,10 +104,11 @@ public static class PictureTransition
         PictureState state,
         AssetId? showing,
         AssetId wanted,
+        bool sameRendering,
         bool admitted,
         bool paused)
     {
-        if (showing != wanted)
+        if (showing != wanted || !sameRendering)
         {
             // A different picture. Nothing of the old one can be carried over.
             return admitted ? PictureAction.Start : PictureAction.Freeze;

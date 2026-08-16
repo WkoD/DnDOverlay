@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using DnDOverlay.Core;
 using DnDOverlay.Hub;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 
 namespace DnDOverlay.Control;
@@ -29,6 +30,7 @@ internal sealed class StagePanel : StackPanel
     private readonly IAssetSink _stock;
     private readonly Func<ScreenRef?> _target;
     private readonly TextBlock _status;
+    private readonly ILogger _logger;
 
     private readonly ListBox _items = new() { MinHeight = 90, Margin = new Thickness(0, 0, 0, 8) };
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 16, 0), IsChecked = true };
@@ -43,12 +45,18 @@ internal sealed class StagePanel : StackPanel
 
     private bool _settingSwitches;
 
-    internal StagePanel(ISessionApi session, IAssetSink stock, Func<ScreenRef?> target, TextBlock status)
+    internal StagePanel(
+        ISessionApi session,
+        IAssetSink stock,
+        Func<ScreenRef?> target,
+        TextBlock status,
+        ILogger logger)
     {
         _session = session;
         _stock = stock;
         _target = target;
         _status = status;
+        _logger = logger;
 
         Margin = new Thickness(0, 12, 0, 0);
 
@@ -163,6 +171,19 @@ internal sealed class StagePanel : StackPanel
         _status.Text = $"{screen.Screen} places new pictures in {mode}.";
     }
 
+    /// <summary>
+    /// Takes the grips away while a picture is being taken in, and gives back what they were so the
+    /// caller can put them back exactly. Not decoration: the step costs seconds, and a control that
+    /// looks idle invites a second picture to be started into the middle of the first.
+    /// </summary>
+    private bool StopTheGrips()
+    {
+        var before = IsEnabled;
+        IsEnabled = false;
+
+        return before;
+    }
+
     private async void PutAsync(bool background)
     {
         if (Screen() is not { } screen)
@@ -184,25 +205,60 @@ internal sealed class StagePanel : StackPanel
 
         var name = Path.GetFileNameWithoutExtension(dialog.FileName);
 
-        _status.Text = $"Taking {name} in ...";
+        // Taking a picture in costs SECONDS and the DM has to be able to see that it is happening.
+        // Measured with the real files (hand-run of M2b, second round, step 17): a 24 MB PNG at
+        // 4616×6000 spends 11.6 s being normalised and 1.1 s on its thumbnail, a 2 MB JPEG spends
+        // 1 ms. A line of text alone was there and was missed - so the grips go dead as well, which
+        // is the part that cannot be overlooked and which also stops a second picture being started
+        // into the middle of the first.
+        _status.Text = $"Taking {name} in - this can take a few seconds for a large picture ...";
 
-        var bytes = await File.ReadAllBytesAsync(dialog.FileName).ConfigureAwait(true);
+        var grips = StopTheGrips();
 
-        // OFF the UI thread. The stock's ingest is synchronous by construction - it hashes,
-        // decodes, normalises, writes and thumbnails - and awaiting it here froze the whole
-        // control until a 20 MB picture was through (hand-run of M2b, step 17). A library returns
-        // a result and does not pick a thread; picking one is the caller's job (rule 10).
-        var taken = await Task.Run(() => _stock.IngestAsync(bytes, name)).ConfigureAwait(true);
+        IngestResult taken;
+        long milliseconds;
+
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(dialog.FileName).ConfigureAwait(true);
+
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            // OFF the UI thread. The stock's ingest is synchronous by construction - it hashes,
+            // decodes, normalises, writes and thumbnails - and awaiting it here froze the whole
+            // control until a 20 MB picture was through (hand-run of M2b, step 17). A library
+            // returns a result and does not pick a thread; picking one is the caller's job
+            // (rule 10).
+            taken = await Task.Run(() => _stock.IngestAsync(bytes, name)).ConfigureAwait(true);
+
+            milliseconds = clock.ElapsedMilliseconds;
+        }
+        finally
+        {
+            IsEnabled = grips;
+        }
 
         if (taken is IngestResult.Refused refused)
         {
             // Named and readable, never a silent failure - the promise the whole refusal path
-            // exists for (Part 5).
+            // exists for (Part 5). Said in the trail as well, so a picture that "did not work" can
+            // be looked up afterwards.
+            ControlLog.AssetRefused(_logger, name, refused.Reason, refused.Detail);
+
             _status.Text = $"{name} was refused: {refused.Reason} - {refused.Detail}";
             return;
         }
 
         var stocked = (IngestResult.Taken)taken;
+
+        ControlLog.AssetTakenIn(
+            _logger,
+            stocked.Asset.Name,
+            stocked.Asset.AssetId.Value,
+            stocked.Asset.Meta.PixelWidth,
+            stocked.Asset.Meta.PixelHeight,
+            stocked.Asset.Meta.Bytes,
+            milliseconds);
 
         if (background)
         {

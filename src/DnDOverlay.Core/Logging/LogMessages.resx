@@ -167,6 +167,12 @@
 
   <!-- 3000-3999 · Display: what is on a screen, and why is it or is it not? -->
 
+  <data name="E2001_AssetTakenIn" xml:space="preserve">
+    <value>Took {Name} in as {AssetId} ({PixelWidth}×{PixelHeight}, {Bytes} bytes) in {Milliseconds} ms.</value>
+  </data>
+  <data name="E2002_AssetRefused" xml:space="preserve">
+    <value>{Name} was not taken in: {Reason} - {Detail}</value>
+  </data>
   <data name="E3001_ScreenFound" xml:space="preserve">
     <value>Screen {ScreenId} ({Label}): {Size} at {Dpi} DPI.</value>
   </data>
