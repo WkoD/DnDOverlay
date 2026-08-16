@@ -1,0 +1,262 @@
+using System.Net;
+using System.Security.Cryptography;
+using System.Threading.Channels;
+using DnDOverlay.Core;
+using DnDOverlay.Core.Protocol;
+
+namespace DnDOverlay.Transport.Tests;
+
+/// <summary>
+/// The load path on its own: what order it asks in, how many at a time, what it does with a picture
+/// it already has, and what it refuses.
+/// <para>
+/// The counterpart here is a stand-in, deliberately - the subject is the ORDERING and the
+/// bookkeeping, not whether this end and the hub agree. That question has its own test with the
+/// real hub next door, because a stand-in agrees with whoever wrote it (checks/M2.md).
+/// </para>
+/// </summary>
+public sealed class AssetLoaderTests : IDisposable
+{
+    private static readonly Uri Hub = new("http://127.0.0.1:9/");
+    private const string Path = "/assets";
+    private const string Token = "a-token";
+
+    private readonly string _directory = System.IO.Path.Combine(
+        System.IO.Path.GetTempPath(), "dndoverlay-loader-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_directory, recursive: true);
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// The background is the layer everything else lies on. A table that gets its portraits before
+    /// its map has been assembled in the wrong order in front of everyone (Part 5).
+    /// </summary>
+    [Fact]
+    public async Task The_background_is_asked_for_first()
+    {
+        var stub = new Counterpart();
+        var loader = Loader(stub);
+
+        await LoadAsync(loader, [Want(1), Want(2), Want(3, background: true)]);
+
+        // Thumbnails and originals interleave, so what is compared is which ASSET came first.
+        Assert.Equal(Asset(3), stub.Asked[0].Asset);
+    }
+
+    /// <summary>
+    /// Three at a time. Twenty at once are twenty pictures that are all slow, and after ten seconds
+    /// not one of them is there; three is the same volume and a different evening (Part 5, Part 6).
+    /// </summary>
+    [Fact]
+    public async Task No_more_than_the_allowed_downloads_run_at_once()
+    {
+        var stub = new Counterpart { Dwell = TimeSpan.FromMilliseconds(60) };
+        var loader = Loader(stub);
+
+        await LoadAsync(loader, [.. Enumerable.Range(1, 9).Select(n => Want(n))]);
+
+        Assert.Equal(3, loader.PeakConcurrency);
+    }
+
+    /// <summary>
+    /// The whole of "transferred once per device": a picture in the store is handed over at once
+    /// and <b>no request goes out for it</b> (Part 5).
+    /// </summary>
+    [Fact]
+    public async Task A_picture_already_in_the_store_costs_no_request()
+    {
+        var stub = new Counterpart();
+        var cache = new AssetCache(_directory);
+        var progress = new AssetProgressTracker();
+
+        cache.Store(Asset(1), Body(1));
+
+        var loader = new AssetLoader(new AssetClient(new HttpClient(stub)), cache, progress);
+
+        var arrived = await LoadAsync(loader, [Want(1)]);
+
+        Assert.Empty(stub.Asked);
+        Assert.Equal(Asset(1), Assert.Single(arrived).Asset);
+        Assert.Equal(AssetLoadState.Done, Assert.Single(progress.Reading()!.Loads).State);
+    }
+
+    /// <summary>
+    /// The thumbnail is handed over on its own and first - it is what lets the picture STAND at its
+    /// place within a second, blurred, while the full one is still coming (Part 5, Part 10).
+    /// </summary>
+    [Fact]
+    public async Task The_thumbnail_arrives_before_the_original()
+    {
+        var stub = new Counterpart();
+        var loader = Loader(stub);
+
+        var arrived = await LoadAsync(loader, [Want(1)]);
+
+        Assert.Equal([true, false], arrived.Select(item => item.IsThumbnail));
+    }
+
+    /// <summary>
+    /// Identity and integrity are two questions (Part 5). The file name carries the SOURCE hash, so
+    /// this is the only place the DELIVERED bytes are ever checked - the half of that split that
+    /// was recorded as M2b.
+    /// </summary>
+    [Fact]
+    public async Task Bytes_that_do_not_match_their_content_hash_are_refused()
+    {
+        var stub = new Counterpart();
+        var cache = new AssetCache(_directory);
+        var progress = new AssetProgressTracker();
+        var loader = new AssetLoader(new AssetClient(new HttpClient(stub)), cache, progress);
+
+        var wanted = new AssetWanted(Asset(1), Meta(new string('f', 64)));
+
+        var arrived = await LoadAsync(loader, [wanted]);
+
+        Assert.DoesNotContain(arrived, item => !item.IsThumbnail);
+        Assert.False(cache.TryGet(Asset(1), out _));
+        Assert.Equal(AssetLoadState.Failed, Assert.Single(progress.Reading()!.Loads).State);
+    }
+
+    /// <summary>
+    /// One picture failing does not take the others with it. A table missing one portrait beats a
+    /// table missing everything.
+    /// </summary>
+    [Fact]
+    public async Task One_picture_that_cannot_be_had_does_not_stop_the_rest()
+    {
+        var stub = new Counterpart { Missing = { Asset(2) } };
+        var cache = new AssetCache(_directory);
+        var progress = new AssetProgressTracker();
+        var loader = new AssetLoader(new AssetClient(new HttpClient(stub)), cache, progress);
+
+        var arrived = await LoadAsync(loader, [Want(1), Want(2), Want(3)]);
+
+        Assert.Equal(
+            [Asset(1), Asset(3)],
+            arrived
+                .Where(item => !item.IsThumbnail)
+                .Select(item => item.Asset)
+                .OrderBy(asset => asset.Value, StringComparer.Ordinal));
+
+        var failed = progress.Reading()!.Loads.Single(load => load.State == AssetLoadState.Failed);
+        Assert.Equal(Asset(2), failed.Asset);
+    }
+
+    /// <summary>
+    /// Every picture the table is waiting for is in the FIRST reading, before anything is fetched.
+    /// Announcing them as each begins would have the rings appear one at a time, which reads as
+    /// "nothing else is coming" (Part 7).
+    /// </summary>
+    [Fact]
+    public async Task Every_picture_being_waited_for_is_in_the_first_reading()
+    {
+        var stub = new Counterpart { Dwell = TimeSpan.FromMilliseconds(150) };
+        var cache = new AssetCache(_directory);
+        var progress = new AssetProgressTracker();
+        var loader = new AssetLoader(new AssetClient(new HttpClient(stub)), cache, progress);
+
+        var arrivals = Channel.CreateUnbounded<AssetArrived>();
+        var running = loader.LoadAsync(
+            Hub, Path, [Want(1), Want(2), Want(3)], Token, arrivals.Writer, TestContext.Current.CancellationToken);
+
+        await stub.FirstRequest;
+
+        Assert.Equal(3, progress.Reading()!.Loads.Count);
+
+        await running;
+    }
+
+    private AssetLoader Loader(Counterpart stub) =>
+        new(new AssetClient(new HttpClient(stub)), new AssetCache(_directory), new AssetProgressTracker());
+
+    private static async Task<List<AssetArrived>> LoadAsync(
+        AssetLoader loader, IReadOnlyList<AssetWanted> wanted)
+    {
+        var arrivals = Channel.CreateUnbounded<AssetArrived>();
+
+        await loader.LoadAsync(
+            Hub, Path, wanted, Token, arrivals.Writer, TestContext.Current.CancellationToken);
+
+        arrivals.Writer.Complete();
+
+        var collected = new List<AssetArrived>();
+
+        await foreach (var arrived in arrivals.Reader.ReadAllAsync(TestContext.Current.CancellationToken))
+        {
+            collected.Add(arrived);
+        }
+
+        return collected;
+    }
+
+    private static AssetWanted Want(int n, bool background = false) =>
+        new(Asset(n), Meta(Convert.ToHexStringLower(SHA256.HashData(Body(n)))), background);
+
+    private static AssetMeta Meta(string contentHash) =>
+        new(64, 64, "png", Bytes: 64, IsAnimated: false, ContentHash: contentHash);
+
+    private static AssetId Asset(int n) =>
+        new(n.ToString(null as IFormatProvider).PadLeft(64, 'a'));
+
+    private static byte[] Body(int n) => [.. Enumerable.Repeat((byte)n, 64)];
+
+    /// <summary>
+    /// Stands in for the hub. It answers thumbnails and originals, can be told to dwell so
+    /// concurrency is observable, and can be told a picture is missing.
+    /// </summary>
+    private sealed class Counterpart : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource _first =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly Lock _gate = new();
+
+        internal List<(AssetId Asset, bool Thumbnail)> Asked { get; } = [];
+
+        internal HashSet<AssetId> Missing { get; } = [];
+
+        internal TimeSpan Dwell { get; set; }
+
+        internal Task FirstRequest => _first.Task;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            var thumbnail = path.EndsWith("/thumb", StringComparison.Ordinal);
+            var id = new AssetId(path.Replace("/thumb", string.Empty, StringComparison.Ordinal).Split('/')[^1]);
+
+            lock (_gate)
+            {
+                Asked.Add((id, thumbnail));
+            }
+
+            _first.TrySetResult();
+
+            if (Dwell > TimeSpan.Zero)
+            {
+                await Task.Delay(Dwell, cancellationToken);
+            }
+
+            if (Missing.Contains(id))
+            {
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            }
+
+            var number = int.Parse(id.Value.TrimStart('a'), null as IFormatProvider);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(thumbnail ? [1, 2, 3] : Body(number)),
+            };
+        }
+    }
+}

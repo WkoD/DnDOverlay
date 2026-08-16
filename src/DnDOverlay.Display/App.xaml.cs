@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Threading.Channels;
 using System.Windows;
@@ -39,6 +40,13 @@ public sealed partial class App : Application, IDisposable
     private readonly Dictionary<AssetId, ImageSource> _images = [];
 
     /// <summary>
+    /// How often the load readings go out - 4 Hz, the upper end of Part 4's "2 to 4". A ring is
+    /// meant to fill visibly rather than jump; below that it looks stuck, above it the number
+    /// flickers.
+    /// </summary>
+    private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
     /// How each screen stands right now. Everything starts <see cref="ScreenState.Inactive"/>
     /// and stays that way until a control says otherwise - the silent start (Part 3).
     /// </summary>
@@ -65,6 +73,9 @@ public sealed partial class App : Application, IDisposable
     private DataRoot _dataRoot;
     private HttpClient _http = null!;
     private AssetClient _assets = null!;
+    private AssetCache _cache = null!;
+    private AssetLoader? _loader;
+    private readonly AssetProgressTracker _progress = new();
     private Uri _hubHttp = null!;
     private string _assetPath = Protocol.AssetPath;
 
@@ -183,6 +194,12 @@ public sealed partial class App : Application, IDisposable
 
         _http = new HttpClient();
         _assets = new AssetClient(_http);
+
+        // The picture store, under the data root so --data moves it with everything else (Part 6).
+        // In M2 it is bound to the session; emptying it on exit and adopting it after a crash are
+        // M5a.
+        _cache = new AssetCache(Path.Combine(_dataRoot.Path, "cache"));
+        _loader = new AssetLoader(_assets, _cache, _progress);
 
         DisplayLog.DataRootChosen(_logger, _dataRoot.Path);
         Report(_logger, loaded);
@@ -689,6 +706,9 @@ public sealed partial class App : Application, IDisposable
         // goes out with the next one (Part 8).
         var forwarding = Task.Run(() => _forwarding!.RunAsync(outbox.Writer, connected.Token));
 
+        // Same lifetime as the forwarder, and for the same reason: it belongs to THIS connection.
+        var reporting = Task.Run(() => ReportProgressAsync(outbox.Writer, connected.Token));
+
         var attempt = Attempt.Fruitless;
 
         await foreach (var message in inbox.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
@@ -935,37 +955,104 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    /// <summary>Fetches and decodes whatever the scene needs and this device does not have yet.</summary>
+    /// <summary>
+    /// Fetches and decodes whatever the scene needs and this device does not have yet.
+    /// <para>
+    /// Everything up to the bytes belongs to <see cref="AssetLoader"/>: order, the three at a time,
+    /// the store, the hash check and the progress readings, all of it under test. What is left here
+    /// is the part that genuinely needs a window - decoding, and putting the result where the
+    /// drawing finds it.
+    /// </para>
+    /// </summary>
     private async Task EnsureImagesAsync(SceneState scene)
     {
-        foreach (var item in scene.Items.OfType<ImageItem>())
+        var wanted = new List<AssetWanted>();
+
+        if (scene.Background is { } background && !_images.ContainsKey(background.AssetId))
         {
-            if (_images.ContainsKey(item.AssetId))
+            wanted.Add(new AssetWanted(background.AssetId, background.Meta, IsBackground: true));
+        }
+
+        wanted.AddRange(scene.Items
+            .OfType<ImageItem>()
+            .Where(item => !_images.ContainsKey(item.AssetId))
+            .Select(item => new AssetWanted(item.AssetId, item.Meta)));
+
+        if (wanted.Count == 0)
+        {
+            return;
+        }
+
+        var arrivals = Channel.CreateUnbounded<AssetArrived>();
+
+        var loading = _loader!
+            .LoadAsync(_hubHttp, _assetPath, wanted, _sessionToken!, arrivals.Writer, _shutdown.Token)
+            .ContinueWith(_ => arrivals.Writer.TryComplete(), TaskScheduler.Default);
+
+        await foreach (var arrived in arrivals.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
+        {
+            Decode(arrived);
+        }
+
+        await loading.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// One arrival becomes a bitmap. A thumbnail is taken only while nothing better is there, so a
+    /// picture STANDS at its place blurred within a second and is replaced when the original lands
+    /// (Part 5) - never the other way round.
+    /// </summary>
+    private void Decode(AssetArrived arrived)
+    {
+        if (arrived.IsThumbnail && _images.ContainsKey(arrived.Asset))
+        {
+            return;
+        }
+
+        try
+        {
+            var decoded = PictureDecoder.Decode(arrived.Bytes);
+
+            _images[arrived.Asset] = decoded;
+
+            if (!arrived.IsThumbnail)
             {
-                continue;
+                // Only the full picture ends the load. Reporting done on the thumbnail would fill
+                // the ring while the picture on the table was still the blurred one.
+                _progress.Done(arrived.Asset);
+                DisplayLog.AssetDecoded(_logger, arrived.Asset, decoded.PixelWidth, decoded.PixelHeight);
             }
+        }
+        // A picture that arrives unreadable stays missing and the rest of the scene is drawn.
+        // NotSupportedException is what WIC answers with - measured, not assumed - and without this
+        // an undecodable asset left HandleAsync, ended the message loop and took the connection with
+        // it. Silently: exactly the failure this project already paid for once (Part 6). What should
+        // SHOW in its place - a placeholder with a reason - is still M2b.
+        catch (NotSupportedException exception)
+        {
+            _progress.Failed(arrived.Asset);
+            DisplayLog.AssetFailed(_logger, exception, arrived.Asset);
+        }
+    }
 
-            try
+    /// <summary>
+    /// Sends what is being loaded, two to four times a second and <b>only while something is</b>
+    /// (Part 4). It runs for as long as the connection does: the readings travel in the progress
+    /// queue, so a slow socket overwrites them rather than queueing them up.
+    /// </summary>
+    private async Task ReportProgressAsync(ChannelWriter<ProtocolMessage> outbox, CancellationToken cancellationToken)
+    {
+        using var tick = new PeriodicTimer(ProgressInterval);
+
+        while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (_progress.Reading() is { } reading)
             {
-                var bytes = await _assets
-                    .GetAsync(_hubHttp, _assetPath, item.AssetId, _sessionToken!, _shutdown.Token)
-                    .ConfigureAwait(false);
+                outbox.TryWrite(reading);
 
-                var decoded = PictureDecoder.Decode(bytes);
-
-                _images[item.AssetId] = decoded;
-                DisplayLog.AssetDecoded(_logger, item.AssetId, decoded.PixelWidth, decoded.PixelHeight);
-            }
-            // A picture that does not arrive, and a picture that arrives unreadable, are the same
-            // thing from here: this one item stays missing and the rest of the scene is drawn.
-            // NotSupportedException is what WIC answers with - measured, not assumed - and without
-            // it here an undecodable asset left HandleAsync, ended the message loop and took the
-            // connection with it. Silently: exactly the failure this project already paid for once
-            // (Part 6). What a display should SHOW in its place - placeholder, retry, a failed
-            // AssetProgress - is M2b.
-            catch (Exception exception) when (exception is HttpRequestException or NotSupportedException)
-            {
-                DisplayLog.AssetFailed(_logger, exception, item.AssetId);
+                // Settled only after it has gone out, so a finished or failed picture is reported
+                // once and then drops out of the readings.
+                _progress.Settle();
             }
         }
     }

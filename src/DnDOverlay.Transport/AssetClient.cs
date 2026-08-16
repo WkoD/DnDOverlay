@@ -52,6 +52,24 @@ public sealed class AssetClient
         FetchAsync(hubBaseAddress, $"{assetPath.TrimEnd('/')}/{id.Value}", token, cancellationToken);
 
     /// <summary>
+    /// The same download, reported as it comes - what the progress ring is fed from (Part 7).
+    /// <para>
+    /// A separate name rather than an optional parameter on <see cref="GetAsync"/>: the token has
+    /// to stay the last parameter (CA1068), and an overload that differs only by an optional
+    /// argument is the kind a caller picks by accident. It also reads correctly at the call site,
+    /// where the two are genuinely different acts - one buffers, the other streams.
+    /// </para>
+    /// </summary>
+    public Task<byte[]> GetReportingAsync(
+        Uri hubBaseAddress,
+        string assetPath,
+        AssetId id,
+        string token,
+        Advanced advanced,
+        CancellationToken cancellationToken = default) =>
+        FetchAsync(hubBaseAddress, $"{assetPath.TrimEnd('/')}/{id.Value}", token, cancellationToken, advanced);
+
+    /// <summary>
     /// Downloads the thumbnail, which is what lets a picture stand at its place within a second
     /// while the full one is still coming (Part 5, Part 10). The width is a wish - what comes back
     /// is the step the stock holds.
@@ -70,8 +88,19 @@ public sealed class AssetClient
             token,
             cancellationToken);
 
+    /// <summary>
+    /// How far a download has got: bytes so far, and the total the counterpart declared - which is
+    /// <c>0</c> when it declared none. Kept as a callback rather than an event so the caller decides
+    /// what it costs; the progress ring is one reader, and it is throttled at its own end (Part 7).
+    /// </summary>
+    public delegate void Advanced(long received, long total);
+
     private async Task<byte[]> FetchAsync(
-        Uri hubBaseAddress, string path, string token, CancellationToken cancellationToken)
+        Uri hubBaseAddress,
+        string path,
+        string token,
+        CancellationToken cancellationToken,
+        Advanced? advanced = null)
     {
         ArgumentNullException.ThrowIfNull(hubBaseAddress);
         ArgumentException.ThrowIfNullOrEmpty(token);
@@ -79,9 +108,38 @@ public sealed class AssetClient
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(hubBaseAddress, path));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        // Read the headers first when somebody is watching: without it the whole body is already
+        // buffered by the time we return, and every reading would be "0 %" followed by "100 %" -
+        // a ring that jumps rather than fills (Part 7).
+        var completion = advanced is null
+            ? HttpCompletionOption.ResponseContentRead
+            : HttpCompletionOption.ResponseHeadersRead;
+
+        using var response = await _http
+            .SendAsync(request, completion, cancellationToken)
+            .ConfigureAwait(false);
+
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        if (advanced is null)
+        {
+            return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var total = response.Content.Headers.ContentLength ?? 0;
+
+        using var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var collected = new MemoryStream();
+
+        var buffer = new byte[81920];
+        int read;
+
+        while ((read = await body.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            collected.Write(buffer, 0, read);
+            advanced(collected.Length, total);
+        }
+
+        return collected.ToArray();
     }
 }

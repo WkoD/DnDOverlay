@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Threading.Channels;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Transport;
@@ -105,6 +107,62 @@ public sealed class AssetSeamTests : IAsyncLifetime
         await Assert.ThrowsAsync<HttpRequestException>(
             () => client.GetAsync(
                 _hub, Protocol.AssetPath, Known, token, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// The whole load path against the real hub: <see cref="AssetLoader"/> with a real
+    /// <see cref="AssetClient"/>, a real <see cref="AssetCache"/> and a real
+    /// <see cref="AssetProgressTracker"/> - thumbnail first, original after, checked against the
+    /// hash the item carries, and stored.
+    /// <para>
+    /// It is here rather than beside the loader's own tests for the reason this seam exists at all:
+    /// the tests next door use a stand-in counterpart, and a stand-in agrees with whoever wrote it.
+    /// What is proved here is that the loader and the hub agree on paths, on the header and on what
+    /// the bytes are.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task TheWholeLoadPathWorksAgainstTheRealHub()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "dndoverlay-seam-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var cache = new AssetCache(directory);
+            var progress = new AssetProgressTracker();
+            var loader = new AssetLoader(new AssetClient(_http), cache, progress);
+
+            var meta = new AssetMeta(
+                8, 8, "png", Stock.Picture.Length, IsAnimated: false,
+                ContentHash: Convert.ToHexStringLower(SHA256.HashData(Stock.Picture)));
+
+            var arrivals = Channel.CreateUnbounded<AssetArrived>();
+
+            await loader.LoadAsync(
+                _hub,
+                Protocol.AssetPath,
+                [new AssetWanted(Known, meta)],
+                DisplayToken,
+                arrivals.Writer,
+                TestContext.Current.CancellationToken);
+
+            arrivals.Writer.Complete();
+
+            var arrived = await arrivals.Reader
+                .ReadAllAsync(TestContext.Current.CancellationToken)
+                .ToListAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal([Stock.Thumbnail, Stock.Picture], arrived.Select(item => item.Bytes));
+            Assert.Equal([true, false], arrived.Select(item => item.IsThumbnail));
+
+            // And it is in the store afterwards, which is what makes the second time free.
+            Assert.True(cache.TryGet(Known, out var held));
+            Assert.Equal(Stock.Picture, held);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     /// <summary>A stock of exactly one picture and its thumbnail.</summary>
