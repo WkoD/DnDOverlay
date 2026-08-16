@@ -491,6 +491,12 @@ public sealed partial class App : Application, IDisposable
 
         var window = new OverlayWindow(_monitors[screen], _windowed);
 
+        // Before Show, because the layout that gives the stage its size happens inside it. The
+        // scene is normalised against the surface it is drawn on, so a surface that changes size
+        // has to be drawn on again - otherwise the first drawing stands on a guess until the next
+        // arrival happens to correct it.
+        window.SurfaceChanged += () => Draw(new ScreenRef(_device, screen));
+
         _windows[screen] = window;
         window.Show();
 

@@ -108,6 +108,134 @@ public sealed class PlacementTests
         Assert.Equal(tall, wide);
     }
 
+    /// <summary>
+    /// <b>The promise of step 16, and until now nothing asserted it:</b> pictures lie side by side
+    /// WITHOUT overlapping. The test that used to cover it went with the free-place search and was
+    /// not replaced - so the one sentence the mode exists for stood unmeasured while five other
+    /// tests looked after its arithmetic.
+    /// <para>
+    /// At the size a picture arrives in, and for the shape the cells are measured in. A wider
+    /// picture does NOT hold this and cannot: the cell is 4:3 and the picture is not, so it reaches
+    /// past it - which is a separate question and has its own test below.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_places_of_one_grid_do_not_overlap()
+    {
+        var screen = Build.Screen();
+        var scale = Layout.ScaleOnLoad(4d / 3d, screen);
+        var scene = SceneState.Empty;
+        var rects = new List<Rect>();
+
+        for (var i = 0; i < 6; i++)
+        {
+            var position = Placement.NextPosition(scene, scale, 4d / 3d, screen);
+            var item = Build.Item(position.X, position.Y, scale, 4d / 3d);
+
+            rects.Add(Layout.ItemToRect(item, screen));
+            scene = Build.SceneWith([.. scene.Items, item]);
+        }
+
+        foreach (var (a, b) in rects.SelectMany(a => rects.Select(b => (a, b))).Where(pair => pair.a != pair.b))
+        {
+            var overlap = a.Intersect(b);
+
+            Assert.True(
+                overlap.Width <= 0 || overlap.Height <= 0,
+                $"{a} and {b} overlap by {overlap.Width}x{overlap.Height}");
+        }
+    }
+
+    /// <summary>
+    /// Reading order: the second place lies to the RIGHT of the first at the same height, and the
+    /// row below starts back at the left. Nothing said so - a grid emitted column by column would
+    /// have left every other test in this file green, and the DM would have learnt a different
+    /// order from the one written down.
+    /// </summary>
+    [Fact]
+    public void The_places_run_left_to_right_and_then_down()
+    {
+        var screen = Build.Screen();
+        var places = SixPlaces(screen);
+
+        Assert.True(places[1].X > places[0].X, "the second place is not to the right of the first");
+        Assert.Equal(places[0].Y, places[1].Y, precision: 9);
+
+        // Three across on a 16:9 table, so the fourth starts the second row - back at the left, and
+        // lower down.
+        Assert.Equal(places[0].X, places[3].X, precision: 9);
+        Assert.True(places[3].Y > places[0].Y, "the fourth place did not step down a row");
+    }
+
+    /// <summary>
+    /// How many places there are follows the size a picture arrives in, and that is the knob the
+    /// number six was chosen with. Fixing only the six would let the reference shape be changed
+    /// underneath it without a single test noticing.
+    /// <para>
+    /// The numbers are MEASURED across screen shapes and sizes, not reckoned - the first version of
+    /// the comment in <c>Placement</c> guessed at 21:9 and was wrong by a factor of two. The 4:3
+    /// row is the one worth keeping in mind: such a projector has exactly ONE place at 0.5, so
+    /// every picture lands on the last.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(1920, 1080, 0.5, 2)]
+    [InlineData(1920, 1080, 0.4, 6)]
+    [InlineData(1920, 1080, 0.3, 12)]
+    [InlineData(3840, 2160, 0.4, 6)]
+    [InlineData(2560, 1080, 0.4, 8)]
+    [InlineData(1600, 1200, 0.5, 1)]
+    [InlineData(1600, 1200, 0.4, 4)]
+    public void How_many_places_there_are_follows_the_arrival_size(int width, int height, double scale, int places)
+    {
+        var screen = Build.Screen(width, height) with { ScaleOnLoad = scale };
+        var seen = new List<Point>();
+        var scene = SceneState.Empty;
+
+        for (var i = 0; i < places * 2; i++)
+        {
+            var position = Placement.NextPosition(scene, scale, 4d / 3d, screen);
+            seen.Add(position);
+            scene = Build.SceneWith([.. scene.Items, Build.Item(position.X, position.Y, scale, 4d / 3d)]);
+        }
+
+        Assert.Equal(places, seen.Distinct().Count());
+    }
+
+    /// <summary>
+    /// A screen that holds no cell at all, because the arrival size is nonsense or larger than the
+    /// table itself. The picture goes to the middle - the answer that shows the most of it - rather
+    /// than off an edge or into an exception thrown at the DM.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(2)]
+    public void A_screen_without_a_single_place_puts_the_picture_in_the_middle(double scaleOnLoad)
+    {
+        var screen = Build.Screen() with { ScaleOnLoad = scaleOnLoad };
+
+        var position = Placement.NextPosition(SceneState.Empty, 0.4, 4d / 3d, screen);
+
+        Assert.Equal(new Point(0.5, 0.5), position);
+    }
+
+    private static List<Point> SixPlaces(ScreenContext screen)
+    {
+        var scale = Layout.ScaleOnLoad(4d / 3d, screen);
+        var scene = SceneState.Empty;
+        var places = new List<Point>();
+
+        for (var i = 0; i < 6; i++)
+        {
+            var position = Placement.NextPosition(scene, scale, 4d / 3d, screen);
+            places.Add(position);
+            scene = Build.SceneWith([.. scene.Items, Build.Item(position.X, position.Y, scale, 4d / 3d)]);
+        }
+
+        return places;
+    }
+
     /// <summary>Filling a whole row must step down, not run off the right edge.</summary>
     [Fact]
     public void A_full_row_wraps_to_the_next_one()

@@ -36,6 +36,73 @@ public sealed class SceneCommandTests
     }
 
     /// <summary>
+    /// <b>The seam nobody had crossed:</b> the hub really does place a new item through
+    /// <c>Placement</c>, with the screen's own settings, and the result really does end up in the
+    /// authoritative scene.
+    /// <para>
+    /// <c>AddItemAsync(position: null)</c> appears a dozen times in these tests and not one of them
+    /// ever looked at WHERE the item landed. Placement itself is covered in <c>Core</c> against a
+    /// screen built by hand - so both halves were green while the wiring between them was an
+    /// assumption. That is the shape of fault this project has already paid for once, when a client
+    /// and a hub were each tested against their own stand-in and neither sent a token.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Two_items_without_a_position_are_placed_apart_by_the_hub()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+
+        var items = (await session.GetSceneAsync(Target, Cancellation)).Items.OfType<ImageItem>().ToList();
+
+        Assert.Equal(2, items.Count);
+        Assert.NotEqual(
+            (items[0].CenterX, items[0].CenterY),
+            (items[1].CenterX, items[1].CenterY));
+
+        // Both on the screen, and both at the size a picture arrives in - the whole computation the
+        // hub is supposed to have done, not merely "some number was written".
+        Assert.All(items, item => Assert.InRange(item.CenterX, 0, 1));
+        Assert.All(items, item => Assert.InRange(item.CenterY, 0, 1));
+        Assert.All(items, item => Assert.True(item.Scale > 0));
+    }
+
+    /// <summary>
+    /// And the placement MODE reaches it: the same two items under <c>Cascade</c> land somewhere
+    /// else than under <c>Flow</c>. Without this the grip in the control could be switching a
+    /// setting that never arrives - which is exactly what step 16 asks to see side by side.
+    /// </summary>
+    [Fact]
+    public async Task The_placement_mode_of_the_screen_reaches_the_placement()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        var flowed = (await session.GetSceneAsync(Target, Cancellation)).Items.OfType<ImageItem>().Single();
+
+        await session.ApplyConfigAsync(
+            Device,
+            new ConfigUpdate([new ScreenConfigUpdate(Screen, new ScreenSettings(Placement: PlacementMode.Cascade))]),
+            Cancellation);
+
+        await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+
+        var cascaded = (await session.GetSceneAsync(Target, Cancellation))
+            .Items.OfType<ImageItem>().Last();
+
+        Assert.NotEqual((flowed.CenterX, flowed.CenterY), (cascaded.CenterX, cascaded.CenterY));
+
+        // Cascade steps out from the CENTRE, flow starts at the top left. Asserted as the direction
+        // rather than as a coordinate, so the test says which mode ran rather than repeating its
+        // arithmetic.
+        Assert.True(cascaded.CenterX > flowed.CenterX, "the second item was not placed the cascade way");
+    }
+
+    /// <summary>
     /// A command that reaches the hub after the item is already gone is not an error - it simply
     /// does nothing (Part 11).
     /// </summary>

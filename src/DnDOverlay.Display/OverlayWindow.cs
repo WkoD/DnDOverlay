@@ -135,9 +135,30 @@ internal sealed class OverlayWindow : Window
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
+
+        _stage.SizeChanged += (_, _) => SurfaceChanged?.Invoke();
     }
 
     internal ScreenId ScreenId => _monitor.Screen.ScreenId;
+
+    /// <summary>
+    /// Raised when the surface the scene is drawn on has changed size. Whoever draws has to draw
+    /// again - the scene is normalised, so every coordinate on it is a fraction of exactly this
+    /// surface.
+    /// <para>
+    /// It exists because of what its absence did (hand-run of M2b, third round): a window is drawn
+    /// into the moment it is shown, and at that moment WPF has not laid it out yet, so the stage
+    /// reports no size at all and the drawing falls back to the size the SCREEN reports. The two
+    /// are not the same number, and the pictures therefore stood in one place until the next
+    /// arrival redrew them somewhere else - which read as "switching a screen off and on moves the
+    /// pictures, adding one puts them back".
+    /// </para>
+    /// <para>
+    /// No loop: a canvas takes its size from its parent and not from what is put on it, so drawing
+    /// cannot change the size that caused the drawing.
+    /// </para>
+    /// </summary>
+    internal event Action? SurfaceChanged;
 
     /// <summary>
     /// Shows this screen's effective name, large, for a few seconds. Pressing again restarts the
