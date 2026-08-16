@@ -956,7 +956,14 @@ public sealed partial class App : Application, IDisposable
                 _images[item.AssetId] = decoded;
                 DisplayLog.AssetDecoded(_logger, item.AssetId, decoded.PixelWidth, decoded.PixelHeight);
             }
-            catch (HttpRequestException exception)
+            // A picture that does not arrive, and a picture that arrives unreadable, are the same
+            // thing from here: this one item stays missing and the rest of the scene is drawn.
+            // NotSupportedException is what WIC answers with - measured, not assumed - and without
+            // it here an undecodable asset left HandleAsync, ended the message loop and took the
+            // connection with it. Silently: exactly the failure this project already paid for once
+            // (Part 6). What a display should SHOW in its place - placeholder, retry, a failed
+            // AssetProgress - is M2b.
+            catch (Exception exception) when (exception is HttpRequestException or NotSupportedException)
             {
                 DisplayLog.AssetFailed(_logger, exception, item.AssetId);
             }

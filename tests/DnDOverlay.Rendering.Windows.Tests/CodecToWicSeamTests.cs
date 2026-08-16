@@ -119,6 +119,6 @@ public sealed class CodecToWicSeamTests(TestDataFixture fixture)
         var rubbish = new byte[512];
         Random.Shared.NextBytes(rubbish);
 
-        Assert.ThrowsAny<Exception>(() => PictureDecoder.Decode(rubbish));
+        Assert.Throws<System.NotSupportedException>(() => PictureDecoder.Decode(rubbish));
     }
 }

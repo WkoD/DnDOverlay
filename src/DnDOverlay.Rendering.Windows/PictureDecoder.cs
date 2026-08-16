@@ -19,9 +19,15 @@ public static class PictureDecoder
     /// thread and be shared between several items without a second copy.
     /// </summary>
     /// <exception cref="System.NotSupportedException">
-    /// The bytes are not a picture this machine can read. Deliberately not swallowed here: what a
-    /// display does about it - placeholder, retry, or a line in the log - is the caller's decision,
-    /// and a decoder that answers <see langword="null"/> makes that decision by omission.
+    /// The bytes are not a picture this machine can read - the type WIC answers with, measured
+    /// rather than assumed.
+    /// <para>
+    /// It is thrown rather than swallowed, because a decoder that answers <see langword="null"/>
+    /// decides by omission what the caller should decide. <b>That puts an obligation on the
+    /// caller</b>, and it is one this repository has already failed once: an exception out of the
+    /// display's message loop ends the loop and takes the connection with it, without a word.
+    /// The caller catches it.
+    /// </para>
     /// </exception>
     public static BitmapSource Decode(byte[] bytes)
     {

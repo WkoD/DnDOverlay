@@ -157,17 +157,24 @@ public sealed class ProjectStructureTests
     /// explicitly responsible for its own subject, and <see cref="RepositoryLayout.SubjectOf"/> is
     /// what says which that is.
     /// </para>
+    /// <para>
+    /// <b>Exempt is the OWN subject, not the category.</b> While there was one Windows-bound
+    /// library the two were the same sentence, and generalising the rule to two of them quietly
+    /// pulled them apart: read as a category it would let the platform tests reach into the
+    /// rendering project and back. A rule that grows a hole while being widened is the quietest
+    /// kind there is.
+    /// </para>
     /// </summary>
     [Fact]
     public void Nobody_but_the_applications_and_its_own_tests_reaches_into_a_Windows_bound_library()
     {
         var offenders = RepositoryLayout.Libraries
             .Select(name => RepositoryLayout.SourceProjects[name])
-            .Concat(RepositoryLayout.TestProjects.Values
-                .Where(project => !RepositoryLayout.WindowsBoundLibraries.Contains(
-                    RepositoryLayout.SubjectOf(project.Name), StringComparer.Ordinal)))
-            .Where(project => project.ProjectReferences.Intersect(
-                RepositoryLayout.WindowsBoundLibraries, StringComparer.Ordinal).Any())
+            .Concat(RepositoryLayout.TestProjects.Values)
+            .Where(project => project.ProjectReferences
+                .Intersect(RepositoryLayout.WindowsBoundLibraries, StringComparer.Ordinal)
+                .Any(reference => !string.Equals(
+                    reference, RepositoryLayout.SubjectOf(project.Name), StringComparison.Ordinal)))
             .Select(project => project.Name)
             .ToList();
 
