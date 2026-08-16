@@ -15,9 +15,6 @@ namespace DnDOverlay.Core;
 /// </summary>
 public sealed record NameSource
 {
-    /// <summary>The token's own name out of a <c>.rptok</c> - "Testfigur", not an MD5 (Part 5).</summary>
-    public string? TokenName { get; init; }
-
     /// <summary>The file name from a file dialog or an Explorer drop, extension and all.</summary>
     public string? FileName { get; init; }
 
@@ -37,7 +34,15 @@ public sealed record NameSource
 }
 
 /// <summary>
-/// The name a new stock entry starts out with, in the five stages of Part 3.
+/// The name a new stock entry starts out with - stages 2 to 5 of the five in Part 3.
+/// <para>
+/// <b>Stage 1 is deliberately not here.</b> A container's own name ("Testfigur" instead of an MD5)
+/// is visible only once the container has been opened, and opening happens inside the ingest so
+/// that no entrance can skip it (<see cref="IContainerReader"/>). Putting a <c>TokenName</c> field
+/// on <see cref="NameSource"/> would mean an entrance had to unpack in order to fill it - four
+/// entrances, four chances to forget. So the store overrides the proposal when it finds a better
+/// name, and the split is by what is KNOWABLE where, not by tidiness.
+/// </para>
 /// <para>
 /// <b>Nothing is invented.</b> The last stage is a counted name rather than a guess at the content -
 /// anything made up would mislead more than a number does. And the result is a PROPOSAL: the stock
@@ -59,12 +64,12 @@ public static class AssetNaming
     public const string CounterPlaceholder = "{n}";
 
     /// <summary>
-    /// The five stages, first answer wins.
+    /// The stages, first answer wins.
     /// <para>
-    /// The order is the plan's and it is an order of EVIDENCE, not of convenience: a token name and
-    /// a file name were chosen by a person, a URL segment was at least written by one, and only
-    /// then comes a number. A real screenshot is the one case that falls through all four, and for
-    /// it there is genuinely nothing to find.
+    /// The order is the plan's and it is an order of EVIDENCE, not of convenience: a file name was
+    /// chosen by a person, a URL segment was at least written by one, and only then comes a number.
+    /// A real screenshot is the one case that falls through them all, and for it there is genuinely
+    /// nothing to find.
     /// </para>
     /// </summary>
     /// <param name="offer">What the entrance had.</param>
@@ -80,8 +85,7 @@ public static class AssetNaming
     {
         ArgumentNullException.ThrowIfNull(offer);
 
-        return Clean(offer.TokenName)
-            ?? Clean(WithoutExtension(offer.FileName))
+        return Clean(WithoutExtension(offer.FileName))
             ?? FromUrl(offer.SourceUrl)
             ?? FromClipboard(offer)
             ?? Counted(counterPattern, counter);

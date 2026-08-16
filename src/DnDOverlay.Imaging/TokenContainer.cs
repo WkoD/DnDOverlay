@@ -28,7 +28,7 @@ namespace DnDOverlay.Imaging;
 /// or has moved is simply "not found", never a wrong picture and never a crash.
 /// </para>
 /// </summary>
-public sealed class TokenContainer(TokenLimits? limits = null)
+public sealed class TokenContainer(TokenLimits? limits = null) : IContainerReader
 {
     private const string RootElement = "net.rptools.maptool.model.Token";
     private const string ContentEntry = "content.xml";
@@ -106,6 +106,22 @@ public sealed class TokenContainer(TokenLimits? limits = null)
         var name = string.IsNullOrWhiteSpace(described.Name) ? "Token" : described.Name;
 
         return new TokenContent(name, portrait, kind);
+    }
+
+    /// <inheritdoc />
+    bool IContainerReader.Holds(ReadOnlyMemory<byte> data) => LooksLikeToken(data);
+
+    /// <summary>
+    /// The stock's view of the same reading. It keeps the name and the bytes and drops
+    /// <see cref="TokenPicture"/> - which of the two pictures was taken is a finding about the
+    /// TOKEN, and the stock has no use for it; the hand-run checks it at the measurements
+    /// (400x600 against 100x100, Part 11).
+    /// </summary>
+    ContainerContent IContainerReader.Read(ReadOnlyMemory<byte> data)
+    {
+        var content = Read(data);
+
+        return new ContainerContent(content.Name, content.Image);
     }
 
     private ZipArchive Open(ReadOnlyMemory<byte> data)

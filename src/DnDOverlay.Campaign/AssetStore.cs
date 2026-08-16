@@ -39,17 +39,36 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         WriteIndented = true,
     };
 
+    /// <summary>
+    /// What has to stay free beyond the picture itself. A starting point, not a measurement (Part
+    /// 10): it covers the thumbnail, the inventory and the difference between source and delivered
+    /// bytes, and it is small on purpose - a limit that fires in normal operation costs more than
+    /// what it guards against. The 5 GB in Part 7 is a different number for a different job: that
+    /// one WARNS while there is still room, this one refuses when there is not.
+    /// </summary>
+    private const long FreeSpaceReserve = 64L * 1024 * 1024;
+
     private readonly IImageCodec _codec;
+    private readonly IContainerReader? _containers;
+    private readonly Func<long> _freeSpace;
     private readonly AssetLimits _limits;
     private readonly TimeProvider _time;
     private readonly Lock _gate = new();
     private readonly Dictionary<string, InventoryEntry> _entries = new(StringComparer.Ordinal);
 
     private AssetStore(
-        string directory, IImageCodec codec, AssetLimits limits, TimeProvider time, InventoryDocument document)
+        string directory,
+        IImageCodec codec,
+        IContainerReader? containers,
+        Func<long>? freeSpace,
+        AssetLimits limits,
+        TimeProvider time,
+        InventoryDocument document)
     {
         Directory = directory;
         _codec = codec;
+        _containers = containers;
+        _freeSpace = freeSpace ?? (() => FreeSpaceOn(directory));
         _limits = limits;
         _time = time;
         CreatedAt = document.CreatedAt;
@@ -88,8 +107,21 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// failing to start, a campaign holds work, and starting fresh over it would destroy it
     /// (Part 3, Part 11).
     /// </exception>
+    /// <param name="containers">
+    /// The unpacker for containers that hold a picture (Part 5). Optional: without one a
+    /// <c>.rptok</c> is simply an unreadable file, which is what a build with no unpacker means.
+    /// </param>
+    /// <param name="freeSpace">
+    /// How many bytes are still free on the campaign's drive. Handed in like every other limit
+    /// (rule 10) - the case worth proving is a FULL disk, and no test may create one.
+    /// </param>
     public static AssetStore Open(
-        string directory, IImageCodec codec, TimeProvider time, AssetLimits? limits = null)
+        string directory,
+        IImageCodec codec,
+        TimeProvider time,
+        AssetLimits? limits = null,
+        IContainerReader? containers = null,
+        Func<long>? freeSpace = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentNullException.ThrowIfNull(codec);
@@ -100,7 +132,8 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         var path = Path.Combine(directory, InventoryFileName);
         var document = Read(path) ?? new InventoryDocument { CreatedAt = time.GetUtcNow() };
 
-        var store = new AssetStore(directory, codec, limits ?? AssetLimits.Default, time, document);
+        var store = new AssetStore(
+            directory, codec, containers, freeSpace, limits ?? AssetLimits.Default, time, document);
 
         if (!File.Exists(path))
         {
@@ -195,6 +228,28 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         }
     }
 
+    /// <summary>
+    /// What the file system says is free where the campaign lies.
+    /// <para>
+    /// An unanswerable question is answered with "plenty", deliberately: a drive that cannot be
+    /// asked - a network share, an unusual mount - must not turn every ingest into a refusal. The
+    /// guard is against a disk filling up, not against not knowing.
+    /// </para>
+    /// </summary>
+    private static long FreeSpaceOn(string directory)
+    {
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(directory));
+
+            return string.IsNullOrEmpty(root) ? long.MaxValue : new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return long.MaxValue;
+        }
+    }
+
     /// <summary>Where the thumbnail of an asset lies, whether or not it exists yet.</summary>
     public string ThumbnailPath(AssetId id) =>
         Path.Combine(
@@ -205,6 +260,26 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
     private IngestResult Ingest(ReadOnlyMemory<byte> source, string proposedName)
     {
+        // A container is opened FIRST, before the hash is taken, and both halves of that matter.
+        // The identity has to be the extracted picture's, or the same portrait out of two tokens
+        // would be two entries and the same picture as token and as PNG likewise (Part 5). And the
+        // name it carried beats the one the entrance proposed - that is stage 1 of the five, and
+        // the only stage no entrance can supply, because only this step sees it (Part 3).
+        if (_containers is { } containers && containers.Holds(source))
+        {
+            try
+            {
+                var content = containers.Read(source);
+
+                source = content.Image;
+                proposedName = content.Name;
+            }
+            catch (ImageRejectedException rejected)
+            {
+                return new IngestResult.Refused(rejected.Reason, rejected.Message);
+            }
+        }
+
         // Identity first, and it hashes the SOURCE. Hashing the output instead breaks dedup two
         // ways that both surface late: the encoder writes timestamps by default, and an encoder
         // update changes the bytes - after which the same file yields a new hash and the store
@@ -220,6 +295,22 @@ public sealed class AssetStore : IAssetSource, IAssetSink
                 return new IngestResult.Taken(
                     new AssetRef(assetId, known.Meta, known.Name), AlreadyPresent: true, FormatStanding.Promised);
             }
+        }
+
+        // Room is asked about BEFORE the decode, in the same place and for the same reason as the
+        // size limits: decoding is the expensive step, and spending twelve seconds on a picture
+        // that cannot be written afterwards helps nobody. An evening of large maps adds up, and the
+        // failure is stated with the campaign named rather than surfacing as a broken write
+        // (Part 5).
+        if (_freeSpace() is var free && free < source.Length + FreeSpaceReserve)
+        {
+            return new IngestResult.Refused(
+                ImageRejection.NoSpace,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"There is no room left for this picture: {free / (1024 * 1024)} MB free where "
+                    + $"{(source.Length + FreeSpaceReserve) / (1024 * 1024)} MB are needed. "
+                    + $"Clear some space in the campaign at {Directory}."));
         }
 
         NormalisedImage normalised;

@@ -14,22 +14,23 @@ public sealed class AssetNamingTests
     private const string Pattern = "Zwischenablage {n}";
 
     /// <summary>
-    /// Stage 1. The whole point of reading a token's name is that the entry says "Testfigur" and
-    /// not an MD5 (Part 5) - so it has to beat every other source, including a file name that is
-    /// exactly such an MD5.
+    /// Stage 2 beats everything below it. Stage 1 - a container's own name - is not in this class
+    /// at all: it becomes visible only when the container is opened, and that happens inside the
+    /// ingest so no entrance can skip it. It is proved where it happens, in
+    /// <c>Campaign.Tests.AssetStoreTests</c>.
     /// </summary>
     [Fact]
-    public void A_token_name_beats_every_other_source()
+    public void A_file_name_beats_every_source_below_it()
     {
         var offer = new NameSource
         {
-            TokenName = "Testfigur",
-            FileName = "aada88d7b506f0e5e0b0e6a0c1d2e3f4.png",
+            FileName = "Wache.png",
             SourceUrl = "https://example.invalid/bilder/ork.png",
             Html = "<img src=\"x\" alt=\"Ein Ork\">",
+            Text = "https://example.invalid/bilder/Tavernenwirt.webp",
         };
 
-        Assert.Equal("Testfigur", AssetNaming.Derive(offer, Pattern, 1));
+        Assert.Equal("Wache", AssetNaming.Derive(offer, Pattern, 1));
     }
 
     /// <summary>Stage 2. <c>Krieger.png</c> becomes <c>Krieger</c> - the extension says nothing a person wants.</summary>
@@ -208,7 +209,7 @@ public sealed class AssetNamingTests
     [Fact]
     public void A_blank_candidate_hands_on_to_the_next_stage()
     {
-        var offer = new NameSource { TokenName = "   ", FileName = "Krieger.png" };
+        var offer = new NameSource { FileName = "   ", SourceUrl = "https://example.invalid/a/Krieger.png" };
 
         Assert.Equal("Krieger", AssetNaming.Derive(offer, Pattern, 1));
     }

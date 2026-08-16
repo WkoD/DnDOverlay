@@ -111,6 +111,17 @@ public enum ImageRejection
     /// purpose: this is the second net, the one that catches a header which LIED.
     /// </summary>
     Aborted,
+
+    /// <summary>
+    /// There is no room on the campaign's drive (Part 5).
+    /// <para>
+    /// Its own entry rather than a shade of <see cref="TooLarge"/>, because it says nothing about
+    /// the picture: an evening of large maps simply adds up. The DM's answer is the cleanup view,
+    /// not a smaller file - and folded into "too large" that is exactly the answer they would not
+    /// get.
+    /// </para>
+    /// </summary>
+    NoSpace,
 }
 
 /// <summary>

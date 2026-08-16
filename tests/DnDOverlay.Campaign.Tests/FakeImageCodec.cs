@@ -24,6 +24,13 @@ internal sealed class FakeImageCodec : IImageCodec
 
     private int _writes;
 
+    /// <summary>
+    /// Bytes this fake always refuses, whatever the flags say. The flag refuses EVERY picture,
+    /// which cannot stage the case a collected report is built for: three broken files among two
+    /// hundred good ones (Part 7).
+    /// </summary>
+    internal static byte[] Unreadable { get; } = Encoding.UTF8.GetBytes("!! not a picture !!");
+
     /// <summary>Set to refuse the next probe, to stage a rejection with a stated reason.</summary>
     internal ImageRejection? RefuseWith { get; set; }
 
@@ -44,6 +51,11 @@ internal sealed class FakeImageCodec : IImageCodec
         if (RefuseWith is { } reason)
         {
             throw new ImageRejectedException(reason, "staged refusal");
+        }
+
+        if (source.Span.StartsWith(Unreadable))
+        {
+            throw new ImageRejectedException(ImageRejection.Unreadable, "this one is not a picture");
         }
 
         return Claims;
