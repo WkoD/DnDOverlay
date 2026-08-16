@@ -121,8 +121,16 @@ public static class Placement
 
         // Normalised height is a fraction of the screen height and normalised width a fraction of
         // the screen WIDTH, so the reference shape travels through both aspect ratios - the same
-        // trap Layout keeps warning about, and the reason 0.4 gives six cells on 16:9 and would
-        // give four on 21:9.
+        // trap Layout keeps warning about. How many places that comes to, MEASURED rather than
+        // reckoned (the first version of this comment guessed and was wrong):
+        //
+        //              0.5   0.4   0.3   0.25
+        //   16:9        2     6    12    12
+        //   21:9        3     8    15    18
+        //    4:3        1     4     9     9
+        //
+        // The 4:3 column is the one to keep in mind: a projector of that shape has ONE place at
+        // 0.5 - every picture exactly on top of the last.
         var width = screen.AspectRatio <= 0
             ? height * ReferenceAspectRatio
             : height * ReferenceAspectRatio / screen.AspectRatio;
