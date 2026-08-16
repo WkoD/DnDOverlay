@@ -34,7 +34,16 @@ internal sealed class OverlayWindow : Window
 
     private readonly MonitorInfo _monitor;
     private readonly bool _windowed;
-    private readonly Canvas _stage = new() { Background = null };
+    /// <summary>
+    /// The drawing surface. <c>Background = null</c> rather than <c>Transparent</c>, because a null
+    /// brush is hit-test free and a transparent one is not (Part 6).
+    /// <para>
+    /// <c>ClipToBounds</c> is set, and it is not decoration: a Canvas does not clip by default, and
+    /// the background layer under <c>Cover</c> deliberately reaches past the screen - that overhang
+    /// is the crop. Without this the crop would be a hope about how far a window happens to paint.
+    /// </para>
+    /// </summary>
+    private readonly Canvas _stage = new() { Background = null, ClipToBounds = true };
     private readonly TextBlock _name;
     private readonly Border _nameplate;
     private readonly DispatcherTimer _naming;
@@ -145,13 +154,22 @@ internal sealed class OverlayWindow : Window
     {
         _stage.Children.Clear();
 
+        var width = _stage.ActualWidth > 0 ? _stage.ActualWidth : context.WidthInDip;
+        var height = _stage.ActualHeight > 0 ? _stage.ActualHeight : context.HeightInDip;
+
+        // The two layers are independent in all four combinations, and each switch hides its own
+        // and nothing else (Part 11, step 24). Hiding is not removing: the pictures stay in the
+        // scene and in the device's store, which is what makes fading them back in immediate and
+        // free of a second transfer (Part 7).
+        if (scene.BackgroundVisible)
+        {
+            DrawBackground(scene.Background, context, images, width, height);
+        }
+
         if (!scene.ItemsVisible)
         {
             return;
         }
-
-        var width = _stage.ActualWidth > 0 ? _stage.ActualWidth : context.WidthInDip;
-        var height = _stage.ActualHeight > 0 ? _stage.ActualHeight : context.HeightInDip;
 
         foreach (var item in scene.Items.OrderBy(item => item.ZOrder))
         {
@@ -164,6 +182,34 @@ internal sealed class OverlayWindow : Window
 
             _stage.Children.Add(Place(source, rect, item.RotationDeg, width, height));
         }
+    }
+
+    /// <summary>
+    /// The background layer, beneath everything - added first, so it is at the bottom of the canvas
+    /// without needing a Z value of its own.
+    /// <para>
+    /// Under <c>Cover</c> the rectangle reaches past the screen on purpose: that overhang IS the
+    /// crop. The stage clips, so what hangs over is simply not drawn - the alternative would be
+    /// cropping the bitmap here and computing the geometry a second time (Part 6).
+    /// </para>
+    /// </summary>
+    private void DrawBackground(
+        BackgroundItem? background,
+        ScreenContext context,
+        IReadOnlyDictionary<AssetId, ImageSource> images,
+        double width,
+        double height)
+    {
+        if (background is null || !images.TryGetValue(background.AssetId, out var source))
+        {
+            return;
+        }
+
+        var aspectRatio = background.Meta.AspectRatio;
+        var rect = Layout.BackgroundRect(
+            aspectRatio, background.Fit, background.OffsetX, background.OffsetY, context);
+
+        _stage.Children.Add(Place(source, rect, rotationDeg: 0, width, height));
     }
 
     private static Image Place(ImageSource source, CoreRect rect, double rotationDeg, double width, double height)

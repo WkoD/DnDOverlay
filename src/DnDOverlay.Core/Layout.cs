@@ -122,4 +122,59 @@ public static class Layout
 
         return Math.Clamp(scale, minimum, Math.Max(minimum, screen.MaxScale));
     }
+
+    /// <summary>
+    /// Where the background picture lies, in the same normalised screen coordinates everything else
+    /// here uses. The screen itself is <c>(0, 0, 1, 1)</c>, so under
+    /// <see cref="BackgroundFit.Cover"/> the rectangle reaches PAST it on one axis - that overhang
+    /// is the crop, and whoever draws it clips to the screen.
+    /// <para>
+    /// Two values and no free scaling, deliberately: <c>Cover</c> fills and crops, <c>Contain</c>
+    /// shows everything with a margin, and a panorama is unusable under <c>Cover</c> without it.
+    /// A freely scalable background would be a gesture this layer deliberately does not have
+    /// (Part 6).
+    /// </para>
+    /// </summary>
+    /// <param name="offsetX">
+    /// Which part of the crop is seen: <c>0</c> is centred, <c>-1</c> the left edge, <c>+1</c> the
+    /// right. <b>It moves only inside the crop</b> and can never run past the edge - the value is
+    /// clamped, and where there is no overhang it has no effect at all. Under <c>Contain</c> that
+    /// means it does nothing, which is the honest outcome rather than a special case: the picture
+    /// is entirely visible, so there is nothing to choose between (Part 6, Part 11).
+    /// </param>
+    public static Rect BackgroundRect(
+        double aspectRatio, BackgroundFit fit, double offsetX, double offsetY, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        if (aspectRatio <= 0 || screen.AspectRatio <= 0)
+        {
+            // Nothing to fit against. Filling the screen is the answer that shows a picture rather
+            // than an empty layer.
+            return new Rect(0, 0, 1, 1);
+        }
+
+        // Normalised height is a fraction of the screen height and normalised width a fraction of
+        // the screen WIDTH, so the picture's shape has to travel through both aspect ratios - the
+        // same trap as in ItemToRect, and the reason both live here rather than at two call sites.
+        var relative = aspectRatio / screen.AspectRatio;
+
+        // Wider than the screen, in normalised terms, iff relative > 1.
+        var (width, height) = fit switch
+        {
+            BackgroundFit.Contain when relative >= 1 => (1d, 1d / relative),
+            BackgroundFit.Contain => (relative, 1d),
+            _ when relative >= 1 => (relative, 1d),
+            _ => (1d, 1d / relative),
+        };
+
+        return new Rect(Edge(width, offsetX), Edge(height, offsetY), width, height);
+    }
+
+    /// <summary>
+    /// Where one edge starts: centred when the offset is zero, and at most as far as the overhang
+    /// allows. <c>Contain</c> needs no case of its own here - it simply has no overhang.
+    /// </summary>
+    private static double Edge(double extent, double offset) =>
+        -(Math.Max(0, extent - 1) / 2) * (1 + Math.Clamp(offset, -1, 1));
 }
