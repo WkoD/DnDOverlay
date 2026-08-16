@@ -31,6 +31,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(ScreensChangedMessage), "ScreensChanged")]
 [JsonDerivedType(typeof(ConfigUpdateMessage), "ConfigUpdate")]
 [JsonDerivedType(typeof(IdentifyScreensMessage), "IdentifyScreens")]
+[JsonDerivedType(typeof(AssetProgressMessage), "AssetProgress")]
 public abstract record ProtocolMessage;
 
 /// <summary>
@@ -379,4 +380,73 @@ public static class Protocol
 
     /// <summary>How often the beacon goes out. A machine set up at the table should appear at once.</summary>
     public static readonly TimeSpan BeaconInterval = TimeSpan.FromSeconds(2);
+}
+
+/// <summary>
+/// Where one picture has got to on its way to a device.
+/// </summary>
+public enum AssetLoadState
+{
+    /// <summary>Bytes are coming down.</summary>
+    Loading,
+
+    /// <summary>All bytes are here and the delivered hash is being checked (Part 5).</summary>
+    Verifying,
+
+    /// <summary>Being turned into a bitmap. Not free, and not instant on a large picture.</summary>
+    Decoding,
+
+    /// <summary>Ready to draw - and only then.</summary>
+    Done,
+
+    /// <summary>
+    /// Finally unsuccessful. A state of its own rather than a ring that never fills: the item shows
+    /// a placeholder with a reason instead (Part 7).
+    /// </summary>
+    Failed,
+}
+
+/// <summary>One picture on its way, as a fraction and a state.</summary>
+/// <param name="Fraction">
+/// Between 0 and 1, and it never goes backwards within one attempt. A retry does not secretly
+/// start over either - it continues to be reported as the same attempt, because a ring that jumped
+/// back to zero would read as "this is going wrong" when it is merely going slowly (Part 7).
+/// </param>
+public sealed record AssetLoad(AssetId Asset, double Fraction, AssetLoadState State);
+
+/// <summary>
+/// What this device is loading right now - one entry per picture, and the thing the progress ring
+/// on the item is fed from (Part 7).
+/// <para>
+/// It flows <b>without being asked for</b>, because the ring has to be there; and it flows
+/// <b>only while something is loading</b>. A device with nothing to do sends nothing at all, and
+/// that is the normal case (Part 4).
+/// </para>
+/// <para>
+/// <b>It carries no device identifier.</b> The hub knows which connection it arrived on, and that
+/// is the one answer that cannot be forged - a device naming itself here would be a second source
+/// for a question that already has a better one.
+/// </para>
+/// <para>
+/// <b>Rank 3</b>, in a queue of its own. Under load the touch points stop getting a turn while
+/// this still does: otherwise the first thing to fall away would be the very feedback that
+/// explains the load (Part 4).
+/// </para>
+/// </summary>
+public sealed record AssetProgressMessage(IReadOnlyList<AssetLoad> Loads) : ProtocolMessage
+{
+    public bool Equals(AssetProgressMessage? other) =>
+        other is not null && Loads.SequenceEqual(other.Loads);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        foreach (var load in Loads)
+        {
+            hash.Add(load);
+        }
+
+        return hash.ToHashCode();
+    }
 }

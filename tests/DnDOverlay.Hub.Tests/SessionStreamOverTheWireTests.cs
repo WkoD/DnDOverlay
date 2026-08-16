@@ -174,6 +174,46 @@ public sealed class SessionStreamOverTheWireTests : IAsyncLifetime
     /// Subscribes and hands back the raw stream, opening picture and all. Only a test that is
     /// ABOUT the opening picture wants this one - everything else wants <see cref="ListenAsync"/>.
     /// </summary>
+    /// <summary>
+    /// A device reports what it is loading, and a surface at <c>/ws/control</c> gets it - the case
+    /// that was missing from the union until M2 (Part 4, Part 11).
+    /// <para>
+    /// Two things are asserted rather than one. The <b>device is named</b>, and it is named from
+    /// the connection: the message itself carries no identifier, which is what makes the answer
+    /// unforgeable. And the event travels as <see cref="SendClass.Progress"/> - the first event of
+    /// this stream that is not state, and therefore the first for which the three-queue ranking
+    /// does any work at all.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task What_a_device_is_loading_reaches_a_surface_and_travels_as_progress()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var stream = await ListenAsync(cancellationToken);
+
+        using var socket = await ConnectAsync(Carrying, [Info(First)], cancellationToken);
+
+        var picture = new AssetId(new string('a', 64));
+
+        await socket.SendAsync(
+            ProtocolJson.Serialise(new AssetProgressMessage(
+                [new AssetLoad(picture, 0.42, AssetLoadState.Loading)])),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            cancellationToken);
+
+        var progress = await NextAsync<SessionEvent.AssetProgress>(stream);
+
+        Assert.Equal(Carrying, progress.Device);
+        Assert.Equal(SendClass.Progress, progress.SendClass);
+
+        var load = Assert.Single(progress.Loads);
+        Assert.Equal(picture, load.Asset);
+        Assert.Equal(0.42, load.Fraction);
+        Assert.Equal(AssetLoadState.Loading, load.State);
+    }
+
     private IAsyncEnumerator<SessionEvent> Listen(CancellationToken cancellationToken) =>
         _app.Services
             .GetRequiredService<ISessionApi>()

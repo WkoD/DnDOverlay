@@ -594,6 +594,14 @@ public static class HubEndpoints
 
                         break;
 
+                    case AssetProgressMessage progress:
+                        // Passed straight on, and the device is named from the CONNECTION rather
+                        // than from the message - the one answer a device cannot get wrong. It is
+                        // not logged: a reading two to four times a second would bury every other
+                        // line, and the ring is where it belongs (Part 7).
+                        events.Publish(new SessionEvent.AssetProgress(device.Device, progress.Loads));
+                        break;
+
                     default:
                         HubLog.UnhandledMessageIgnored(logger, device.Device);
                         break;

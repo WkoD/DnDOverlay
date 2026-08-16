@@ -44,10 +44,11 @@ public static class SendClasses
     /// </summary>
     public static SendClass Of(ProtocolMessage message) => message switch
     {
-        // Everything M1b puts on the wire is state. The other two classes are declared and built
-        // regardless, because there must be no moment in which a socket is written WITHOUT these
-        // rules - the traffic for them arrives later: AssetProgress with M2, TouchPoints,
-        // Diagnostics, WindowList and SpotlightPulse with M3 and M5 (Part 4, Part 10).
+        // The first message that is not state, and therefore the first one that makes the ranking
+        // do any work at all. Until M2 the two lower queues were built and empty (Part 4, Part 10);
+        // the transient one still is, and fills with TouchPoints, Diagnostics, WindowList and
+        // SpotlightPulse in M3 and M5.
+        AssetProgressMessage => SendClass.Progress,
         _ => SendClass.State,
     };
 }

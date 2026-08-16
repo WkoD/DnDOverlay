@@ -62,6 +62,14 @@ public sealed class ProtocolJsonTests
         // Carries nothing, and that is the statement: the device knows its own screens and what
         // each is called, so a list from the control would be a second copy of the names (Part 6).
         new IdentifyScreensMessage(),
+
+        // The first message that is not state (Part 4). It names no device: the hub knows which
+        // connection a reading came in on, and that is the answer a device cannot get wrong.
+        new AssetProgressMessage(
+        [
+            new AssetLoad(new AssetId(new string('a', 64)), 0.4, AssetLoadState.Loading),
+            new AssetLoad(new AssetId(new string('b', 64)), 1, AssetLoadState.Decoding),
+        ]),
     ];
 
     public static TheoryData<ProtocolMessage> AllMessages() => [.. Messages];
@@ -84,6 +92,7 @@ public sealed class ProtocolJsonTests
     [InlineData("ScreensChanged")]
     [InlineData("ConfigUpdate")]
     [InlineData("IdentifyScreens")]
+    [InlineData("AssetProgress")]
     public void The_wire_names_are_the_ones_the_plan_promises(string wireName)
     {
         var payloads = Messages

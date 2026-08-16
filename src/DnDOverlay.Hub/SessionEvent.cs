@@ -99,4 +99,42 @@ public abstract record SessionEvent
     /// DM reads on screen he finds again in <c>logs\</c> (Part 8).
     /// </summary>
     public sealed record Logged(LogRecord Record) : SessionEvent;
+
+    /// <summary>
+    /// What one device is loading right now, feeding the progress ring on the item (Part 7).
+    /// <para>
+    /// <b>The first event of this stream that is not state</b>, and therefore the first one the
+    /// three-queue ranking does any work for: under load the touch points of M3 will stop getting
+    /// a turn while this still does. Until now the classes were declared and the lower queues
+    /// empty (Part 4).
+    /// </para>
+    /// <para>
+    /// The device is named <b>here</b> rather than in the message: the hub knows which connection
+    /// the reading came in on, and that is the one answer a device cannot get wrong or forge.
+    /// </para>
+    /// </summary>
+    public sealed record AssetProgress(DeviceId Device, IReadOnlyList<AssetLoad> Loads) : SessionEvent
+    {
+        /// <summary>
+        /// One slot, overwritten. A reading from a moment ago is worthless rather than inaccurate,
+        /// so a subscriber that fell behind wants the newer one and not both.
+        /// </summary>
+        public override SendClass SendClass => SendClass.Progress;
+
+        public bool Equals(AssetProgress? other) =>
+            other is not null && Device == other.Device && Loads.SequenceEqual(other.Loads);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(Device);
+
+            foreach (var load in Loads)
+            {
+                hash.Add(load);
+            }
+
+            return hash.ToHashCode();
+        }
+    }
 }
