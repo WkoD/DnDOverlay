@@ -90,6 +90,29 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// </para>
     /// </summary>
     public LogLevel LogLevel { get; set; } = LogLevel.Information;
+
+    /// <summary>
+    /// The pattern for the counted name - stage 5 of the naming, used when a picture arrives with
+    /// nothing to derive a name from (Part 3, Part 7).
+    /// <para>
+    /// <b>It is a setting rather than a constant for one reason above all:</b> hard wired it would
+    /// be the single place where a German word stood in an English interface or the other way
+    /// round - and the DM who would rather have "NSC 7" could not reach it. The
+    /// <c>{n}</c> is where the number goes; a pattern without it is taken at its word.
+    /// </para>
+    /// <para>
+    /// Additive, so a file written before this existed simply reads the default and the schema
+    /// version stays where it is (rule 7).
+    /// </para>
+    /// </summary>
+    public string CountedNamePattern { get; set; } = "Clipboard {n}";
+
+    /// <summary>
+    /// How far the counted names have got. Kept so a restart does not start again at one and
+    /// collide with every name from the last session - the stock would number those apart, and the
+    /// DM would be looking at "Clipboard 1 (2)" without ever having done anything twice.
+    /// </summary>
+    public int CountedNameNext { get; set; } = 1;
 }
 
 /// <summary>

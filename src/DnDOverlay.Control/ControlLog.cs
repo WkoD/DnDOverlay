@@ -131,4 +131,21 @@ internal static partial class ControlLog
         Message = "{Name} was not taken in: {Reason} - {Detail}")]
     internal static partial void AssetRefused(
         ILogger logger, string name, ImageRejection reason, string detail);
+
+    /// <summary>
+    /// The line that answers what 2001 cannot. Two hundred pictures write two hundred 2001 lines,
+    /// and reading them tells you about each picture and nothing about the RUN - how long it took
+    /// altogether, how many were already there, whether it was broken off halfway.
+    /// <para>
+    /// Written for a run of one as well, because a single paste is the same path: a line that only
+    /// appears above some threshold is a line nobody can rely on finding.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 2003,
+        Level = LogLevel.Information,
+        Message = "Intake over {Sources} source(s) finished in {Milliseconds} ms: {Taken} taken in, "
+                  + "{Known} already there, {Refused} refused{Broken}.")]
+    internal static partial void IntakeFinished(
+        ILogger logger, int sources, long milliseconds, int taken, int known, int refused, string broken);
 }

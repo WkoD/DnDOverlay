@@ -21,7 +21,6 @@ internal sealed class MainWindow : Window, IDisposable
 {
     private readonly ISessionApi _session;
     private readonly PairingDesk _pairing;
-    private readonly IAssetSink _stock;
     private readonly Uri _address;
     private readonly LogList _log;
     private readonly CancellationTokenSource _listening = new();
@@ -41,17 +40,16 @@ internal sealed class MainWindow : Window, IDisposable
     internal MainWindow(
         ISessionApi session,
         PairingDesk pairing,
-        IAssetSink stock,
+        Entrances entrances,
         Uri address,
         ProcessLog log)
     {
         _session = session;
         _pairing = pairing;
-        _stock = stock;
         _address = address;
         _log = new LogList(log, "Control") { Height = 200 };
 
-        _stage = new StagePanel(session, stock, Selected, _status, log.CreateLogger("Control"));
+        _stage = new StagePanel(session, entrances, Selected, _status, log.CreateLogger("Control"));
 
         Title = "DnDOverlay - M2b";
         Width = 620;

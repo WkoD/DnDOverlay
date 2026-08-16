@@ -617,8 +617,9 @@ later is not a notification but the trail: *did this device ever knock, and what
 |---|---|---|
 | 2001 | `AssetTakenIn` | Information |
 | 2002 | `AssetRefused` | Information |
+| 2003 | `IntakeFinished` | Information |
 
-**Next free: 2003.**
+**Next free: 2004.**
 
 **2001 carries a duration, and that is the point of it.** The range stood empty through M2a and
 M2b, and a hand run showed what that cost: twelve pictures were taken into a campaign and the
@@ -631,6 +632,12 @@ from the outside the two are indistinguishable without the number.
 **2002 is Information and not Warning.** A refused picture is the hardening working — the DM is
 told at the panel and the trail says the same. A warning would put a correct refusal on the same
 footing as a fault, and the file is read for faults.
+
+**2003 is the line that answers a question 2001 cannot.** Two hundred pictures dropped in one go
+write two hundred `2001` lines, and reading them tells you about each picture and nothing about the
+run: how long the whole thing took, how many were already there, whether it was broken off. It is
+written once per run — including for a run of one, because a single paste is the same path and a
+line that only appears above some threshold is a line nobody can rely on.
 
 ### 3000–3999 · Display
 

@@ -100,7 +100,12 @@ public sealed partial class App : Application, IDisposable
         var store = AssetStore.Open(
             Path.Combine(_dataRoot.CampaignsDefault, "unbenannt"),
             new MagickCodec(),
-            TimeProvider.System);
+            TimeProvider.System,
+
+            // The unpacker is handed in here and nowhere else. Without it a .rptok would be an
+            // unreadable file, and the shortest way to a full stock - the monsters the DM has had
+            // as tokens for years - would not exist (Part 5).
+            containers: new TokenContainer());
 
         _store = store;
 
@@ -201,7 +206,7 @@ public sealed partial class App : Application, IDisposable
         var window = new MainWindow(
             session,
             new PairingDesk(session, secrets, _settings, TimeProvider.System),
-            store,
+            new Entrances(store, _settings),
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
             _log);
 
