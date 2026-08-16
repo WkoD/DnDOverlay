@@ -1,14 +1,13 @@
-using System.IO;
 using System.Net.Http;
 using System.Threading.Channels;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Platform.Windows;
+using DnDOverlay.Rendering.Windows;
 using DnDOverlay.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
@@ -952,7 +951,7 @@ public sealed partial class App : Application, IDisposable
                     .GetAsync(_hubHttp, _assetPath, item.AssetId, _sessionToken!, _shutdown.Token)
                     .ConfigureAwait(false);
 
-                var decoded = Decode(bytes);
+                var decoded = PictureDecoder.Decode(bytes);
 
                 _images[item.AssetId] = decoded;
                 DisplayLog.AssetDecoded(_logger, item.AssetId, decoded.PixelWidth, decoded.PixelHeight);
@@ -962,26 +961,6 @@ public sealed partial class App : Application, IDisposable
                 DisplayLog.AssetFailed(_logger, exception, item.AssetId);
             }
         }
-    }
-
-    /// <summary>
-    /// Decoding happens here, in the application, with WIC - never in Transport. A decoded
-    /// bitmap is uncompressed memory, width × height × 4 bytes, and the file size says nothing
-    /// about it: a 6000×4000 photo is 96 MB in memory even when the JPEG weighs 5 MB (Part 6).
-    /// The stepped decoding that follows from that is M2's business.
-    /// </summary>
-    private static BitmapImage Decode(byte[] bytes)
-    {
-        using var stream = new MemoryStream(bytes);
-
-        var image = new BitmapImage();
-        image.BeginInit();
-        image.CacheOption = BitmapCacheOption.OnLoad;
-        image.StreamSource = stream;
-        image.EndInit();
-        image.Freeze();
-
-        return image;
     }
 
     private Task RenderAsync(ScreenRef screen) => Dispatcher.InvokeAsync(() => Draw(screen)).Task;

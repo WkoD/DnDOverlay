@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Decoding picture bytes into something a window can draw - and the one project in the
+       repository that is allowed to reference WPF without being an application.
+
+       Why it exists at all: the decode sat as a private method inside App.xaml.cs, where no test
+       can reach it. That is the same place, and the same reason, that once let a display fail to
+       ever reconnect (Part 6, and the open decision on the connection loop in STATUS.md). The
+       seam this closes is a real one: what MagickCodec WRITES has so far only ever been read back
+       by Magick itself, and the JPEG it passes through is trimmed by our own byte surgery.
+
+       Windows-bound all the way through, hence the name. WIC reaches us through PresentationCore,
+       so this needs net10.0-windows AND UseWPF - there is nothing in here that would build on
+       Linux, and pretending otherwise would only put it in the Linux filter to fail there.
+
+       What deliberately does NOT live here: WHICH size to decode at. The base step is the longer
+       screen edge (Part 6), and that is arithmetic over numbers - it stays platform-neutral in
+       Core, and this project takes the result as a parameter. The split is what keeps the
+       untestable part as small as it can be. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

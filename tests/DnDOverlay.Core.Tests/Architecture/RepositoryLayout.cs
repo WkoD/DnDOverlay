@@ -36,6 +36,34 @@ internal static class RepositoryLayout
         "DnDOverlay.Platform.Windows",
     ];
 
+    /// <summary>
+    /// The fifth category: Windows-bound code that needs WPF itself - today the picture decoder,
+    /// which reaches WIC through PresentationCore.
+    /// <para>
+    /// It is a category of its own rather than a second entry under <see cref="Platform"/>, and the
+    /// reason is written into the platform project: <c>UseWPF</c> is off there deliberately, so that
+    /// "what changes a window of our own stays with that window" is a property of the build rather
+    /// than a habit. Putting a WPF-needing type in there would dissolve that boundary for BOTH
+    /// applications at once, for the sake of one type.
+    /// </para>
+    /// <para>
+    /// Why it is a library at all rather than a method in the display: it sat as a private method
+    /// inside <c>App.xaml.cs</c>, where nothing could test it - and Part 5's promise that WIC reads
+    /// what our codec writes had no net under it at all.
+    /// </para>
+    /// </summary>
+    internal static readonly string[] Rendering =
+    [
+        "DnDOverlay.Rendering.Windows",
+    ];
+
+    /// <summary>
+    /// The Windows-bound libraries. Both categories answer the same question the same way: a
+    /// platform-neutral library reaching into either of them would be Windows-bound through the
+    /// back door, and the Linux job would be the place that found out.
+    /// </summary>
+    internal static readonly string[] WindowsBoundLibraries = [.. Platform, .. Rendering];
+
     /// <summary>The two WPF applications.</summary>
     internal static readonly string[] Applications =
     [
@@ -69,8 +97,12 @@ internal static class RepositoryLayout
         "DnDOverlay.FirewallRemove",
     ];
 
-    /// <summary>Everything under src/ that is Windows-bound - platform, apps and the helpers.</summary>
-    internal static readonly string[] WindowsBound = [.. Platform, .. Applications, .. Helpers];
+    /// <summary>
+    /// Everything under src/ that is Windows-bound - the two Windows-bound libraries, the apps and
+    /// the helpers.
+    /// </summary>
+    internal static readonly string[] WindowsBound =
+        [.. WindowsBoundLibraries, .. Applications, .. Helpers];
 
     /// <summary>
     /// Test projects that are Windows-bound, and therefore not in the Linux filter.
@@ -84,6 +116,7 @@ internal static class RepositoryLayout
     internal static readonly string[] WindowsBoundTests =
     [
         "DnDOverlay.Platform.Windows.Tests",
+        "DnDOverlay.Rendering.Windows.Tests",
     ];
 
     /// <summary>

@@ -147,30 +147,55 @@ public sealed class ProjectStructureTests
     }
 
     /// <summary>
-    /// The one rule that makes the third category worth having: the platform project is for the
-    /// applications, and for nobody else. A library that reached into it would be Windows-bound
-    /// through the back door.
+    /// The one rule that makes the Windows-bound categories worth having: they are for the
+    /// applications, and for nobody else. A platform-neutral library that reached into one of them
+    /// would be Windows-bound through the back door, and the Linux job would be where that was
+    /// found out.
     /// <para>
-    /// <b>The tests of the platform project itself are not an exception to this</b> - they are what
-    /// a test project is for. The rule describes how ordinary projects may depend on one another;
-    /// a test project is explicitly responsible for its own subject, and
-    /// <see cref="RepositoryLayout.SubjectOf"/> is what says which that is.
+    /// <b>Their own tests are not an exception to this</b> - they are what a test project is for.
+    /// The rule describes how ordinary projects may depend on one another; a test project is
+    /// explicitly responsible for its own subject, and <see cref="RepositoryLayout.SubjectOf"/> is
+    /// what says which that is.
     /// </para>
     /// </summary>
     [Fact]
-    public void Nobody_but_the_applications_and_its_own_tests_reaches_into_the_platform_project()
+    public void Nobody_but_the_applications_and_its_own_tests_reaches_into_a_Windows_bound_library()
     {
         var offenders = RepositoryLayout.Libraries
             .Select(name => RepositoryLayout.SourceProjects[name])
             .Concat(RepositoryLayout.TestProjects.Values
-                .Where(project => !RepositoryLayout.Platform.Contains(
+                .Where(project => !RepositoryLayout.WindowsBoundLibraries.Contains(
                     RepositoryLayout.SubjectOf(project.Name), StringComparer.Ordinal)))
             .Where(project => project.ProjectReferences.Intersect(
-                RepositoryLayout.Platform, StringComparer.Ordinal).Any())
+                RepositoryLayout.WindowsBoundLibraries, StringComparer.Ordinal).Any())
             .Select(project => project.Name)
             .ToList();
 
         Assert.Empty(offenders);
+    }
+
+    /// <summary>
+    /// The counterpart to <see cref="The_platform_project_carries_no_user_interface"/>, and it is
+    /// the reason the rendering project is a category rather than a second platform project: it
+    /// has to declare WPF.
+    /// <para>
+    /// Without this, dropping <c>UseWPF</c> would leave a project that looks like the platform
+    /// project, sits in a category that exists solely to keep WPF out of that one, and explains
+    /// itself to nobody. The seam it carries would simply stop compiling, which is loud - but the
+    /// category would have gone quiet, and that is what this catches.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_rendering_project_declares_the_user_interface_framework_it_exists_for()
+    {
+        foreach (var name in RepositoryLayout.Rendering)
+        {
+            var project = XDocument.Load(RepositoryLayout.SourceProjects[name].Path);
+
+            var useWpf = project.Descendants("UseWPF").Select(element => element.Value).ToList();
+
+            Assert.Equal(["true"], useWpf);
+        }
     }
 
     /// <summary>
@@ -205,11 +230,16 @@ public sealed class ProjectStructureTests
         Assert.Empty(orphans);
     }
 
-    /// <summary>The platform project may know Core and nothing else - it produces Core types.</summary>
+    /// <summary>
+    /// A Windows-bound library may know Core and nothing else. The platform project produces Core
+    /// types; the rendering project takes bytes and gives back a bitmap and today knows nobody at
+    /// all. What neither may reach is Imaging - the display's slim MSI is a costed promise, and
+    /// Magick.NET would be thirty megabytes of it (Part 2, Part 9).
+    /// </summary>
     [Fact]
-    public void The_platform_project_references_only_Core()
+    public void A_Windows_bound_library_references_only_Core()
     {
-        foreach (var name in RepositoryLayout.Platform)
+        foreach (var name in RepositoryLayout.WindowsBoundLibraries)
         {
             Assert.All(
                 RepositoryLayout.SourceProjects[name].ProjectReferences,
@@ -262,7 +292,7 @@ public sealed class ProjectStructureTests
     public void Nothing_else_lives_in_src()
     {
         var expected = RepositoryLayout.Libraries
-            .Concat(RepositoryLayout.Platform)
+            .Concat(RepositoryLayout.WindowsBoundLibraries)
             .Concat(RepositoryLayout.Applications)
             .Concat(RepositoryLayout.Helpers)
             .OrderBy(name => name, StringComparer.Ordinal);

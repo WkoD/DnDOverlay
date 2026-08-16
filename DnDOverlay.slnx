@@ -10,6 +10,7 @@
     <Project Path="src/DnDOverlay.Hub/DnDOverlay.Hub.csproj" />
     <Project Path="src/DnDOverlay.Imaging/DnDOverlay.Imaging.csproj" />
     <Project Path="src/DnDOverlay.Platform.Windows/DnDOverlay.Platform.Windows.csproj" />
+    <Project Path="src/DnDOverlay.Rendering.Windows/DnDOverlay.Rendering.Windows.csproj" />
     <Project Path="src/DnDOverlay.Transport/DnDOverlay.Transport.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -18,6 +19,7 @@
     <Project Path="tests/DnDOverlay.Hub.Tests/DnDOverlay.Hub.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Imaging.Tests/DnDOverlay.Imaging.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Platform.Windows.Tests/DnDOverlay.Platform.Windows.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.Rendering.Windows.Tests/DnDOverlay.Rendering.Windows.Tests.csproj" />
     <Project Path="tests/DnDOverlay.TestData/DnDOverlay.TestData.csproj" />
     <Project Path="tests/DnDOverlay.Transport.Tests/DnDOverlay.Transport.Tests.csproj" />
   </Folder>

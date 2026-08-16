@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The third seam: what MagickCodec WRITES, read back by the decoder the display really runs.
+
+       Until now those two had never met. Imaging was proved against Magick, the display against
+       nothing at all, and Part 5's "WIC can do all three without any help" was an ASSUMPTION - one
+       with a concrete risk under it, because the JPEG we pass through is trimmed by our own byte
+       surgery and had so far been read by Magick alone.
+
+       It references BOTH sides on purpose. A stand-in for either half would be worthless here: it
+       would prove that our codec writes something, or that WIC reads something, and the whole
+       point is whether the two AGREE - the same lesson the asset fetch cost us a commit for.
+
+       Windows-bound because WIC is, so it stays out of the Linux filter. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DnDOverlay.Rendering.Windows\DnDOverlay.Rendering.Windows.csproj" />
+    <ProjectReference Include="..\..\src\DnDOverlay.Imaging\DnDOverlay.Imaging.csproj" />
+    <ProjectReference Include="..\DnDOverlay.TestData\DnDOverlay.TestData.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
