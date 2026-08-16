@@ -31,6 +31,108 @@ public sealed record AnimationPlan(bool Background, IReadOnlyList<ItemId> Items)
     }
 }
 
+/// <summary>What a place on the screen is showing at the moment.</summary>
+public enum PictureState
+{
+    /// <summary>Nothing yet - the place has just been made.</summary>
+    Nothing,
+
+    /// <summary>A picture that does not move, and has no animation attached to it.</summary>
+    Still,
+
+    /// <summary>An animation, running.</summary>
+    Moving,
+
+    /// <summary>An animation, stopped where it stood and able to carry on.</summary>
+    Held,
+}
+
+/// <summary>What to do with a place on the screen to bring it up to date.</summary>
+public enum PictureAction
+{
+    /// <summary>Nothing. It already shows what it should, in the state it should.</summary>
+    Leave,
+
+    /// <summary>Build the animation and run it, from the beginning.</summary>
+    Start,
+
+    /// <summary>Start the animation that is already there again, where it stopped.</summary>
+    Resume,
+
+    /// <summary>Stop the animation where it stands, keeping it.</summary>
+    Hold,
+
+    /// <summary>Show the still picture and let the animation go.</summary>
+    Freeze,
+}
+
+/// <summary>
+/// What has to happen to one place on the screen when the scene changes. A pure function over
+/// before and after, so it is decided here rather than inside a window.
+/// <para>
+/// <b>Why this is not simply "draw it again":</b> measured at the table (hand-run of M2b, step 24),
+/// every change to the scene - switching the background on, renaming something - restarted every
+/// animation from its first frame, because the display rebuilt the whole picture on every patch. An
+/// animation is not a drawing, it is a running clock, and rebuilding it is not the same as leaving
+/// it alone.
+/// </para>
+/// </summary>
+public static class PictureTransition
+{
+    /// <summary>
+    /// What to do with a place that currently shows <paramref name="showing"/> in state
+    /// <paramref name="state"/>, when it should show <paramref name="wanted"/>.
+    /// </summary>
+    /// <param name="admitted">Whether <see cref="AnimationBudget"/> lets this one move.</param>
+    /// <param name="paused">
+    /// Whether the DM stopped it. This is what tells a pause apart from a refusal: both end with a
+    /// picture that does not move, but a pause is meant to be undone and therefore keeps its place
+    /// in the animation, while a refusal has to let go of what it holds.
+    /// </param>
+    public static PictureAction Next(
+        PictureState state,
+        AssetId? showing,
+        AssetId wanted,
+        bool admitted,
+        bool paused)
+    {
+        if (showing != wanted)
+        {
+            // A different picture. Nothing of the old one can be carried over.
+            return admitted ? PictureAction.Start : PictureAction.Freeze;
+        }
+
+        if (admitted)
+        {
+            return state switch
+            {
+                PictureState.Moving => PictureAction.Leave,
+                PictureState.Held => PictureAction.Resume,
+                _ => PictureAction.Start,
+            };
+        }
+
+        if (paused)
+        {
+            // Standing still already, in one way or the other. A still picture cannot be held - it
+            // has no animation left to hold - and re-freezing it would only make it flicker.
+            return state == PictureState.Moving ? PictureAction.Hold : PictureAction.Leave;
+        }
+
+        // The budget turned it away, or it never moved at all.
+        return state == PictureState.Still ? PictureAction.Leave : PictureAction.Freeze;
+    }
+
+    /// <summary>What the place shows once <paramref name="action"/> has been carried out.</summary>
+    public static PictureState After(PictureState state, PictureAction action) => action switch
+    {
+        PictureAction.Start or PictureAction.Resume => PictureState.Moving,
+        PictureAction.Hold => PictureState.Held,
+        PictureAction.Freeze => PictureState.Still,
+        _ => state,
+    };
+}
+
 /// <summary>
 /// Decides <b>which</b> pictures of a scene are allowed to move. How they move is the platform's
 /// business and lives in the rendering project - the same split the decoder has, and for the same

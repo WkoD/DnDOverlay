@@ -415,7 +415,12 @@ public sealed record ScreenContext(
             MinVisiblePixels: 96,
             MinScale: heightInDip <= 0 ? 0.05 : 80d / heightInDip,
             MaxScale: 10,
-            ScaleOnLoad: 0.5,
+
+            // 0.4, not the 0.5 of the parameter table in Part 6, and the difference is not
+            // cosmetic: Scale means HEIGHT, so at 0.5 a 4:3 picture measures 0.375 x 0.5 normalised
+            // and the flow grid holds exactly TWO slots. Measured at the table (hand-run of M2b,
+            // step 16), which is where "flow does not flow" came from. 0.4 gives six.
+            ScaleOnLoad: 0.4,
             MaxWidthOnLoad: 0.9,
             Placement: PlacementMode.Flow,
             DefaultRotationDeg: 0,

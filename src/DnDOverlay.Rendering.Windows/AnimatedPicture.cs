@@ -54,14 +54,71 @@ public static class AnimatedPicture
         source.StreamSource = stream;
         source.EndInit();
 
+        // Frozen, like every other picture we build, and here it is not merely good manners:
+        // the library keeps a static cache of animations keyed by the source object, and comparing
+        // two keys READS a property off a cached source. An unfrozen one belongs to the thread that
+        // built it, so the second thread to animate anything throws - measured, and it made the
+        // animation tests pass or fail by the order they happened to run in.
+        source.Freeze();
+
         ImageBehavior.SetRepeatBehavior(target, RepeatBehavior.Forever);
         ImageBehavior.SetAnimatedSource(target, source);
     }
 
     /// <summary>
+    /// Stops the picture <b>where it is</b>, on the frame that was showing, and leaves it able to
+    /// carry on from there. Returns whether there was an animation to stop.
+    /// <para>
+    /// This is the DM's pause switch, and it is a different thing from <see cref="Freeze"/>: a
+    /// pause is meant to be undone, so jumping back to the first frame would throw away the very
+    /// thing the DM stopped on. Measured at the table (hand-run of M2b, step 24): stopping snapped
+    /// back to frame one a moment after it stopped.
+    /// </para>
+    /// <para>
+    /// The animation stays attached, which is what makes carrying on possible at all - and that is
+    /// why the budget's own refusals go to <see cref="Freeze"/> instead. A picture the ceiling
+    /// turned away should let go of what it holds; one the DM paused is meant to be un-paused.
+    /// </para>
+    /// </summary>
+    public static bool Hold(Image target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (ImageBehavior.GetAnimationController(target) is not { } controller)
+        {
+            return false;
+        }
+
+        controller.Pause();
+
+        return true;
+    }
+
+    /// <summary>
+    /// Starts a held picture again, from the frame it stopped on. Returns whether there was one.
+    /// </summary>
+    public static bool Resume(Image target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (ImageBehavior.GetAnimationController(target) is not { } controller)
+        {
+            return false;
+        }
+
+        controller.Play();
+
+        return true;
+    }
+
+    /// <summary>
     /// Shows the picture without moving it - the outcome for everything the budget did not admit,
-    /// and for a picture the DM paused. It stands on its first frame, which is a still picture and
-    /// not a missing one.
+    /// and for a picture that never had an animation to begin with. It stands on its first frame,
+    /// which is a still picture and not a missing one.
+    /// <para>
+    /// A picture the DM paused goes to <see cref="Hold"/> instead: this one gives the frames back
+    /// and therefore cannot say where it was.
+    /// </para>
     /// </summary>
     public static void Freeze(Image target, BitmapSource source)
     {

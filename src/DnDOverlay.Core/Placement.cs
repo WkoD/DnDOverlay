@@ -54,8 +54,15 @@ public static class Placement
     /// <para>
     /// "Skipped" is what makes the mode usable when images arrive quickly - without it the
     /// second image lands on the first whenever the first was moved out of its slot by hand.
-    /// If nothing free is left, the first slot wins: overlapping is the lesser evil against
-    /// refusing to show the image at all.
+    /// </para>
+    /// <para>
+    /// <b>When nothing is free the slots start over from the top</b>, and that is a correction the
+    /// table forced (hand-run of M2b, step 16). The first version let the FIRST slot win, so from
+    /// the moment the grid was full every further picture landed on exactly the same spot - a
+    /// growing stack that looked like flow was broken. Starting over spreads the second pass across
+    /// the same slots in the same order, so the pictures stay reachable one by one. Overlapping
+    /// remains the lesser evil against refusing to show the image at all; WHERE it overlaps is what
+    /// changed.
     /// </para>
     /// <para>
     /// The row is exactly as high as the picture. The Java version's second correction - extra
@@ -68,32 +75,53 @@ public static class Placement
         double height,
         ScreenContext screen)
     {
+        var slots = Slots(width, height);
+
+        if (slots.Count == 0)
+        {
+            // The item is larger than the screen: there is no grid to speak of.
+            return new Point(0.5, 0.5);
+        }
+
         var occupied = scene.Items
             .Select(item => Layout.ItemToRect(item, screen))
             .ToList();
 
-        var first = (Point?)null;
+        foreach (var slot in slots)
+        {
+            if (!occupied.Any(taken => Overlaps(slot, taken)))
+            {
+                return Centre(slot);
+            }
+        }
+
+        // Counted over the items already lying here, so a full grid of six is followed by the
+        // seventh in slot one, the eighth in slot two, and so on round again.
+        return Centre(slots[scene.Items.Count % slots.Count]);
+    }
+
+    /// <summary>
+    /// The grid, in reading order. It depends only on the size of the picture being placed, which
+    /// is why two pictures of different shapes see different grids - each is laid out against the
+    /// slots IT fits in.
+    /// </summary>
+    private static List<Rect> Slots(double width, double height)
+    {
+        var slots = new List<Rect>();
 
         for (var y = Gap; y + height <= 1 - Gap + double.Epsilon; y += height + Gap)
         {
             for (var x = Gap; x + width <= 1 - Gap + double.Epsilon; x += width + Gap)
             {
-                var candidate = new Point(x + (width / 2), y + (height / 2));
-
-                first ??= candidate;
-
-                var rect = new Rect(x, y, width, height);
-
-                if (!occupied.Any(taken => Overlaps(rect, taken)))
-                {
-                    return candidate;
-                }
+                slots.Add(new Rect(x, y, width, height));
             }
         }
 
-        // Nothing free, or the item is larger than the screen: back to the beginning.
-        return first ?? new Point(0.5, 0.5);
+        return slots;
     }
+
+    private static Point Centre(Rect slot) =>
+        new(slot.X + (slot.Width / 2), slot.Y + (slot.Height / 2));
 
     /// <summary>Stacked from the centre with a growing offset, wrapping before it leaves the screen.</summary>
     private static Point Cascade(SceneState scene, double width, double height)

@@ -5,6 +5,10 @@ namespace DnDOverlay.Core.Tests.Scene;
 public sealed class PlacementTests
 {
     private const double SmallScale = 0.2;
+
+    /// <summary>Large enough that a 1080p screen runs out of slots inside a twenty-picture run.</summary>
+    private const double CrowdedScale = 0.4;
+
     private const double Square = 1;
 
     /// <summary>
@@ -70,6 +74,77 @@ public sealed class PlacementTests
         Assert.Contains(positions, p => p.Y > positions[0].Y);
         Assert.All(positions, p => Assert.InRange(p.X, 0, 1));
         Assert.All(positions, p => Assert.InRange(p.Y, 0, 1));
+    }
+
+    /// <summary>
+    /// What the table found (hand-run of M2b, step 16): "flow rarely puts pictures side by side and
+    /// usually straight on top of each other". Once the grid was full, the FIRST slot won every
+    /// time, so everything from there on formed one growing stack. Now the slots start over.
+    /// <para>
+    /// The number of slots is not written down here - it is read off the run itself, at the point
+    /// the positions begin to repeat - so the test measures the CYCLE and not the grid. The old
+    /// behaviour passes the first comparison of the loop and fails the second, which is why the
+    /// loop runs to the end rather than checking one position.
+    /// </para>
+    /// <para>
+    /// The size is <see cref="CrowdedScale"/> and not the small one the other tests use, and that
+    /// is the whole point: at <see cref="SmallScale"/> a 1080p screen holds 28 slots, so twenty
+    /// pictures never fill the grid and the fallback never runs at all. The first version of this
+    /// test did exactly that and stayed green with the OLD code in place - hence the assertion that
+    /// the run overflowed, which is what makes the rest of it mean anything.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_full_grid_starts_over_from_the_first_slot()
+    {
+        var screen = Build.Screen();
+        var scene = SceneState.Empty;
+        var positions = new List<Point>();
+
+        for (var i = 0; i < 20; i++)
+        {
+            var position = Placement.NextPosition(scene, CrowdedScale, Square, screen);
+            positions.Add(position);
+            scene = Build.SceneWith([.. scene.Items, Build.Item(position.X, position.Y, CrowdedScale, Square)]);
+        }
+
+        var slots = positions.Distinct().Count();
+        Assert.True(
+            positions.Count > slots,
+            $"the grid held {slots} slots and never filled, so nothing about the cycle was measured");
+
+        for (var i = slots; i < positions.Count; i++)
+        {
+            Assert.Equal(positions[i % slots], positions[i]);
+        }
+    }
+
+    /// <summary>
+    /// The other half of step 16, and the reason the mode looked broken at all: at the size a
+    /// picture used to arrive in - half the screen height - a 4:3 picture measures 0.375 × 0.5
+    /// normalised, and the grid holds exactly TWO slots. Flow with two slots is a stack from the
+    /// third picture on, whatever the fallback does.
+    /// <para>
+    /// Both numbers are written out rather than read from <c>ScreenContext</c>: reading the
+    /// constant would assert that the code equals itself, and it is the SIX that was decided.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_size_a_picture_arrives_in_leaves_room_for_six()
+    {
+        var screen = Build.Screen();
+        var scale = Layout.ScaleOnLoad(aspectRatio: 4d / 3d, screen);
+        var scene = SceneState.Empty;
+        var positions = new List<Point>();
+
+        for (var i = 0; i < 12; i++)
+        {
+            var position = Placement.NextPosition(scene, scale, 4d / 3d, screen);
+            positions.Add(position);
+            scene = Build.SceneWith([.. scene.Items, Build.Item(position.X, position.Y, scale, 4d / 3d)]);
+        }
+
+        Assert.Equal(6, positions.Distinct().Count());
     }
 
     /// <summary>Everything stays on the screen, whatever the mode.</summary>

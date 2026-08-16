@@ -46,6 +46,24 @@ internal sealed class OverlayWindow : Window
     /// </para>
     /// </summary>
     private readonly Canvas _stage = new() { Background = null, ClipToBounds = true };
+
+    /// <summary>
+    /// The progress rings, on a layer of their own above the stage. They belong to the ungoverned
+    /// layer and not to the scene (Part 7), and here that separation earns its keep twice: the
+    /// rings are rebuilt on every render while the pictures beneath them are kept, and a ring can
+    /// never end up behind the picture it is about.
+    /// </summary>
+    private readonly Canvas _rings = new() { Background = null, IsHitTestVisible = false };
+
+    /// <summary>
+    /// The places on the stage, one per item, kept between renders. See <see cref="Mount"/> for why
+    /// they are kept at all.
+    /// </summary>
+    private readonly Dictionary<ItemId, Mount> _mounts = [];
+
+    /// <summary>The background's place, which has no item id to be keyed by.</summary>
+    private Mount? _backdrop;
+
     private readonly TextBlock _name;
     private readonly Border _nameplate;
     private readonly DispatcherTimer _naming;
@@ -89,6 +107,7 @@ internal sealed class OverlayWindow : Window
         var root = new Grid { Background = null };
 
         root.Children.Add(_stage);
+        root.Children.Add(_rings);
         root.Children.Add(_nameplate);
 
         Title = monitor.Screen.Label;
@@ -148,6 +167,15 @@ internal sealed class OverlayWindow : Window
     /// Draws the scene. Everything goes through <see cref="Layout.ItemToRect"/> - the table, the
     /// thumbnail and every later preview use the same computation, which is what makes the
     /// thumbnail trustworthy (Part 1, rule 9).
+    /// <para>
+    /// <b>The stage is not cleared.</b> Each item keeps its place across renders and only what
+    /// actually changed is touched, because an animation is a running clock and rebuilding it is
+    /// not the same as leaving it alone. Measured at the table (hand-run of M2b, step 24): every
+    /// change to the scene - switching the background on, renaming something - sent every animation
+    /// back to its first frame, and each restart cost the half second it takes to decode the frames
+    /// again. What to do with each place is decided in <see cref="PictureTransition"/>, in Core,
+    /// where it can be asserted.
+    /// </para>
     /// </summary>
     internal void Render(
         SceneState scene,
@@ -156,7 +184,7 @@ internal sealed class OverlayWindow : Window
         IReadOnlyDictionary<AssetId, byte[]> moving,
         IReadOnlyDictionary<AssetId, double> loading)
     {
-        _stage.Children.Clear();
+        ArgumentNullException.ThrowIfNull(scene);
 
         var width = _stage.ActualWidth > 0 ? _stage.ActualWidth : context.WidthInDip;
         var height = _stage.ActualHeight > 0 ? _stage.ActualHeight : context.HeightInDip;
@@ -170,41 +198,86 @@ internal sealed class OverlayWindow : Window
         // and nothing else (Part 11, step 24). Hiding is not removing: the pictures stay in the
         // scene and in the device's store, which is what makes fading them back in immediate and
         // free of a second transfer (Part 7).
-        if (scene.BackgroundVisible)
+        DrawBackground(scene, context, images, moving, width, height, animating.Background);
+
+        var standing = new HashSet<ItemId>();
+
+        if (scene.ItemsVisible)
         {
-            DrawBackground(scene.Background, context, images, moving, width, height, animating.Background);
+            foreach (var item in scene.Items)
+            {
+                if (item is not ImageItem image || !images.TryGetValue(image.AssetId, out var source))
+                {
+                    continue;
+                }
+
+                standing.Add(image.ItemId);
+
+                var mount = _mounts.TryGetValue(image.ItemId, out var known) ? known : Raise(image.ItemId);
+
+                // Depth by Z index rather than by the order things were added, so keeping a place
+                // between renders does not decide what lies on top of what.
+                Panel.SetZIndex(mount.Element, item.ZOrder);
+
+                Show(
+                    mount,
+                    source,
+                    image.AssetId,
+                    moving.GetValueOrDefault(image.AssetId),
+                    animating.Items.Contains(image.ItemId),
+                    image.AnimationPaused);
+
+                Lay(
+                    mount,
+                    Layout.ItemToRect(item, context),
+                    item.RotationDeg,
+                    width,
+                    height,
+                    image.ShowName ? image.Name : null);
+            }
         }
+
+        foreach (var (id, mount) in _mounts.Where(pair => !standing.Contains(pair.Key)).ToList())
+        {
+            _stage.Children.Remove(mount.Element);
+            _mounts.Remove(id);
+        }
+
+        // The rings live on their own layer above everything: they belong to the ungoverned layer,
+        // not to the scene. If a picture is being fetched, its place already stands - what is
+        // missing is the picture, and the ring says so where it will appear (Part 7). They are the
+        // one thing rebuilt every time, because a ring is a number and not a running clock.
+        _rings.Children.Clear();
 
         if (!scene.ItemsVisible)
         {
             return;
         }
 
-        foreach (var item in scene.Items.OrderBy(item => item.ZOrder))
-        {
-            if (item is not ImageItem image || !images.TryGetValue(image.AssetId, out var source))
-            {
-                continue;
-            }
-
-            var rect = Layout.ItemToRect(item, context);
-
-            _stage.Children.Add(Place(
-                source, rect, item.RotationDeg, width, height,
-                image.ShowName ? image.Name : null,
-                animating.Items.Contains(image.ItemId) ? moving.GetValueOrDefault(image.AssetId) : null));
-        }
-
-        // The ring is drawn LAST and on its own, above everything: it belongs to the ungoverned
-        // layer, not to the scene. If a picture is being fetched, its place already stands - what
-        // is missing is the picture, and the ring says so where it will appear (Part 7).
         foreach (var item in scene.Items.OfType<ImageItem>())
         {
             if (loading.TryGetValue(item.AssetId, out var fraction))
             {
-                _stage.Children.Add(Ring(Layout.ItemToRect(item, context), fraction, width, height));
+                _rings.Children.Add(Ring(Layout.ItemToRect(item, context), fraction, width, height));
             }
         }
+    }
+
+    /// <summary>Makes a new place on the stage and registers it under its item.</summary>
+    private Mount Raise(ItemId item)
+    {
+        var mount = Raise();
+        _mounts[item] = mount;
+
+        return mount;
+    }
+
+    private Mount Raise()
+    {
+        var mount = new Mount();
+        _stage.Children.Add(mount.Element);
+
+        return mount;
     }
 
     /// <summary>
@@ -285,7 +358,7 @@ internal sealed class OverlayWindow : Window
     /// </para>
     /// </summary>
     private void DrawBackground(
-        BackgroundItem? background,
+        SceneState scene,
         ScreenContext context,
         IReadOnlyDictionary<AssetId, ImageSource> images,
         IReadOnlyDictionary<AssetId, byte[]> moving,
@@ -293,84 +366,178 @@ internal sealed class OverlayWindow : Window
         double height,
         bool animate)
     {
-        if (background is null || !images.TryGetValue(background.AssetId, out var source))
+        if (!scene.BackgroundVisible
+            || scene.Background is not { } background
+            || !images.TryGetValue(background.AssetId, out var source))
         {
+            if (_backdrop is { } gone)
+            {
+                _stage.Children.Remove(gone.Element);
+                _backdrop = null;
+            }
+
             return;
         }
 
-        var aspectRatio = background.Meta.AspectRatio;
-        var rect = Layout.BackgroundRect(
-            aspectRatio, background.Fit, background.OffsetX, background.OffsetY, context);
+        _backdrop ??= Raise();
 
-        _stage.Children.Add(Place(
-            source, rect, rotationDeg: 0, width, height,
-            background.ShowName ? background.Name : null,
-            animate ? moving.GetValueOrDefault(background.AssetId) : null));
+        // Beneath everything, whatever Z order the items carry. The background is a layer and not
+        // an item, so it does not compete for depth with them.
+        Panel.SetZIndex(_backdrop.Element, int.MinValue);
+
+        Show(
+            _backdrop,
+            source,
+            background.AssetId,
+            moving.GetValueOrDefault(background.AssetId),
+            animate,
+            background.AnimationPaused);
+
+        var rect = Layout.BackgroundRect(
+            background.Meta.AspectRatio,
+            background.Fit,
+            background.OffsetX,
+            background.OffsetY,
+            context);
+
+        Lay(_backdrop, rect, rotationDeg: 0, width, height, background.ShowName ? background.Name : null);
     }
 
     /// <summary>
-    /// One picture, and its caption if it wears one. The two sit in a single rotated container, so
-    /// the caption turns WITH the picture - nobody is helped by a readable label under a figure
-    /// standing on its head (<c>checks/M1.md</c>).
+    /// Brings one place up to date with the picture it should show. What has to happen is decided in
+    /// <see cref="PictureTransition"/> - here is only the doing of it.
     /// </summary>
-    private static Grid Place(
+    private static void Show(
+        Mount mount,
         ImageSource source,
+        AssetId asset,
+        byte[]? bytes,
+        bool admitted,
+        bool paused)
+    {
+        // A picture may only move if the budget admitted it AND the bytes to move it are here. The
+        // second half is not a detail: the animated path needs the BYTES rather than the decoded
+        // picture, and that is measured - handed the decoded one the library reports zero frames,
+        // because the frames of a GIF are read a second time from the source and PictureDecoder has
+        // let its stream go.
+        var canMove = admitted && bytes is not null;
+
+        var action = PictureTransition.Next(mount.State, mount.Showing, asset, canMove, paused);
+
+        switch (action)
+        {
+            case PictureAction.Start:
+                AnimatedPicture.Run(mount.Picture, bytes!);
+                break;
+
+            case PictureAction.Resume:
+                AnimatedPicture.Resume(mount.Picture);
+                break;
+
+            case PictureAction.Hold:
+                AnimatedPicture.Hold(mount.Picture);
+                break;
+
+            case PictureAction.Freeze:
+                if (source is BitmapSource still)
+                {
+                    AnimatedPicture.Freeze(mount.Picture, still);
+                }
+                else
+                {
+                    mount.Picture.Source = source;
+                }
+
+                break;
+
+            default:
+                break;
+        }
+
+        mount.Showing = asset;
+        mount.State = PictureTransition.After(mount.State, action);
+    }
+
+    /// <summary>
+    /// Puts a place where it belongs and hangs its caption on it. Geometry is written on every
+    /// render because it is cheap and always current; the picture inside is not touched here.
+    /// </summary>
+    private static void Lay(
+        Mount mount,
         CoreRect rect,
         double rotationDeg,
         double width,
         double height,
-        string? name,
-        byte[]? moving)
+        string? name)
     {
         var renderedWidth = rect.Width * width;
         var renderedHeight = rect.Height * height;
 
-        var element = new Grid
-        {
-            Width = renderedWidth,
-            Height = renderedHeight,
-            IsHitTestVisible = false,
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = new RotateTransform(rotationDeg),
-        };
+        mount.Element.Width = renderedWidth;
+        mount.Element.Height = renderedHeight;
+        mount.Turn.Angle = rotationDeg;
 
-        var picture = new Image { Stretch = Stretch.Fill };
-
-        // Both ways go through the same wrapper, so "not animating" is a stated outcome rather than
-        // the absence of a call: a picture that may not move stands on its first frame, and its
-        // timer is taken away rather than merely left unstarted (rule 8).
-        //
-        // The moving path needs the BYTES rather than the decoded picture, and that is measured:
-        // handed the decoded one the library reports zero frames, because the frames of a GIF are
-        // read a second time from the source and PictureDecoder has let its stream go.
-        if (moving is not null)
-        {
-            AnimatedPicture.Run(picture, moving);
-        }
-        else if (source is BitmapSource still)
-        {
-            AnimatedPicture.Freeze(picture, still);
-        }
-        else
-        {
-            picture.Source = source;
-        }
-
-        element.Children.Add(picture);
+        Canvas.SetLeft(mount.Element, rect.X * width);
+        Canvas.SetTop(mount.Element, rect.Y * height);
 
         // In DIP on the screen, not in normalised coordinates - the text does not scale with the
         // picture, which is the whole reason the cascade is measured rather than computed.
         var caption = CaptionLayout.Fit(name, renderedWidth, renderedHeight);
 
-        if (caption.IsVisible)
+        if (mount.Caption is { } old)
         {
-            element.Children.Add(Label(caption, renderedWidth));
+            mount.Element.Children.Remove(old);
+            mount.Caption = null;
         }
 
-        Canvas.SetLeft(element, rect.X * width);
-        Canvas.SetTop(element, rect.Y * height);
+        if (caption.IsVisible)
+        {
+            mount.Caption = Label(caption, renderedWidth);
+            mount.Element.Children.Add(mount.Caption);
+        }
+    }
 
-        return element;
+    /// <summary>
+    /// One picture's place on the stage, kept from one render to the next.
+    /// <para>
+    /// The picture and its caption sit in a single rotated container, so the caption turns WITH the
+    /// picture - nobody is helped by a readable label under a figure standing on its head
+    /// (<c>checks/M1.md</c>).
+    /// </para>
+    /// <para>
+    /// It is kept, rather than built each time, because of what it carries: an animation is a
+    /// running clock, and a new <c>Image</c> means a new clock at frame one. What it currently shows
+    /// is remembered here so that <see cref="PictureTransition"/> can tell an unchanged picture from
+    /// a replaced one.
+    /// </para>
+    /// </summary>
+    private sealed class Mount
+    {
+        internal Mount()
+        {
+            Turn = new RotateTransform(0);
+
+            Element = new Grid
+            {
+                IsHitTestVisible = false,
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                RenderTransform = Turn,
+            };
+
+            Element.Children.Add(Picture);
+        }
+
+        internal Grid Element { get; }
+
+        internal Image Picture { get; } = new() { Stretch = Stretch.Fill };
+
+        internal RotateTransform Turn { get; }
+
+        internal Border? Caption { get; set; }
+
+        internal AssetId? Showing { get; set; }
+
+        internal PictureState State { get; set; } = PictureState.Nothing;
     }
 
     /// <summary>
