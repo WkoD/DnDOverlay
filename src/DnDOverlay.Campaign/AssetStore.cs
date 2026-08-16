@@ -254,10 +254,23 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             ContentHash = Convert.ToHexStringLower(SHA256.HashData(normalised.Bytes)),
         };
 
+        byte[]? thumbnail;
+
+        try
+        {
+            thumbnail = Thumbnail(assetId, normalised);
+        }
+        catch (ImageRejectedException rejected)
+        {
+            // A picture whose thumbnail cannot be made is a picture that cannot be DECODED, and it
+            // is turned away here rather than at the table.
+            return new IngestResult.Refused(rejected.Reason, rejected.Message);
+        }
+
         // Written before the entry exists, and that order is the promise: an ingest that fails
         // after the file is there leaves no item without a picture, because the reference only
         // goes out once the bytes are on disk (Part 11).
-        WriteFiles(entry, normalised);
+        WriteFiles(entry, normalised, thumbnail);
 
         lock (_gate)
         {
@@ -279,7 +292,32 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             new AssetRef(assetId, entry.Meta, entry.Name), AlreadyPresent: false, normalised.Standing);
     }
 
-    private void WriteFiles(InventoryEntry entry, NormalisedImage normalised)
+    /// <summary>
+    /// Makes the thumbnail, and it is the <b>acceptance test</b> for the picture as a whole.
+    /// <c>null</c> means there already is one, from an earlier run.
+    /// <para>
+    /// <b>This used to be allowed to fail quietly, and the ground under that has moved.</b> The
+    /// comment read "a missing thumbnail is a blank tile, not a lost image" - which held while
+    /// <c>Normalise</c> decoded and re-encoded every picture, so a thumbnail failing was a SECOND
+    /// failure of something already proved to work. Since M2b both JPEG and PNG hand their bytes
+    /// through untouched, and this is the only place on this side where a picture is unfolded at
+    /// all. A failure here is therefore the first and only news that the file is broken.
+    /// </para>
+    /// <para>
+    /// Refusing costs one picture at the control. Not refusing costs it at the table, on every
+    /// device at once, in front of everybody - and it would have been knowable here.
+    /// </para>
+    /// </summary>
+    private byte[]? Thumbnail(AssetId assetId, NormalisedImage normalised)
+    {
+        // An existing thumbnail is proof enough: this picture decoded once already. Re-proving it
+        // would put a full decode on every re-import of a picture the stock knows.
+        return File.Exists(ThumbnailPath(assetId))
+            ? null
+            : _codec.Thumbnail(normalised.Bytes, ThumbnailWidth);
+    }
+
+    private void WriteFiles(InventoryEntry entry, NormalisedImage normalised, byte[]? thumbnail)
     {
         // The discriminator keeps two writers of the same image off one scratch file - without it
         // the loser could rename a half-written file into place under a valid hash (Part 11).
@@ -289,21 +327,10 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         // finds its own bytes already there (Part 5).
         AtomicFile.WriteContentAddressed(FileOf(entry), normalised.Bytes, scratch);
 
-        var thumbnail = ThumbnailPath(new AssetId(entry.AssetId));
-
-        if (!File.Exists(thumbnail))
+        if (thumbnail is not null)
         {
-            try
-            {
-                AtomicFile.WriteContentAddressed(
-                    thumbnail, _codec.Thumbnail(normalised.Bytes, ThumbnailWidth), scratch);
-            }
-            catch (ImageRejectedException)
-            {
-                // A missing thumbnail is a blank tile, not a lost image. The folder reconciliation
-                // makes it again in silence (Part 3) - refusing the whole ingest over it would
-                // throw away the picture for the sake of its preview.
-            }
+            AtomicFile.WriteContentAddressed(
+                ThumbnailPath(new AssetId(entry.AssetId)), thumbnail, scratch);
         }
     }
 

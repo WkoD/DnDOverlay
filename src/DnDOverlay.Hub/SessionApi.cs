@@ -185,9 +185,16 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var scene = _scenes.Get(screen);
 
             var aspectRatio = asset.Meta.AspectRatio;
-            var scale = Layout.ScaleOnLoad(aspectRatio, context);
 
-            // An aimed drop point wins; otherwise the placement mode of this screen decides.
+            // Two bounds, composed, and each at the boundary it belongs to: how large a picture may
+            // arrive on this SCREEN, and then how large it may be in the PLACE it is going to. The
+            // second is what stopped a 7000×4211 picture overlapping its neighbours (hand-run of
+            // M2b), and it does nothing at all in Cascade, which has no places.
+            var scale = Placement.FitIntoItsPlace(
+                Layout.ScaleOnLoad(aspectRatio, context), aspectRatio, context);
+
+            // An aimed drop point wins; otherwise the placement mode of this screen decides. An
+            // aimed one keeps the fitted size too - the DM chose the spot, not the size.
             var centre = position ?? Placement.NextPosition(scene, scale, aspectRatio, context);
 
             var item = new ImageItem(

@@ -191,20 +191,39 @@ public sealed class AssetStoreTests : IDisposable
     }
 
     /// <summary>
-    /// A failed thumbnail is a blank tile, not a lost image - refusing the whole ingest over a
-    /// preview would throw away the picture for the sake of its thumbnail (Part 3).
+    /// A picture whose thumbnail cannot be made is <b>refused</b>, and the reason it reaches the DM
+    /// is that making the thumbnail is the only place the picture is decoded at all.
+    /// <para>
+    /// <b>This assertion used to say the opposite</b>, and the ground under it moved rather than
+    /// the opinion. It read "a failed thumbnail is a blank tile, not a lost image", which held
+    /// while <c>Normalise</c> decoded and re-encoded every picture: a thumbnail failing was then a
+    /// SECOND failure of something already proved to work, and refusing over a preview would have
+    /// thrown away a good picture. Since M2b both JPEG and PNG hand their bytes through untouched -
+    /// the PNG re-encode cost 11.6 s on a real file - so nothing else on this side unfolds the
+    /// picture, and a failure here is the first and only news that it is broken.
+    /// </para>
+    /// <para>
+    /// Refusing costs one picture at the control. Not refusing costs it at the table, on every
+    /// device at once, and it was knowable here.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task AFailedThumbnailDoesNotLoseTheImage()
+    public async Task APictureThatCannotBeDecodedIsRefusedRatherThanStored()
     {
         var store = Open();
         _codec.ThumbnailFails = true;
 
-        var taken = await Taken(store, "portrait.png", "Fürst Aldric");
+        var result = await store.IngestAsync(
+            Bytes("portrait.png"), "Fürst Aldric", TestContext.Current.CancellationToken);
 
-        Assert.True(store.TryOpen(taken.Asset.AssetId, out var data, out _));
-        data.Dispose();
-        Assert.False(File.Exists(store.ThumbnailPath(taken.Asset.AssetId)));
+        var refused = Assert.IsType<IngestResult.Refused>(result);
+        Assert.False(string.IsNullOrWhiteSpace(refused.Detail), "the refusal carries no reason");
+
+        // Nothing was left behind: not in the inventory, and not on disk either. The refusal
+        // happens BEFORE the picture is written, which is what keeps the folder free of files no
+        // entry points at.
+        Assert.Equal(0, store.Count);
+        Assert.Empty(Directory.GetFiles(_directory, "*.png", SearchOption.AllDirectories));
     }
 
     /// <summary>

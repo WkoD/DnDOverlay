@@ -147,6 +147,87 @@ public sealed class PlacementTests
     }
 
     /// <summary>
+    /// <b>The picture found at the table:</b> 7000×4211 overlapped its neighbours on both sides.
+    /// The cell decided only WHERE a picture went and never how big it was - the size came from the
+    /// arrival height and a width cap against the SCREEN, which at that shape does not bite at all
+    /// (0.96 against an arrival size of 0.4). Every picture wider than the cell's own 4:3 reached
+    /// past it.
+    /// <para>
+    /// Run over six shapes so that this is a property and not one file: whatever arrives, six of
+    /// them lie side by side without touching. That is the one sentence step 16 exists for.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(7000d / 4211d)]
+    [InlineData(16d / 9d)]
+    [InlineData(4d / 3d)]
+    [InlineData(1d)]
+    [InlineData(2d / 3d)]
+    [InlineData(21d / 9d)]
+    public void Six_pictures_of_any_shape_lie_side_by_side_without_overlapping(double aspectRatio)
+    {
+        var screen = Build.Screen();
+
+        var scale = Placement.FitIntoItsPlace(
+            Layout.ScaleOnLoad(aspectRatio, screen), aspectRatio, screen);
+
+        var scene = SceneState.Empty;
+        var rects = new List<Rect>();
+
+        for (var i = 0; i < 6; i++)
+        {
+            var position = Placement.NextPosition(scene, scale, aspectRatio, screen);
+            var item = Build.Item(position.X, position.Y, scale, aspectRatio);
+
+            rects.Add(Layout.ItemToRect(item, screen));
+            scene = Build.SceneWith([.. scene.Items, item]);
+        }
+
+        foreach (var (a, b) in rects.SelectMany(a => rects.Select(b => (a, b))).Where(pair => pair.a != pair.b))
+        {
+            var overlap = a.Intersect(b);
+
+            Assert.True(
+                overlap.Width <= 0 || overlap.Height <= 0,
+                $"aspect ratio {aspectRatio}: {a} and {b} overlap by {overlap.Width}×{overlap.Height}");
+        }
+    }
+
+    /// <summary>
+    /// The counter-check, so the fitting is not simply "make everything small": a picture the cell
+    /// can hold is not touched at all. Without this, returning zero would pass the test above.
+    /// </summary>
+    [Theory]
+    [InlineData(4d / 3d)]
+    [InlineData(1d)]
+    [InlineData(2d / 3d)]
+    public void A_picture_that_fits_its_place_arrives_at_the_size_it_was_promised(double aspectRatio)
+    {
+        var screen = Build.Screen();
+        var wanted = Layout.ScaleOnLoad(aspectRatio, screen);
+
+        Assert.Equal(wanted, Placement.FitIntoItsPlace(wanted, aspectRatio, screen), precision: 9);
+    }
+
+    /// <summary>
+    /// Cascade has no places to fit into, so nothing is taken away there. Deliberately the opposite
+    /// answer to the same question - the two modes are not two spellings of one arrangement, and a
+    /// bound that leaked from one into the other would shrink pictures for no reason at all.
+    /// </summary>
+    [Fact]
+    public void Cascade_takes_nothing_away_from_the_arrival_size()
+    {
+        var screen = Build.Screen(placement: PlacementMode.Cascade);
+        var wanted = Layout.ScaleOnLoad(Wide, screen);
+
+        Assert.Equal(wanted, Placement.FitIntoItsPlace(wanted, Wide, screen), precision: 9);
+
+        // And the same picture IS taken down in Flow, which is what makes the line above a
+        // measurement rather than a tautology.
+        Assert.True(Placement.FitIntoItsPlace(wanted, Wide, Build.Screen()) < wanted);
+    }
+
+    /// <summary>
     /// Reading order: the second place lies to the RIGHT of the first at the same height, and the
     /// row below starts back at the left. Nothing said so - a grid emitted column by column would
     /// have left every other test in this file green, and the DM would have learnt a different

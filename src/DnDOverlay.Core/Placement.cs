@@ -105,6 +105,52 @@ public static class Placement
     }
 
     /// <summary>
+    /// Holds a scale down to what fits in one place of the grid. In <see cref="PlacementMode.Flow"/>
+    /// only - <see cref="PlacementMode.Cascade"/> has no places to fit into.
+    /// <para>
+    /// <b>Measured at the table (hand-run of M2b, third round):</b> a 7000×4211 picture overlapped
+    /// its neighbours on both sides. The reason is that the cell decided only WHERE a picture went
+    /// and never how big it was - the size came from the arrival height and a width cap against the
+    /// SCREEN, which for that shape does not bite at all. Every picture wider than the cell's own
+    /// 4:3 reached past it, systematically.
+    /// </para>
+    /// <para>
+    /// This is the same rule the width cap already is, applied at the boundary that actually holds:
+    /// <c>Scale</c> still means the height and is only lowered until the picture lies inside its
+    /// place. The price is named - a wide picture arrives smaller than <c>ScaleOnLoad</c> promises,
+    /// a 16:9 one at three quarters of it - and it buys the one sentence the mode exists for: side
+    /// by side, without overlapping.
+    /// </para>
+    /// </summary>
+    public static double FitIntoItsPlace(double scale, double aspectRatio, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        if (screen.Placement is PlacementMode.Cascade || aspectRatio <= 0)
+        {
+            return scale;
+        }
+
+        var cells = Cells(screen);
+
+        if (cells.Count == 0)
+        {
+            return scale;
+        }
+
+        var cell = cells[0];
+
+        // Scale means HEIGHT while the cell's width is a fraction of the screen's WIDTH, so the
+        // bound travels through both aspect ratios - the same dance ItemToRect does, and the reason
+        // this cannot be a plain division.
+        var byWidth = screen.AspectRatio <= 0
+            ? cell.Width / aspectRatio
+            : cell.Width * screen.AspectRatio / aspectRatio;
+
+        return Math.Min(scale, Math.Min(cell.Height, byWidth));
+    }
+
+    /// <summary>
     /// The grid, in reading order. It depends on the SCREEN alone - the arrival size and the
     /// screen's own shape - so every picture sees the same one.
     /// </summary>
