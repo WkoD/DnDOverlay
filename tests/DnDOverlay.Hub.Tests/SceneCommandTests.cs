@@ -1,0 +1,247 @@
+using DnDOverlay.Core;
+using DnDOverlay.Core.Logging;
+using DnDOverlay.Core.Protocol;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+
+namespace DnDOverlay.Hub.Tests;
+
+/// <summary>
+/// The commands M2b adds to <see cref="ISessionApi"/>, seen from the control side: each one changes
+/// the authoritative scene <b>and</b> puts exactly one patch on the wire.
+/// <para>
+/// One command, one patch, never merged with the next over a time window - and the same patch to
+/// both audiences, because a second control has to APPLY it rather than be handed a whole scene
+/// (Part 4, rule 1).
+/// </para>
+/// </summary>
+public sealed class SceneCommandTests
+{
+    private static readonly DeviceId Device = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"));
+    private static readonly ScreenId Screen = new(@"\\?\DISPLAY#COMMANDS#1");
+    private static readonly ScreenRef Target = new(Device, Screen);
+
+    private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Removing_an_item_takes_it_out_of_the_authoritative_scene()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.RemoveItemAsync(Target, item, Cancellation);
+
+        Assert.Empty((await session.GetSceneAsync(Target, Cancellation)).Items);
+    }
+
+    /// <summary>
+    /// A command that reaches the hub after the item is already gone is not an error - it simply
+    /// does nothing (Part 11).
+    /// </summary>
+    [Fact]
+    public async Task Removing_something_that_is_not_there_is_not_an_error()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+
+        await session.RemoveItemAsync(Target, new ItemId(Guid.NewGuid()), Cancellation);
+
+        Assert.Equal(item, Assert.Single((await session.GetSceneAsync(Target, Cancellation)).Items).ItemId);
+    }
+
+    /// <summary>
+    /// The hub does the work and the finished layer travels, exactly as the finished item does for
+    /// <c>AddItem</c> (Part 1, rule 2). Fit and offset start at their resting values.
+    /// </summary>
+    [Fact]
+    public async Task Setting_a_background_puts_a_finished_layer_on_the_screen()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+
+        var background = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(background);
+        Assert.Equal(Reference().AssetId, background.AssetId);
+        Assert.Equal(BackgroundFit.Cover, background.Fit);
+        Assert.Equal(0, background.OffsetX);
+        Assert.False(background.ShowName);
+    }
+
+    /// <summary>Strictly separate from the items - which is why "empty the lot" has to send both.</summary>
+    [Fact]
+    public async Task Clearing_the_background_leaves_the_items_standing()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+        await session.ClearBackgroundAsync(Target, Cancellation);
+
+        var scene = await session.GetSceneAsync(Target, Cancellation);
+
+        Assert.Null(scene.Background);
+        Assert.Equal(item, Assert.Single(scene.Items).ItemId);
+    }
+
+    /// <summary>
+    /// One picture, one name (Part 3): renaming the asset reaches every item carrying it, and the
+    /// background too when it shows the same picture.
+    /// </summary>
+    [Fact]
+    public async Task Renaming_an_asset_reaches_everything_showing_it()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+
+        await session.SetAssetNameAsync(Target, Reference().AssetId, "Ratsherr Vellin", Cancellation);
+
+        var scene = await session.GetSceneAsync(Target, Cancellation);
+
+        Assert.All(scene.Items.OfType<ImageItem>(), item => Assert.Equal("Ratsherr Vellin", item.Name));
+        Assert.Equal("Ratsherr Vellin", scene.Background!.Name);
+    }
+
+    /// <summary>The caption belongs to the INSTANCE, so it reaches exactly one item.</summary>
+    [Fact]
+    public async Task Showing_a_name_reaches_one_item_and_not_its_twin()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var wanted = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        var other = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+
+        await session.SetShowNameAsync(Target, wanted, show: true, Cancellation);
+
+        var items = (await session.GetSceneAsync(Target, Cancellation)).Items.OfType<ImageItem>().ToList();
+
+        Assert.True(items.Single(item => item.ItemId == wanted).ShowName);
+        Assert.False(items.Single(item => item.ItemId == other).ShowName);
+    }
+
+    /// <summary>No item named means the background layer - a city map wants its name (Part 7).</summary>
+    [Fact]
+    public async Task Showing_a_name_without_an_item_means_the_background()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+        await session.SetShowNameAsync(Target, item: null, show: true, Cancellation);
+        await session.SetAnimationPausedAsync(Target, item: null, paused: true, Cancellation);
+
+        var background = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.True(background!.ShowName);
+        Assert.True(background.AnimationPaused);
+    }
+
+    /// <summary>
+    /// Hiding is not deleting. The pictures stay in the scene and in the device's store, which is
+    /// what makes fading them back in immediate and free of a second transfer (Part 7, step 24).
+    /// </summary>
+    [Fact]
+    public async Task Switching_a_layer_off_keeps_what_is_on_it()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+
+        await session.ToggleItemsAsync(Target, visible: false, Cancellation);
+        await session.ToggleBackgroundAsync(Target, visible: false, Cancellation);
+
+        var scene = await session.GetSceneAsync(Target, Cancellation);
+
+        Assert.False(scene.ItemsVisible);
+        Assert.False(scene.BackgroundVisible);
+        Assert.Equal(item, Assert.Single(scene.Items).ItemId);
+        Assert.NotNull(scene.Background);
+    }
+
+    /// <summary>
+    /// Every one of them puts its patch on the stream, addressed at the screen it was aimed at.
+    /// This is the half that says the DEVICES and a second control learn of it at all - a change
+    /// that only reached the store would be a table that never moved.
+    /// </summary>
+    /// <remarks>
+    /// A timeout, and it was earned: with the dispatch taken out this test did not fail, it
+    /// <b>hung</b> - the read simply waits for an event that never comes. A hanging test says the
+    /// same thing as a failing one and says it an hour later.
+    /// </remarks>
+    [Fact(Timeout = 30_000)]
+    public async Task Every_command_puts_exactly_one_addressed_patch_on_the_stream()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+
+        await using var stream = session.Subscribe(Cancellation).GetAsyncEnumerator(Cancellation);
+        Assert.True(await stream.MoveNextAsync());
+
+        var commands = new (string Name, Func<Task> Run)[]
+        {
+            ("RemoveItem", () => session.RemoveItemAsync(Target, item, Cancellation)),
+            ("SetBackground", () => session.SetBackgroundAsync(Target, Reference(), Cancellation)),
+            ("SetName", () => session.SetAssetNameAsync(Target, Reference().AssetId, "Vellin", Cancellation)),
+            ("SetShowName", () => session.SetShowNameAsync(Target, null, true, Cancellation)),
+            ("SetAnimationPaused", () => session.SetAnimationPausedAsync(Target, null, true, Cancellation)),
+            ("ToggleItems", () => session.ToggleItemsAsync(Target, false, Cancellation)),
+            ("ToggleBackground", () => session.ToggleBackgroundAsync(Target, false, Cancellation)),
+            ("ClearBackground", () => session.ClearBackgroundAsync(Target, Cancellation)),
+        };
+
+        foreach (var (name, run) in commands)
+        {
+            await run();
+
+            Assert.True(await stream.MoveNextAsync(), $"{name} put nothing on the stream");
+
+            var patched = Assert.IsType<SessionEvent.ScenePatched>(stream.Current);
+            var op = Assert.Single(patched.Patch.Ops);
+
+            Assert.Equal(Target, op.Screen);
+        }
+    }
+
+    private static SessionApi Session(out ScreenCatalog screens)
+    {
+        var options = new HubOptions
+        {
+            KnownDevices = [new PairedDevice(Device, "TISCH-PC", PairingRole.Display, "a-token")],
+        };
+
+        screens = new ScreenCatalog();
+
+        return new SessionApi(
+            new SceneStore(),
+            screens,
+            new DisplayConnections(),
+            new PairingDirectory(Options.Create(options), TimeProvider.System),
+            new SessionEvents(),
+            null,
+            NullLogger<SessionApi>.Instance);
+    }
+
+    private static ScreenInfo Info() =>
+        new(Screen, "TISCH-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true);
+
+    private static AssetRef Reference() =>
+        new(
+            new AssetId(new string('d', 64)),
+            new AssetMeta(800, 600, "png", 1024, false, new string('c', 64)),
+            "Grimmbart");
+}

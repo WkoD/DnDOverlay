@@ -235,6 +235,96 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public Task RemoveItemAsync(ScreenRef screen, ItemId item, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new RemoveItem(item), cancellationToken);
+
+    /// <inheritdoc />
+    public Task SetBackgroundAsync(
+        ScreenRef screen, AssetRef asset, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+
+        // The finished layer travels, as the finished item does for AddItem: what the hub has
+        // worked out is not worked out again at the other end (Part 1, rule 2). Fit and offset
+        // start at their resting values - Cover, centred - and are moved from the thumbnail
+        // afterwards (Part 6).
+        var background = new BackgroundItem(
+            asset.AssetId,
+            asset.Meta,
+            asset.Name,
+            ShowName: false,
+            Fit: BackgroundFit.Cover,
+            OffsetX: 0,
+            OffsetY: 0,
+            AnimationPaused: false);
+
+        return ApplyAsync(screen, new SetBackground(background), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new ClearBackground(), cancellationToken);
+
+    /// <inheritdoc />
+    public Task SetAssetNameAsync(
+        ScreenRef screen, AssetId asset, string name, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new SetName(asset, name), cancellationToken);
+
+    /// <inheritdoc />
+    public Task SetShowNameAsync(
+        ScreenRef screen, ItemId? item, bool show, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new SetShowName(item, show), cancellationToken);
+
+    /// <inheritdoc />
+    public Task SetAnimationPausedAsync(
+        ScreenRef screen, ItemId? item, bool paused, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new SetAnimationPaused(item, paused), cancellationToken);
+
+    /// <inheritdoc />
+    public Task ToggleItemsAsync(ScreenRef screen, bool visible, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new ToggleItems(visible), cancellationToken);
+
+    /// <inheritdoc />
+    public Task ToggleBackgroundAsync(
+        ScreenRef screen, bool visible, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new ToggleBackground(visible), cancellationToken);
+
+    /// <summary>
+    /// The shape every operation of M2b shares: apply to the authoritative scene under the lock,
+    /// then send the very same patch to the devices and to the surfaces.
+    /// <para>
+    /// <b>The store is written before the patch goes out</b>, so a display acting on it can never
+    /// be ahead of the hub. And it is <b>one</b> patch for both audiences, because a second control
+    /// has to APPLY it - handing it a whole scene would throw away what patches are for (Part 4).
+    /// </para>
+    /// <para>
+    /// <see cref="AddItemAsync"/> deliberately does not go through here: it computes placement, a
+    /// ZOrder and a revision first, and those are the things that must not be duplicated. What is
+    /// shared is the dispatch, not the decision.
+    /// </para>
+    /// </summary>
+    private async Task ApplyAsync(ScreenRef screen, PatchOp op, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var context = _screens.ContextFor(screen);
+
+            _scenes.Set(screen, SceneReducer.Apply(_scenes.Get(screen), op, context));
+
+            var patch = new ScenePatch([new ScreenOp(screen, op)]);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<SceneState> GetSceneAsync(
         ScreenRef screen,
         CancellationToken cancellationToken = default)

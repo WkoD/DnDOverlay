@@ -28,6 +28,53 @@ public interface ISessionApi
     /// An aimed drop point wins over the placement mode. <see langword="null"/> means "you
     /// decide".
     /// </param>
+    /// <summary>
+    /// Takes one image off a screen. An <c>ItemId</c> the screen does not carry is not an error -
+    /// a command may reach the hub after the item is already gone (Part 11).
+    /// </summary>
+    Task RemoveItemAsync(ScreenRef screen, ItemId item, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Puts a picture on the background layer of a screen, replacing whatever was there.
+    /// <see cref="ClearBackgroundAsync"/> is the counterpart, and it is a separate call rather than
+    /// this one with a null: the two are strictly separate operations, which is what makes "empty
+    /// the lot" have to say both out loud (Part 3).
+    /// </summary>
+    Task SetBackgroundAsync(ScreenRef screen, AssetRef asset, CancellationToken cancellationToken = default);
+
+    /// <summary>Takes the background layer away, leaving the items where they are.</summary>
+    Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Renames an ASSET wherever it shows on this screen - every item carrying it and the
+    /// background too. "One picture, one name" (Part 3): the control sends one of these per
+    /// affected screen, otherwise the same picture would briefly be called two different things.
+    /// </summary>
+    Task SetAssetNameAsync(
+        ScreenRef screen, AssetId asset, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether one item wears its caption. <paramref name="item"/> <see langword="null"/> means the
+    /// background layer, which has the same field - a city map wants to be able to carry its name
+    /// (Part 7).
+    /// </summary>
+    Task SetShowNameAsync(
+        ScreenRef screen, ItemId? item, bool show, CancellationToken cancellationToken = default);
+
+    /// <summary>Holds one animation still, or lets it run again. <see langword="null"/> means the background.</summary>
+    Task SetAnimationPausedAsync(
+        ScreenRef screen, ItemId? item, bool paused, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether the item layer of this screen is drawn. It hides rather than deletes - the pictures
+    /// stay in the scene and in the device's store, which is what makes fading them back in
+    /// immediate and free of a second transfer (Part 7).
+    /// </summary>
+    Task ToggleItemsAsync(ScreenRef screen, bool visible, CancellationToken cancellationToken = default);
+
+    /// <summary>The same for the background layer, independent of the items in all four combinations.</summary>
+    Task ToggleBackgroundAsync(ScreenRef screen, bool visible, CancellationToken cancellationToken = default);
+
     Task<ItemId> AddItemAsync(
         ScreenRef screen,
         AssetRef asset,
