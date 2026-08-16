@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using DnDOverlay.Core;
 using DnDOverlay.Platform.Windows;
+using DnDOverlay.Rendering.Windows;
 using CoreRect = DnDOverlay.Core.Rect;
 
 namespace DnDOverlay.Display;
@@ -180,7 +181,9 @@ internal sealed class OverlayWindow : Window
 
             var rect = Layout.ItemToRect(item, context);
 
-            _stage.Children.Add(Place(source, rect, item.RotationDeg, width, height));
+            _stage.Children.Add(Place(
+                source, rect, item.RotationDeg, width, height,
+                image.ShowName ? image.Name : null));
         }
     }
 
@@ -209,26 +212,90 @@ internal sealed class OverlayWindow : Window
         var rect = Layout.BackgroundRect(
             aspectRatio, background.Fit, background.OffsetX, background.OffsetY, context);
 
-        _stage.Children.Add(Place(source, rect, rotationDeg: 0, width, height));
+        _stage.Children.Add(Place(
+            source, rect, rotationDeg: 0, width, height,
+            background.ShowName ? background.Name : null));
     }
 
-    private static Image Place(ImageSource source, CoreRect rect, double rotationDeg, double width, double height)
+    /// <summary>
+    /// One picture, and its caption if it wears one. The two sit in a single rotated container, so
+    /// the caption turns WITH the picture - nobody is helped by a readable label under a figure
+    /// standing on its head (<c>checks/M1.md</c>).
+    /// </summary>
+    private static Grid Place(
+        ImageSource source,
+        CoreRect rect,
+        double rotationDeg,
+        double width,
+        double height,
+        string? name)
     {
-        var element = new Image
+        var renderedWidth = rect.Width * width;
+        var renderedHeight = rect.Height * height;
+
+        var element = new Grid
         {
-            Source = source,
-            Width = rect.Width * width,
-            Height = rect.Height * height,
-            Stretch = Stretch.Fill,
+            Width = renderedWidth,
+            Height = renderedHeight,
             IsHitTestVisible = false,
             RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
             RenderTransform = new RotateTransform(rotationDeg),
         };
 
+        element.Children.Add(new Image { Source = source, Stretch = Stretch.Fill });
+
+        // In DIP on the screen, not in normalised coordinates - the text does not scale with the
+        // picture, which is the whole reason the cascade is measured rather than computed.
+        var caption = CaptionLayout.Fit(name, renderedWidth, renderedHeight);
+
+        if (caption.IsVisible)
+        {
+            element.Children.Add(Label(caption, renderedWidth));
+        }
+
         Canvas.SetLeft(element, rect.X * width);
         Canvas.SetTop(element, rect.Y * height);
 
         return element;
+    }
+
+    /// <summary>
+    /// The name plate: inside the picture, at the bottom, on a dark gradient that fades out
+    /// upwards.
+    /// <para>
+    /// The gradient is the price the plan already accepted for the inventory tiles and it carries
+    /// unchanged here - white text on a light picture is unreadable, and this is not a second
+    /// decision (<c>checks/M1.md</c>).
+    /// </para>
+    /// </summary>
+    private static Border Label(Caption caption, double width)
+    {
+        var gradient = new LinearGradientBrush
+        {
+            StartPoint = new System.Windows.Point(0, 1),
+            EndPoint = new System.Windows.Point(0, 0),
+            GradientStops =
+            [
+                new GradientStop(Color.FromArgb(0xC0, 0, 0, 0), 0),
+                new GradientStop(Colors.Transparent, 1),
+            ],
+        };
+
+        return new Border
+        {
+            Background = gradient,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Padding = new Thickness(4, 8, 4, 2),
+            Child = new TextBlock
+            {
+                Text = caption.Text,
+                FontSize = CaptionLayout.DefaultTextSize,
+                Foreground = Brushes.White,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = width,
+            },
+        };
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
