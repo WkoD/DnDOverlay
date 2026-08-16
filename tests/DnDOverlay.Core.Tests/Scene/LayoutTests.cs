@@ -110,4 +110,48 @@ public sealed class LayoutTests
 
         Assert.Equal(screen.MaxScale, Layout.ClampScale(1000, aspectRatio: 1, screen), precision: 9);
     }
+
+    /// <summary>
+    /// A picture always fits the screen it is put on, however extreme its shape. Found at the
+    /// table (hand-run of M2b, step 15): a 6500x39 panorama arrived at <b>694 %</b> of the screen
+    /// width and hung out over both edges.
+    /// <para>
+    /// The cause was two demands contradicting each other, with the wrong one winning: the width
+    /// cap computed a scale of 0.0096 and <c>ClampScale</c> raised it back to <c>MinScale</c>, the
+    /// lower bound that stops a picture becoming too small to grab. The cap wins now - a picture
+    /// that does not fit is unusable for everyone, and the lower bound belongs to the gesture.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(6500, 39)]
+    [InlineData(5000, 500)]
+    [InlineData(10000, 100)]
+    [InlineData(39, 6500)]
+    public void A_picture_of_any_shape_arrives_inside_the_screen(double pixelWidth, double pixelHeight)
+    {
+        var screen = Build.Screen();
+        var aspectRatio = pixelWidth / pixelHeight;
+
+        var scale = Layout.ScaleOnLoad(aspectRatio, screen);
+        var rect = Layout.ItemToRect(Build.Item(scale: scale, aspectRatio: aspectRatio), screen);
+
+        Assert.True(
+            rect.Width <= screen.MaxWidthOnLoad + 1e-9,
+            $"{rect.Width * 100:F0} % of the screen width, capped at {screen.MaxWidthOnLoad * 100:F0} %");
+
+        Assert.True(rect.Height <= 1 + 1e-9, $"{rect.Height * 100:F0} % of the screen height");
+    }
+
+    /// <summary>
+    /// The counter-check that keeps the fix from being "cap everything to nothing": an ordinary
+    /// picture is still laid out at the configured size, and the lower bound still holds for it.
+    /// </summary>
+    [Fact]
+    public void An_ordinary_picture_is_untouched_by_the_cap()
+    {
+        var screen = Build.Screen();
+
+        Assert.Equal(screen.ScaleOnLoad, Layout.ScaleOnLoad(4d / 3d, screen), precision: 9);
+        Assert.Equal(screen.ScaleOnLoad, Layout.ScaleOnLoad(1, screen), precision: 9);
+    }
 }

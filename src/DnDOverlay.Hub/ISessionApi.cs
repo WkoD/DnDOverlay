@@ -42,6 +42,22 @@ public interface ISessionApi
     /// </summary>
     Task SetBackgroundAsync(ScreenRef screen, AssetRef asset, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Changes how the background sits without touching which picture it is: the fit, and which
+    /// part of the crop is seen.
+    /// <para>
+    /// There is no operation of its own for this - the background travels as a whole layer, so
+    /// changing it is a read, a change and a <c>SetBackground</c> under the same lock. A screen
+    /// with no background is left alone rather than given an empty one.
+    /// </para>
+    /// </summary>
+    Task SetBackgroundFitAsync(
+        ScreenRef screen,
+        BackgroundFit fit,
+        double offsetX = 0,
+        double offsetY = 0,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Takes the background layer away, leaving the items where they are.</summary>
     Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default);
 

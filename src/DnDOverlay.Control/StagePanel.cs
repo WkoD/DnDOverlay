@@ -58,6 +58,11 @@ internal sealed class StagePanel : StackPanel
             Button("Set as background ...", (_, _) => PutAsync(background: true)),
             Button("Clear background", (_, _) => Run(screen => _session.ClearBackgroundAsync(screen)))));
 
+        Children.Add(Row(
+            Button("Cover", (_, _) => Run(screen => _session.SetBackgroundFitAsync(screen, BackgroundFit.Cover))),
+            Button("Contain", (_, _) => Run(screen => _session.SetBackgroundFitAsync(screen, BackgroundFit.Contain))),
+            Button("Hold/run background", (_, _) => HoldBackgroundAsync())));
+
         _images.Click += (_, _) => Switch(_images, visible => _session.ToggleItemsAsync(Screen()!.Value, visible));
         _background.Click += (_, _) => Switch(_background, visible => _session.ToggleBackgroundAsync(Screen()!.Value, visible));
 
@@ -115,6 +120,34 @@ internal sealed class StagePanel : StackPanel
 
     private ScreenRef? Screen() => _target();
 
+    /// <summary>
+    /// The background's own pause. It needs its own grip because the item buttons act on the
+    /// selected item, and the background is not one - the operation takes a null item for exactly
+    /// this (Part 7).
+    /// </summary>
+    private async void HoldBackgroundAsync()
+    {
+        if (Screen() is not { } screen)
+        {
+            _status.Text = "Pick a screen first.";
+            return;
+        }
+
+        var scene = await _session.GetSceneAsync(screen).ConfigureAwait(true);
+
+        if (scene.Background is not { } background)
+        {
+            _status.Text = "This screen has no background.";
+            return;
+        }
+
+        await _session
+            .SetAnimationPausedAsync(screen, item: null, !background.AnimationPaused)
+            .ConfigureAwait(true);
+
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
     private async void Place()
     {
         if (_settingSwitches || Screen() is not { } screen || _placement.SelectedItem is not PlacementMode mode)
@@ -151,9 +184,15 @@ internal sealed class StagePanel : StackPanel
 
         var name = Path.GetFileNameWithoutExtension(dialog.FileName);
 
-        var taken = await _stock
-            .IngestAsync(await File.ReadAllBytesAsync(dialog.FileName).ConfigureAwait(true), name)
-            .ConfigureAwait(true);
+        _status.Text = $"Taking {name} in ...";
+
+        var bytes = await File.ReadAllBytesAsync(dialog.FileName).ConfigureAwait(true);
+
+        // OFF the UI thread. The stock's ingest is synchronous by construction - it hashes,
+        // decodes, normalises, writes and thumbnails - and awaiting it here froze the whole
+        // control until a 20 MB picture was through (hand-run of M2b, step 17). A library returns
+        // a result and does not pick a thread; picking one is the caller's job (rule 10).
+        var taken = await Task.Run(() => _stock.IngestAsync(bytes, name)).ConfigureAwait(true);
 
         if (taken is IngestResult.Refused refused)
         {

@@ -858,6 +858,7 @@ public sealed partial class App : Application, IDisposable
 
             case SceneSnapshotMessage snapshot:
                 _scenes[snapshot.Screen] = snapshot.Scene;
+                LetGoOfWhatNoSceneNeeds();
                 await EnsureImagesAsync(snapshot.Scene).ConfigureAwait(false);
                 await RenderAsync(snapshot.Screen).ConfigureAwait(false);
                 break;
@@ -961,6 +962,8 @@ public sealed partial class App : Application, IDisposable
 
             _scenes[op.Screen] = SceneReducer.Apply(scene, op.Op, context);
 
+            LetGoOfWhatNoSceneNeeds();
+
             await EnsureImagesAsync(_scenes[op.Screen]).ConfigureAwait(false);
             await RenderAsync(op.Screen).ConfigureAwait(false);
         }
@@ -1057,6 +1060,37 @@ public sealed partial class App : Application, IDisposable
             _progress.Failed(arrived.Asset);
             DisplayLog.AssetFailed(_logger, exception, arrived.Asset);
         }
+    }
+
+    /// <summary>
+    /// Lets go of every picture no scene of this device stands on any more - the decoded bitmap,
+    /// the bytes kept for an animation, and the file in the store.
+    /// <para>
+    /// <b>Without this the display grows without end.</b> Part 6 says it in as many words: the sum
+    /// only works if bitmaps disappear again, and a table keyed by identifier is "the obvious
+    /// convenience" that prevents exactly that. Measured at the table (hand-run of M2b, step 44a):
+    /// <b>2 GB</b> and still climbing, because nothing removed an entry - not the bitmaps, not the
+    /// animation bytes, and the disk store was never trimmed at all.
+    /// </para>
+    /// <para>
+    /// Counted over ALL screens, the inactive ones included: their arrangement is kept, so what
+    /// lies there is still needed (Part 3).
+    /// </para>
+    /// </summary>
+    private void LetGoOfWhatNoSceneNeeds()
+    {
+        var wanted = SceneAssets.InUse(_scenes.Values);
+
+        foreach (var asset in _images.Keys.Where(asset => !wanted.Contains(asset)).ToList())
+        {
+            _images.Remove(asset);
+            _moving.Remove(asset);
+        }
+
+        // The file may stay - the store keeps what it has room for, because a picture that comes
+        // back costs nothing then (Part 5). What it must never do is keep growing, and this is the
+        // only place that knows which files a current item needs.
+        _cache.Trim(wanted);
     }
 
     /// <summary>

@@ -101,7 +101,22 @@ public static class Layout
 
         var widthCap = screen.MaxWidthOnLoad * screen.AspectRatio / aspectRatio;
 
-        return ClampScale(Math.Min(screen.ScaleOnLoad, widthCap), aspectRatio, screen);
+        // The LOWER bound has no business here, and that is a correction the table forced.
+        //
+        // ClampScale holds a scale above MinScale - "80 DIP on the shorter edge", so nothing can
+        // become too small to grab. Measured in the hand-run of M2b, step 15: on an extreme shape
+        // that bound does not merely bind, it EXPLODES, because it is expressed against the
+        // shorter edge. A 6500x39 panorama caps to 0.0096 and came back as 0.0741 - 694 % of the
+        // screen width. Its mirror image, 39x6500, came back at 1235 % of the screen height,
+        // because the shorter-edge factor divides by six thousandths.
+        //
+        // Which demand gives way is not a close call: a picture that does not FIT is unusable for
+        // everyone, while one whose short edge is under 80 DIP is merely hard to grab - and a
+        // sliver is a sliver whatever we do with it. The lower bound keeps its job where it
+        // belongs, at the GESTURE (M3): it stops the DM zooming a picture away. How large a
+        // picture ARRIVES is a different question, and it has two answers already - the configured
+        // size and the width cap.
+        return Math.Min(screen.ScaleOnLoad, widthCap);
     }
 
     /// <summary>

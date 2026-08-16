@@ -262,6 +262,37 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task SetBackgroundFitAsync(
+        ScreenRef screen,
+        BackgroundFit fit,
+        double offsetX = 0,
+        double offsetY = 0,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        BackgroundItem wanted;
+
+        try
+        {
+            // Read and change under the same lock as the write, or two grips on the fit would
+            // each compute from a background the other has already replaced.
+            if (_scenes.Get(screen).Background is not { } background)
+            {
+                return;
+            }
+
+            wanted = background with { Fit = fit, OffsetX = offsetX, OffsetY = offsetY };
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await ApplyAsync(screen, new SetBackground(wanted), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
         ApplyAsync(screen, new ClearBackground(), cancellationToken);
 
