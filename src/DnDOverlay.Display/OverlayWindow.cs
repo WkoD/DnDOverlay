@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DnDOverlay.Core;
 using DnDOverlay.Platform.Windows;
@@ -151,12 +152,18 @@ internal sealed class OverlayWindow : Window
     internal void Render(
         SceneState scene,
         ScreenContext context,
-        IReadOnlyDictionary<AssetId, ImageSource> images)
+        IReadOnlyDictionary<AssetId, ImageSource> images,
+        IReadOnlyDictionary<AssetId, byte[]> moving)
     {
         _stage.Children.Clear();
 
         var width = _stage.ActualWidth > 0 ? _stage.ActualWidth : context.WidthInDip;
         var height = _stage.ActualHeight > 0 ? _stage.ActualHeight : context.HeightInDip;
+
+        // Which pictures may move is decided over the scene, in Core, before anything is built -
+        // a continuous animation on a software-rendered transparent overlay is the most expensive
+        // case this application has (Part 6).
+        var animating = AnimationBudget.Plan(scene);
 
         // The two layers are independent in all four combinations, and each switch hides its own
         // and nothing else (Part 11, step 24). Hiding is not removing: the pictures stay in the
@@ -164,7 +171,7 @@ internal sealed class OverlayWindow : Window
         // free of a second transfer (Part 7).
         if (scene.BackgroundVisible)
         {
-            DrawBackground(scene.Background, context, images, width, height);
+            DrawBackground(scene.Background, context, images, moving, width, height, animating.Background);
         }
 
         if (!scene.ItemsVisible)
@@ -183,7 +190,8 @@ internal sealed class OverlayWindow : Window
 
             _stage.Children.Add(Place(
                 source, rect, item.RotationDeg, width, height,
-                image.ShowName ? image.Name : null));
+                image.ShowName ? image.Name : null,
+                animating.Items.Contains(image.ItemId) ? moving.GetValueOrDefault(image.AssetId) : null));
         }
     }
 
@@ -200,8 +208,10 @@ internal sealed class OverlayWindow : Window
         BackgroundItem? background,
         ScreenContext context,
         IReadOnlyDictionary<AssetId, ImageSource> images,
+        IReadOnlyDictionary<AssetId, byte[]> moving,
         double width,
-        double height)
+        double height,
+        bool animate)
     {
         if (background is null || !images.TryGetValue(background.AssetId, out var source))
         {
@@ -214,7 +224,8 @@ internal sealed class OverlayWindow : Window
 
         _stage.Children.Add(Place(
             source, rect, rotationDeg: 0, width, height,
-            background.ShowName ? background.Name : null));
+            background.ShowName ? background.Name : null,
+            animate ? moving.GetValueOrDefault(background.AssetId) : null));
     }
 
     /// <summary>
@@ -228,7 +239,8 @@ internal sealed class OverlayWindow : Window
         double rotationDeg,
         double width,
         double height,
-        string? name)
+        string? name,
+        byte[]? moving)
     {
         var renderedWidth = rect.Width * width;
         var renderedHeight = rect.Height * height;
@@ -242,7 +254,29 @@ internal sealed class OverlayWindow : Window
             RenderTransform = new RotateTransform(rotationDeg),
         };
 
-        element.Children.Add(new Image { Source = source, Stretch = Stretch.Fill });
+        var picture = new Image { Stretch = Stretch.Fill };
+
+        // Both ways go through the same wrapper, so "not animating" is a stated outcome rather than
+        // the absence of a call: a picture that may not move stands on its first frame, and its
+        // timer is taken away rather than merely left unstarted (rule 8).
+        //
+        // The moving path needs the BYTES rather than the decoded picture, and that is measured:
+        // handed the decoded one the library reports zero frames, because the frames of a GIF are
+        // read a second time from the source and PictureDecoder has let its stream go.
+        if (moving is not null)
+        {
+            AnimatedPicture.Run(picture, moving);
+        }
+        else if (source is BitmapSource still)
+        {
+            AnimatedPicture.Freeze(picture, still);
+        }
+        else
+        {
+            picture.Source = source;
+        }
+
+        element.Children.Add(picture);
 
         // In DIP on the screen, not in normalised coordinates - the text does not scale with the
         // picture, which is the whole reason the cascade is measured rather than computed.

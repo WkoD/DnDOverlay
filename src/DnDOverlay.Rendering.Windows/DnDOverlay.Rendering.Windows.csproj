@@ -23,4 +23,11 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- The one third-party dependency here, and it is wrapped: only AnimatedPicture names it.
+         Correct GIF disposal handling is fiddly enough to be worth a library, and Part 6 named
+         this one - MIT, and measured to build against net10.0-windows before it was taken. -->
+    <PackageReference Include="WpfAnimatedGif" />
+  </ItemGroup>
+
 </Project>

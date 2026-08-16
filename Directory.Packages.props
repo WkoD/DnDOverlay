@@ -1,4 +1,4 @@
-﻿<Project>
+<Project>
 
   <!-- Central Package Management: every NuGet version lives here exactly once. -->
 
@@ -34,6 +34,11 @@
          binary is identical, and a self-contained publish is RID specific, so the MSI does
          not grow. Imaging and the test data generator must reference the same variant. -->
     <PackageVersion Include="Magick.NET-Q8-AnyCPU" Version="14.16.0" />
+
+    <!-- GIF animation: frames, frame times and the disposal handling that goes with them. Behind
+         our own abstraction (rule 8), so what depends on it is one type in Rendering.Windows.
+         Measured before it was pinned: 2.0.2 restores and builds against net10.0-windows. -->
+    <PackageVersion Include="WpfAnimatedGif" Version="2.0.2" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">

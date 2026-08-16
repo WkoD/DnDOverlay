@@ -40,6 +40,17 @@ public sealed partial class App : Application, IDisposable
     private readonly Dictionary<AssetId, ImageSource> _images = [];
 
     /// <summary>
+    /// The delivered bytes of the pictures that MOVE, and only of those.
+    /// <para>
+    /// Measured rather than foreseen: the animation reads a GIF's frames a second time, from the
+    /// source - and <c>PictureDecoder</c> has let its stream go by then, which is right for a still
+    /// picture. So a moving picture needs its bytes kept, and the price is paid only where it buys
+    /// something.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<AssetId, byte[]> _moving = [];
+
+    /// <summary>
     /// How often the load readings go out - 4 Hz, the upper end of Part 4's "2 to 4". A ring is
     /// meant to fill visibly rather than jump; below that it looks stuck, above it the number
     /// flickers.
@@ -1015,6 +1026,13 @@ public sealed partial class App : Application, IDisposable
 
             _images[arrived.Asset] = decoded;
 
+            // Kept only for what moves, and only from the full picture - a thumbnail of an
+            // animation is a still, and animating it would show the wrong thing sharply.
+            if (!arrived.IsThumbnail && Animated(arrived.Asset))
+            {
+                _moving[arrived.Asset] = arrived.Bytes;
+            }
+
             if (!arrived.IsThumbnail)
             {
                 // Only the full picture ends the load. Reporting done on the thumbnail would fill
@@ -1034,6 +1052,18 @@ public sealed partial class App : Application, IDisposable
             DisplayLog.AssetFailed(_logger, exception, arrived.Asset);
         }
     }
+
+    /// <summary>
+    /// Whether any scene this device holds says this picture moves. Asked of the SCENE rather than
+    /// of the bytes: the codec has already worked it out, and asking again would be a second answer
+    /// to a settled question (Part 5).
+    /// </summary>
+    private bool Animated(AssetId asset) =>
+        _scenes.Values.Any(scene =>
+            (scene.Background is { } background
+                && background.AssetId == asset
+                && background.Meta.IsAnimated)
+            || scene.Items.OfType<ImageItem>().Any(item => item.AssetId == asset && item.Meta.IsAnimated));
 
     /// <summary>
     /// Sends what is being loaded, two to four times a second and <b>only while something is</b>
@@ -1077,6 +1107,10 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        window.Render(_scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty, context, _images);
+        window.Render(
+            _scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty,
+            context,
+            _images,
+            _moving);
     }
 }
