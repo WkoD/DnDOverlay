@@ -153,7 +153,8 @@ internal sealed class OverlayWindow : Window
         SceneState scene,
         ScreenContext context,
         IReadOnlyDictionary<AssetId, ImageSource> images,
-        IReadOnlyDictionary<AssetId, byte[]> moving)
+        IReadOnlyDictionary<AssetId, byte[]> moving,
+        IReadOnlyDictionary<AssetId, double> loading)
     {
         _stage.Children.Clear();
 
@@ -193,6 +194,85 @@ internal sealed class OverlayWindow : Window
                 image.ShowName ? image.Name : null,
                 animating.Items.Contains(image.ItemId) ? moving.GetValueOrDefault(image.AssetId) : null));
         }
+
+        // The ring is drawn LAST and on its own, above everything: it belongs to the ungoverned
+        // layer, not to the scene. If a picture is being fetched, its place already stands - what
+        // is missing is the picture, and the ring says so where it will appear (Part 7).
+        foreach (var item in scene.Items.OfType<ImageItem>())
+        {
+            if (loading.TryGetValue(item.AssetId, out var fraction))
+            {
+                _stage.Children.Add(Ring(Layout.ItemToRect(item, context), fraction, width, height));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The progress ring at the item's place. It is fed from <c>AssetProgress</c> and NOT from the
+    /// scene stream, which is why it keeps turning while everything else is slow - under load the
+    /// feedback that explains the load must not be the first thing to stop (Part 7, rank 3).
+    /// </summary>
+    private static Grid Ring(CoreRect rect, double fraction, double width, double height)
+    {
+        const double Size = 56;
+
+        var ring = new Grid { Width = Size, Height = Size, IsHitTestVisible = false };
+
+        ring.Children.Add(new System.Windows.Shapes.Ellipse
+        {
+            Stroke = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+            StrokeThickness = 5,
+            Fill = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0)),
+        });
+
+        // An arc rather than a second ellipse: a partial circle is what says "some of it", and a
+        // ring that only changed colour would read as a state rather than as a quantity.
+        var arc = new System.Windows.Shapes.Path
+        {
+            Stroke = Brushes.White,
+            StrokeThickness = 5,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            Data = Arc(Size / 2, (Size / 2) - 4, Math.Clamp(fraction, 0, 1)),
+        };
+
+        ring.Children.Add(arc);
+
+        Canvas.SetLeft(ring, ((rect.X + (rect.Width / 2)) * width) - (Size / 2));
+        Canvas.SetTop(ring, ((rect.Y + (rect.Height / 2)) * height) - (Size / 2));
+
+        return ring;
+    }
+
+    /// <summary>The filled part, clockwise from twelve o'clock.</summary>
+    private static Geometry Arc(double centre, double radius, double fraction)
+    {
+        if (fraction <= 0)
+        {
+            return Geometry.Empty;
+        }
+
+        var angle = fraction * 2 * Math.PI;
+        var start = new System.Windows.Point(centre, centre - radius);
+        var end = new System.Windows.Point(
+            centre + (radius * Math.Sin(angle)),
+            centre - (radius * Math.Cos(angle)));
+
+        var figure = new PathFigure { StartPoint = start, IsClosed = false };
+
+        figure.Segments.Add(new ArcSegment
+        {
+            Point = fraction >= 1 ? new System.Windows.Point(centre - 0.01, centre - radius) : end,
+            Size = new System.Windows.Size(radius, radius),
+            SweepDirection = SweepDirection.Clockwise,
+            IsLargeArc = fraction > 0.5,
+        });
+
+        var geometry = new PathGeometry();
+        geometry.Figures.Add(figure);
+        geometry.Freeze();
+
+        return geometry;
     }
 
     /// <summary>

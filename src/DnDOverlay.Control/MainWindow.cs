@@ -21,7 +21,7 @@ internal sealed class MainWindow : Window, IDisposable
 {
     private readonly ISessionApi _session;
     private readonly PairingDesk _pairing;
-    private readonly DemoAsset _asset;
+    private readonly IAssetSink _stock;
     private readonly Uri _address;
     private readonly LogList _log;
     private readonly CancellationTokenSource _listening = new();
@@ -31,6 +31,8 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Border _firstRun = new() { Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _notices = new() { Margin = new Thickness(0, 0, 0, 12) };
 
+    private readonly StagePanel _stage;
+
     private DevicesWindow? _devices;
     private NetworkWindow? _network;
     private NetworkPanel? _welcome;
@@ -39,22 +41,21 @@ internal sealed class MainWindow : Window, IDisposable
     internal MainWindow(
         ISessionApi session,
         PairingDesk pairing,
-        DemoAsset asset,
+        IAssetSink stock,
         Uri address,
         ProcessLog log)
     {
         _session = session;
         _pairing = pairing;
-        _asset = asset;
+        _stock = stock;
         _address = address;
         _log = new LogList(log, "Control") { Height = 200 };
 
-        Title = "DnDOverlay - M1b";
+        _stage = new StagePanel(session, stock, Selected, _status);
+
+        Title = "DnDOverlay - M2b";
         Width = 620;
         Height = 760;
-
-        var send = new Button { Content = "Send the image to the selected screen", Padding = new Thickness(12, 8, 12, 8) };
-        send.Click += OnSend;
 
         var panel = new StackPanel { Margin = new Thickness(16) };
 
@@ -76,7 +77,7 @@ internal sealed class MainWindow : Window, IDisposable
         });
         panel.Children.Add(_list);
         panel.Children.Add(StateRow());
-        panel.Children.Add(send);
+        panel.Children.Add(_stage);
         panel.Children.Add(_status);
         panel.Children.Add(_log);
 
@@ -85,6 +86,8 @@ internal sealed class MainWindow : Window, IDisposable
         // Built with the window and fed from the subscription below - a second stream would take
         // events away from this one, and the device list is half its input (Part 4).
         _guard = new StageGuard(this, session, Environment.MachineName);
+
+        _list.SelectionChanged += async (_, _) => await _stage.RefreshAsync().ConfigureAwait(true);
 
         Closed += (_, _) => Dispose();
 
@@ -130,6 +133,14 @@ internal sealed class MainWindow : Window, IDisposable
                         Show(devices.Devices);
                         break;
 
+                    // Redrawn from the authoritative scene rather than from what this window just
+                    // sent: a second control changes the same table, and a panel that trusted its
+                    // own command would drift from it (rule 1).
+                    case SessionEvent.ScenePatched:
+                    case SessionEvent.SceneReplaced:
+                        await _stage.RefreshAsync().ConfigureAwait(true);
+                        break;
+
                     default:
                         break;
                 }
@@ -140,6 +151,10 @@ internal sealed class MainWindow : Window, IDisposable
             // The window was closed.
         }
     }
+
+    /// <summary>Which screen the grips act on, or nothing while the list is empty.</summary>
+    private ScreenRef? Selected() =>
+        _list.SelectedItem is ScreenEntry entry ? entry.Screen : null;
 
     /// <summary>
     /// Flattened to a list here, because a grip that sends one image needs a target rather than a
@@ -335,21 +350,6 @@ internal sealed class MainWindow : Window, IDisposable
         row.Children.Add(apply);
 
         return row;
-    }
-
-    private async void OnSend(object sender, RoutedEventArgs e)
-    {
-        if (_list.SelectedItem is not ScreenEntry entry)
-        {
-            _status.Text = "No screen yet - start a display and wait a moment.";
-            return;
-        }
-
-        // No drop point aimed at, so the hub decides where it goes: placement is its business,
-        // because it reads the state and writes it in the same breath (Part 3).
-        var item = await _session.AddItemAsync(entry.Screen, _asset.Reference, position: null).ConfigureAwait(true);
-
-        _status.Text = $"Sent as item {item} to {entry.Label}.";
     }
 
     /// <summary>

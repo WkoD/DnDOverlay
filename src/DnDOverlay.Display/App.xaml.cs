@@ -1000,10 +1000,16 @@ public sealed partial class App : Application, IDisposable
             .LoadAsync(_hubHttp, _assetPath, wanted, _sessionToken!, arrivals.Writer, _shutdown.Token)
             .ContinueWith(_ => arrivals.Writer.TryComplete(), TaskScheduler.Default);
 
+        // Redrawn on every arrival AND while the readings change, because the ring lives on the
+        // ungoverned layer: it has to keep turning while the rest of the scene sits still.
+        var turning = Task.Run(() => TurnRingsAsync(scene, _shutdown.Token));
+
         await foreach (var arrived in arrivals.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
         {
             Decode(arrived);
         }
+
+        await turning.ConfigureAwait(false);
 
         await loading.ConfigureAwait(false);
     }
@@ -1052,6 +1058,49 @@ public sealed partial class App : Application, IDisposable
             DisplayLog.AssetFailed(_logger, exception, arrived.Asset);
         }
     }
+
+    /// <summary>
+    /// Keeps the rings moving for as long as something is loading. It redraws on its own beat
+    /// rather than on arrivals: between the first byte and the last there is no arrival at all,
+    /// and a ring that only moved when a picture landed would jump instead of filling (Part 7).
+    /// </summary>
+    private async Task TurnRingsAsync(SceneState scene, CancellationToken cancellationToken)
+    {
+        var screens = _scenes
+            .Where(pair => ReferenceEquals(pair.Value, scene))
+            .Select(pair => pair.Key)
+            .ToList();
+
+        try
+        {
+            while (_progress.Reading() is { } reading
+                && reading.Loads.Any(load => load.State is not AssetLoadState.Done))
+            {
+                await Task.Delay(ProgressInterval, cancellationToken).ConfigureAwait(false);
+
+                foreach (var screen in screens)
+                {
+                    await RenderAsync(screen).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
+    }
+
+    /// <summary>
+    /// How far each picture that is still coming has got - the source the progress ring is drawn
+    /// from. Taken from the tracker rather than kept a second time, so what turns at the table and
+    /// what the control is told are the same number (Part 7).
+    /// </summary>
+    private Dictionary<AssetId, double> Loading() =>
+        _progress.Reading() is { } reading
+            ? reading.Loads
+                .Where(load => load.State is not AssetLoadState.Done)
+                .ToDictionary(load => load.Asset, load => load.Fraction)
+            : new Dictionary<AssetId, double>();
 
     /// <summary>
     /// Whether any scene this device holds says this picture moves. Asked of the SCENE rather than
@@ -1111,6 +1160,7 @@ public sealed partial class App : Application, IDisposable
             _scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty,
             context,
             _images,
-            _moving);
+            _moving,
+            Loading());
     }
 }

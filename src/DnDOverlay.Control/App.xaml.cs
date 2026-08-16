@@ -1,9 +1,11 @@
 using System.IO;
 using System.Windows;
+using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Hub;
+using DnDOverlay.Imaging;
 using DnDOverlay.Platform.Windows;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -27,6 +29,7 @@ public sealed partial class App : Application, IDisposable
     private WebApplication? _host;
     private ConfigurationFile<ControlConfiguration>? _configuration;
     private ProcessLog? _log;
+    private AssetStore? _store;
     private ScreenCatalog? _screens;
     private ControlSettings? _settings;
     private DataRoot _dataRoot;
@@ -86,7 +89,21 @@ public sealed partial class App : Application, IDisposable
         var secrets = new WindowsSecretStore();
         var restored = PairingDesk.Restore(loaded.Value, secrets);
 
-        var asset = DemoAsset.Create();
+        // BEFORE the first picture operation, and that is the whole point of the call: applied
+        // late the policy silently does nothing at all, and the hardening that separates a URL
+        // import from a remote control is simply absent (Part 5). It proves its own effect.
+        CoderPolicy.Apply();
+
+        // The real stock replaces the hard-coded stand-in from M1a (checks/M2.md, decision 5).
+        // One unnamed campaign is enough for M2 - naming, switching and the campaign panel are
+        // M5b (Part 10).
+        var store = AssetStore.Open(
+            Path.Combine(_dataRoot.CampaignsDefault, "unbenannt"),
+            new MagickCodec(),
+            TimeProvider.System);
+
+        _store = store;
+
         var builder = WebApplication.CreateBuilder();
 
         // One provider per process, registered unconditionally and never taken out again - which
@@ -141,7 +158,7 @@ public sealed partial class App : Application, IDisposable
             hub.KnownScreens = loaded.Value.KnownScreens;
         });
 
-        builder.Services.AddSingleton<IAssetSource>(asset);
+        builder.Services.AddSingleton<IAssetSource>(store);
 
         // Registered so the hub can put FORWARDED entries into the same log as our own - one
         // stream out of everybody's lines (Part 8). The hub asks for it optionally and runs
@@ -184,7 +201,7 @@ public sealed partial class App : Application, IDisposable
         var window = new MainWindow(
             session,
             new PairingDesk(session, secrets, _settings, TimeProvider.System),
-            asset,
+            store,
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
             _log);
 
