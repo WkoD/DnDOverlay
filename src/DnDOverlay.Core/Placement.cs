@@ -20,24 +20,20 @@ public static class Placement
 
     /// <summary>
     /// The centre for a new item of the given scale and shape.
-    /// </summary>
-    /// <param name="captionHeight">
-    /// Extra room below each item, in normalised units, for the name caption. Flow has to know
-    /// it, because the row height is what it wrecks - that was the bug in the Java version
-    /// (commit 37e946c), where a captioned row overlapped the one below it.
     /// <para>
-    /// It is handed in rather than read from <see cref="ScreenContext"/>: the text size is a
-    /// display parameter in Part 6 that the model in Part 3 does not carry, and adding a field
-    /// to <see cref="ScreenContext"/> is a structural decision that belongs to the milestone
-    /// which starts drawing captions (M2), not to this one. Until then callers pass zero.
+    /// <b>There is no caption allowance any more</b>, and that is a decision rather than an
+    /// omission (M2b). Until M1 the signature carried a <c>captionHeight</c> because the Java
+    /// version drew the name BELOW the picture, which grew the row and made a captioned row
+    /// overlap the one under it (commit 37e946c). Ours draws the caption INSIDE the picture, so
+    /// an item never reaches past its own rectangle - the bug cannot recur, and a parameter kept
+    /// "just in case" would be a second answer to a question that now has one.
     /// </para>
-    /// </param>
+    /// </summary>
     public static Point NextPosition(
         SceneState scene,
         double scale,
         double aspectRatio,
-        ScreenContext screen,
-        double captionHeight = 0)
+        ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(screen);
@@ -47,39 +43,38 @@ public static class Placement
         return screen.Placement switch
         {
             PlacementMode.Cascade => Cascade(scene, width, height),
-            _ => Flow(scene, width, height, captionHeight, screen),
+            _ => Flow(scene, width, height, screen),
         };
     }
 
     /// <summary>
     /// Side by side from the top left; a full row moves one row down, the bottom edge starts
-    /// over from the top. Ported from <c>OlPane.addImage</c> with two corrections: the row
-    /// height accounts for the caption, and occupied slots are skipped.
+    /// over from the top. Ported from <c>OlPane.addImage</c> with one correction: occupied slots
+    /// are skipped.
     /// <para>
     /// "Skipped" is what makes the mode usable when images arrive quickly - without it the
     /// second image lands on the first whenever the first was moved out of its slot by hand.
     /// If nothing free is left, the first slot wins: overlapping is the lesser evil against
     /// refusing to show the image at all.
     /// </para>
+    /// <para>
+    /// The row is exactly as high as the picture. The Java version's second correction - extra
+    /// room for the caption - is gone with the caption having moved inside the image.
+    /// </para>
     /// </summary>
     private static Point Flow(
         SceneState scene,
         double width,
         double height,
-        double captionHeight,
         ScreenContext screen)
     {
         var occupied = scene.Items
             .Select(item => Layout.ItemToRect(item, screen))
             .ToList();
 
-        // The caption sits BELOW the image, so it grows the row without moving the picture.
-        // Centring the item in image-plus-caption would push every captioned image half a
-        // caption downwards - a shift nobody asked for and nobody would find again.
-        var rowHeight = height + captionHeight;
         var first = (Point?)null;
 
-        for (var y = Gap; y + rowHeight <= 1 - Gap + double.Epsilon; y += rowHeight + Gap)
+        for (var y = Gap; y + height <= 1 - Gap + double.Epsilon; y += height + Gap)
         {
             for (var x = Gap; x + width <= 1 - Gap + double.Epsilon; x += width + Gap)
             {
@@ -87,7 +82,7 @@ public static class Placement
 
                 first ??= candidate;
 
-                var rect = new Rect(x, y, width, rowHeight);
+                var rect = new Rect(x, y, width, height);
 
                 if (!occupied.Any(taken => Overlaps(rect, taken)))
                 {

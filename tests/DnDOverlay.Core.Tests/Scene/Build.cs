@@ -16,6 +16,9 @@ internal static class Build
     internal static AssetMeta Meta(int width = 800, int height = 600) =>
         new(width, height, "png", Bytes: 1024, IsAnimated: false, ContentHash: new string('a', 64));
 
+    /// <summary>The asset every built item carries unless a test says otherwise.</summary>
+    internal static AssetId Asset(char fill = 'b') => new(new string(fill, 64));
+
     internal static ImageItem Item(
         double centerX = 0.5,
         double centerY = 0.5,
@@ -23,7 +26,12 @@ internal static class Build
         double aspectRatio = 4d / 3d,
         double rotationDeg = 0,
         int zOrder = 0,
-        ItemId? id = null) =>
+        ItemId? id = null,
+        AssetId? asset = null,
+        string name = "Grimmbart",
+        bool showName = false,
+        bool animationPaused = false,
+        long revision = 1) =>
         new(
             ItemId: id ?? new ItemId(Guid.NewGuid()),
             CenterX: centerX,
@@ -34,12 +42,20 @@ internal static class Build
             ZOrder: zOrder,
             Locked: false,
             Parked: false,
-            Revision: 1,
-            AssetId: new AssetId(new string('b', 64)),
+            Revision: revision,
+            AssetId: asset ?? Asset(),
             Meta: Meta(),
-            Name: "Grimmbart",
-            ShowName: false,
-            AnimationPaused: false);
+            Name: name,
+            ShowName: showName,
+            AnimationPaused: animationPaused);
+
+    internal static BackgroundItem Background(
+        AssetId? asset = null,
+        string? name = "Sturmküste",
+        bool showName = false,
+        BackgroundFit fit = BackgroundFit.Cover,
+        bool animationPaused = false) =>
+        new(asset ?? Asset('c'), Meta(), name, showName, fit, OffsetX: 0, OffsetY: 0, animationPaused);
 
     internal static SceneState SceneWith(params SceneItem[] items) =>
         SceneState.Empty with { Items = items };

@@ -108,32 +108,40 @@ public sealed class PlacementTests
     }
 
     /// <summary>
-    /// The caption is what wrecked the row height in the Java version (commit 37e946c). It is
-    /// handed in rather than read from the screen context, so the effect must be visible here.
+    /// The row is exactly as tall as the picture, and this is what replaced the caption test
+    /// (M2b). The Java version drew the name BELOW the image, which grew the row and let a
+    /// captioned row overlap the one under it (commit 37e946c); ours draws it inside, so an item
+    /// never reaches past its own rectangle.
+    /// <para>
+    /// Stated as an exact distance rather than as "no bigger than": a slack assertion would still
+    /// hold if some allowance crept back in, and that allowance is precisely the thing that was
+    /// removed.
+    /// </para>
     /// </summary>
     [Fact]
-    public void A_caption_pushes_the_next_row_further_down()
+    public void A_row_is_exactly_as_tall_as_the_picture()
     {
         var screen = Build.Screen();
         var scene = SceneState.Empty;
 
-        var withoutCaption = FirstSecondRowY(scene, screen, captionHeight: 0);
-        var withCaption = FirstSecondRowY(scene, screen, captionHeight: 0.05);
-
-        Assert.True(withCaption > withoutCaption);
-    }
-
-    private static double FirstSecondRowY(SceneState scene, ScreenContext screen, double captionHeight)
-    {
-        var positions = new List<Point>();
+        var rows = new List<double>();
 
         for (var i = 0; i < ItemsPastOneRow; i++)
         {
-            var position = Placement.NextPosition(scene, SmallScale, Square, screen, captionHeight);
-            positions.Add(position);
+            var position = Placement.NextPosition(scene, SmallScale, Square, screen);
+            rows.Add(position.Y);
             scene = Build.SceneWith([.. scene.Items, Build.Item(position.X, position.Y, SmallScale, Square)]);
         }
 
-        return positions.Select(p => p.Y).Distinct().OrderBy(y => y).Skip(1).First();
+        var distinct = rows.Distinct().OrderBy(y => y).ToList();
+        Assert.True(distinct.Count > 1, "the run never reached a second row");
+
+        // Both numbers are derived from what the placement itself produced, so the test carries no
+        // second copy of the geometry: the height comes from the item's own rectangle, and the gap
+        // is whatever margin the first row kept from the top edge.
+        var height = Layout.ItemToRect(Build.Item(0.5, 0.5, SmallScale, Square), screen).Height;
+        var gap = distinct[0] - (height / 2);
+
+        Assert.Equal(height + gap, distinct[1] - distinct[0], precision: 9);
     }
 }
