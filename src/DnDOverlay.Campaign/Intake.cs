@@ -32,7 +32,7 @@ public abstract record IntakeBytes
     /// address that refused. It is a refusal like any other and lands in the same report, because
     /// to the DM there is no difference between "could not be fetched" and "could not be read".
     /// </summary>
-    public sealed record Unavailable(string Detail) : IntakeBytes;
+    public sealed record Unavailable(IntakeRejection Reason, string Detail) : IntakeBytes;
 }
 
 /// <summary>How far a run has got. "37 von 200", over the whole stack rather than per file (Part 7).</summary>
@@ -41,8 +41,16 @@ public abstract record IntakeBytes
 /// <param name="Name">The one being worked on, so the DM can see it move.</param>
 public sealed record IntakeProgress(int Done, int Total, string Name);
 
-/// <summary>One that did not come in, with the reason kept for the collected message.</summary>
-public sealed record IntakeFailure(string Name, string Detail);
+/// <summary>
+/// One that did not come in, with the reason kept for the collected message.
+/// <para>
+/// <paramref name="Reason"/> is carried rather than re-derived, and that is the whole repair of the
+/// M2c finding: it used to hold the detail text only, so the one place that logs a refusal had
+/// nothing to say and said <c>Unreadable</c> for every one of them - a pixel bomb, a refused
+/// address and a locked file alike.
+/// </para>
+/// </summary>
+public sealed record IntakeFailure(string Name, IntakeRejection Reason, string Detail);
 
 /// <summary>
 /// What a whole run came to - the material for ONE collected message rather than two hundred
@@ -162,7 +170,7 @@ public sealed class Intake(IAssetSink stock)
                     break;
 
                 case IngestResult.Refused turned:
-                    refused.Add(new IntakeFailure(source.ProposedName, turned.Detail));
+                    refused.Add(new IntakeFailure(source.ProposedName, turned.Reason, turned.Detail));
                     break;
             }
         }
@@ -182,15 +190,15 @@ public sealed class Intake(IAssetSink stock)
                     .IngestAsync(ready.Data, source.ProposedName, cancellationToken)
                     .ConfigureAwait(false),
                 IntakeBytes.Unavailable missing =>
-                    new IngestResult.Refused(ImageRejection.Unreadable, missing.Detail),
-                _ => new IngestResult.Refused(ImageRejection.Unreadable, "Nothing came of it."),
+                    new IngestResult.Refused(missing.Reason, missing.Detail),
+                _ => new IngestResult.Refused(IntakeRejection.Unreadable, "Nothing came of it."),
             };
         }
         catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
         {
             // A file that is locked or gone is the everyday case in a folder of two hundred, and it
             // must not end the run for the other hundred and ninety-nine.
-            return new IngestResult.Refused(ImageRejection.Unreadable, failure.Message);
+            return new IngestResult.Refused(IntakeRejection.Unavailable, failure.Message);
         }
     }
 }

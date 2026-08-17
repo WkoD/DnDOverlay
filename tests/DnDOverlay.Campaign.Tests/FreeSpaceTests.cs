@@ -45,7 +45,7 @@ public sealed class FreeSpaceTests : IDisposable
         var refused = Assert.IsType<IngestResult.Refused>(
             await store.IngestAsync(Picture, "Dorfkarte", TestContext.Current.CancellationToken));
 
-        Assert.Equal(ImageRejection.NoSpace, refused.Reason);
+        Assert.Equal(IntakeRejection.NoSpace, refused.Reason);
         Assert.Contains(_directory, refused.Detail, StringComparison.Ordinal);
     }
 

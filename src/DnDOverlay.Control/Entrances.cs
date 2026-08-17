@@ -225,8 +225,8 @@ internal sealed class Entrances(IAssetSink stock, ControlSettings settings)
                 return await fetch.FetchAsync(address, token).ConfigureAwait(false) switch
                 {
                     FetchResult.Fetched got => new IntakeBytes.Ready(got.Bytes),
-                    FetchResult.Refused refused => new IntakeBytes.Unavailable(refused.Detail),
-                    _ => new IntakeBytes.Unavailable("Nothing came back."),
+                    FetchResult.Refused refused => new IntakeBytes.Unavailable(refused.Reason.AsIntake(), refused.Detail),
+                    _ => new IntakeBytes.Unavailable(IntakeRejection.Unreachable, "Nothing came back."),
                 };
             });
 

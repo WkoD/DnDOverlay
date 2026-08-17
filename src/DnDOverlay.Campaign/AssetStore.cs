@@ -276,7 +276,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             }
             catch (ImageRejectedException rejected)
             {
-                return new IngestResult.Refused(rejected.Reason, rejected.Message);
+                return new IngestResult.Refused(rejected.Reason.AsIntake(), rejected.Message);
             }
         }
 
@@ -305,7 +305,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         if (_freeSpace() is var free && free < source.Length + FreeSpaceReserve)
         {
             return new IngestResult.Refused(
-                ImageRejection.NoSpace,
+                IntakeRejection.NoSpace,
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"There is no room left for this picture: {free / (1024 * 1024)} MB free where "
@@ -327,7 +327,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         }
         catch (ImageRejectedException rejected)
         {
-            return new IngestResult.Refused(rejected.Reason, rejected.Message);
+            return new IngestResult.Refused(rejected.Reason.AsIntake(), rejected.Message);
         }
 
         var entry = new InventoryEntry
@@ -355,7 +355,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         {
             // A picture whose thumbnail cannot be made is a picture that cannot be DECODED, and it
             // is turned away here rather than at the table.
-            return new IngestResult.Refused(rejected.Reason, rejected.Message);
+            return new IngestResult.Refused(rejected.Reason.AsIntake(), rejected.Message);
         }
 
         // Written before the entry exists, and that order is the promise: an ingest that fails

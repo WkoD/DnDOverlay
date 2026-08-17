@@ -6,6 +6,38 @@ using DnDOverlay.Core;
 
 namespace DnDOverlay.Transport;
 
+/// <summary>
+/// Turning a fetch refusal into the word the DM is answered in.
+/// <para>
+/// It sits here rather than at the entrance because this is where the vocabulary is defined: a
+/// caller that had to know which <see cref="FetchRejection"/> means "the address" and which means
+/// "nobody answered" would be a second place holding the same knowledge, and the M2c hand-run is
+/// what a second place costs - the entrance had it, wrote <c>Unreadable</c> for all of them, and
+/// nothing noticed for a whole milestone.
+/// </para>
+/// </summary>
+public static class FetchRejections
+{
+    /// <summary>
+    /// <see cref="FetchRejection.Scheme"/> lands on the address rather than on "unreadable": an
+    /// <c>ftp://</c> address and a loopback address are refused by the same check for the same
+    /// reason, that we do not fetch from there.
+    /// </summary>
+    public static IntakeRejection AsIntake(this FetchRejection reason) => reason switch
+    {
+        FetchRejection.Scheme or FetchRejection.Address => IntakeRejection.Address,
+        FetchRejection.TooLarge => IntakeRejection.TooLarge,
+
+        // A page instead of a picture is exactly "what came back is not an image", which is what
+        // the word means on the file side too.
+        FetchRejection.ContentType => IntakeRejection.Unreadable,
+
+        // Redirects that never end and a budget that ran out are the same answer from the table:
+        // it did not arrive.
+        _ => IntakeRejection.Unreachable,
+    };
+}
+
 /// <summary>Why a fetch was turned away, in a shape the collected report can group by.</summary>
 public enum FetchRejection
 {

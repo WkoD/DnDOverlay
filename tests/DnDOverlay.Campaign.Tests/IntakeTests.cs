@@ -42,6 +42,39 @@ public sealed class IntakeTests : IDisposable
     }
 
     /// <summary>
+    /// Every refusal keeps the reason it was given, and the three sources of a reason stay told
+    /// apart: the picture, the address, and the bytes that could not be got at this end.
+    /// <para>
+    /// This is the test that was missing when it mattered. The report used to carry the detail text
+    /// only, the one place that logs a refusal therefore had nothing to say and wrote
+    /// <c>Unreadable</c> for all of them - and the M2c hand-run produced sixty-three log lines whose
+    /// text was right and whose reason was wrong, with nothing red anywhere (Part 5, Part 8).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_keeps_the_reason_it_was_given()
+    {
+        var report = await Run(
+            Refusing("Ork von innen", IntakeRejection.Address, "127.0.0.1 is loopback."),
+            Refusing("Landkarte", IntakeRejection.Unreachable, "The server answered 403 Forbidden."),
+            Broken("Kaputtes Bild"),
+            Throwing("Weggeschlossen"));
+
+        Assert.Equal(
+            [
+                IntakeRejection.Address,
+                IntakeRejection.Unreachable,
+                IntakeRejection.Unreadable,
+                IntakeRejection.Unavailable,
+            ],
+            report.Refused.Select(failure => failure.Reason));
+
+        // And the text still says which of the two addresses it was - a reason groups, a detail
+        // names (Part 7).
+        Assert.Contains("127.0.0.1", report.Refused[0].Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The collected message's material: taken in, already there, refused - counted apart, because
     /// "195 aufgenommen" alone is not an answer to what happened to the other five (Part 7).
     /// </summary>
@@ -175,7 +208,11 @@ public sealed class IntakeTests : IDisposable
 
     private static IntakeSource Missing(string name) =>
         new(name, _ => ValueTask.FromResult<IntakeBytes>(
-            new IntakeBytes.Unavailable("The address answered 404.")));
+            new IntakeBytes.Unavailable(IntakeRejection.Unreachable, "The address answered 404.")));
+
+    /// <summary>A source that could not be got at all, with the reason its entrance gave.</summary>
+    private static IntakeSource Refusing(string name, IntakeRejection reason, string detail) =>
+        new(name, _ => ValueTask.FromResult<IntakeBytes>(new IntakeBytes.Unavailable(reason, detail)));
 
     private static IntakeSource Throwing(string name) =>
         new(name, _ => throw new FileNotFoundException("The file is gone."));

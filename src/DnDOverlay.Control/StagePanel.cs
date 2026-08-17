@@ -355,7 +355,7 @@ internal sealed class StagePanel : StackPanel
             // Named and readable, never a silent failure - the promise the whole refusal path
             // exists for (Part 5). In the trail as well, so a picture that "did not work" can be
             // looked up afterwards.
-            ControlLog.AssetRefused(_logger, failure.Name, ImageRejection.Unreadable, failure.Detail);
+            ControlLog.AssetRefused(_logger, failure.Name, failure.Reason, failure.Detail);
         }
 
         await ShowAsync(screen, report, background).ConfigureAwait(true);

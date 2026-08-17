@@ -101,7 +101,7 @@ public sealed class AssetStoreTests : IDisposable
         var refused = Assert.IsType<IngestResult.Refused>(
             await store.IngestAsync(Bytes("bomb.png"), "Bombe", TestContext.Current.CancellationToken));
 
-        Assert.Equal(ImageRejection.TooLarge, refused.Reason);
+        Assert.Equal(IntakeRejection.TooLarge, refused.Reason);
         Assert.Equal(0, _codec.Normalisations);
         Assert.Equal(0, store.Count);
     }
@@ -119,7 +119,7 @@ public sealed class AssetStoreTests : IDisposable
         var refused = Assert.IsType<IngestResult.Refused>(
             await store.IngestAsync(Bytes("many.gif"), "Flackern", TestContext.Current.CancellationToken));
 
-        Assert.Equal(ImageRejection.TooLarge, refused.Reason);
+        Assert.Equal(IntakeRejection.TooLarge, refused.Reason);
     }
 
     /// <summary>
@@ -146,7 +146,7 @@ public sealed class AssetStoreTests : IDisposable
         var refused = Assert.IsType<IngestResult.Refused>(
             await store.IngestAsync(Bytes("photo.heic"), "Urlaubsbild", TestContext.Current.CancellationToken));
 
-        Assert.Equal(ImageRejection.NotPermitted, refused.Reason);
+        Assert.Equal(IntakeRejection.NotPermitted, refused.Reason);
         Assert.Equal(0, store.Count);
         Assert.Empty(Directory.GetFiles(Path.Combine(_directory, "assets")));
     }
