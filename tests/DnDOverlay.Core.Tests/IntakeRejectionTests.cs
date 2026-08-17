@@ -20,8 +20,25 @@ public sealed class IntakeRejectionTests
         [ImageRejection.NotPermitted] = IntakeRejection.NotPermitted,
         [ImageRejection.TooLarge] = IntakeRejection.TooLarge,
         [ImageRejection.Aborted] = IntakeRejection.Aborted,
-        [ImageRejection.NoSpace] = IntakeRejection.NoSpace,
     };
+
+    /// <summary>
+    /// The reasons the DM can be given that no codec produces. They are here so the two vocabularies
+    /// are read side by side: <see cref="IntakeRejection"/> is deliberately the wider one, and a
+    /// value missing from the table above is only right when it is missing on purpose.
+    /// <para>
+    /// <see cref="IntakeRejection.NoSpace"/> was in the picture's vocabulary once and had no
+    /// producer at all - a codec is asked what a picture IS and can say nothing about a drive. It
+    /// read in the mapping as though one could.
+    /// </para>
+    /// </summary>
+    private static readonly HashSet<IntakeRejection> NotFromAPicture =
+    [
+        IntakeRejection.NoSpace,
+        IntakeRejection.Address,
+        IntakeRejection.Unreachable,
+        IntakeRejection.Unavailable,
+    ];
 
     public static TheoryData<ImageRejection> Reasons => [.. Expected.Keys];
 
@@ -38,4 +55,24 @@ public sealed class IntakeRejectionTests
     [Fact]
     public void No_picture_reason_is_left_out_of_the_table() =>
         Assert.Equal(Enum.GetValues<ImageRejection>().ToHashSet(), Expected.Keys.ToHashSet());
+
+    /// <summary>
+    /// And every reason the DM can be given is accounted for: either a picture produces it, or it
+    /// is named above as one that cannot. A word added to <see cref="IntakeRejection"/> with no
+    /// source at all is the fault this pair of tests exists to prevent - it looks like an answer
+    /// and nothing ever gives it.
+    /// </summary>
+    [Fact]
+    public void Every_reason_the_DM_reads_comes_from_somewhere()
+    {
+        var fromAPicture = Expected.Values.ToHashSet();
+        var stranded = Enum.GetValues<IntakeRejection>()
+            .Where(reason => !fromAPicture.Contains(reason) && !NotFromAPicture.Contains(reason))
+            .ToList();
+
+        Assert.Empty(stranded);
+
+        // Both ways round: a reason cannot be in the picture's table AND named as impossible there.
+        Assert.DoesNotContain(NotFromAPicture, fromAPicture.Contains);
+    }
 }

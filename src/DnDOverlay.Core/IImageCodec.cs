@@ -112,16 +112,10 @@ public enum ImageRejection
     /// </summary>
     Aborted,
 
-    /// <summary>
-    /// There is no room on the campaign's drive (Part 5).
-    /// <para>
-    /// Its own entry rather than a shade of <see cref="TooLarge"/>, because it says nothing about
-    /// the picture: an evening of large maps simply adds up. The DM's answer is the cleanup view,
-    /// not a smaller file - and folded into "too large" that is exactly the answer they would not
-    /// get.
-    /// </para>
-    /// </summary>
-    NoSpace,
+    // "No room on the drive" was once a fourth entry here, and it had no producer: a codec is asked
+    // what a picture IS and can say nothing about a disk. The store raises IntakeRejection.NoSpace
+    // itself, which is where the question is actually answered. Left as a note rather than removed
+    // silently, because in the mapping table it read as though a codec could report a full drive.
 }
 
 /// <summary>

@@ -118,7 +118,6 @@ public static class IntakeRejections
         ImageRejection.NotPermitted => IntakeRejection.NotPermitted,
         ImageRejection.TooLarge => IntakeRejection.TooLarge,
         ImageRejection.Aborted => IntakeRejection.Aborted,
-        ImageRejection.NoSpace => IntakeRejection.NoSpace,
         _ => IntakeRejection.Unreadable,
     };
 }
