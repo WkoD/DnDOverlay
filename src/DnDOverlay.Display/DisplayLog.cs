@@ -49,8 +49,30 @@ internal static partial class DisplayLog
     [LoggerMessage(
         EventId = 3006,
         Level = LogLevel.Information,
-        Message = "Asset {AssetId} decoded at {Width}×{Height}.")]
+        Message = "Asset {AssetId} decoded at {Width}x{Height}.")]
     internal static partial void AssetDecoded(ILogger logger, AssetId assetId, int width, int height);
+
+    /// <summary>
+    /// What one load run came to, said once at the end rather than per picture.
+    /// <para>
+    /// The M2c hand-run had to time the pictures with a stopwatch: the only duration in either
+    /// process was the control's 2001, and that measures the INGEST - hash, decode, normalise,
+    /// store - which reads "0 ms" for a small file and says nothing about the wire. This is the
+    /// number the step called "Zeitvorgabe" was actually asking for.
+    /// </para>
+    /// <para>
+    /// The peak is in the same line on purpose. "The pictures came one after another" and "three
+    /// came at once but each was slow" look identical from the room, and they need opposite
+    /// answers - so the reading that tells them apart belongs where the duration is (Part 5,
+    /// Part 8).
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3020,
+        Level = LogLevel.Information,
+        Message = "Loaded {Fetched} asset(s) in {Milliseconds} ms, {Bytes} bytes, {Peak} at a time; {AlreadyHere} already here.")]
+    internal static partial void AssetsLoaded(
+        ILogger logger, int fetched, long milliseconds, long bytes, int peak, int alreadyHere);
 
     /// <summary>
     /// The counterpart to <c>OverlayOpened</c>, and it is worth its own line: on a machine that

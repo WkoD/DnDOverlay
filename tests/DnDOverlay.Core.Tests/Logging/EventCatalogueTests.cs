@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Xml.Linq;
+using DnDOverlay.Core.Tests.Architecture;
+
 namespace DnDOverlay.Core.Tests.Logging;
 
 /// <summary>
@@ -27,6 +31,90 @@ public sealed class EventCatalogueTests
             .ToList();
 
         Assert.Empty(twice);
+    }
+
+    /// <summary>
+    /// Punctuation and symbols in a message are ASCII. <b>Letters are not</b> - a translation says
+    /// "Bildschirm" and "größer", and a rule that forbade that would forbid the translations this
+    /// catalogue exists for.
+    /// <para>
+    /// Measured at the table, not thought up: <c>2001</c> and <c>3006</c> carried a proper
+    /// multiplication sign, and the M2c hand-run read <c>64?64</c>. The log FILE was never wrong -
+    /// it is UTF-8 without a BOM and holds U+00D7 exactly as written - but a log line is read in
+    /// more places than the file. The debug channel goes out through <c>OutputDebugStringA</c> and
+    /// is ANSI by construction, and a console inherits whatever code page the machine has; neither
+    /// is ours to fix.
+    /// </para>
+    /// <para>
+    /// So the line is drawn where the loss is avoidable rather than at "non-ASCII": a multiplication
+    /// sign, an em dash and a middle dot each have an ASCII spelling that costs nothing - <c>x</c>,
+    /// <c>-</c>, <c>|</c> - while an umlaut has none, and dropping it would damage the sentence
+    /// instead of the typography. A letter that arrives mangled is still the word; a symbol that
+    /// arrives mangled is a question mark in the middle of a measurement.
+    /// </para>
+    /// <para>
+    /// Every <c>LogMessages*.resx</c> is scanned, not only the neutral one, so a translation added
+    /// later is held to the same rule on the day it appears. Values that flow through the
+    /// placeholders are NOT covered: an asset called "Königin der Hazim'Tor" is data and belongs in
+    /// the line as it is. The exception is <see cref="PixelSize"/> - not data from outside but a
+    /// rendering WE choose, and it lands inside half the lines about screens and pictures.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Symbols_in_messages_are_ASCII_while_letters_may_be_anything()
+    {
+        static string? Offending(string text)
+        {
+            foreach (var character in text)
+            {
+                if (character <= '\x7f' || char.IsLetter(character))
+                {
+                    continue;
+                }
+
+                // A combining accent belongs to the letter in front of it and travels with it.
+                if (CharUnicodeInfo.GetUnicodeCategory(character)
+                    is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark)
+                {
+                    continue;
+                }
+
+                return $"U+{(int)character:X4}";
+            }
+
+            return null;
+        }
+
+        var wrong = EventCatalogue.Declared
+            .Where(declared => Offending(declared.Message) is not null)
+            .Select(declared => $"{declared.Key} declares {Offending(declared.Message)}: {declared.Message}")
+            .ToList();
+
+        foreach (var catalogue in new DirectoryInfo(
+            Path.Combine(RepositoryLayout.RepositoryRoot.FullName, "src"))
+            .EnumerateFiles("LogMessages*.resx", SearchOption.AllDirectories))
+        {
+            wrong.AddRange(XDocument
+                .Load(catalogue.FullName)
+                .Root!
+                .Elements("data")
+                .Select(entry => (Name: (string)entry.Attribute("name")!, Text: entry.Element("value")!.Value))
+                .Where(entry => Offending(entry.Text) is not null)
+                .Select(entry => $"{catalogue.Name}: {entry.Name} holds {Offending(entry.Text)}: {entry.Text}"));
+        }
+
+        Assert.Empty(wrong);
+
+        // The rule itself, both ways round - otherwise "no message offends" would also be true of a
+        // rule that permits everything, and the catalogue is English today so nothing would catch it
+        // until the first translation (C2).
+        Assert.Null(Offending("Bildschirm zu klein: naeher als 96 Pixel, groesser als 10x."));
+        Assert.Null(Offending("Bildschirm zu klein - näher als 96 Pixel, größer als 10x."));
+        Assert.Equal("U+00D7", Offending("Asset decoded at 64×64."));
+        Assert.Equal("U+2014", Offending("Took it in — and kept it."));
+
+        // The values we render ourselves, on the way into those lines.
+        Assert.Equal("1920x1080", new PixelSize(1920, 1080).ToString());
     }
 
     /// <summary>

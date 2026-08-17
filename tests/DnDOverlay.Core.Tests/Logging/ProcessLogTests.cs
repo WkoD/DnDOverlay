@@ -56,7 +56,7 @@ public sealed class ProcessLogTests
     {
         var record = Record(1039, "BeaconStopped", []) with { RawText = "Access to the path is denied." };
 
-        Assert.Equal("The discovery beacon has stopped. — Access to the path is denied.", LogCatalog.Render(record));
+        Assert.Equal("The discovery beacon has stopped. - Access to the path is denied.", LogCatalog.Render(record));
     }
 
     /// <summary>

@@ -173,7 +173,7 @@ public sealed class ProcessLog : ILoggerProvider
         }
 
         private static string? Both(string first, string? second) =>
-            string.IsNullOrEmpty(second) ? first : $"{first} — {second}";
+            string.IsNullOrEmpty(second) ? first : $"{first} - {second}";
 
         /// <summary>
         /// The named values of a message, turned into text right here.

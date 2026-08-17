@@ -53,8 +53,8 @@ public sealed class LogFileTests : IDisposable
 
         var all = ReadLines(Written().Single());
 
-        Assert.StartsWith("# DnDOverlay.Control 0.1.0-test · protocol 1 · UI ", all[0], StringComparison.Ordinal);
-        Assert.Contains("· started", all[1], StringComparison.Ordinal);
+        Assert.StartsWith("# DnDOverlay.Control 0.1.0-test | protocol 1 | UI ", all[0], StringComparison.Ordinal);
+        Assert.Contains("| started", all[1], StringComparison.Ordinal);
         Assert.DoesNotContain("#", all[2], StringComparison.Ordinal);
     }
 

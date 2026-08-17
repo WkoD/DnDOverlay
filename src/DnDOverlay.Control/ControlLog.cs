@@ -110,7 +110,7 @@ internal static partial class ControlLog
     [LoggerMessage(
         EventId = 2001,
         Level = LogLevel.Information,
-        Message = "Took {Name} in as {AssetId} ({PixelWidth}×{PixelHeight}, {Bytes} bytes) in {Milliseconds} ms.")]
+        Message = "Took {Name} in as {AssetId} ({PixelWidth}x{PixelHeight}, {Bytes} bytes) in {Milliseconds} ms.")]
     internal static partial void AssetTakenIn(
         ILogger logger,
         string name,
@@ -130,7 +130,7 @@ internal static partial class ControlLog
         Level = LogLevel.Information,
         Message = "{Name} was not taken in: {Reason} - {Detail}")]
     internal static partial void AssetRefused(
-        ILogger logger, string name, ImageRejection reason, string detail);
+        ILogger logger, string name, IntakeRejection reason, string detail);
 
     /// <summary>
     /// The line that answers what 2001 cannot. Two hundred pictures write two hundred 2001 lines,

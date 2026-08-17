@@ -662,8 +662,9 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3017 | `SettingsApplied` | Information |
 | 3018 | `ScreensIdentified` | Information |
 | 3019 | `WakeLockChanged` | Information |
+| 3020 | `AssetsLoaded` | Information |
 
-**Next free: 3020.**
+**Next free: 3021.**
 
 3019 sits in the display range although what it changes is a process-wide flag — the subject of
 the sentence is whether a screen stays lit, and that is what decides the range. Both directions

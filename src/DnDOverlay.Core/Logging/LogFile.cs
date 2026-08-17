@@ -271,10 +271,10 @@ public sealed class LogFile : IDisposable
         [
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"# {_identity.Application} {_identity.Version} · protocol {_identity.ProtocolVersion} · UI {ui} · system {system}"),
+                $"# {_identity.Application} {_identity.Version} | protocol {_identity.ProtocolVersion} | UI {ui} | system {system}"),
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"# {now} · pid {Environment.ProcessId} · {reason}"),
+                $"# {now} | pid {Environment.ProcessId} | {reason}"),
         ];
 
         foreach (var line in lines)

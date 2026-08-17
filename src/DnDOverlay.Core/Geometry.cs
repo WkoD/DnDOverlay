@@ -42,7 +42,7 @@ public readonly record struct Rect(double X, double Y, double Width, double Heig
     }
 
     public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"[{X:0.####}, {Y:0.####} {Width:0.####}×{Height:0.####}]");
+        string.Create(CultureInfo.InvariantCulture, $"[{X:0.####}, {Y:0.####} {Width:0.####}x{Height:0.####}]");
 }
 
 /// <summary>
@@ -55,5 +55,5 @@ public readonly record struct PixelSize(int Width, int Height)
     public double AspectRatio => Height == 0 ? 0 : (double)Width / Height;
 
     public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"{Width}×{Height}");
+        string.Create(CultureInfo.InvariantCulture, $"{Width}x{Height}");
 }

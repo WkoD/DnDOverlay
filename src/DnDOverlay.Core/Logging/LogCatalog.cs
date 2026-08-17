@@ -75,7 +75,7 @@ public static class LogCatalog
         // clean; LogText.Clean ran where they came in.
         return string.IsNullOrEmpty(record.RawText)
             ? text
-            : $"{text} — {record.RawText}";
+            : $"{text} - {record.RawText}";
     }
 
     /// <summary>Stage 1 and 2: the template with its placeholders filled in.</summary>

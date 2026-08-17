@@ -166,7 +166,7 @@
   </data>
 
   <data name="E2001_AssetTakenIn" xml:space="preserve">
-    <value>Took {Name} in as {AssetId} ({PixelWidth}×{PixelHeight}, {Bytes} bytes) in {Milliseconds} ms.</value>
+    <value>Took {Name} in as {AssetId} ({PixelWidth}x{PixelHeight}, {Bytes} bytes) in {Milliseconds} ms.</value>
   </data>
   <data name="E2002_AssetRefused" xml:space="preserve">
     <value>{Name} was not taken in: {Reason} - {Detail}</value>
@@ -193,7 +193,7 @@
     <value>Could not load asset {AssetId}.</value>
   </data>
   <data name="E3006_AssetDecoded" xml:space="preserve">
-    <value>Asset {AssetId} decoded at {Width}×{Height}.</value>
+    <value>Asset {AssetId} decoded at {Width}x{Height}.</value>
   </data>
   <data name="E3007_ScreenAdded" xml:space="preserve">
     <value>New screen {Screen} ({Label}) - playing on it.</value>
@@ -233,6 +233,9 @@
   </data>
   <data name="E3019_WakeLockChanged" xml:space="preserve">
     <value>Screen wake lock held: {Holding}.</value>
+  </data>
+  <data name="E3020_AssetsLoaded" xml:space="preserve">
+    <value>Loaded {Fetched} asset(s) in {Milliseconds} ms, {Bytes} bytes, {Peak} at a time; {AlreadyHere} already here.</value>
   </data>
 
   <!-- 4000-4999 · Operations: what a process does to itself. -->
