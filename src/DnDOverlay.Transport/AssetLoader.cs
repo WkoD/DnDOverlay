@@ -200,7 +200,11 @@ public sealed class AssetLoader
 
         return new AssetLoadRun(
             run.Fetched,
-            order.Count - run.Fetched,
+
+            // What was neither fetched nor lost was already here. Subtracting only the fetched ones
+            // counted every FAILURE as "already here" - so a run of three with one 401 said "loaded
+            // 2; 1 already here" one line above the 3005 that named the same picture as missing.
+            order.Count - run.Fetched - run.Failed.Count,
             run.Bytes,
             run.Peak,
             (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,

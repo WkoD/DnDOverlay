@@ -226,6 +226,40 @@ public sealed class AssetLoaderTests : IDisposable
 
         // The other two are not failures, and the count says so rather than the absence of a name.
         Assert.Equal(2, run.Fetched);
+
+        // And the one that failed is not counted as one that was already here. Nothing was in the
+        // store at all - the line 3020 writes would otherwise have said "1 already here" directly
+        // above the 3005 naming that same picture as missing.
+        Assert.Equal(0, run.AlreadyHere);
+    }
+
+    /// <summary>
+    /// The three counts of a run add up to what was asked for, and each picture lands in exactly
+    /// one of them. Written as the sum rather than as three separate numbers: the fault this
+    /// replaces was a subtraction that silently put failures into "already here", which no single
+    /// count could have shown.
+    /// </summary>
+    [Fact]
+    public async Task Fetched_already_here_and_failed_account_for_every_picture()
+    {
+        var stub = new Counterpart { Missing = { Asset(2) } };
+        var cache = new AssetCache(_directory);
+        var loader = new AssetLoader(new AssetClient(new HttpClient(stub)), cache, new AssetProgressTracker());
+        var arrivals = Channel.CreateUnbounded<AssetArrived>();
+
+        // One in the store, one that cannot be had, two ordinary ones.
+        cache.Store(Asset(4), Body(4));
+
+        var run = await loader.LoadAsync(
+            Hub, Path, [Want(1), Want(2), Want(3), Want(4)], Token, arrivals.Writer,
+            TestContext.Current.CancellationToken);
+
+        arrivals.Writer.Complete();
+
+        Assert.Equal(2, run.Fetched);
+        Assert.Equal(1, run.AlreadyHere);
+        Assert.Single(run.Failed);
+        Assert.Equal(4, run.Fetched + run.AlreadyHere + run.Failed.Count);
     }
 
     /// <summary>
