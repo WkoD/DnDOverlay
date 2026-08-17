@@ -110,6 +110,48 @@ public sealed class AssetSeamTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The token a device is handed AT PAIRING opens the stock - not only one that stood in
+    /// <c>control.json</c> when the hub was built.
+    /// <para>
+    /// Everything above starts from <see cref="HubOptions.KnownDevices"/>, which is the second
+    /// night and every one after it. The first night runs the other way round: the device is
+    /// unknown, the DM allows it, and the token reaches it in the <c>Welcome</c> - a path that
+    /// touches <see cref="PairingDirectory.Approve"/> rather than the constructor, and that no test
+    /// followed as far as an asset. It is the exact shape of the M2c hand-run, so it is measured
+    /// here rather than assumed.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task ATokenIssuedAtPairingOpensTheStock()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var stranger = new DeviceId(Guid.Parse("cccccccc-0000-0000-0000-000000000003"));
+        var issued = DeviceTokens.Create();
+
+        var hello = new HelloMessage(
+            stranger,
+            "KADACHI",
+            "1.0.0",
+            Protocol.Version,
+            [new ScreenInfo(new ScreenId(@"\\?\DISPLAY#TEST#1"), "KADACHI//DISPLAY1", null, new PixelSize(2736, 1824), 144, true)],
+            Token: null,
+            "7547");
+
+        // Knocking, as a Hello over the socket does it - the state the DM's list shows.
+        Assert.IsType<Admission.Waiting>(
+            _app.Services.GetRequiredService<PairingDirectory>().Consider(hello, "192.168.178.20"));
+
+        // Allowed, exactly the way the pairing desk allows one.
+        await _app.Services.GetRequiredService<ISessionApi>()
+            .ApprovePairingAsync(stranger, issued, PairingRole.Display, cancellationToken);
+
+        var bytes = await new AssetClient(_http)
+            .GetAsync(_hub, Protocol.AssetPath, Known, issued, cancellationToken);
+
+        Assert.Equal(Stock.Picture, bytes);
+    }
+
+    /// <summary>
     /// The whole load path against the real hub: <see cref="AssetLoader"/> with a real
     /// <see cref="AssetClient"/>, a real <see cref="AssetCache"/> and a real
     /// <see cref="AssetProgressTracker"/> - thumbnail first, original after, checked against the
