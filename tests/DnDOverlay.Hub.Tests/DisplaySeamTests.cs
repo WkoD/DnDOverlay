@@ -79,8 +79,16 @@ public sealed class DisplaySeamTests : IAsyncLifetime
     /// the hub's answers come back and PARSE - a <c>Welcome</c>, the settings, and the scene of the
     /// screen the device reported.
     /// <para>
-    /// Scanned rather than expected in order: after the welcome the hub sends the configuration and
-    /// the scene, and which of those two arrives first is not part of the promise.
+    /// Scanned rather than expected in order, and that holds for the WELCOME too. The heartbeat
+    /// starts at the socket rather than at the admission - deliberately, so that a connection still
+    /// waiting for the DM is covered by it (Part 4) - so a Ping may legitimately arrive before the
+    /// Welcome. This test used to take the first message and name it, which held on a fast machine
+    /// and fell over on a loaded CI runner the first time this branch reached Linux: it asserted an
+    /// order nobody had promised.
+    /// </para>
+    /// <para>
+    /// Then the configuration and the scene, and which of those two comes first is not part of the
+    /// promise either.
     /// </para>
     /// </summary>
     [Fact(Timeout = 30_000)]
@@ -92,7 +100,7 @@ public sealed class DisplaySeamTests : IAsyncLifetime
         var inbox = Channel.CreateUnbounded<ProtocolMessage>();
         var pump = Start(inbox, Channel.CreateUnbounded<ProtocolMessage>(), run.Token);
 
-        var welcome = Assert.IsType<WelcomeMessage>(await Next(inbox, run.Token));
+        var welcome = await Until<WelcomeMessage>(inbox, run.Token);
         Assert.Equal(Protocol.AssetPath, welcome.AssetPath);
 
         Assert.IsType<ConfigUpdateMessage>(await Until<ConfigUpdateMessage>(inbox, run.Token));
