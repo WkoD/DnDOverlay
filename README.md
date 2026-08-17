@@ -22,9 +22,11 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
         └──────────────┘ └──────────────┘
 ```
 
-> **Status: under construction.** The repository currently contains the scaffolding — project
-> structure, architecture tests, CI, empty installers. Nothing is installable yet. The
-> sections below grow with each milestone.
+> **Status: under construction.** Pictures already go from the DM's machine onto the screens:
+> displays find the control by themselves and are paired by hand, the campaign holds a stock,
+> and all four ways in work. Still missing are the gestures at the table, the DM's own surface,
+> and the installers, which are empty — so **nothing is installable yet**; it runs from a build.
+> The sections below grow with each milestone.
 
 ## Documentation
 
@@ -97,9 +99,11 @@ behind your back.
 | `defaultRotationDeg` | `0` | the angle a picture arrives at — for a table people sit around |
 | `parkEdge` | `Right` | which edge a parked picture waits at |
 
-Every display keeps its own copy of the pictures it has shown, up to **4 GiB**, so the second
-evening with the same map costs no transfer at all. Pictures arrive **three at a time**: twenty
-at once are twenty pictures that are all slow, and after ten seconds none of them is there.
+Every display keeps its own copy of the pictures it has shown, up to **4 GiB** — so moving a
+picture from one screen to another, hiding it and bringing it back, or putting the same map up
+twice in an evening costs no transfer at all. Only a picture that was evicted to make room is
+fetched again. Pictures arrive **three at a time**: twenty at once are twenty pictures that are
+all slow, and after ten seconds none of them is there.
 
 ## Building
 
