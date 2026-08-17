@@ -1014,8 +1014,9 @@ public sealed partial class App : Application, IDisposable
         var arrivals = Channel.CreateUnbounded<AssetArrived>();
 
         var loading = _loader!
-            .LoadAsync(_hubHttp, _assetPath, wanted, _sessionToken!, arrivals.Writer, _shutdown.Token)
-            .ContinueWith(_ => arrivals.Writer.TryComplete(), TaskScheduler.Default);
+            .LoadAsync(_hubHttp, _assetPath, wanted, _sessionToken!, arrivals.Writer, _shutdown.Token);
+
+        _ = loading.ContinueWith(_ => arrivals.Writer.TryComplete(), TaskScheduler.Default);
 
         // Redrawn on every arrival AND while the readings change, because the ring lives on the
         // ungoverned layer: it has to keep turning while the rest of the scene sits still.
@@ -1028,7 +1029,16 @@ public sealed partial class App : Application, IDisposable
 
         await turning.ConfigureAwait(false);
 
-        await loading.ConfigureAwait(false);
+        var run = await loading.ConfigureAwait(false);
+
+        // Said only where something actually came down. A scene whose pictures are all in the store
+        // already is the ordinary case - every reconnect, every second look at the same table - and
+        // a "0 assets in 0 ms" for each of them would bury the runs that carry a measurement.
+        if (run.Fetched > 0)
+        {
+            DisplayLog.AssetsLoaded(
+                _logger, run.Fetched, run.Milliseconds, run.Bytes, run.Peak, run.AlreadyHere);
+        }
     }
 
     /// <summary>

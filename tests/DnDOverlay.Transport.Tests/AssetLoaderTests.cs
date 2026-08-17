@@ -67,6 +67,48 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     /// <summary>
+    /// A run says what it came to, and the numbers are about THIS run.
+    /// <para>
+    /// The M2c hand-run had to time the pictures by hand, because the only duration in either
+    /// process was the control's ingest - which reads "0 ms" for a small file and never touched the
+    /// wire. What is checked here is the part a hand-run cannot check: that what is counted is what
+    /// arrived, that a picture already in the store is counted as such rather than as traffic, and
+    /// that the peak belongs to this run.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_run_reports_what_it_came_to()
+    {
+        var stub = new Counterpart { Dwell = TimeSpan.FromMilliseconds(30) };
+        var loader = Loader(stub);
+        var arrivals = Channel.CreateUnbounded<AssetArrived>();
+
+        var run = await loader.LoadAsync(
+            Hub, Path, [.. Enumerable.Range(1, 6).Select(n => Want(n))], Token,
+            arrivals.Writer, TestContext.Current.CancellationToken);
+
+        arrivals.Writer.Complete();
+
+        Assert.Equal(6, run.Fetched);
+        Assert.Equal(0, run.AlreadyHere);
+        Assert.Equal(3, run.Peak);
+
+        // Both halves of every picture crossed the wire, and nothing else did.
+        var carried = 0L;
+
+        await foreach (var arrived in arrivals.Reader.ReadAllAsync(TestContext.Current.CancellationToken))
+        {
+            carried += arrived.Bytes.Length;
+        }
+
+        Assert.Equal(carried, run.Bytes);
+
+        // Six pictures, three at a time, thirty milliseconds each: the run cannot have been
+        // instantaneous, and saying so is what makes the number a measurement rather than a field.
+        Assert.True(run.Milliseconds >= 30, $"the run reported {run.Milliseconds} ms");
+    }
+
+    /// <summary>
     /// The whole of "transferred once per device": a picture in the store is handed over at once
     /// and <b>no request goes out for it</b> (Part 5).
     /// </summary>

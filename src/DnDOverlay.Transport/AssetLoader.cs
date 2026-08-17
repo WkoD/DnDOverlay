@@ -1,8 +1,27 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Threading.Channels;
 using DnDOverlay.Core;
 
 namespace DnDOverlay.Transport;
+
+/// <summary>
+/// What one load run came to: how many pictures were fetched, how many were already here, how many
+/// bytes crossed the wire, how many requests were in flight at the busiest moment, and how long it
+/// all took.
+/// <para>
+/// It exists because of a gap the M2c hand-run found. The only duration anywhere was the control's
+/// <c>2001</c>, which measures hashing, decoding and storing - the ingest - and reads "0 ms" for a
+/// small picture. Nothing measured the part the DM actually waits for, so the one number for "a
+/// picture stands within N seconds" was a stopwatch in somebody's hand (Part 5, Part 11).
+/// </para>
+/// <para>
+/// <paramref name="Peak"/> is per RUN rather than the loader's lifetime peak, because that is the
+/// question being asked: did this evening's pictures really go three at a time, or did they queue
+/// up one behind the other and only look parallel?
+/// </para>
+/// </summary>
+public sealed record AssetLoadRun(int Fetched, int AlreadyHere, long Bytes, int Peak, long Milliseconds);
 
 /// <summary>What a scene needs, and how badly.</summary>
 /// <param name="IsBackground">
@@ -86,7 +105,12 @@ public sealed class AssetLoader
     /// missing one portrait beats a table missing everything.
     /// </para>
     /// </summary>
-    public async Task LoadAsync(
+    /// <returns>
+    /// What this run amounted to - the numbers the M2c hand-run had to take with a stopwatch,
+    /// because the only duration anywhere was the control's ingest and that says nothing about the
+    /// wire (see <see cref="AssetLoadRun"/>).
+    /// </returns>
+    public async Task<AssetLoadRun> LoadAsync(
         Uri hubBaseAddress,
         string assetPath,
         IReadOnlyList<AssetWanted> wanted,
@@ -96,6 +120,9 @@ public sealed class AssetLoader
     {
         ArgumentNullException.ThrowIfNull(wanted);
         ArgumentNullException.ThrowIfNull(arrivals);
+
+        var started = Stopwatch.GetTimestamp();
+        var run = new Tally();
 
         // Background first, and otherwise the order the scene gave. Distinct, because two items on
         // one picture are one download.
@@ -135,9 +162,9 @@ public sealed class AssetLoader
 
             try
             {
-                Note(Interlocked.Increment(ref inFlight));
+                Note(run, Interlocked.Increment(ref inFlight));
 
-                await FetchAsync(hubBaseAddress, assetPath, item, token, arrivals, cancellationToken)
+                await FetchAsync(hubBaseAddress, assetPath, item, token, arrivals, run, cancellationToken)
                     .ConfigureAwait(false);
             }
             finally
@@ -148,16 +175,36 @@ public sealed class AssetLoader
         });
 
         await Task.WhenAll(running).ConfigureAwait(false);
+
+        return new AssetLoadRun(
+            run.Fetched,
+            order.Count - run.Fetched,
+            run.Bytes,
+            run.Peak,
+            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
     }
 
     private bool Held(AssetId asset) => _cache.TryGet(asset, out _);
 
-    private void Note(int inFlight)
+    private void Note(Tally run, int inFlight)
     {
         lock (_peak)
         {
             PeakConcurrency = Math.Max(PeakConcurrency, inFlight);
+            run.Peak = Math.Max(run.Peak, inFlight);
         }
+    }
+
+    /// <summary>
+    /// What one run has come to so far. A class rather than counters in the loop, because the loop
+    /// body runs on several threads at once - the two counts go through Interlocked, and the peak
+    /// through the lock that already guards it.
+    /// </summary>
+    private sealed class Tally
+    {
+        internal int Fetched;
+        internal long Bytes;
+        internal int Peak;
     }
 
     /// <summary>Straight out of the store - no request, and finished the moment it is handed over.</summary>
@@ -183,6 +230,7 @@ public sealed class AssetLoader
         AssetWanted item,
         string token,
         ChannelWriter<AssetArrived> arrivals,
+        Tally run,
         CancellationToken cancellationToken)
     {
         try
@@ -196,6 +244,7 @@ public sealed class AssetLoader
                     .ConfigureAwait(false);
 
                 _cache.StoreThumbnail(item.Asset, thumbnail);
+                Interlocked.Add(ref run.Bytes, thumbnail.Length);
 
                 await arrivals
                     .WriteAsync(new AssetArrived(item.Asset, thumbnail, IsThumbnail: true), cancellationToken)
@@ -226,6 +275,12 @@ public sealed class AssetLoader
             }
 
             _cache.Store(item.Asset, bytes);
+
+            // Counted where it ARRIVED, not where it was asked for: a picture that failed its hash
+            // check or never came is not volume that reached this device, and counting it would make
+            // the reading flatter than the evening was.
+            Interlocked.Add(ref run.Bytes, bytes.Length);
+            Interlocked.Increment(ref run.Fetched);
 
             // Decoding is the caller's, and it is not free - so the state says so, and DONE is left
             // for whoever decoded it (Part 11).
