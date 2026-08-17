@@ -210,6 +210,120 @@ public sealed class AssetCacheTests : IDisposable
         Assert.Throws<ArgumentException>(() => cache.TryGet(new AssetId(value), out _));
     }
 
+    /// <summary>
+    /// A store that was already there when the process started is COUNTED. Until this was measured
+    /// it was not: the files survived and <c>TryGet</c> served them, so a picture from a previous
+    /// evening cost no transfer - and the bookkeeping knew about none of them, so the ceiling
+    /// applied to nothing they weighed. The directory grew without a bound.
+    /// <para>
+    /// This is not the lifetime rule of Part 5 and does not pretend to be. Emptying on exit,
+    /// trimming with the first scene and the five-minute wipe are M5a; this only makes what is
+    /// there countable.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_store_found_at_start_is_counted()
+    {
+        var first = new AssetCache(_directory);
+
+        first.Store(Asset(1), Bytes(100, seed: 1));
+        first.StoreThumbnail(Asset(1), Bytes(20, seed: 2));
+        first.Store(Asset(2), Bytes(100, seed: 3));
+
+        var second = new AssetCache(_directory);
+
+        Assert.Equal(2, second.Count);
+        Assert.Equal(220, second.Bytes);
+
+        // And it is the same picture, not merely the same weight.
+        Assert.True(second.TryGet(Asset(1), out var read));
+        Assert.Equal(100, read.Length);
+    }
+
+    /// <summary>
+    /// The whole point of counting it: the ceiling can reach it. Before this an adopted picture was
+    /// immortal - never a candidate, and not even part of the total that decides whether to look
+    /// for one.
+    /// </summary>
+    [Fact]
+    public void A_picture_that_was_only_found_can_be_evicted()
+    {
+        new AssetCache(_directory).Store(Asset(1), Bytes(200, seed: 1));
+
+        var second = new AssetCache(_directory, maxBytes: 150);
+
+        Assert.Equal([Asset(1)], second.Trim(Nothing));
+        Assert.False(second.TryGet(Asset(1), out _));
+    }
+
+    /// <summary>
+    /// Found beats nothing, and used beats found. An adopted picture ranks below everything this
+    /// session has touched - among themselves no order is claimed, because the only thing that
+    /// could order them is a file timestamp, and this store evicts by a counter for exactly that
+    /// reason (Part 1, idea 7).
+    /// </summary>
+    [Fact]
+    public void What_was_used_this_session_outlives_what_was_merely_found()
+    {
+        var first = new AssetCache(_directory);
+
+        first.Store(Asset(1), Bytes(100, seed: 1));
+        first.Store(Asset(2), Bytes(100, seed: 2));
+
+        var second = new AssetCache(_directory, maxBytes: 250);
+
+        // Touching the first is the only thing that tells the two apart.
+        Assert.True(second.TryGet(Asset(1), out _));
+
+        second.Store(Asset(3), Bytes(100, seed: 3));
+
+        Assert.Equal([Asset(2)], second.Trim(Nothing));
+        Assert.True(second.TryGet(Asset(1), out _));
+        Assert.True(second.TryGet(Asset(3), out _));
+    }
+
+    /// <summary>
+    /// A half picture is what a hard end leaves - the thumbnail arrived and the original never did.
+    /// It counts as the picture it belongs to, or its bytes would sit in the directory outside the
+    /// ceiling and nothing would ever remove them.
+    /// </summary>
+    [Fact]
+    public void A_thumbnail_whose_original_never_arrived_is_still_a_picture()
+    {
+        new AssetCache(_directory).StoreThumbnail(Asset(1), Bytes(20, seed: 1));
+
+        var second = new AssetCache(_directory);
+
+        Assert.Equal(1, second.Count);
+        Assert.Equal(20, second.Bytes);
+    }
+
+    /// <summary>
+    /// What the store did not write, it does not adopt. A scratch file is half of an interrupted
+    /// write and carries no identifier at all; anything else in the folder is somebody else's, and
+    /// taking either into the bookkeeping would put it under a ceiling that later DELETES by
+    /// identifier.
+    /// </summary>
+    [Fact]
+    public void A_scratch_file_and_a_foreign_name_are_not_pictures()
+    {
+        new AssetCache(_directory).Store(Asset(1), Bytes(100, seed: 1));
+
+        File.WriteAllBytes(
+            Path.Combine(_directory, Asset(2).Value + ".7f3a" + AtomicFile.TemporarySuffix), Bytes(500, seed: 2));
+        File.WriteAllBytes(Path.Combine(_directory, "notes.txt"), Bytes(500, seed: 3));
+
+        var second = new AssetCache(_directory);
+
+        Assert.Equal(1, second.Count);
+        Assert.Equal(100, second.Bytes);
+
+        // And they are left where they are - this store removes what it knows, never what it found
+        // and did not understand.
+        Assert.Empty(second.Trim(Nothing));
+        Assert.True(File.Exists(Path.Combine(_directory, "notes.txt")));
+    }
+
     private static readonly IReadOnlySet<AssetId> Nothing = new HashSet<AssetId>();
 
     private static AssetId Asset(int n) => new(n.ToString(null as IFormatProvider).PadLeft(64, 'a'));

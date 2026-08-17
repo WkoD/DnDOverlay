@@ -14,16 +14,26 @@ namespace DnDOverlay.Transport;
 /// alone carries the heavy decoder (Part 2, Part 9).
 /// </para>
 /// <para>
-/// <b>In M2 the store is bound to the session.</b> Emptying it on exit, adopting it after a crash
-/// and trimming it with the first scene are M5a - and they are what will need bookkeeping that
-/// outlives the process. Today it is held in memory, and a store found at start is simply unknown
-/// to it.
+/// <b>What is found at start is counted, and that is all it is.</b> The three rules of Part 5 -
+/// emptying on exit, adopting after a hard end, trimming with the first <c>SceneSnapshot</c> and
+/// the five-minute wipe without a control - are M5a and none of them is built. What was built here
+/// by accident was the middle of the first: the files survived, <see cref="TryGet"/> served them,
+/// and the bookkeeping knew nothing about them - so the ceiling did not apply to a single one of
+/// them and the directory grew without a bound across evenings. Reading them in at start is the
+/// smallest thing that makes the ceiling true again, and it decides nothing that M5a has to decide.
 /// </para>
 /// </summary>
 public sealed class AssetCache
 {
     /// <summary>Part 6's number for the whole device, and it is handed in so a test can shrink it.</summary>
     public const long DefaultMaxBytes = 4L * 1024 * 1024 * 1024;
+
+    /// <summary>
+    /// What tells the two files of one picture apart. It is written once and read back once, and
+    /// both ends have to agree - a store that names them one way and adopts them another would come
+    /// up empty every time.
+    /// </summary>
+    private const string ThumbnailSuffix = ".thumb";
 
     private readonly Lock _gate = new();
     private readonly Dictionary<AssetId, Entry> _entries = [];
@@ -53,6 +63,68 @@ public sealed class AssetCache
         _maxBytes = maxBytes;
 
         Directory.CreateDirectory(directory);
+        Adopt();
+    }
+
+    /// <summary>
+    /// Takes what is already lying in the directory into the bookkeeping.
+    /// <para>
+    /// <b>Every adopted picture ranks below everything used in this session</b> - they all keep
+    /// <c>LastUsed</c> at zero, and the first use of one lifts it above them. Among themselves no
+    /// order is claimed, deliberately: the only thing that could order them is a file timestamp,
+    /// and a store that evicts by the clock evicts the wrong thing the moment a machine's clock is
+    /// wrong, with nothing about the symptom pointing at the cause.
+    /// </para>
+    /// <para>
+    /// A directory that cannot be read is an empty one. This runs in the display's start-up path,
+    /// and a picture store is never a reason for a display PC not to come up (Part 6).
+    /// </para>
+    /// </summary>
+    private void Adopt()
+    {
+        IEnumerable<FileInfo> found;
+
+        try
+        {
+            found = new DirectoryInfo(_directory).EnumerateFiles();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (var file in found)
+        {
+            // A scratch file is not a picture. It is what a write that was cut off leaves behind,
+            // and counting it would put a half file into the ceiling under no identifier at all.
+            if (file.Name.EndsWith(AtomicFile.TemporarySuffix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var thumbnail = file.Name.EndsWith(ThumbnailSuffix, StringComparison.Ordinal);
+            var id = new AssetId(thumbnail ? file.Name[..^ThumbnailSuffix.Length] : file.Name);
+
+            // Anything else in there is somebody else's. The name is the identifier and nothing
+            // else, so a file that is not one was not written by this store.
+            if (!id.IsWellFormed)
+            {
+                continue;
+            }
+
+            var entry = _entries.TryGetValue(id, out var known) ? known : new Entry();
+
+            if (thumbnail)
+            {
+                entry.ThumbnailBytes = file.Length;
+            }
+            else
+            {
+                entry.OriginalBytes = file.Length;
+            }
+
+            _entries[id] = entry;
+        }
     }
 
     /// <summary>What the store currently holds, originals and thumbnails together.</summary>
@@ -247,7 +319,7 @@ public sealed class AssetCache
             throw new ArgumentException($"'{id.Value}' is not a well-formed asset identifier.", nameof(id));
         }
 
-        return System.IO.Path.Combine(_directory, thumbnail ? id.Value + ".thumb" : id.Value);
+        return System.IO.Path.Combine(_directory, thumbnail ? id.Value + ThumbnailSuffix : id.Value);
     }
 
     private static void Delete(string path)
@@ -267,9 +339,12 @@ public sealed class AssetCache
     {
         internal long LastUsed { get; set; }
 
-        internal int OriginalBytes { get; set; }
+        // Long rather than int, because an adopted entry is measured off a FILE. What this store
+        // writes cannot exceed the source ceiling, but what it finds was not necessarily written
+        // by it, and a cast would turn that into a negative size inside the ceiling.
+        internal long OriginalBytes { get; set; }
 
-        internal int ThumbnailBytes { get; set; }
+        internal long ThumbnailBytes { get; set; }
 
         internal long Bytes => OriginalBytes + ThumbnailBytes;
     }
