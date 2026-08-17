@@ -314,6 +314,14 @@ public sealed class ReachedFromProductionTests
     /// other way round. A wrong answer from an old file is worse than no answer, so an old file is
     /// a loud failure now.
     /// </para>
+    /// <para>
+    /// <b>What the failure has to SAY was found the hard way, by following its own advice.</b> The
+    /// first version said "build the solution and run again" - and "run again", read as
+    /// <c>dotnet test</c>, produces the identical failure a second time, because that command is
+    /// exactly the one that cannot fix it. A message whose instruction leads back to itself teaches
+    /// the reader nothing. So it now names the constraint, both timestamps and the two commands, in
+    /// that order (guide <c>C13</c>).
+    /// </para>
     /// </summary>
     private static string? Built(string project)
     {
@@ -345,9 +353,20 @@ public sealed class ReachedFromProductionTests
 
         Assert.False(
             newestSource > assembly.LastWriteTimeUtc,
-            $"{project} was changed after it was last built ({assembly.FullName}). This rule reads "
-            + "that assembly, so an answer out of it would be about code that is no longer there - "
-            + "build the solution and run again.");
+            $"{project} was changed after it was last built, and this rule reads the assembly - so "
+            + "an answer out of it would be about code that is no longer there."
+            // To the millisecond, and that is not pedantry: a source touched moments after a build
+            // prints the same second as the build, and a message whose two numbers look identical
+            // reads as a bug in the check rather than as the skew it is measuring (guide C13).
+            + $"{Environment.NewLine}  newest source: {newestSource:yyyy-MM-dd HH:mm:ss.fff} UTC"
+            + $"{Environment.NewLine}  last built:    {assembly.LastWriteTimeUtc:yyyy-MM-dd HH:mm:ss.fff} UTC"
+            + $" ({assembly.FullName})"
+            + Environment.NewLine
+            + "  Running the tests again will NOT fix this: nothing references an application, so "
+            + "it lies outside every test project's dependency graph and 'dotnet test' never builds "
+            + "it. That is the very property this rule exists to check."
+            + $"{Environment.NewLine}  Do this: dotnet build DnDOverlay.slnx"
+            + $"{Environment.NewLine}     then: dotnet test  DnDOverlay.slnx");
 
         return assembly.FullName;
     }

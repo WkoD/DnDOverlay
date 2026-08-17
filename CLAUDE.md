@@ -76,3 +76,9 @@ dotnet format DnDOverlay.slnx --verify-no-changes
 dotnet test  DnDOverlay.Libraries.slnf          # what the Linux job checks
 dotnet build installer/Control/Control.wixproj  # never through the solution
 ```
+
+**Build before test, and the order is not a habit.** `dotnet test` builds only the test projects and
+what they depend on — and **nothing depends on `Control` or `Display`**, which is the property
+`ReachedFromProductionTests` exists to check. So a change to either application is not compiled by
+`dotnet test` at all, and that rule fails on the stale assembly until a `dotnet build` has run. It
+says so itself; this line is here so it does not have to.

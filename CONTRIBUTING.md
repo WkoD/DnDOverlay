@@ -31,8 +31,15 @@ dotnet test  DnDOverlay.slnx
 dotnet format DnDOverlay.slnx --verify-no-changes
 ```
 
-These are exactly what CI runs. A fourth checks that the platform-neutral half really is
-platform-neutral:
+These are exactly what CI runs, **and the first two are a sequence rather than a choice.**
+`dotnet test` compiles the test projects and whatever they depend on — and nothing depends on
+`Control` or `Display`. That is deliberate: an application is what everything else is reached
+*from*, and `ReachedFromProductionTests` checks exactly that by reading their assemblies. The
+consequence is easy to trip over: **a change inside either application is not compiled by
+`dotnet test`**, so that one rule keeps answering out of the previous build until you run
+`dotnet build`. It fails loudly rather than answering wrongly, and its message says what to do.
+
+A fourth command checks that the platform-neutral half really is platform-neutral:
 
 ```
 dotnet test DnDOverlay.Libraries.slnf
