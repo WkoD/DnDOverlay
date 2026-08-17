@@ -91,4 +91,89 @@ public sealed class ScreenSettingsTests
         Assert.Equal("Touch table", delta.CustomName);
         Assert.False(delta.IsEmpty);
     }
+
+    /// <summary>
+    /// <b>Every parameter of a screen goes the whole way round</b>, driven off the type rather than
+    /// listed by hand: a value is changed, taken to a full set, laid back over the defaults, and
+    /// asked for as a delta. Four places have to know about a parameter -
+    /// <see cref="ScreenSettings.Of"/>, <see cref="ScreenSettings.ApplyTo"/>,
+    /// <see cref="ScreenSettings.Diff"/> and <see cref="ScreenSettings.IsEmpty"/> - and forgetting
+    /// one of them does not fail anywhere. It drops a value silently, which is the same shape as
+    /// the two-place <c>Merge</c> that Part 3 already cost us once.
+    /// <para>
+    /// <b>Measured, not foreseen:</b> the tests above set five of the eight parameters and would
+    /// have passed with a sixth missing from all four - they compare a changed context against
+    /// itself, so a parameter that never moved reads as correct. <c>ImageTextSize</c> was decided
+    /// in M2 as "18 DIP, settable per screen", built as a constant, and recorded as a missing
+    /// GRIP for a whole milestone; it was in fact a missing FIELD, and no test could have said so.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Parameters))]
+    public void Every_parameter_of_a_screen_survives_the_whole_round_trip(string name)
+    {
+        var changed = Moved(Context, name);
+
+        // Of and ApplyTo: the full set carries it out, and laying it back puts it there.
+        Assert.Equal(changed, ScreenSettings.Of(changed, null).ApplyTo(Context));
+
+        // Diff: it is reported as having moved, under its own name.
+        var delta = ScreenSettings.Diff(ScreenSettings.Of(Context, null), ScreenSettings.Of(changed, null));
+        var reported = typeof(ScreenSettings).GetProperty(name);
+
+        Assert.NotNull(reported);
+        Assert.NotNull(reported.GetValue(delta));
+
+        // IsEmpty: a delta that carries this one is not empty. Without it a forgotten parameter
+        // would be diffed correctly and then thrown away as "nothing to send".
+        Assert.False(delta.IsEmpty, $"a delta carrying only {name} says it is empty");
+    }
+
+    /// <summary>
+    /// The settable parameters of a screen. <c>Size</c> and <c>Dpi</c> are hardware facts and
+    /// deliberately absent from the settings; the computed properties have no setter and are not
+    /// parameters at all.
+    /// </summary>
+    public static TheoryData<string> Parameters =>
+        [.. typeof(ScreenContext)
+            .GetProperties()
+            .Where(property => property.CanWrite && property.Name is not ("Size" or "Dpi"))
+            .Select(property => property.Name)];
+
+    /// <summary>
+    /// The same context with one parameter moved to a different value, whatever its type. Built
+    /// through the primary constructor because a record's <c>with</c> cannot be reached by name.
+    /// </summary>
+    private static ScreenContext Moved(ScreenContext context, string name)
+    {
+        var constructor = typeof(ScreenContext)
+            .GetConstructors()
+            .MaxBy(candidate => candidate.GetParameters().Length)!;
+
+        var arguments = constructor.GetParameters()
+            .Select(parameter =>
+            {
+                var current = typeof(ScreenContext).GetProperty(parameter.Name!)!.GetValue(context);
+
+                return string.Equals(parameter.Name, name, StringComparison.Ordinal)
+                    ? Different(current!)
+                    : current;
+            })
+            .ToArray();
+
+        return (ScreenContext)constructor.Invoke(arguments);
+    }
+
+    /// <summary>Any value of the same type that is not the one given.</summary>
+    private static object Different(object current) => current switch
+    {
+        double number => number + 7,
+        int number => number + 90,
+        Enum value => Enum.GetValues(value.GetType())
+            .Cast<Enum>()
+            .First(candidate => !candidate.Equals(value)),
+        _ => throw new NotSupportedException(
+            $"a screen parameter of type {current.GetType().Name} has no 'different' value here - "
+            + "add one, or this parameter is silently not being checked"),
+    };
 }

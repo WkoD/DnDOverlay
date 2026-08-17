@@ -254,7 +254,8 @@ internal sealed class OverlayWindow : Window
                     item.RotationDeg,
                     width,
                     height,
-                    image.ShowName ? image.Name : null);
+                    image.ShowName ? image.Name : null,
+                    context.ImageTextSize);
             }
         }
 
@@ -421,7 +422,14 @@ internal sealed class OverlayWindow : Window
             background.OffsetY,
             context);
 
-        Lay(_backdrop, rect, rotationDeg: 0, width, height, background.ShowName ? background.Name : null);
+        Lay(
+            _backdrop,
+            rect,
+            rotationDeg: 0,
+            width,
+            height,
+            background.ShowName ? background.Name : null,
+            context.ImageTextSize);
     }
 
     /// <summary>
@@ -495,7 +503,8 @@ internal sealed class OverlayWindow : Window
         double rotationDeg,
         double width,
         double height,
-        string? name)
+        string? name,
+        double textSize)
     {
         var renderedWidth = rect.Width * width;
         var renderedHeight = rect.Height * height;
@@ -508,8 +517,10 @@ internal sealed class OverlayWindow : Window
         Canvas.SetTop(mount.Element, rect.Y * height);
 
         // In DIP on the screen, not in normalised coordinates - the text does not scale with the
-        // picture, which is the whole reason the cascade is measured rather than computed.
-        var caption = CaptionLayout.Fit(name, renderedWidth, renderedHeight);
+        // picture, which is the whole reason the cascade is measured rather than computed. The size
+        // comes from the SCREEN, because only the viewing distance separates a table from a
+        // projector and no machine can read that off the hardware (Part 6).
+        var caption = CaptionLayout.Fit(name, renderedWidth, renderedHeight, textSize);
 
         if (mount.Caption is { } old)
         {

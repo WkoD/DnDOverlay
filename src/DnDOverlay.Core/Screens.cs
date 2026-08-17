@@ -141,7 +141,8 @@ public sealed record ScreenSettings(
     double? MaxWidthOnLoad = null,
     PlacementMode? Placement = null,
     int? DefaultRotationDeg = null,
-    ParkEdge? ParkEdge = null)
+    ParkEdge? ParkEdge = null,
+    double? ImageTextSize = null)
 {
     /// <summary>Nothing changed - the answer when a diff finds no difference.</summary>
     public static readonly ScreenSettings None = new();
@@ -165,7 +166,8 @@ public sealed record ScreenSettings(
         && MaxWidthOnLoad is null
         && Placement is null
         && DefaultRotationDeg is null
-        && ParkEdge is null;
+        && ParkEdge is null
+        && ImageTextSize is null;
 
     /// <summary>
     /// The full effective set of a screen, for the baseline in the <c>Hello</c>. Size and DPI are
@@ -185,7 +187,8 @@ public sealed record ScreenSettings(
             MaxWidthOnLoad: context.MaxWidthOnLoad,
             Placement: context.Placement,
             DefaultRotationDeg: context.DefaultRotationDeg,
-            ParkEdge: context.ParkEdge);
+            ParkEdge: context.ParkEdge,
+            ImageTextSize: context.ImageTextSize);
     }
 
     /// <summary>Lays this delta over a context, leaving untouched whatever it does not mention.</summary>
@@ -203,6 +206,7 @@ public sealed record ScreenSettings(
             Placement = Placement ?? context.Placement,
             DefaultRotationDeg = DefaultRotationDeg ?? context.DefaultRotationDeg,
             ParkEdge = ParkEdge ?? context.ParkEdge,
+            ImageTextSize = ImageTextSize ?? context.ImageTextSize,
         };
     }
 
@@ -229,7 +233,8 @@ public sealed record ScreenSettings(
             DefaultRotationDeg: before.DefaultRotationDeg == after.DefaultRotationDeg
                 ? null
                 : after.DefaultRotationDeg,
-            ParkEdge: before.ParkEdge == after.ParkEdge ? null : after.ParkEdge);
+            ParkEdge: before.ParkEdge == after.ParkEdge ? null : after.ParkEdge,
+            ImageTextSize: before.ImageTextSize == after.ImageTextSize ? null : after.ImageTextSize);
     }
 }
 
@@ -381,7 +386,18 @@ public sealed record ScreenContext(
     double MaxWidthOnLoad,
     PlacementMode Placement,
     int DefaultRotationDeg,
-    ParkEdge ParkEdge)
+    ParkEdge ParkEdge,
+
+    /// <summary>
+    /// How tall the name in a picture is drawn, in DIP on that screen (Part 6).
+    /// <para>
+    /// Per screen and not once for the program, because the only thing that separates the three
+    /// cases is the VIEWING DISTANCE, and the DPI knows nothing about it: the table is an arm away,
+    /// the projector three metres, the Surface half a metre. DIP already carries the user's chosen
+    /// Windows scaling, so what is left over is exactly the correction no machine can make.
+    /// </para>
+    /// </summary>
+    double ImageTextSize)
 {
     /// <summary>The screen height in DIP - the unit <see cref="MinVisiblePixels"/> is given in.</summary>
     public double HeightInDip => Dpi <= 0 ? Size.Height : Size.Height * 96d / Dpi;
@@ -424,6 +440,11 @@ public sealed record ScreenContext(
             MaxWidthOnLoad: 0.9,
             Placement: PlacementMode.Flow,
             DefaultRotationDeg: 0,
-            ParkEdge: ParkEdge.Right);
+            ParkEdge: ParkEdge.Right,
+
+            // Around one and a half times Windows' standard text: readable at arm's length on the
+            // table without a small portrait running straight into the truncation (decided in
+            // checks/M2.md). A starting point, and one the hand-run is meant to move.
+            ImageTextSize: 18);
     }
 }
