@@ -192,6 +192,19 @@ public sealed class AssetCache
     {
         var path = Path(id, thumbnail);
 
+        // Asked before it is read, although the catch below would answer just as correctly. A miss
+        // is the NORMAL case - every picture the table has not seen yet is one, twice over, once for
+        // the thumbnail and once for the original - and going through an exception for it puts a
+        // FileNotFoundException in the debugger's output for every new picture. It cost the M2c
+        // hand-run a finding that looked like a defect and was none. The race stays covered: the
+        // file can still vanish between the question and the answer, which is what the catch is for.
+        if (!File.Exists(path))
+        {
+            bytes = [];
+
+            return false;
+        }
+
         // Read before touching the bookkeeping: a file that is gone from underneath us is not a
         // use, and recording one would keep a phantom alive at the top of the list.
         try

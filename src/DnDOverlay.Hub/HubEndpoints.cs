@@ -176,6 +176,17 @@ public static class HubEndpoints
         await using (data.ConfigureAwait(false))
         {
             context.Response.ContentType = contentType;
+
+            // Declared wherever the stream can say it, and that is not a nicety: without a length
+            // the answer goes out chunked, the display's reading has no total, and the progress ring
+            // stands at zero for the whole download and then vanishes when the picture appears. The
+            // M2c hand-run saw exactly that and read it as "no progress is shown" - which was true,
+            // and the cause was here rather than in the ring (Part 7).
+            if (data.CanSeek)
+            {
+                context.Response.ContentLength = data.Length;
+            }
+
             await data.CopyToAsync(context.Response.Body, context.RequestAborted).ConfigureAwait(false);
         }
     }
