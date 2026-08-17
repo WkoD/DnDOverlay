@@ -52,8 +52,18 @@ internal static class CraftedFiles
 
         // A genuine image under a name that lies. The counterpart to the file above: there the
         // content is dangerous, here it is harmless and only the name is wrong.
+        //
+        // A picture of its OWN, not a copy of the genuine PNG. As a copy it was byte-identical to
+        // it, and the stock is content-addressed - so in the M2c hand-run the file did not test the
+        // name at all: it was recognised as a picture already there, under the other one's name, and
+        // the mislabelling was never reached. A test that cannot fail because something upstream
+        // answers first is worse than no test (Guide C9).
         var mislabelled = Path.Combine(directory, "mislabelled.jpg");
-        File.Copy(genuinePngPath, mislabelled, overwrite: true);
+
+        using (var own = new MagickImage(MagickColors.Teal, 48, 48))
+        {
+            own.Write(mislabelled, MagickFormat.Png);
+        }
 
         var truncated = Path.Combine(directory, "truncated.png");
         var whole = File.ReadAllBytes(genuinePngPath);

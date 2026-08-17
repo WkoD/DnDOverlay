@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using DnDOverlay.Core;
 using DnDOverlay.TestData;
 
@@ -261,6 +262,32 @@ public sealed class FormatParcoursTests(TestDataFixture fixture)
         // straight in (Part 5).
         var fine = _codec.Normalise(File.ReadAllBytes(_assets.Crafted.WrongExtension));
         Assert.Equal("png", fine.Format);
+    }
+
+    /// <summary>
+    /// No two files of the parcours hold the same bytes, save the one pair that is meant to: the
+    /// container under its two names.
+    /// <para>
+    /// It is here because the mislabelled file used to be a COPY of the genuine PNG, and the M2c
+    /// hand-run showed what that costs. The stock is content-addressed, so the second of two
+    /// identical files is recognised as one already there - and the property the file was written
+    /// for is never reached. Every future file of this parcours has the same trap waiting, which is
+    /// why this is a rule rather than an assertion about one name (Guide C9).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NoFileOfTheParcoursIsACopyOfAnother()
+    {
+        var twins = Directory
+            .EnumerateFiles(_assets.Directory, "*", SearchOption.TopDirectoryOnly)
+            .GroupBy(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))))
+            .Where(group => group.Count() > 1)
+            .Select(group => string.Join(" = ", group.Select(Path.GetFileName)))
+            .Where(pair => pair is not "token-renamed.zip = token-with-portrait.rptok"
+                and not "token-with-portrait.rptok = token-renamed.zip")
+            .ToList();
+
+        Assert.Empty(twins);
     }
 
     /// <summary>
