@@ -43,14 +43,15 @@ internal static partial class DisplayLog
     [LoggerMessage(
         EventId = 3005,
         Level = LogLevel.Warning,
-        Message = "Could not load asset {AssetId}.")]
-    internal static partial void AssetFailed(ILogger logger, Exception exception, AssetId assetId);
+        Message = "Could not load asset {Name} ({AssetId}): {Detail}")]
+    internal static partial void AssetFailed(ILogger logger, string name, AssetId assetId, string detail);
 
     [LoggerMessage(
         EventId = 3006,
         Level = LogLevel.Information,
-        Message = "Asset {AssetId} decoded at {Width}x{Height}.")]
-    internal static partial void AssetDecoded(ILogger logger, AssetId assetId, int width, int height);
+        Message = "Asset {Name} ({AssetId}) decoded at {Width}x{Height}.")]
+    internal static partial void AssetDecoded(
+        ILogger logger, string name, AssetId assetId, int width, int height);
 
     /// <summary>
     /// What one load run came to, said once at the end rather than per picture.

@@ -21,7 +21,29 @@ namespace DnDOverlay.Transport;
 /// up one behind the other and only look parallel?
 /// </para>
 /// </summary>
-public sealed record AssetLoadRun(int Fetched, int AlreadyHere, long Bytes, int Peak, long Milliseconds);
+public sealed record AssetLoadRun(
+    int Fetched,
+    int AlreadyHere,
+    long Bytes,
+    int Peak,
+    long Milliseconds,
+    IReadOnlyList<AssetLoadFailure> Failed);
+
+/// <summary>
+/// One picture that did not arrive, with what the wire said about it.
+/// <para>
+/// It travels in the report rather than being logged here, because this library has no logger and
+/// should not get one for it: a download failure is a sentence about the SESSION, and the sentence
+/// belongs where the names are - only the display knows that this hash is "Dilwyn Kemri" (Part 8).
+/// </para>
+/// <para>
+/// It is carried at all because it was lost. Until M2b the display fetched in its own code and said
+/// so when a fetch failed; the loader took the fetching and not the saying, and from then on a
+/// picture that never came was silent in the log - the ring showed it and nothing else did. The M2c
+/// hand-run only saw those 401 lines because the surface was running the older build.
+/// </para>
+/// </summary>
+public sealed record AssetLoadFailure(AssetId Asset, string Detail);
 
 /// <summary>What a scene needs, and how badly.</summary>
 /// <param name="IsBackground">
@@ -181,7 +203,8 @@ public sealed class AssetLoader
             order.Count - run.Fetched,
             run.Bytes,
             run.Peak,
-            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            run.Failed);
     }
 
     private bool Held(AssetId asset) => _cache.TryGet(asset, out _);
@@ -202,9 +225,19 @@ public sealed class AssetLoader
     /// </summary>
     private sealed class Tally
     {
+        internal readonly List<AssetLoadFailure> Failed = [];
+
         internal int Fetched;
         internal long Bytes;
         internal int Peak;
+
+        internal void Note(AssetId asset, string detail)
+        {
+            lock (Failed)
+            {
+                Failed.Add(new AssetLoadFailure(asset, detail));
+            }
+        }
     }
 
     /// <summary>Straight out of the store - no request, and finished the moment it is handed over.</summary>
@@ -270,6 +303,7 @@ public sealed class AssetLoader
             if (!Matches(bytes, item.Meta.ContentHash))
             {
                 _progress.Failed(item.Asset);
+                run.Note(item.Asset, "The delivered bytes do not match the hash the scene carries.");
 
                 return;
             }
@@ -290,9 +324,10 @@ public sealed class AssetLoader
                 .WriteAsync(new AssetArrived(item.Asset, bytes, IsThumbnail: false), cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException failure)
         {
             _progress.Failed(item.Asset);
+            run.Note(item.Asset, failure.Message);
         }
     }
 

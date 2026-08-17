@@ -41,7 +41,11 @@ public sealed class LogForwardingOverTheWireTests
                 "AssetFailed",
                 LogLevel.Warning,
                 written,
-                [new LogValue("AssetId", "ab12cd")],
+                [
+                    new LogValue("Name", "Dilwyn Kemri"),
+                    new LogValue("AssetId", "ab12cd"),
+                    new LogValue("Detail", "The server answered 404 Not Found."),
+                ],
                 Screen: new ScreenId(@"\\?\DISPLAY#TEST#1")),
             cancellationToken);
 
@@ -52,7 +56,12 @@ public sealed class LogForwardingOverTheWireTests
         Assert.Equal(Device, record.Source?.Device);
         Assert.Equal("TISCH-PC", record.Source?.Name);
         Assert.Equal(new ScreenId(@"\\?\DISPLAY#TEST#1"), record.Screen);
-        Assert.Equal("Could not load asset ab12cd.", LogCatalog.Render(record));
+        // Rendered from the CONTROL's catalogue out of the values the device sent - which is the
+        // point of forwarding values rather than a finished sentence, and why the name is worth
+        // carrying: the DM reads "Dilwyn Kemri", not a hash (Part 8).
+        Assert.Equal(
+            "Could not load asset Dilwyn Kemri (ab12cd): The server answered 404 Not Found.",
+            LogCatalog.Render(record));
     }
 
     /// <summary>

@@ -190,10 +190,10 @@
     <value>Discarding an operation for screen {ScreenId}, which this device does not have.</value>
   </data>
   <data name="E3005_AssetFailed" xml:space="preserve">
-    <value>Could not load asset {AssetId}.</value>
+    <value>Could not load asset {Name} ({AssetId}): {Detail}</value>
   </data>
   <data name="E3006_AssetDecoded" xml:space="preserve">
-    <value>Asset {AssetId} decoded at {Width}x{Height}.</value>
+    <value>Asset {Name} ({AssetId}) decoded at {Width}x{Height}.</value>
   </data>
   <data name="E3007_ScreenAdded" xml:space="preserve">
     <value>New screen {Screen} ({Label}) - playing on it.</value>

@@ -1039,6 +1039,47 @@ public sealed partial class App : Application, IDisposable
             DisplayLog.AssetsLoaded(
                 _logger, run.Fetched, run.Milliseconds, run.Bytes, run.Peak, run.AlreadyHere);
         }
+
+        // A picture that never arrived is said here, with its name. The loader has no logger and
+        // should not get one: only this end knows that a hash is "Dilwyn Kemri", and a name is the
+        // whole point of the line (Part 8).
+        foreach (var failure in run.Failed)
+        {
+            var name = NameOf(failure.Asset);
+
+            DisplayLog.AssetFailed(_logger, name, failure.Asset, failure.Detail);
+        }
+    }
+
+    /// <summary>
+    /// What the DM calls this picture. The scenes of this device carry it, and the hash is what is
+    /// left when nothing does - a picture can be dropped from a scene while its bytes are still on
+    /// their way.
+    /// <para>
+    /// Asked at the moment of writing rather than kept in a table beside the pictures: a second
+    /// table over the same keys is the shape that cost 2 GB in M2b, and this one would be read a
+    /// handful of times an evening.
+    /// </para>
+    /// </summary>
+    private string NameOf(AssetId asset)
+    {
+        foreach (var scene in _scenes.Values)
+        {
+            foreach (var item in scene.Items)
+            {
+                if (item is ImageItem picture && picture.AssetId == asset)
+                {
+                    return picture.Name;
+                }
+            }
+
+            if (scene.Background is { } background && background.AssetId == asset)
+            {
+                return background.Name ?? asset.Value[..8];
+            }
+        }
+
+        return asset.Value[..8];
     }
 
     /// <summary>
@@ -1071,7 +1112,13 @@ public sealed partial class App : Application, IDisposable
                 // Only the full picture ends the load. Reporting done on the thumbnail would fill
                 // the ring while the picture on the table was still the blurred one.
                 _progress.Done(arrived.Asset);
-                DisplayLog.AssetDecoded(_logger, arrived.Asset, decoded.PixelWidth, decoded.PixelHeight);
+
+                // Looked up before the call rather than inside it: an argument that costs something
+                // must not be evaluated when the level would throw the line away (CA1873).
+                var name = NameOf(arrived.Asset);
+
+                DisplayLog.AssetDecoded(
+                    _logger, name, arrived.Asset, decoded.PixelWidth, decoded.PixelHeight);
             }
         }
         // A picture that arrives unreadable stays missing and the rest of the scene is drawn.
@@ -1082,7 +1129,10 @@ public sealed partial class App : Application, IDisposable
         catch (NotSupportedException exception)
         {
             _progress.Failed(arrived.Asset);
-            DisplayLog.AssetFailed(_logger, exception, arrived.Asset);
+
+            var name = NameOf(arrived.Asset);
+
+            DisplayLog.AssetFailed(_logger, name, arrived.Asset, exception.Message);
         }
     }
 

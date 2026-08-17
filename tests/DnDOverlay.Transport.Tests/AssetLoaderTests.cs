@@ -193,6 +193,64 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     /// <summary>
+    /// What did not arrive comes back NAMED, so that somebody can say it.
+    /// <para>
+    /// Until M2b the display fetched in its own code and logged a failed fetch itself. The loader
+    /// took over the fetching and not the saying, and from then on a picture that never came was
+    /// silent in the log - the ring showed it, and nothing else did. The M2c hand-run only saw those
+    /// 401 lines because the surface was still running the older build, which is the opposite of
+    /// reassuring.
+    /// </para>
+    /// <para>
+    /// It comes back rather than being logged here because this library has no logger and should
+    /// not get one: only the display knows that a hash is "Dilwyn Kemri", and the name is the whole
+    /// point of the line (Part 8).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task What_did_not_arrive_comes_back_with_it()
+    {
+        var stub = new Counterpart { Missing = { Asset(2) } };
+        var cache = new AssetCache(_directory);
+        var loader = new AssetLoader(new AssetClient(new HttpClient(stub)), cache, new AssetProgressTracker());
+        var arrivals = Channel.CreateUnbounded<AssetArrived>();
+
+        var run = await loader.LoadAsync(
+            Hub, Path, [Want(1), Want(2), Want(3)], Token, arrivals.Writer,
+            TestContext.Current.CancellationToken);
+
+        arrivals.Writer.Complete();
+
+        Assert.Equal(Asset(2), Assert.Single(run.Failed).Asset);
+        Assert.NotEmpty(run.Failed[0].Detail);
+
+        // The other two are not failures, and the count says so rather than the absence of a name.
+        Assert.Equal(2, run.Fetched);
+    }
+
+    /// <summary>
+    /// A picture whose bytes do not match the hash the scene carries fails with a sentence of its
+    /// own. It is not a network fault and must not read like one: the bytes arrived, and they were
+    /// the wrong ones (Part 5).
+    /// </summary>
+    [Fact]
+    public async Task Bytes_that_fail_their_hash_are_named_as_that()
+    {
+        var stub = new Counterpart();
+        var cache = new AssetCache(_directory);
+        var loader = new AssetLoader(new AssetClient(new HttpClient(stub)), cache, new AssetProgressTracker());
+        var arrivals = Channel.CreateUnbounded<AssetArrived>();
+
+        var run = await loader.LoadAsync(
+            Hub, Path, [new AssetWanted(Asset(1), Meta(new string('f', 64)))], Token, arrivals.Writer,
+            TestContext.Current.CancellationToken);
+
+        arrivals.Writer.Complete();
+
+        Assert.Contains("hash", Assert.Single(run.Failed).Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Every picture the table is waiting for is in the FIRST reading, before anything is fetched.
     /// Announcing them as each begins would have the rings appear one at a time, which reads as
     /// "nothing else is coming" (Part 7).
