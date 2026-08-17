@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DnDOverlay.Core;
 
 namespace DnDOverlay.Campaign;
@@ -53,32 +54,63 @@ public sealed record IntakeProgress(int Done, int Total, string Name);
 public sealed record IntakeFailure(string Name, IntakeRejection Reason, string Detail);
 
 /// <summary>
+/// One that came in, with what it cost.
+/// </summary>
+/// <param name="Standing">
+/// Whether the source format was promised or merely tolerated (Part 5). Carried per picture rather
+/// than as a second list beside this one, so the two cannot disagree about which picture it was.
+/// </param>
+/// <param name="Milliseconds">
+/// How long THIS picture took - hash, unpack, decode, normalise, thumbnail, write.
+/// <para>
+/// It is per picture and not only per run, because the run total cannot answer the question it is
+/// asked. Two hundred files that took eight seconds say nothing about which one took six of them,
+/// and the spread is real: a JPEG hands its bytes through in a millisecond while a 24 MB PNG has
+/// its thumbnail unfolded. Without this the line for both reads the same from the outside.
+/// </para>
+/// <para>
+/// <b>It was lost once already.</b> Until M2c the control measured each ingest itself; when the run
+/// took the looping over, the measurement did not come with it and <c>2001</c> reported a hard-wired
+/// zero for every picture. The M2c hand-run saw "0 ms", read it as "the ingest is fast" and closed
+/// the finding - a number that is not measured is worse than no number, because it answers.
+/// </para>
+/// </param>
+public sealed record IntakeTaken(AssetRef Asset, FormatStanding Standing, long Milliseconds);
+
+/// <summary>
 /// What a whole run came to - the material for ONE collected message rather than two hundred
 /// dialogues (Part 7).
 /// </summary>
-/// <param name="Taken">Newly taken in.</param>
+/// <param name="Taken">Newly taken in, each with its standing and what it cost.</param>
 /// <param name="AlreadyPresent">
 /// Already in the stock, so nothing was written and the name they carry is the one they already
 /// had. Counted separately because "2 doppelt" is an answer and "195 aufgenommen" alone is not.
+/// They carry no duration: nothing was decoded, and a zero here would be a measurement of nothing.
 /// </param>
 /// <param name="Refused">Turned away, each with its reason.</param>
-/// <param name="Tolerated">
-/// Names of those whose format worked but is not assured (Part 5). Reported rather than hidden:
-/// it went through, and the DM is told that this format is not one of the six promised.
-/// </param>
 /// <param name="Cancelled">The run was broken off. What was taken in stays - nothing is rolled back.</param>
 public sealed record IntakeReport(
-    IReadOnlyList<AssetRef> Taken,
+    IReadOnlyList<IntakeTaken> Taken,
     IReadOnlyList<AssetRef> AlreadyPresent,
     IReadOnlyList<IntakeFailure> Refused,
-    IReadOnlyList<string> Tolerated,
     bool Cancelled)
 {
     /// <summary>Nothing was asked of it.</summary>
-    public static IntakeReport Empty { get; } = new([], [], [], [], Cancelled: false);
+    public static IntakeReport Empty { get; } = new([], [], [], Cancelled: false);
 
     /// <summary>How many were dealt with, one way or another.</summary>
     public int Count => Taken.Count + AlreadyPresent.Count + Refused.Count;
+
+    /// <summary>
+    /// Names of those whose format worked but is not assured (Part 5). Reported rather than hidden:
+    /// it went through, and the DM is told that this format is not one of the six promised.
+    /// <para>
+    /// Read off <see cref="Taken"/> rather than collected beside it. A second list would be a second
+    /// place saying which pictures those were, and the two could drift apart with nothing noticing.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Tolerated =>
+        [.. Taken.Where(taken => taken.Standing is FormatStanding.Tolerated).Select(taken => taken.Asset.Name)];
 }
 
 /// <summary>
@@ -119,10 +151,9 @@ public sealed class Intake(IAssetSink stock)
             return IntakeReport.Empty;
         }
 
-        var taken = new List<AssetRef>();
+        var taken = new List<IntakeTaken>();
         var known = new List<AssetRef>();
         var refused = new List<IntakeFailure>();
-        var tolerated = new List<string>();
 
         for (var index = 0; index < sources.Count; index++)
         {
@@ -130,7 +161,7 @@ public sealed class Intake(IAssetSink stock)
             {
                 // Broken off, and what is already in stays in - every finished picture is a valid
                 // entry, so there is nothing a rollback would be putting right (Part 7).
-                return new IntakeReport(taken, known, refused, tolerated, Cancelled: true);
+                return new IntakeReport(taken, known, refused, Cancelled: true);
             }
 
             var source = sources[index];
@@ -138,6 +169,11 @@ public sealed class Intake(IAssetSink stock)
             progress?.Report(new IntakeProgress(index, sources.Count, source.ProposedName));
 
             IngestResult outcome;
+
+            // Started here rather than inside the stock, because what is being measured is what the
+            // DM waits for: reaching the bytes counts too, and a URL import spends most of its
+            // seconds there.
+            var clock = Stopwatch.GetTimestamp();
 
             try
             {
@@ -150,7 +186,7 @@ public sealed class Intake(IAssetSink stock)
                 // token that was fine a line earlier. Letting that out would hand the caller an
                 // exception instead of the report, and the report is the whole promise: it says
                 // what stands. So the break arrives here as what it is, an ending, not a failure.
-                return new IntakeReport(taken, known, refused, tolerated, Cancelled: true);
+                return new IntakeReport(taken, known, refused, Cancelled: true);
             }
 
             switch (outcome)
@@ -160,13 +196,10 @@ public sealed class Intake(IAssetSink stock)
                     break;
 
                 case IngestResult.Taken stocked:
-                    taken.Add(stocked.Asset);
-
-                    if (stocked.Standing is FormatStanding.Tolerated)
-                    {
-                        tolerated.Add(stocked.Asset.Name);
-                    }
-
+                    taken.Add(new IntakeTaken(
+                        stocked.Asset,
+                        stocked.Standing,
+                        (long)Stopwatch.GetElapsedTime(clock).TotalMilliseconds));
                     break;
 
                 case IngestResult.Refused turned:
@@ -177,7 +210,7 @@ public sealed class Intake(IAssetSink stock)
 
         progress?.Report(new IntakeProgress(sources.Count, sources.Count, string.Empty));
 
-        return new IntakeReport(taken, known, refused, tolerated, Cancelled: false);
+        return new IntakeReport(taken, known, refused, Cancelled: false);
     }
 
     private async Task<IngestResult> One(IntakeSource source, CancellationToken cancellationToken)

@@ -156,11 +156,55 @@ public sealed class IntakeTests : IDisposable
         Assert.Equal(3, stock.Count);
 
         // And what stands is really there, not half written.
-        foreach (var asset in report.Taken)
+        foreach (var taken in report.Taken)
         {
-            Assert.True(stock.TryOpen(asset.AssetId, out var data, out _), $"{asset.Name} has no file");
+            Assert.True(
+                stock.TryOpen(taken.Asset.AssetId, out var data, out _), $"{taken.Asset.Name} has no file");
             data.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Every picture that came in says what IT cost, and the run's own total is not a substitute.
+    /// <para>
+    /// The number was there until M2c, when the control still looped itself; the run took the
+    /// looping over and the measurement did not come with it, so <c>2001</c> reported a hard-wired
+    /// zero for every picture. The M2c hand-run saw "0 ms", read it as "the ingest is fast", and
+    /// closed the finding - a number that is not measured is worse than none, because it answers.
+    /// </para>
+    /// <para>
+    /// What is asserted is that it is a MEASUREMENT, not a particular duration: a fake codec is
+    /// fast and the honest floor is zero. So the source is made to dwell, and the reading has to
+    /// follow it - which a constant cannot do.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Every_picture_says_what_it_cost()
+    {
+        var report = await Run(Dwelling("Langsam", TimeSpan.FromMilliseconds(40)), Source("Schnell"));
+
+        var slow = report.Taken.Single(taken => taken.Asset.Name == "Langsam");
+        var quick = report.Taken.Single(taken => taken.Asset.Name == "Schnell");
+
+        Assert.True(slow.Milliseconds >= 40, $"the slow one reported {slow.Milliseconds} ms");
+        Assert.True(
+            quick.Milliseconds < slow.Milliseconds,
+            $"both reported the same: {quick.Milliseconds} ms and {slow.Milliseconds} ms");
+    }
+
+    /// <summary>
+    /// The tolerated rank is read off what came in rather than collected beside it - two lists
+    /// could disagree about which pictures they meant, with nothing noticing (Part 5).
+    /// </summary>
+    [Fact]
+    public async Task A_tolerated_format_is_named_in_the_report()
+    {
+        _codec.Standing = FormatStanding.Tolerated;
+
+        var report = await Run(Source("Karte in JPEG XL"));
+
+        Assert.Equal(["Karte in JPEG XL"], report.Tolerated);
+        Assert.Equal(FormatStanding.Tolerated, Assert.Single(report.Taken).Standing);
     }
 
     /// <summary>
@@ -201,6 +245,19 @@ public sealed class IntakeTests : IDisposable
     private static IntakeSource Source(string name) =>
         new(name, _ => ValueTask.FromResult<IntakeBytes>(
             new IntakeBytes.Ready(Encoding.UTF8.GetBytes("picture of " + name))));
+
+    /// <summary>
+    /// A source that takes its time getting at its bytes - a large file, a slow address. The delay
+    /// sits in reaching them rather than in the codec, because that is part of what the DM waits
+    /// for and therefore part of what the reading has to cover.
+    /// </summary>
+    private static IntakeSource Dwelling(string name, TimeSpan dwell) =>
+        new(name, async _ =>
+        {
+            await Task.Delay(dwell, TestContext.Current.CancellationToken);
+
+            return new IntakeBytes.Ready(Encoding.UTF8.GetBytes("picture of " + name));
+        });
 
     private static IntakeSource Broken(string name) =>
         new(name, _ => ValueTask.FromResult<IntakeBytes>(

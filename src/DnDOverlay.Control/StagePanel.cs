@@ -52,7 +52,23 @@ internal sealed class StagePanel : StackPanel
         ItemsSource = Enum.GetValues<PlacementMode>(),
     };
 
+    /// <summary>
+    /// The one grip that stays alive while a run is going, and therefore the one that cannot live
+    /// inside the block that is switched off. Check step 29a asks for two hundred files to be broken
+    /// off in the middle - the library has carried that promise since M2c and there was nothing to
+    /// press, so the step could not be walked at all.
+    /// </summary>
+    private readonly StackPanel _breakOff = new()
+    {
+        Orientation = Orientation.Horizontal,
+        Margin = new Thickness(0, 0, 0, 8),
+        Visibility = Visibility.Collapsed,
+    };
+
     private bool _settingSwitches;
+
+    /// <summary>Alive exactly while a run is going, and the reason a second one cannot start.</summary>
+    private CancellationTokenSource? _running;
 
     internal StagePanel(
         ISessionApi session,
@@ -81,6 +97,10 @@ internal sealed class StagePanel : StackPanel
         };
 
         Children.Add(Heading("Stage"));
+
+        _breakOff.Children.Add(Button("Break off", (_, _) => _running?.Cancel()));
+        Children.Add(_breakOff);
+
         Children.Add(Row(
             Button("Send a picture ...", (_, _) => ChosenAsync(background: false)),
             Button("Set as background ...", (_, _) => ChosenAsync(background: true)),
@@ -207,16 +227,23 @@ internal sealed class StagePanel : StackPanel
     }
 
     /// <summary>
-    /// Takes the grips away while a picture is being taken in, and gives back what they were so the
-    /// caller can put them back exactly. Not decoration: the step costs seconds, and a control that
-    /// looks idle invites a second picture to be started into the middle of the first.
+    /// Takes the grips away while a picture is being taken in, and puts the break-off in their
+    /// place. Not decoration: the step costs seconds, and a control that looks idle invites a second
+    /// picture to be started into the middle of the first.
+    /// <para>
+    /// Every child EXCEPT the break-off, rather than the panel itself. WPF coerces
+    /// <see cref="UIElement.IsEnabled"/> down the tree, so a button under a disabled panel cannot be
+    /// enabled again - and a run with no way out is what check step 29a could not walk.
+    /// </para>
     /// </summary>
-    private bool StopTheGrips()
+    private void Grips(bool enabled)
     {
-        var before = IsEnabled;
-        IsEnabled = false;
+        foreach (UIElement child in Children)
+        {
+            child.IsEnabled = enabled || ReferenceEquals(child, _breakOff);
+        }
 
-        return before;
+        _breakOff.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>Entrance one: files, chosen. Several at a time, because that is the ordinary case.</summary>
@@ -313,13 +340,25 @@ internal sealed class StagePanel : StackPanel
             return;
         }
 
+        // A run is already going. The grips are off, but a drop lands on the panel itself and the
+        // panel has to stay alive to carry the break-off - so the guard is here rather than implied
+        // by a disabled control.
+        if (_running is not null)
+        {
+            _status.Text = "A run is going. Break it off first, or wait for it.";
+            return;
+        }
+
         // Taking pictures in costs SECONDS and the DM has to be able to see that it is happening.
         // Measured with the real files (hand-run of M2b, second round, step 17): a 24 MB PNG at
-        // 4616×6000 spent 11.6 s being normalised before the pass-through, and 1.2 s after. A line
+        // 4616x6000 spent 11.6 s being normalised before the pass-through, and 1.2 s after. A line
         // of text alone was there and was missed - so the grips go dead as well, which is the part
-        // that cannot be overlooked and which also stops a second run being started into the middle
-        // of the first.
-        var grips = StopTheGrips();
+        // that cannot be overlooked.
+        using var running = new CancellationTokenSource();
+
+        _running = running;
+        Grips(enabled: false);
+
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         IntakeReport report;
@@ -333,12 +372,13 @@ internal sealed class StagePanel : StackPanel
             // control until a 20 MB picture was through (hand-run of M2b, step 17). A library
             // returns a result and does not pick a thread; picking one is the caller's job
             // (rule 10).
-            report = await Task.Run(() => _entrances.TakeInAsync(sources, progress, CancellationToken.None))
+            report = await Task.Run(() => _entrances.TakeInAsync(sources, progress, running.Token))
                 .ConfigureAwait(true);
         }
         finally
         {
-            IsEnabled = grips;
+            _running = null;
+            Grips(enabled: true);
         }
 
         ControlLog.IntakeFinished(
@@ -350,6 +390,21 @@ internal sealed class StagePanel : StackPanel
             report.Refused.Count,
             report.Cancelled ? ", broken off" : string.Empty);
 
+        // One line per picture that was really taken in, each with what IT cost - the run's total
+        // above cannot say which of two hundred took six of the eight seconds. Written only for
+        // the newly stocked: an already-present picture was not taken in, and 2003 counts it.
+        foreach (var taken in report.Taken)
+        {
+            ControlLog.AssetTakenIn(
+                _logger,
+                taken.Asset.Name,
+                taken.Asset.AssetId.Value,
+                taken.Asset.Meta.PixelWidth,
+                taken.Asset.Meta.PixelHeight,
+                taken.Asset.Meta.Bytes,
+                taken.Milliseconds);
+        }
+
         foreach (var failure in report.Refused)
         {
             // Named and readable, never a silent failure - the promise the whole refusal path
@@ -358,38 +413,59 @@ internal sealed class StagePanel : StackPanel
             ControlLog.AssetRefused(_logger, failure.Name, failure.Reason, failure.Detail);
         }
 
-        await ShowAsync(screen, report, background).ConfigureAwait(true);
+        var unused = await ShowAsync(screen, report, background).ConfigureAwait(true);
 
-        _status.Text = Collected(report);
+        _status.Text = unused is null ? Collected(report) : Collected(report) + " " + unused;
 
         await RefreshAsync().ConfigureAwait(true);
     }
 
     /// <summary>
-    /// Puts what came in onto the screen. The background layer holds ONE picture, so a run of many
-    /// meant as a background shows its first and says so rather than quietly dropping the rest.
+    /// Puts what came in onto the screen.
+    /// <para>
+    /// The background layer holds ONE picture. A run of several meant as a background therefore uses
+    /// its first, and <b>says which and how many it did not use</b> - the rest were taken into the
+    /// stock and are simply not on a screen. Returning quietly used to leave the collected message
+    /// saying "5 taken in" beside a table showing one, with nothing accounting for the other four.
+    /// </para>
     /// </summary>
-    private async Task ShowAsync(ScreenRef screen, IntakeReport report, bool background)
+    private async Task<string?> ShowAsync(ScreenRef screen, IntakeReport report, bool background)
     {
-        foreach (var asset in report.Taken.Concat(report.AlreadyPresent))
-        {
-            ControlLog.AssetTakenIn(
-                _logger,
-                asset.Name,
-                asset.AssetId.Value,
-                asset.Meta.PixelWidth,
-                asset.Meta.PixelHeight,
-                asset.Meta.Bytes,
-                0);
+        // The order the run reported: what was newly taken in, then what was already in the stock.
+        // Both go on the screen - a picture that is already known is exactly what a second sending
+        // of the same file is meant to put up.
+        var placeable = report.Taken
+            .Select(taken => taken.Asset)
+            .Concat(report.AlreadyPresent)
+            .ToList();
 
-            if (background)
+        if (background)
+        {
+            if (placeable.Count == 0)
             {
-                await _session.SetBackgroundAsync(screen, asset).ConfigureAwait(true);
-                return;
+                return null;
             }
 
+            await _session.SetBackgroundAsync(screen, placeable[0]).ConfigureAwait(true);
+
+            if (placeable.Count == 1)
+            {
+                return null;
+            }
+
+            var others = placeable.Count - 1;
+
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{placeable[0].Name} is the background; the other {others} went into the stock only.");
+        }
+
+        foreach (var asset in placeable)
+        {
             await _session.AddItemAsync(screen, asset, position: null).ConfigureAwait(true);
         }
+
+        return null;
     }
 
     private static string Progressing(IntakeProgress step) =>
