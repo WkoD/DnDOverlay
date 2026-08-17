@@ -149,6 +149,35 @@ public sealed class EventCatalogueTests
     }
 
     /// <summary>
+    /// And the neutral entry says the SAME THING, word for word. The placeholders matching is not
+    /// enough: it was, and the two halves of <c>4004</c> drifted apart underneath it.
+    /// <para>
+    /// <b>What it cost.</b> The declaration told the DM to "call for orphaned devices" - a grip that
+    /// belongs to M5a and does not exist - while the catalogue said to reset the pairing at each
+    /// device. Both are read by the same person for the same fault, and which one they got depended
+    /// on whether the line was rendered in the process or out of the catalogue. Nothing was wrong
+    /// with either sentence on its own, which is why nothing noticed for two milestones.
+    /// </para>
+    /// <para>
+    /// The neutral entry only. A TRANSLATION differs on purpose - that is what it is for - and it is
+    /// held to the identifier and the placeholders, which the tests above and below cover.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void The_neutral_catalogue_entry_says_what_the_declaration_says()
+    {
+        var wrong = EventCatalogue.Declared
+            .Where(declared => EventCatalogue.Catalogue.TryGetValue(declared.Key, out var entry)
+                && !string.Equals(entry, declared.Message, StringComparison.Ordinal))
+            .Select(declared =>
+                $"{declared.Key}{Environment.NewLine}  code:      {declared.Message}"
+                + $"{Environment.NewLine}  catalogue: {EventCatalogue.Catalogue[declared.Key]}")
+            .ToList();
+
+        Assert.Empty(wrong);
+    }
+
+    /// <summary>
     /// And the other way round, or the catalogue silently keeps entries for messages that no
     /// longer exist - the kind of leftover that makes a retired number look free.
     /// </summary>

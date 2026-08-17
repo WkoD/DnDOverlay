@@ -224,10 +224,13 @@ public sealed partial class App : Application, IDisposable
                     + "The identity of this control was recovered from it, so the paired displays find "
                     + "it again by themselves - they arrive as pairing requests, because their tokens "
                     + "went with the file. Allow them here; nothing has to be done at the devices."
+                // No mention of calling for orphaned devices: that grip is M5a, and a sentence that
+                // points at a function which does not exist leaves the reader worse off than one
+                // that names the only thing they can actually do (Part 8).
                 : $"control.json was unreadable and was set aside as {loaded.SetAside ?? "(not kept)"}. "
                     + "This control started with defaults - and with a new identity, so paired displays "
-                    + "discard its announcements and will not appear here by themselves. Call for "
-                    + "orphaned devices, or reset the pairing at each device.");
+                    + "discard its announcements and will not appear here by themselves. The pairing "
+                    + "has to be reset at each device.");
         }
     }
 

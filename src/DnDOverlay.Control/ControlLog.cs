@@ -33,13 +33,19 @@ internal static partial class ControlLog
     /// the identity gone, this control's own displays treat it as a stranger and never knock at
     /// all. "Allowed again" alone would read like "they will be back in a minute", and they will
     /// not (Part 4, Part 6).
+    /// <para>
+    /// <b>It names the walk and not the call for orphaned devices</b>, although the plan has both:
+    /// that grip is M5a and does not exist. A line read in the worst position this program has -
+    /// identity gone, every table silent - must not send the reader looking for a function they
+    /// cannot find. <b>When M5a builds it, this line and the catalogue entry change together.</b>
+    /// </para>
     /// </summary>
     [LoggerMessage(
         EventId = 4004,
         Level = LogLevel.Warning,
         Message = "control.json was unreadable. Set aside as {SetAside}; starting with defaults "
                   + "and a new identity, so paired displays will not find this control by "
-                  + "themselves - call for orphaned devices, or reset the pairing at each device.")]
+                  + "themselves - their pairing has to be reset at each device.")]
     internal static partial void ConfigurationReplaced(ILogger logger, string setAside);
 
     /// <summary>
