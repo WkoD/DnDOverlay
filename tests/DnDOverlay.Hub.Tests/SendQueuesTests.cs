@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Core.Tests.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,10 +9,11 @@ namespace DnDOverlay.Hub.Tests;
 /// <summary>
 /// The three queues in front of one socket.
 /// <para>
-/// Two of them carry no message yet - progress arrives with M2, the transient traffic with M3 -
-/// so they are driven here by hand. A queue that has never had anything in it is a queue nobody
-/// has proven, and the rules it enforces are exactly the ones that only show themselves under a
-/// load that does not exist for another two milestones (Part 4, Part 10).
+/// The rules are driven here by hand, with pings standing in for real traffic, so that what is
+/// being read is the queueing and nothing else. <b>The transient rank still carries no real
+/// message</b> - touch points arrive with M3 - and a queue that has never had anything in it is a
+/// queue nobody has proven (Part 4, Part 10). The progress rank stopped being one of those in M2b,
+/// and the counter-check at the bottom is where it is put under a real load.
 /// </para>
 /// <para>
 /// Nothing runs the pump while messages are being queued, so what comes out afterwards is a fact
@@ -170,6 +172,128 @@ public sealed class SendQueuesTests
         Assert.True(queues.Closing.IsCancellationRequested);
         Assert.Empty(socket.Written);
     }
+
+    /// <summary>
+    /// <b>The counter-check, and it is the other direction from every test above.</b> Those stage a
+    /// limit and show it bites; this one stages the evening the program is actually for and shows
+    /// that <b>nothing bites at all</b> - four devices, twenty items on each scene, all connected,
+    /// against the REAL defaults.
+    /// <para>
+    /// It was passed once, in M1b, and it was worth little there: <c>AssetProgress</c> did not
+    /// exist, so the rank that shares the socket with the state queue was empty. M2b noted that it
+    /// had to run again with that traffic in it and then did not run it - the posten fell between
+    /// the derivation and the milestone's close, which is why it is written down as a test now
+    /// rather than walked once by hand (checks/M2.md).
+    /// </para>
+    /// <para>
+    /// <b>Four sockets, not one bigger queue.</b> The queues hang off the socket, so four devices
+    /// are four of these - and staging them as one would quietly test a load four times too heavy
+    /// against a ceiling that is per connection (Part 4).
+    /// </para>
+    /// <para>
+    /// The pump never runs, which is the worst honest case: every message of the burst is in the
+    /// queue at once, as it would be behind a socket that has stopped taking anything for a moment.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_realistic_evening_trips_no_limit()
+    {
+        var defaults = new HubOptions();
+        var heaviest = 0;
+
+        for (var device = 0; device < 4; device++)
+        {
+            using var socket = new RecordingSocket();
+            using var queues = Queues(socket);
+
+            var screen = new ScreenRef(new DeviceId(Guid.NewGuid()), new ScreenId("DISPLAY" + device));
+            var assets = Enumerable.Range(0, 20).Select(Asset).ToList();
+            var queued = 0L;
+
+            // How a scene of twenty comes about: the snapshot the device gets on connecting, then
+            // one patch per picture as the DM sends them.
+            void Send(ProtocolMessage message, SendClass rank)
+            {
+                var bytes = ProtocolJson.Serialise(message).Length;
+
+                heaviest = Math.Max(heaviest, bytes);
+
+                if (rank is SendClass.State)
+                {
+                    queued += bytes;
+                }
+
+                Assert.True(queues.TrySend(message, rank), $"{message.GetType().Name} was refused");
+            }
+
+            Send(new SceneSnapshotMessage(screen, Scene(assets)), SendClass.State);
+
+            for (var item = 0; item < 20; item++)
+            {
+                Send(
+                    new ScenePatchMessage(new ScenePatch(
+                        [new ScreenOp(screen, new AddItem(Item(assets[item])))])),
+                    SendClass.State);
+
+                // And the progress that goes with them, every picture in every reading - the rank
+                // that was empty when this check last ran.
+                Send(
+                    new AssetProgressMessage(
+                        [.. assets.Select(asset => new AssetLoad(asset, 0.5, AssetLoadState.Loading))]),
+                    SendClass.Progress);
+            }
+
+            Assert.False(
+                queues.Closing.IsCancellationRequested,
+                $"device {device} tripped a limit on an ordinary evening");
+
+            // Not merely under the ceiling - far under it, so that this stays an answer as scenes
+            // grow. A burst that used nine tenths of the room would pass today and say nothing.
+            Assert.True(
+                queued * 4 < defaults.MaxStateBytes,
+                $"the state burst was {queued} bytes against a ceiling of {defaults.MaxStateBytes}");
+        }
+
+        // The largest single message an evening produces, against the ceiling meant to catch a
+        // runaway one. Stated as a number so a future scene that quadruples it fails here.
+        Assert.True(
+            heaviest * 8 < defaults.MaxStateBytes,
+            $"the heaviest message was {heaviest} bytes against a ceiling of {defaults.MaxStateBytes}");
+    }
+
+    private static AssetId Asset(int n) =>
+        new(n.ToString(null as IFormatProvider).PadLeft(64, 'e'));
+
+    /// <summary>A scene as a table really carries it: a background and twenty named pictures.</summary>
+    private static SceneState Scene(IReadOnlyList<AssetId> assets) =>
+        SceneState.Empty with
+        {
+            Background = new BackgroundItem(
+                new AssetId(new string('f', 64)), Meta(), "Sturmkueste", ShowName: false,
+                BackgroundFit.Cover, OffsetX: 0, OffsetY: 0, AnimationPaused: false),
+            Items = [.. assets.Select(Item)],
+        };
+
+    private static ImageItem Item(AssetId asset) =>
+        new(
+            ItemId: new ItemId(Guid.NewGuid()),
+            CenterX: 0.5,
+            CenterY: 0.5,
+            Scale: 0.4,
+            AspectRatio: 4d / 3d,
+            RotationDeg: 0,
+            ZOrder: 0,
+            Locked: false,
+            Parked: false,
+            Revision: 1,
+            AssetId: asset,
+            Meta: Meta(),
+            Name: "Dilwyn Kemri von den Hazim'Tor",
+            ShowName: true,
+            AnimationPaused: false);
+
+    private static AssetMeta Meta() =>
+        new(1920, 1080, "png", Bytes: 2_400_000, IsAnimated: false, ContentHash: new string('a', 64));
 
     /// <summary>
     /// Pings, distinguished by their round-trip field. All one type on the wire, so what is being
