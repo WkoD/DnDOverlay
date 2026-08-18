@@ -25,6 +25,9 @@ namespace DnDOverlay.Core;
 [JsonDerivedType(typeof(SetAnimationPaused), "setAnimationPaused")]
 [JsonDerivedType(typeof(ToggleItems), "toggleItems")]
 [JsonDerivedType(typeof(ToggleBackground), "toggleBackground")]
+[JsonDerivedType(typeof(TransformItem), "transformItem")]
+[JsonDerivedType(typeof(SetLocked), "setLocked")]
+[JsonDerivedType(typeof(ParkItem), "parkItem")]
 public abstract record PatchOp;
 
 /// <summary>
@@ -39,6 +42,49 @@ public sealed record AddItem(SceneItem Item) : PatchOp;
 /// twice or late.
 /// </summary>
 public sealed record RemoveItem(ItemId Item) : PatchOp;
+
+/// <summary>
+/// Where an item lies now: pushed, zoomed, turned. The values are FINISHED - clamped against the
+/// screen, held between the two scale bounds, with the <c>ZOrder</c> and the <c>Revision</c> the
+/// hub handed out (Part 1, rule 2; Part 4). A display sends an intention and gets this back.
+/// <para>
+/// <b>It goes through even for a locked item</b>, and that is not an oversight: the lock guards
+/// against the TABLE, not against the DM, who would otherwise have to unlock before every
+/// correction. The refusal sits in <c>ISessionApi</c>, where the origin of the command is known -
+/// the reducer sees only the operation and could not tell the two apart (Part 3).
+/// </para>
+/// </summary>
+public sealed record TransformItem(
+    ItemId Item,
+    double CenterX,
+    double CenterY,
+    double Scale,
+    double RotationDeg,
+    int ZOrder,
+    long Revision) : PatchOp;
+
+/// <summary>
+/// Locks an item against gestures at the table, or releases it. "Unlock all" is not an operation
+/// of its own: it is one of these per locked item, in one patch (Part 4).
+/// <para>
+/// The revision stays where it is, as with the caption switches. <c>Revision</c> orders
+/// TRANSFORMS - it is what a display weighs its own running gesture against - and a padlock has
+/// nothing to weigh against a gesture.
+/// </para>
+/// </summary>
+public sealed record SetLocked(ItemId Item, bool Locked) : PatchOp;
+
+/// <summary>
+/// Puts an item into the slot bar along the park edge, or takes it out again.
+/// <para>
+/// It carries no position: where a parked picture lies follows from the LIST of parked pictures
+/// and the screen's park edge, and both ends work it out with the same function
+/// (<see cref="Parking"/>). Sending coordinates instead would leave the bar with a gap in it as
+/// soon as one picture left, and a scene loaded onto another screen would carry the first
+/// screen's edge with it.
+/// </para>
+/// </summary>
+public sealed record ParkItem(ItemId Item, bool Parked, int ZOrder, long Revision) : PatchOp;
 
 /// <summary>
 /// Puts a picture on the background layer, replacing whatever was there. Removing is

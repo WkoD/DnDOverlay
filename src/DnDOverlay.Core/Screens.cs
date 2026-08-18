@@ -142,7 +142,12 @@ public sealed record ScreenSettings(
     PlacementMode? Placement = null,
     int? DefaultRotationDeg = null,
     ParkEdge? ParkEdge = null,
-    double? ImageTextSize = null)
+    double? ImageTextSize = null,
+    double? RotationDeadZoneDeg = null,
+    double? RotationSnapToleranceDeg = null,
+    double? ArrivalHighlightSeconds = null,
+    bool? Inertia = null,
+    bool? ScrollUpZoomsIn = null)
 {
     /// <summary>Nothing changed - the answer when a diff finds no difference.</summary>
     public static readonly ScreenSettings None = new();
@@ -167,7 +172,12 @@ public sealed record ScreenSettings(
         && Placement is null
         && DefaultRotationDeg is null
         && ParkEdge is null
-        && ImageTextSize is null;
+        && ImageTextSize is null
+        && RotationDeadZoneDeg is null
+        && RotationSnapToleranceDeg is null
+        && ArrivalHighlightSeconds is null
+        && Inertia is null
+        && ScrollUpZoomsIn is null;
 
     /// <summary>
     /// The full effective set of a screen, for the baseline in the <c>Hello</c>. Size and DPI are
@@ -188,7 +198,12 @@ public sealed record ScreenSettings(
             Placement: context.Placement,
             DefaultRotationDeg: context.DefaultRotationDeg,
             ParkEdge: context.ParkEdge,
-            ImageTextSize: context.ImageTextSize);
+            ImageTextSize: context.ImageTextSize,
+            RotationDeadZoneDeg: context.RotationDeadZoneDeg,
+            RotationSnapToleranceDeg: context.RotationSnapToleranceDeg,
+            ArrivalHighlightSeconds: context.ArrivalHighlightSeconds,
+            Inertia: context.Inertia,
+            ScrollUpZoomsIn: context.ScrollUpZoomsIn);
     }
 
     /// <summary>Lays this delta over a context, leaving untouched whatever it does not mention.</summary>
@@ -207,7 +222,46 @@ public sealed record ScreenSettings(
             DefaultRotationDeg = DefaultRotationDeg ?? context.DefaultRotationDeg,
             ParkEdge = ParkEdge ?? context.ParkEdge,
             ImageTextSize = ImageTextSize ?? context.ImageTextSize,
+            RotationDeadZoneDeg = RotationDeadZoneDeg ?? context.RotationDeadZoneDeg,
+            RotationSnapToleranceDeg = RotationSnapToleranceDeg ?? context.RotationSnapToleranceDeg,
+            ArrivalHighlightSeconds = ArrivalHighlightSeconds ?? context.ArrivalHighlightSeconds,
+            Inertia = Inertia ?? context.Inertia,
+            ScrollUpZoomsIn = ScrollUpZoomsIn ?? context.ScrollUpZoomsIn,
         };
+    }
+
+    /// <summary>
+    /// Two deltas laid on top of each other, the newer one winning per key. The hub needs this
+    /// where a device changed something while an earlier change was still pending, and it belongs
+    /// here beside the other three rather than at the call site.
+    /// <para>
+    /// <b>It lived in the hub until M3, and it was wrong there.</b> Written out positionally, it
+    /// listed nine of ten fields, and <c>ImageTextSize</c> - added in M2, one milestone earlier -
+    /// fell out of every merge without a sound. That is the fifth place a screen parameter has to
+    /// be known, and the round-trip test now holds this one too.
+    /// </para>
+    /// </summary>
+    public static ScreenSettings Merge(ScreenSettings older, ScreenSettings newer)
+    {
+        ArgumentNullException.ThrowIfNull(older);
+        ArgumentNullException.ThrowIfNull(newer);
+
+        return new ScreenSettings(
+            CustomName: newer.CustomName ?? older.CustomName,
+            MinVisiblePixels: newer.MinVisiblePixels ?? older.MinVisiblePixels,
+            MinScale: newer.MinScale ?? older.MinScale,
+            MaxScale: newer.MaxScale ?? older.MaxScale,
+            ScaleOnLoad: newer.ScaleOnLoad ?? older.ScaleOnLoad,
+            MaxWidthOnLoad: newer.MaxWidthOnLoad ?? older.MaxWidthOnLoad,
+            Placement: newer.Placement ?? older.Placement,
+            DefaultRotationDeg: newer.DefaultRotationDeg ?? older.DefaultRotationDeg,
+            ParkEdge: newer.ParkEdge ?? older.ParkEdge,
+            ImageTextSize: newer.ImageTextSize ?? older.ImageTextSize,
+            RotationDeadZoneDeg: newer.RotationDeadZoneDeg ?? older.RotationDeadZoneDeg,
+            RotationSnapToleranceDeg: newer.RotationSnapToleranceDeg ?? older.RotationSnapToleranceDeg,
+            ArrivalHighlightSeconds: newer.ArrivalHighlightSeconds ?? older.ArrivalHighlightSeconds,
+            Inertia: newer.Inertia ?? older.Inertia,
+            ScrollUpZoomsIn: newer.ScrollUpZoomsIn ?? older.ScrollUpZoomsIn);
     }
 
     /// <summary>
@@ -234,7 +288,20 @@ public sealed record ScreenSettings(
                 ? null
                 : after.DefaultRotationDeg,
             ParkEdge: before.ParkEdge == after.ParkEdge ? null : after.ParkEdge,
-            ImageTextSize: before.ImageTextSize == after.ImageTextSize ? null : after.ImageTextSize);
+            ImageTextSize: before.ImageTextSize == after.ImageTextSize ? null : after.ImageTextSize,
+            RotationDeadZoneDeg: before.RotationDeadZoneDeg == after.RotationDeadZoneDeg
+                ? null
+                : after.RotationDeadZoneDeg,
+            RotationSnapToleranceDeg: before.RotationSnapToleranceDeg == after.RotationSnapToleranceDeg
+                ? null
+                : after.RotationSnapToleranceDeg,
+            ArrivalHighlightSeconds: before.ArrivalHighlightSeconds == after.ArrivalHighlightSeconds
+                ? null
+                : after.ArrivalHighlightSeconds,
+            Inertia: before.Inertia == after.Inertia ? null : after.Inertia,
+            ScrollUpZoomsIn: before.ScrollUpZoomsIn == after.ScrollUpZoomsIn
+                ? null
+                : after.ScrollUpZoomsIn);
     }
 }
 
@@ -397,7 +464,41 @@ public sealed record ScreenContext(
     /// Windows scaling, so what is left over is exactly the correction no machine can make.
     /// </para>
     /// </summary>
-    double ImageTextSize)
+    double ImageTextSize,
+
+    /// <summary>
+    /// Below this angle a two-finger gesture does not rotate at all (Part 6). Two fingers turn a
+    /// picture a LITTLE every time; without the dead zone everything on the table stands crooked
+    /// after an evening, and nobody meant to do it.
+    /// </summary>
+    double RotationDeadZoneDeg,
+
+    /// <summary>
+    /// How close to a quarter turn an angle has to end up to be pulled onto it when the finger
+    /// lifts - <c>0</c> switches snapping off. Never DURING the gesture: a picture that clicks
+    /// into place under the finger feels broken (Part 6).
+    /// </summary>
+    double RotationSnapToleranceDeg,
+
+    /// <summary>
+    /// How long a newly arrived picture lights up, in seconds - <c>0</c> switches it off, the same
+    /// shape <see cref="RotationSnapToleranceDeg"/> uses. On a table holding twelve pictures a
+    /// thirteenth appears somewhere in the flow order and nobody notices it; sound is not available
+    /// as a channel, so the picture has to draw attention to itself (Part 6).
+    /// </summary>
+    double ArrivalHighlightSeconds,
+
+    /// <summary>
+    /// Whether a pushed picture glides on after the finger leaves, damped towards the edge
+    /// (Part 6). Off is safe and wooden - on a table lying flat one pushes across real distances.
+    /// </summary>
+    bool Inertia,
+
+    /// <summary>
+    /// Wheel up makes a picture larger. Java had it the other way round, which is the one thing
+    /// about a wheel that everybody has an opinion on (Part 6).
+    /// </summary>
+    bool ScrollUpZoomsIn)
 {
     /// <summary>The screen height in DIP - the unit <see cref="MinVisiblePixels"/> is given in.</summary>
     public double HeightInDip => Dpi <= 0 ? Size.Height : Size.Height * 96d / Dpi;
@@ -405,9 +506,22 @@ public sealed record ScreenContext(
     /// <summary>The screen width in DIP.</summary>
     public double WidthInDip => Dpi <= 0 ? Size.Width : Size.Width * 96d / Dpi;
 
-    /// <summary><see cref="MinVisiblePixels"/> expressed in the normalised unit the scene uses.</summary>
-    public double MinVisibleNormalised =>
+    /// <summary>
+    /// <see cref="MinVisiblePixels"/> expressed in the normalised unit of the VERTICAL axis.
+    /// <para>
+    /// There are two of these and there has to be: normalised Y is a fraction of the screen height
+    /// and normalised X a fraction of its WIDTH, so the same physical length is a different number
+    /// on each axis. Using one of them for both leaves 96 DIP standing at the top edge and 54 at
+    /// the side of a 16:9 table - the edge clamp would be nearly half as strict sideways as it
+    /// promises.
+    /// </para>
+    /// </summary>
+    public double MinVisibleNormalisedY =>
         HeightInDip <= 0 ? 0 : MinVisiblePixels / HeightInDip;
+
+    /// <summary><see cref="MinVisiblePixels"/> expressed in the normalised unit of the horizontal axis.</summary>
+    public double MinVisibleNormalisedX =>
+        WidthInDip <= 0 ? 0 : MinVisiblePixels / WidthInDip;
 
     /// <summary>
     /// The screen's own aspect ratio. It has to enter the width cap, because <c>Scale</c> means
@@ -445,6 +559,15 @@ public sealed record ScreenContext(
             // Around one and a half times Windows' standard text: readable at arm's length on the
             // table without a small portrait running straight into the truncation (decided in
             // checks/M2.md). A starting point, and one the hand-run is meant to move.
-            ImageTextSize: 18);
+            ImageTextSize: 18,
+
+            // All five are proposals from the parameter table in Part 6 and stay proposals until
+            // the hand-run of M3b has had fingers on them. Whichever of them turns out wrong, the
+            // NUMBER is corrected afterwards and not the test (Guide G6).
+            RotationDeadZoneDeg: 5,
+            RotationSnapToleranceDeg: 4,
+            ArrivalHighlightSeconds: 2,
+            Inertia: true,
+            ScrollUpZoomsIn: true);
     }
 }

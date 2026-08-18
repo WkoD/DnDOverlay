@@ -31,6 +31,9 @@ public sealed class PatchOpJsonTests
         new SetAnimationPaused(Item, Paused: true),
         new ToggleItems(Visible: false),
         new ToggleBackground(Visible: false),
+        new TransformItem(Item, CenterX: 0.4, CenterY: 0.6, Scale: 0.35, RotationDeg: 270, ZOrder: 12, Revision: 48),
+        new SetLocked(Item, Locked: true),
+        new ParkItem(Item, Parked: true, ZOrder: 13, Revision: 49),
     ];
 
     public static TheoryData<PatchOp> AllOperations() => [.. Operations];

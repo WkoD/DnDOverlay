@@ -302,7 +302,7 @@ public sealed class ScreenCatalog
             }
 
             _pending[screen] = _pending.TryGetValue(screen, out var known)
-                ? Merge(known, settings)
+                ? ScreenSettings.Merge(older: known, newer: settings)
                 : settings;
         }
 
@@ -479,18 +479,6 @@ public sealed class ScreenCatalog
             : update.Screens
                 .Where(screen => screen.Settings is not null)
                 .ToDictionary(screen => screen.Screen, screen => screen.Settings!);
-
-    private static ScreenSettings Merge(ScreenSettings older, ScreenSettings newer) =>
-        new(
-            newer.CustomName ?? older.CustomName,
-            newer.MinVisiblePixels ?? older.MinVisiblePixels,
-            newer.MinScale ?? older.MinScale,
-            newer.MaxScale ?? older.MaxScale,
-            newer.ScaleOnLoad ?? older.ScaleOnLoad,
-            newer.MaxWidthOnLoad ?? older.MaxWidthOnLoad,
-            newer.Placement ?? older.Placement,
-            newer.DefaultRotationDeg ?? older.DefaultRotationDeg,
-            newer.ParkEdge ?? older.ParkEdge);
 
     /// <summary>Called under the lock.</summary>
     private ScreenView View(ScreenRef screen, Entry entry) =>

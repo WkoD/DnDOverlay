@@ -97,9 +97,15 @@ public sealed class ScreenSettingsTests
     /// listed by hand: a value is changed, taken to a full set, laid back over the defaults, and
     /// asked for as a delta. Four places have to know about a parameter -
     /// <see cref="ScreenSettings.Of"/>, <see cref="ScreenSettings.ApplyTo"/>,
-    /// <see cref="ScreenSettings.Diff"/> and <see cref="ScreenSettings.IsEmpty"/> - and forgetting
-    /// one of them does not fail anywhere. It drops a value silently, which is the same shape as
-    /// the two-place <c>Merge</c> that Part 3 already cost us once.
+    /// <see cref="ScreenSettings.Diff"/>, <see cref="ScreenSettings.IsEmpty"/> and
+    /// <see cref="ScreenSettings.Merge"/> - and forgetting one of them does not fail anywhere. It
+    /// drops a value silently.
+    /// <para>
+    /// <b>Five, not four, and the fifth was found by walking into it</b> (M3a): <c>Merge</c> lived
+    /// in the hub, written out positionally, and had never heard of <c>ImageTextSize</c> - a
+    /// parameter added a milestone earlier fell out of every merge of two pending deltas. The four
+    /// places this test already held were all correct; the place it did not know about was not.
+    /// </para>
     /// <para>
     /// <b>Measured, not foreseen:</b> the tests above set five of the eight parameters and would
     /// have passed with a sixth missing from all four - they compare a changed context against
@@ -127,6 +133,14 @@ public sealed class ScreenSettingsTests
         // IsEmpty: a delta that carries this one is not empty. Without it a forgotten parameter
         // would be diffed correctly and then thrown away as "nothing to send".
         Assert.False(delta.IsEmpty, $"a delta carrying only {name} says it is empty");
+
+        // Merge: laid over an empty older delta it survives, and it beats an older value for the
+        // same key. Both directions, because dropping a field looks identical to "the older one
+        // won" from the outside.
+        Assert.NotNull(reported.GetValue(ScreenSettings.Merge(ScreenSettings.None, delta)));
+        Assert.Equal(
+            reported.GetValue(delta),
+            reported.GetValue(ScreenSettings.Merge(ScreenSettings.Of(Context, null), delta)));
     }
 
     /// <summary>
@@ -169,6 +183,7 @@ public sealed class ScreenSettingsTests
     {
         double number => number + 7,
         int number => number + 90,
+        bool value => !value,
         Enum value => Enum.GetValues(value.GetType())
             .Cast<Enum>()
             .First(candidate => !candidate.Equals(value)),

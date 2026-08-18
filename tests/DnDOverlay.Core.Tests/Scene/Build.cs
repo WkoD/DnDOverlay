@@ -31,6 +31,8 @@ internal static class Build
         string name = "Grimmbart",
         bool showName = false,
         bool animationPaused = false,
+        bool locked = false,
+        bool parked = false,
         long revision = 1) =>
         new(
             ItemId: id ?? new ItemId(Guid.NewGuid()),
@@ -40,8 +42,8 @@ internal static class Build
             AspectRatio: aspectRatio,
             RotationDeg: rotationDeg,
             ZOrder: zOrder,
-            Locked: false,
-            Parked: false,
+            Locked: locked,
+            Parked: parked,
             Revision: revision,
             AssetId: asset ?? Asset(),
             Meta: Meta(),

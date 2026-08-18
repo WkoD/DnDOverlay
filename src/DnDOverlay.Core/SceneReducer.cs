@@ -31,10 +31,9 @@ public static class SceneReducer
         return op switch
         {
             AddItem add => ApplyAddItem(scene, add),
-            RemoveItem remove => scene with
-            {
-                Items = [.. scene.Items.Where(item => item.ItemId != remove.Item)],
-            },
+            RemoveItem remove => Parking.Arrange(
+                scene with { Items = [.. scene.Items.Where(item => item.ItemId != remove.Item)] },
+                screen),
             SetBackground background => scene with { Background = background.Background },
             ClearBackground => scene with { Background = null },
             SetName name => ApplySetName(scene, name),
@@ -50,9 +49,58 @@ public static class SceneReducer
                 background => background with { AnimationPaused = paused.Paused }),
             ToggleItems items => scene with { ItemsVisible = items.Visible },
             ToggleBackground background => scene with { BackgroundVisible = background.Visible },
+            TransformItem transform => ApplyTransform(scene, transform),
+            SetLocked locked => ApplyToItem(
+                scene, locked.Item, item => item with { Locked = locked.Locked }),
+            ParkItem park => Parking.Arrange(
+                ApplyToItem(
+                    scene,
+                    park.Item,
+                    item => item with
+                    {
+                        Parked = park.Parked,
+                        ZOrder = park.ZOrder,
+                        Revision = park.Revision,
+                    }),
+                screen),
             _ => scene,
         };
     }
+
+    /// <summary>
+    /// Moves an item to where it now lies. Nothing is computed - the hub has clamped the position,
+    /// held the scale between its bounds and handed out the revision, and the display applies the
+    /// very same values (Part 1, rule 2).
+    /// <para>
+    /// <b>An older revision is not refused here.</b> Ordering is the hub's, and by the time an
+    /// operation reaches a reducer it has already won; a display that receives one out of order
+    /// weighs it against its OWN running gesture, which is a question about the gesture and not
+    /// about the scene (Part 4, conflict resolution).
+    /// </para>
+    /// </summary>
+    private static SceneState ApplyTransform(SceneState scene, TransformItem op) =>
+        ApplyToItem(
+            scene,
+            op.Item,
+            item => item with
+            {
+                CenterX = op.CenterX,
+                CenterY = op.CenterY,
+                Scale = op.Scale,
+                RotationDeg = op.RotationDeg,
+                ZOrder = op.ZOrder,
+                Revision = op.Revision,
+            });
+
+    /// <summary>
+    /// One item by its id, or nothing at all. Unlike <see cref="ApplyToOne"/> there is no fallback
+    /// to the background: a background layer cannot be pushed, locked or parked.
+    /// </summary>
+    private static SceneState ApplyToItem(SceneState scene, ItemId id, Func<SceneItem, SceneItem> change) =>
+        scene with
+        {
+            Items = [.. scene.Items.Select(item => item.ItemId == id ? change(item) : item)],
+        };
 
     /// <summary>
     /// Renames the ASSET wherever it shows on this screen - every item carrying it and the
