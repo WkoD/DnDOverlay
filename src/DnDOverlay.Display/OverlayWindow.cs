@@ -38,7 +38,7 @@ internal sealed class OverlayWindow : Window
     /// </summary>
     private static readonly TimeSpan ShowNameFor = TimeSpan.FromSeconds(4);
 
-    private readonly MonitorInfo _monitor;
+    private MonitorInfo _monitor;
     private readonly bool _windowed;
     /// <summary>
     /// The drawing surface. <c>Background = null</c> rather than <c>Transparent</c>, because a null
@@ -171,6 +171,29 @@ internal sealed class OverlayWindow : Window
     }
 
     internal ScreenId ScreenId => _monitor.Screen.ScreenId;
+
+    /// <summary>
+    /// The screen changed its resolution, its scaling or its place, and this window follows it.
+    /// <para>
+    /// <b>Found at the table (hand-run of M3b, step 37c3), and it produced both halves of that
+    /// finding.</b> A window is placed when it is created and never again, so after a resolution
+    /// change it kept the old pixel bounds: pictures near the old right edge lay OUTSIDE the new
+    /// screen and could not be reached, and everything on it was stretched - the scene is
+    /// normalised against the screen's aspect ratio while it was being drawn onto a surface of the
+    /// old shape. The hub had recomputed the items correctly; the surface they were drawn on was
+    /// the wrong one.
+    /// </para>
+    /// <para>
+    /// Resizing raises <see cref="SurfaceChanged"/> by itself, so the redraw is not asked for here.
+    /// </para>
+    /// </summary>
+    internal void Moved(MonitorInfo monitor)
+    {
+        _monitor = monitor;
+        Title = monitor.Screen.Label;
+
+        Settle();
+    }
 
     /// <summary>
     /// How this screen stands. It decides whether gestures do anything at all: on
@@ -405,10 +428,18 @@ internal sealed class OverlayWindow : Window
 
         foreach (var item in scene.Items.OfType<ImageItem>())
         {
-            if (loading.TryGetValue(item.AssetId, out var fraction))
+            if (!loading.TryGetValue(item.AssetId, out var fraction))
             {
-                _rings.Children.Add(Ring(Layout.ItemToRect(item, context), fraction, width, height));
+                continue;
             }
+
+            // At the place the FINGER has it, not the one the hub last knew. Measured at the table
+            // (hand-run of M3b, step 37b): a picture still loading could be pushed around while its
+            // ring stayed where it had first appeared - the ring is rebuilt from the scene, and
+            // during a gesture the scene is deliberately the older of the two truths.
+            var where = _held.TryGetValue(item.ItemId, out var hold) ? hold.Item : item;
+
+            _rings.Children.Add(Ring(Layout.ItemToRect(where, context), fraction, width, height));
         }
 
         if (waiting)
@@ -554,6 +585,15 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
+        if (hold.Parked)
+        {
+            // The swipe has already gone into the bar. A residual inertial step would report a
+            // position the hub would take for the newest truth.
+            e.Complete();
+
+            return;
+        }
+
         var (width, height) = Surface(context);
         var delta = e.DeltaManipulation;
 
@@ -605,6 +645,10 @@ internal sealed class OverlayWindow : Window
 
         if (CoreManipulation.ShouldPark(hold.Item, velocity.X * 1000, velocity.Y * 1000, context))
         {
+            // Marked BEFORE the message goes out: everything this gesture does from here on has to
+            // stay silent, or the transform that follows undoes the park (see Hold.Parked).
+            hold.Parked = true;
+
             Parked?.Invoke(item, true);
             Still(e);
 
@@ -646,6 +690,16 @@ internal sealed class OverlayWindow : Window
 
         if (_context is not { } context || !_held.TryGetValue(item, out var hold))
         {
+            return;
+        }
+
+        if (hold.Parked)
+        {
+            // Where a parked picture lies is the bar's business, and the bar is worked out at both
+            // ends from the LIST. A binding transform here would be this gesture answering a
+            // question it does not get to answer - and it would win, because it arrives second.
+            _held.Remove(item);
+
             return;
         }
 
@@ -1323,6 +1377,18 @@ internal sealed class OverlayWindow : Window
 
         /// <summary>How far the hand has travelled in DIP - a tap is a gesture that barely moved.</summary>
         internal double Moved { get; set; }
+
+        /// <summary>
+        /// This gesture ended in the slot bar. From then on it reports NOTHING more.
+        /// <para>
+        /// <b>Found at the table, and it made parking look broken.</b> The swipe sent
+        /// <c>ItemParked</c>, WPF then raised <c>ManipulationCompleted</c> as it does for every
+        /// gesture, and the binding <c>ItemTransformed</c> that followed carried the position the
+        /// finger had let go at. The hub applied both in order: into the slot, and straight back
+        /// out of it. The item was flagged as parked and lay where it had been dropped.
+        /// </para>
+        /// </summary>
+        internal bool Parked { get; set; }
 
         internal long Began { get; } = Environment.TickCount64;
 

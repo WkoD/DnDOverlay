@@ -246,6 +246,9 @@
   <data name="E3023_FrameTimes" xml:space="preserve">
     <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %.</value>
   </data>
+  <data name="E3026_RenderPath" xml:space="preserve">
+    <value>Render path: tier {Tier}, mode {Mode}.</value>
+  </data>
   <data name="E3025_PictureSharpened" xml:space="preserve">
     <value>{Name} decoded again at {StepPixels} px, up from {BeforePixels} px.</value>
   </data>

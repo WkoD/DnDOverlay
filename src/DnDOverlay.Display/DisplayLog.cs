@@ -76,6 +76,27 @@ internal static partial class DisplayLog
         ILogger logger, int fetched, long milliseconds, long bytes, int peak, int alreadyHere);
 
     /// <summary>
+    /// What the render path is, written once at startup.
+    /// <para>
+    /// <b>Part 11 asks for it in the log's HEADER, and it cannot go there:</b> the header is written
+    /// by <c>ProcessLog</c> in Core, which knows nothing about WPF and must not (Part 2). So it is
+    /// the display's first line instead - same file, same run, one line further down.
+    /// </para>
+    /// <para>
+    /// <c>Tier</c> describes the hardware and not the layered window - tier 2 under forced software
+    /// rendering is measured (Part 6), so it is a negative test only: <c>0</c> means software for
+    /// certain. The MODE beside it is the thing the counter-test of 37a switches, and without this
+    /// line there is no way to tell whether it took - which is exactly how the first hand-run ended,
+    /// with "the registry edit had no effect, wrong command?".
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3026,
+        Level = LogLevel.Information,
+        Message = "Render path: tier {Tier}, mode {Mode}.")]
+    internal static partial void RenderPath(ILogger logger, int tier, string mode);
+
+    /// <summary>
     /// A picture was decoded a step larger because it is being drawn larger than it was decoded.
     /// Debug rather than Information: it happens whenever somebody zooms, and it is a reading for
     /// the evening when the table went soft or slow, not news (Part 6).

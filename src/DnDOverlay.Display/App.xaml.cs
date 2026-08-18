@@ -234,6 +234,13 @@ public sealed partial class App : Application, IDisposable
         // thirty seconds either way (Part 10).
         _frames = new FrameWatch(_logger, PlayingScreens);
 
+        // Said once, at the start: without it there is no way to tell whether forced software
+        // rendering took - and that is how the first hand-run of 37a ended (checks/M3.md).
+        var tier = RenderCapability.Tier >> 16;
+        var mode = RenderOptions.ProcessRenderMode.ToString();
+
+        DisplayLog.RenderPath(_logger, tier, mode);
+
         _device = new DeviceId(loaded.Value.DeviceId);
 
         _http = new HttpClient();
@@ -524,6 +531,10 @@ public sealed partial class App : Application, IDisposable
             // switching back take effect at once, with no rebuild and no flash (Part 11, step 37e).
             standing.State = command.State;
 
+            // And it follows its monitor: a resolution change leaves the window on the old bounds
+            // otherwise, which puts pictures outside the screen and stretches the rest (37c3).
+            standing.Moved(monitor);
+
             return;
         }
 
@@ -538,7 +549,13 @@ public sealed partial class App : Application, IDisposable
         // What a hand at the table does, on its way to the hub. The window keeps the gesture, this
         // decides how often it is reported and puts it on the wire (Part 4).
         window.Transformed += reported => Report(screen, reported);
-        window.Parked += (item, parked) => _outbox?.TryWrite(new ItemParkedMessage(screen, item, parked));
+        window.Parked += (item, parked) =>
+        {
+            // A gesture that ended in the bar sends no binding transform, so its throttle entry
+            // would otherwise stay behind for good.
+            _throttle.Forget(item);
+            _outbox?.TryWrite(new ItemParkedMessage(screen, item, parked));
+        };
 
         // Zoomed past its step: the next one is decoded from the bytes already in the store, so a
         // sharper picture costs a decode and never a second download (Part 6).
@@ -1494,7 +1511,9 @@ public sealed partial class App : Application, IDisposable
     private IReadOnlyCollection<string> PlayingScreens() =>
     [
         .. _windows.Keys.Select(screen =>
-            _names.TryGetValue(screen, out var named) ? named : screen.Value),
+            _names.TryGetValue(screen, out var named) ? named
+                : _monitors.TryGetValue(screen, out var monitor) ? monitor.Screen.Label
+                : screen.Value),
     ];
 
     private Task RenderAsync(ScreenRef screen) => Dispatcher.InvokeAsync(() => Draw(screen)).Task;
