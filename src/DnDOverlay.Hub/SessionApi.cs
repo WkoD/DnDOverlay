@@ -460,6 +460,73 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task RefitAsync(ScreenRef screen, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        List<PatchOp> ops = [];
+
+        try
+        {
+            var context = _screens.ContextFor(screen);
+            var scene = _scenes.Get(screen);
+
+            if (scene.Items.Count == 0)
+            {
+                return;
+            }
+
+            // Parked pictures move because their bar does - it is measured in the new screen's
+            // units - so the whole scene is fitted first and then read off. Working item by item
+            // would leave the bar computed against a scene half of whose items had already moved.
+            //
+            // What does NOT follow is MinScale, and that is a property of the model rather than an
+            // omission here: MinVisiblePixels is in DIP and means the same length on any screen,
+            // while MinScale is a FRACTION of the screen height - the number that meant 80 DIP on
+            // a 1080p table means 44 on an 800x600 one. Re-deriving it would need a screen to be
+            // able to say "I have no opinion of my own", and there is no such state; it is the
+            // same gap Part 6 records for the base size (M5b/M8).
+            var fitted = Parking.Arrange(
+                scene with
+                {
+                    Items =
+                    [
+                        .. scene.Items.Select(item => Manipulation.HoldAtEdge(
+                            item with { Scale = Layout.ClampScale(item.Scale, item.AspectRatio, context) },
+                            context)),
+                    ],
+                },
+                context);
+
+            foreach (var (before, after) in scene.Items.Zip(fitted.Items))
+            {
+                if (before == after)
+                {
+                    continue;
+                }
+
+                // The finished values travel, as everywhere else: the display is not asked to work
+                // out what a changed screen means, or the two ends would each have their own idea
+                // of where a picture ended up (Part 1, rule 2).
+                ops.Add(new TransformItem(
+                    after.ItemId,
+                    after.CenterX,
+                    after.CenterY,
+                    after.Scale,
+                    after.RotationDeg,
+                    after.ZOrder,
+                    _scenes.NextRevision()));
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await ApplyAsync(screen, ops, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task SetLockedAsync(
         ScreenRef screen, ItemId item, bool locked, CancellationToken cancellationToken = default) =>
         ApplyAsync(screen, new SetLocked(item, locked), cancellationToken);

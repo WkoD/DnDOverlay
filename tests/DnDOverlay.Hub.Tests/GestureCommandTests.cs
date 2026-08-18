@@ -291,6 +291,88 @@ public sealed class GestureCommandTests
     }
 
     /// <summary>
+    /// A screen that changed shape gets its pictures fitted to it. Both bounds are in that
+    /// screen's own DIP, so a table switched to a smaller resolution would otherwise keep
+    /// pictures too small to hit and slivers now past its edge (Part 11, 37c3).
+    /// </summary>
+    [Fact]
+    public async Task A_screen_that_changed_shape_gets_its_pictures_fitted_to_it()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+
+        // Pushed as far to the right edge as a 1080p table allows.
+        await session.TransformItemAsync(
+            Target, new ItemTransform(item, 5, 0.5, 0.1, 0), fromTable: true, toFront: false, Cancellation);
+
+        var before = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
+
+        // A smaller screen: 96 DIP of remainder is a larger share of it, so the place the picture
+        // was allowed to have is no longer allowed.
+        screens.Report(Device, [Info(800, 600)], reported: null);
+        await session.RefitAsync(Target, Cancellation);
+
+        var fitted = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
+        var smaller = screens.ContextFor(Target);
+
+        Assert.True(fitted.CenterX < before.CenterX, "a picture past the new edge was left where it was");
+        Assert.Equal(fitted, Manipulation.HoldAtEdge(fitted, smaller));
+        Assert.Equal(Layout.ClampScale(fitted.Scale, fitted.AspectRatio, smaller), fitted.Scale, precision: 9);
+
+        // <b>And the size does NOT follow, which is a property of the model rather than of this
+        // fit.</b> MinVisiblePixels is in DIP and therefore means the same length on any screen;
+        // MinScale is a FRACTION of the screen height, so the number that meant 80 DIP on the old
+        // screen means 44 on this one. Re-deriving it would need a screen to be able to say "I have
+        // no opinion of my own", and there is no such state - the same gap Part 6 already records
+        // for the base size (M5b/M8).
+        Assert.Equal(before.Scale, fitted.Scale, precision: 9);
+    }
+
+    /// <summary>A screen that changed shape but has nothing lying on it says nothing.</summary>
+    [Fact]
+    public async Task Fitting_an_empty_screen_sends_no_patch()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var stream = await ListenAsync(session);
+
+        await session.RefitAsync(Target, Cancellation);
+        await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+
+        Assert.IsType<AddItem>(Assert.Single((await NextAsync<SessionEvent.ScenePatched>(stream)).Patch.Ops).Op);
+    }
+
+    /// <summary>
+    /// Parked pictures move with their bar: the slots are measured in the new screen's units, so a
+    /// picture that stays where it was would no longer be in one (Part 6).
+    /// </summary>
+    [Fact]
+    public async Task Fitting_moves_the_park_bar_as_well()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.ParkItemAsync(Target, item, parked: true, Cancellation);
+
+        var before = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
+
+        screens.Report(Device, [Info(800, 600)], reported: null);
+        await session.RefitAsync(Target, Cancellation);
+
+        var parked = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
+        var smaller = ScreenContext.Default(new PixelSize(800, 600), 96);
+
+        Assert.True(parked.Parked);
+        Assert.NotEqual(before.CenterX, parked.CenterX);
+        Assert.Equal(Parking.SlotCentre(parked, 0, 1, smaller).X, parked.CenterX, precision: 9);
+        Assert.Equal(Parking.SlotCentre(parked, 0, 1, smaller).Y, parked.CenterY, precision: 9);
+    }
+
+    /// <summary>
     /// <b>A taken-over scene lifts the counter</b>, and the seam test is what found this: a control
     /// that restarts inherits items numbered by the run before it, and starting again at 1 would
     /// have every display weighing the hub's new state against a higher number of its own and
@@ -370,8 +452,8 @@ public sealed class GestureCommandTests
 
     private static ScreenContext Context() => ScreenContext.Default(new PixelSize(1920, 1080), 96);
 
-    private static ScreenInfo Info() =>
-        new(Screen, "TISCH-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true);
+    private static ScreenInfo Info(int width = 1920, int height = 1080) =>
+        new(Screen, "TISCH-PC//DISPLAY1", null, new PixelSize(width, height), 96, true);
 
     private static ScreenInfo Other() =>
         new(new ScreenId(@"\\?\DISPLAY#GESTURES#2"), "TISCH-PC//DISPLAY2", null, new PixelSize(1920, 1080), 96, true);

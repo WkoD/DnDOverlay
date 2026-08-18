@@ -542,7 +542,9 @@ public static class HubEndpoints
 
         // Now that this device may be here. The ticket is what tells THIS report from a later one,
         // so that unwinding after a fast reconnect cannot switch off the table that is already back.
-        var presence = Inventory(catalog, device.Device, hello.Screens, hello.Settings, logger);
+        var presence = await InventoryAsync(
+            catalog, session, device.Device, hello.Screens, hello.Settings, logger, cancellationToken)
+            .ConfigureAwait(false);
 
         connections.Add(connection);
         HubLog.DisplayConnected(logger, device.Device, device.Name, screenIds.Count);
@@ -595,7 +597,9 @@ public static class HubEndpoints
                         break;
 
                     case ScreensChangedMessage reported:
-                        presence = Rescan(reported, connection, catalog, scenes, device, logger);
+                        presence = await RescanAsync(
+                            reported, connection, catalog, scenes, session, device, logger, cancellationToken)
+                            .ConfigureAwait(false);
                         break;
 
                     case ConfigUpdateMessage update:
@@ -670,15 +674,19 @@ public static class HubEndpoints
     /// A new inventory on a standing connection. The same comparison as at the <c>Hello</c>, plus
     /// the one thing only a live connection has: the set of screens this socket is addressed by.
     /// </summary>
-    private static long Rescan(
+    private static async Task<long> RescanAsync(
         ScreensChangedMessage reported,
         DisplayConnection connection,
         ScreenCatalog catalog,
         SceneStore scenes,
+        ISessionApi session,
         PairedDevice device,
-        ILogger logger)
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
-        var presence = Inventory(catalog, device.Device, reported.Screens, settings: null, logger);
+        var presence = await InventoryAsync(
+            catalog, session, device.Device, reported.Screens, settings: null, logger, cancellationToken)
+            .ConfigureAwait(false);
 
         connection.Reported([.. reported.Screens.Select(screen => screen.ScreenId)]);
 
@@ -704,12 +712,14 @@ public static class HubEndpoints
     /// Takes a reported inventory and says what changed about it. Three findings, and only one of
     /// them is dangerous - which is why they are told apart rather than summed up (Part 3).
     /// </summary>
-    private static long Inventory(
+    private static async Task<long> InventoryAsync(
         ScreenCatalog catalog,
+        ISessionApi session,
         DeviceId device,
         IReadOnlyList<ScreenInfo> screens,
         ConfigUpdate? settings,
-        ILogger logger)
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         var before = screens
             .Select(screen => new ScreenRef(device, screen.ScreenId))
@@ -736,6 +746,13 @@ public static class HubEndpoints
                 now?.Label ?? screen.Screen.Value,
                 before.GetValueOrDefault(screen) ?? default,
                 now?.Size ?? default);
+
+            // And the pictures are recomputed, which until M3a nothing could do: both bounds a
+            // screen imposes - the smallest grabbable size and the graspable remainder at the edge
+            // - are expressed in that screen's own DIP. A table switched to a smaller resolution
+            // would otherwise keep pictures too small to hit and slivers now past its edge
+            // (Part 11, 37c3).
+            await session.RefitAsync(screen, cancellationToken).ConfigureAwait(false);
         }
 
         return change.Presence;

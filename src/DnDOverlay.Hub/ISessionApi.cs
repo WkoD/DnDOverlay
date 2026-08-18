@@ -144,6 +144,24 @@ public interface ISessionApi
     /// </summary>
     Task ParkItemAsync(ScreenRef screen, ItemId item, bool parked, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Fits the scene of one screen to the screen as it is NOW - after a resolution change, a
+    /// rotation, or a device coming back with a monitor that is no longer the one it left with.
+    /// <para>
+    /// It is the one command nobody gives. Everything else here answers a grip of the DM's or a
+    /// hand at the table; this answers a fact of the hardware, and it has to exist because the
+    /// bounds it enforces are expressed in the screen's own terms: <c>MinScale</c> in DIP of its
+    /// height, the graspable remainder in DIP of both its edges. A table switched from 1080p to
+    /// something smaller would otherwise keep pictures that are now too small to hit and slivers
+    /// that are now off the edge (Part 11).
+    /// </para>
+    /// <para>
+    /// It leaves no step in the undo timeline, for the same reason no transformation does: undo is
+    /// for what the DM did, and nobody did this (Part 3).
+    /// </para>
+    /// </summary>
+    Task RefitAsync(ScreenRef screen, CancellationToken cancellationToken = default);
+
     /// <summary>Reads a scene - what "save screen as scene" will use.</summary>
     Task<SceneState> GetSceneAsync(ScreenRef screen, CancellationToken cancellationToken = default);
 
