@@ -237,6 +237,12 @@
   <data name="E3020_AssetsLoaded" xml:space="preserve">
     <value>Loaded {Fetched} asset(s) in {Milliseconds} ms, {Bytes} bytes, {Peak} at a time; {AlreadyHere} already here.</value>
   </data>
+  <data name="E3021_LockedItemNotMoved" xml:space="preserve">
+    <value>A locked image on {ScreenName} was not moved from the table.</value>
+  </data>
+  <data name="E3022_ForeignScreenRefused" xml:space="preserve">
+    <value>{DeviceName} reported a gesture for {ScreenName}, which is not one of its screens.</value>
+  </data>
 
   <!-- 4000-4999 · Operations: what a process does to itself. -->
 

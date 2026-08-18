@@ -97,6 +97,53 @@ public interface ISessionApi
         Point? position,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Moves an item to where it now lies. Everything the sender may not decide happens here: the
+    /// position is held at the edge, the scale between its bounds, and the revision and the
+    /// <c>ZOrder</c> are handed out (Part 4).
+    /// </summary>
+    /// <param name="fromTable">
+    /// Whether a hand at the table did this. It is the one thing that decides the lock: the lock
+    /// guards against the TABLE and not against the DM, who would otherwise have to unlock before
+    /// every correction (Part 3). A refused transform is logged and changes nothing.
+    /// </param>
+    /// <param name="toFront">
+    /// Whether this was a GRAB rather than a command - the first report of a gesture, and from M4
+    /// the moment the DM takes hold in the thumbnail. What is touched comes to the front; a locked
+    /// item never does, because it cannot be taken hold of (Part 3).
+    /// </param>
+    Task TransformItemAsync(
+        ScreenRef screen,
+        ItemTransform transform,
+        bool fromTable,
+        bool toFront,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Locks one item against gestures at the table, or releases it. Nothing moves, and nothing
+    /// enters the undo timeline - the worst outcome of an unlock is that the DM sets a few
+    /// padlocks again (Part 3).
+    /// </summary>
+    Task SetLockedAsync(ScreenRef screen, ItemId item, bool locked, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Releases every locked item of ONE screen, in a single patch.
+    /// <para>
+    /// Over an evening the DM locks a handful of pictures and the players eventually report "that
+    /// one does not work". Going through twelve items one at a time is the wrong answer to that;
+    /// one grip releases them all, and the padlock visible on each item is what makes the sweep
+    /// harmless - whoever can see which five were locked can tap them back in seconds (Part 3).
+    /// </para>
+    /// </summary>
+    Task UnlockAllAsync(ScreenRef screen, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lays an item into the slot bar along the park edge, or takes it out again. Size and
+    /// rotation survive both ways - the Java version reset them and undid the work of lining a
+    /// picture up (Part 6). Coming back out brings the item to the front.
+    /// </summary>
+    Task ParkItemAsync(ScreenRef screen, ItemId item, bool parked, CancellationToken cancellationToken = default);
+
     /// <summary>Reads a scene - what "save screen as scene" will use.</summary>
     Task<SceneState> GetSceneAsync(ScreenRef screen, CancellationToken cancellationToken = default);
 

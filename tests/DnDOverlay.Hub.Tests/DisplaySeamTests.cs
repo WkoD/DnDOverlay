@@ -154,16 +154,78 @@ public sealed class DisplaySeamTests : IAsyncLifetime
         await Finished(pump);
     }
 
+    /// <summary>
+    /// The gesture wire, end to end: a real client sends what a hand at the table produces, and the
+    /// hub answers with the patch that everybody else on that table will apply.
+    /// <para>
+    /// It is the third crossing of this seam and the first that carries an intention UPWARDS. Both
+    /// halves have their own tests - the client's send loop here, the hub's command surface in
+    /// <c>GestureCommandTests</c> against a scene built by hand - and that is exactly the
+    /// arrangement that let an <c>AssetClient</c> pass without ever sending a token.
+    /// </para>
+    /// <para>
+    /// The item comes in with the <c>Hello</c>, over the takeover path, because a display cannot
+    /// put an image on a table by itself: what it can do is report what a player did to one that is
+    /// already lying there.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task AGestureFromTheClientMovesTheItemAndComesBackAsAPatch()
+    {
+        using var run = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+
+        var item = new ItemId(Guid.Parse("11111111-2222-3333-4444-555555555555"));
+        var inbox = Channel.CreateUnbounded<ProtocolMessage>();
+        var outbox = Channel.CreateUnbounded<ProtocolMessage>();
+
+        var pump = Start(inbox, outbox, run.Token, Lying(item));
+
+        await Until<WelcomeMessage>(inbox, run.Token);
+
+        // The takeover is what puts the item into the hub's scene, and it has to have happened
+        // before the gesture means anything - a transform for an item nobody has is a no-op, and
+        // this test would then be proving that nothing happens.
+        var snapshot = await Until<SceneSnapshotMessage>(inbox, run.Token);
+
+        Assert.Equal(item, Assert.Single(snapshot.Scene.Items).ItemId);
+
+        await outbox.Writer.WriteAsync(
+            new ItemTransformedMessage(
+                Screen,
+                new ItemTransform(item, 0.8, 0.3, 0.25, 90),
+                KnownRevision: 1,
+                Grabbed: true),
+            run.Token);
+
+        var patch = await Until<ScenePatchMessage>(inbox, run.Token);
+        var op = Assert.IsType<TransformItem>(Assert.Single(patch.Patch.Ops).Op);
+
+        Assert.Equal(item, op.Item);
+        Assert.Equal(0.8, op.CenterX, precision: 6);
+        Assert.Equal(90, op.RotationDeg);
+
+        // The hub's number, not the one the client sent up: an intention goes up, a fact comes
+        // back (Part 4).
+        Assert.True(op.Revision > 1, "the revision came back unchanged - the hub did not hand one out");
+
+        await run.CancelAsync();
+        await Finished(pump);
+    }
+
     private Task Start(
-        Channel<ProtocolMessage> inbox, Channel<ProtocolMessage> outbox, CancellationToken cancellationToken)
+        Channel<ProtocolMessage> inbox,
+        Channel<ProtocolMessage> outbox,
+        CancellationToken cancellationToken,
+        IReadOnlyList<ScreenScene>? scenes = null)
     {
         var client = new DisplayClient(NullLogger<DisplayClient>.Instance);
 
         return Task.Run(
-            () => client.RunAsync(_ws, Hello(), inbox.Writer, outbox, cancellationToken), cancellationToken);
+            () => client.RunAsync(_ws, Hello(scenes), inbox.Writer, outbox, cancellationToken), cancellationToken);
     }
 
-    private static HelloMessage Hello() =>
+    private static HelloMessage Hello(IReadOnlyList<ScreenScene>? scenes = null) =>
         new(
             Device,
             "SEAM",
@@ -171,7 +233,38 @@ public sealed class DisplaySeamTests : IAsyncLifetime
             Protocol.Version,
             [new ScreenInfo(Screen, "SEAM//DISPLAY1", null, new PixelSize(1920, 1080), 96, IsPrimary: true)],
             Token,
-            null);
+            null,
+            null,
+            scenes);
+
+    /// <summary>One picture already on the table, as a device that survived a control restart has.</summary>
+    private static IReadOnlyList<ScreenScene> Lying(ItemId item) =>
+    [
+        new(
+            Screen,
+            SceneState.Empty with
+            {
+                Items =
+                [
+                    new ImageItem(
+                        item,
+                        CenterX: 0.5,
+                        CenterY: 0.5,
+                        Scale: 0.4,
+                        AspectRatio: 4d / 3d,
+                        RotationDeg: 0,
+                        ZOrder: 1,
+                        Locked: false,
+                        Parked: false,
+                        Revision: 1,
+                        AssetId: new AssetId(new string('e', 64)),
+                        Meta: new AssetMeta(800, 600, "png", 1024, false, new string('f', 64)),
+                        Name: "Grimmbart",
+                        ShowName: false,
+                        AnimationPaused: false),
+                ],
+            }),
+    ];
 
     private static async Task<T> Until<T>(Channel<ProtocolMessage> inbox, CancellationToken cancellationToken)
         where T : ProtocolMessage

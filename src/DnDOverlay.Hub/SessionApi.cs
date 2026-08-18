@@ -22,7 +22,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
     private readonly ILogger<SessionApi> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    private long _revision;
 
     public SessionApi(
         SceneStore scenes,
@@ -210,7 +209,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 ZOrder: scene.TopZOrder + 1,
                 Locked: false,
                 Parked: false,
-                Revision: Interlocked.Increment(ref _revision),
+                Revision: _scenes.NextRevision(),
                 AssetId: asset.AssetId,
                 Meta: asset.Meta,
                 Name: asset.Name,
@@ -341,15 +340,113 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// shared is the dispatch, not the decision.
     /// </para>
     /// </summary>
-    private async Task ApplyAsync(ScreenRef screen, PatchOp op, CancellationToken cancellationToken)
+    private Task ApplyAsync(ScreenRef screen, PatchOp op, CancellationToken cancellationToken) =>
+        ApplyAsync(screen, [op], cancellationToken);
+
+    /// <summary>
+    /// Several operations of ONE command, in one patch. That is what "unlock all" needs and what
+    /// the loading of a layout will need in M5b: one command, one patch, one step in the timeline -
+    /// a half-rebuilt table must never become visible (Part 4).
+    /// </summary>
+    private async Task ApplyAsync(
+        ScreenRef screen,
+        IReadOnlyList<PatchOp> ops,
+        CancellationToken cancellationToken)
     {
+        if (ops.Count == 0)
+        {
+            // Nothing to say. A patch with no operations would still be a revision and a step in
+            // the timeline, and "unlock all" on a screen with nothing locked is the normal way to
+            // get here.
+            return;
+        }
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
             var context = _screens.ContextFor(screen);
+            var scene = _scenes.Get(screen);
 
-            _scenes.Set(screen, SceneReducer.Apply(_scenes.Get(screen), op, context));
+            foreach (var op in ops)
+            {
+                scene = SceneReducer.Apply(scene, op, context);
+            }
+
+            _scenes.Set(screen, scene);
+
+            var patch = new ScenePatch([.. ops.Select(op => new ScreenOp(screen, op))]);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task TransformItemAsync(
+        ScreenRef screen,
+        ItemTransform transform,
+        bool fromTable,
+        bool toFront,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transform);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        PatchOp op;
+
+        try
+        {
+            var context = _screens.ContextFor(screen);
+            var scene = _scenes.Get(screen);
+
+            if (scene.Items.FirstOrDefault(item => item.ItemId == transform.Item) is not { } current)
+            {
+                // Gone in the meantime. With two ways of steering and hands on the table this is a
+                // normal course of events, not an error (Part 11).
+                return;
+            }
+
+            if (fromTable && current.Locked)
+            {
+                HubLog.LockedItemNotMoved(_logger, screen.Screen.Value);
+
+                return;
+            }
+
+            // Everything the sender may not decide, in the order the arithmetic needs: the scale
+            // first, because the hull the edge clamp measures depends on it.
+            var scale = Layout.ClampScale(transform.Scale, current.AspectRatio, context);
+
+            var held = Manipulation.HoldAtEdge(
+                current with
+                {
+                    CenterX = transform.CenterX,
+                    CenterY = transform.CenterY,
+                    Scale = scale,
+                    RotationDeg = transform.RotationDeg,
+                },
+                context);
+
+            op = new TransformItem(
+                transform.Item,
+                held.CenterX,
+                held.CenterY,
+                held.Scale,
+                held.RotationDeg,
+
+                // What is taken hold of comes to the front (Part 3). Already on top counts as
+                // done: raising it every twentieth of a second through a gesture would run the
+                // number space up and change nothing anybody can see.
+                ZOrder: toFront ? Math.Max(current.ZOrder, scene.TopZOrder + 1) : current.ZOrder,
+                Revision: _scenes.NextRevision());
+
+            _scenes.Set(screen, SceneReducer.Apply(scene, op, context));
 
             var patch = new ScenePatch([new ScreenOp(screen, op)]);
 
@@ -360,6 +457,71 @@ public sealed class SessionApi : ISessionApi, IDisposable
         {
             _gate.Release();
         }
+    }
+
+    /// <inheritdoc />
+    public Task SetLockedAsync(
+        ScreenRef screen, ItemId item, bool locked, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, new SetLocked(item, locked), cancellationToken);
+
+    /// <inheritdoc />
+    public async Task UnlockAllAsync(ScreenRef screen, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<PatchOp> ops;
+
+        try
+        {
+            // Read under the same lock the write takes, then let go of it: which items are locked
+            // has to be decided from the scene the patch is built against.
+            ops =
+            [
+                .. _scenes.Get(screen).Items
+                    .Where(item => item.Locked)
+                    .Select(item => new SetLocked(item.ItemId, false)),
+            ];
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await ApplyAsync(screen, ops, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task ParkItemAsync(
+        ScreenRef screen, ItemId item, bool parked, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        PatchOp op;
+
+        try
+        {
+            var scene = _scenes.Get(screen);
+
+            if (scene.Items.FirstOrDefault(candidate => candidate.ItemId == item) is not { } current)
+            {
+                return;
+            }
+
+            op = new ParkItem(
+                item,
+                parked,
+
+                // Coming back out of the bar counts as being touched; going in does not - a parked
+                // picture that jumped to the front would cover the table it was tidied off (Part 3).
+                ZOrder: parked ? current.ZOrder : Math.Max(current.ZOrder, scene.TopZOrder + 1),
+                Revision: _scenes.NextRevision());
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await ApplyAsync(screen, op, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

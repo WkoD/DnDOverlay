@@ -75,6 +75,22 @@ public sealed record ImageItem(
     bool AnimationPaused)
     : SceneItem(ItemId, CenterX, CenterY, Scale, AspectRatio, RotationDeg, ZOrder, Locked, Parked, Revision);
 
+/// <summary>
+/// Where an item lies, as an INTENTION - what a display reports after a gesture and what the DM's
+/// hand in the thumbnail will report from M4 on.
+/// <para>
+/// It carries no <c>ZOrder</c> and no <c>Revision</c>: both are handed out by the hub alone, and
+/// a sender that could set them would be deciding the global order of a table it can only see
+/// part of (Part 4).
+/// </para>
+/// </summary>
+public sealed record ItemTransform(
+    ItemId Item,
+    double CenterX,
+    double CenterY,
+    double Scale,
+    double RotationDeg);
+
 /// <summary>How the background layer fills the screen.</summary>
 public enum BackgroundFit
 {

@@ -17,7 +17,7 @@ namespace DnDOverlay.Hub;
 /// <para>
 /// Next free in the connection range: <b>1051</b>; in the display range, which the screen
 /// inventory writes into because the range follows the SUBJECT rather than the assembly:
-/// <b>3018</b>. 1007–1009 stay unassigned so the first block could still
+/// <b>3023</b>. 1007–1009 stay unassigned so the first block could still
 /// grow, 1010–1018 belong to Transport with 1019 left free, pairing has 1020–1037 (the display
 /// writes 1033–1037 - the range follows the subject, not the assembly), discovery has 1038–1041,
 /// the display's backoff 1042, the send side 1043–1045, log forwarding 1046–1047, the stranger
@@ -364,6 +364,29 @@ internal static partial class HubLog
         Level = LogLevel.Warning,
         Message = "{DeviceName} sent a screen state of its own - passed over; states belong to the control.")]
     internal static partial void ScreenCommandIgnored(ILogger logger, string deviceName);
+
+    /// <summary>
+    /// A device reported a gesture for a screen this connection is not addressed by. The mirror
+    /// image of the display's own 3004: each side discards what is not its own and says so, and
+    /// between them there is no direction in which a foreign table can be moved (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3022,
+        Level = LogLevel.Warning,
+        Message = "{DeviceName} reported a gesture for {ScreenName}, which is not one of its screens.")]
+    internal static partial void ForeignScreenRefused(ILogger logger, string deviceName, string screenName);
+
+    /// <summary>
+    /// A hand at the table took hold of a locked picture. The display refuses the gesture itself
+    /// and gives the finger the same short answer it gives on a disabled screen, so this line is
+    /// not the player's feedback - it is the DM's, for the evening when somebody says "that one is
+    /// broken" (Part 3).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3021,
+        Level = LogLevel.Information,
+        Message = "A locked image on {ScreenName} was not moved from the table.")]
+    internal static partial void LockedItemNotMoved(ILogger logger, string screenName);
 
     /// <summary>
     /// The one exception to "the hub is authoritative", and it is deliberately this narrow: a

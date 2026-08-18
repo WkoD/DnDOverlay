@@ -455,15 +455,30 @@ timeline.
 | Operation | Since | Effect |
 |---|---|---|
 | `addItem` | M1a | puts a finished item on a screen |
+| `transformItem` | M3a | where an item lies now — pushed, zoomed, turned |
+| `setLocked` | M3a | locks one item against gestures at the table, or releases it |
+| `parkItem` | M3a | lays an item into the slot bar along the park edge, or takes it out |
 
-The remaining thirteen operations arrive with the milestones that implement them. An operation
-that serialises but does nothing in the reducer would look implemented while being a trap.
+The remaining operations arrive with the milestones that implement them. An operation that
+serialises but does nothing in the reducer would look implemented while being a trap.
+
+**"Unlock all" is not an operation**: it is one `setLocked` per locked item, in one patch. Nor is
+there one for parking positions — where a parked picture lies follows from the list of parked
+pictures and the screen's park edge, and both ends work it out with the same function. Sending
+coordinates would leave a gap in the bar as soon as one picture left it.
+
+**The lock guards against the table, not against the DM.** A `transformItem` that came from a
+display is refused for a locked item and logged (3021); the same operation from the control goes
+through, or the DM would have to unlock before every correction.
 
 **Revisions are handed out by the hub alone.** That is what makes the order globally
 unambiguous, and it is why a display sends an *intention* rather than a fact.
 
 **`ZOrder` is per screen** and rises to the maximum in use plus one whenever something is
-touched — including when an item is newly added. That is also why moving an item between screens
+touched — including when an item is newly added, and when one comes back out of the park bar. It
+does **not** rise for a locked item, which cannot be taken hold of, nor while a gesture runs: the
+first report of a gesture carries `grabbed`, and raising it twenty times a second afterwards would
+run the number space up without anybody seeing a difference. That is also why moving an item between screens
 gets it a fresh one: an item with `ZOrder` 3 arriving on a screen whose maximum is 47 would land
 invisibly at the bottom.
 
@@ -663,15 +678,17 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3018 | `ScreensIdentified` | Information |
 | 3019 | `WakeLockChanged` | Information |
 | 3020 | `AssetsLoaded` | Information |
+| 3021 | `LockedItemNotMoved` | Information |
+| 3022 | `ForeignScreenRefused` | Warning |
 
-**Next free: 3021.**
+**Next free: 3023.**
 
 3019 sits in the display range although what it changes is a process-wide flag — the subject of
 the sentence is whether a screen stays lit, and that is what decides the range. Both directions
 are worth the same line, and the second one more than the first: from the room, a device that was
 *told* to let go looks exactly like one that failed to hold on.
 
-Of these, 3007–3014 are written by the **hub** and 3015–3019 by the **display** — the range
+Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 by the **display** — the range
 follows the subject of the sentence, never the assembly it is written in. Only one of the three
 inventory findings is a warning, and that is the point of telling them apart: a missing screen
 loses nothing, a new one is a fact, and a screen whose **metrics changed** has had its images

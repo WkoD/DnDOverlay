@@ -22,6 +22,8 @@ public sealed class SceneStore
 {
     private readonly ConcurrentDictionary<ScreenRef, SceneState> _scenes = new();
 
+    private long _revision;
+
     /// <summary>
     /// The scene of a screen, or an empty one. A screen the hub has never heard of is not an
     /// error - it is a screen nobody has played on yet.
@@ -29,7 +31,47 @@ public sealed class SceneStore
     public SceneState Get(ScreenRef screen) =>
         _scenes.TryGetValue(screen, out var scene) ? scene : SceneState.Empty;
 
-    public void Set(ScreenRef screen, SceneState scene) => _scenes[screen] = scene;
+    public void Set(ScreenRef screen, SceneState scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        _scenes[screen] = scene;
+
+        // Never below what is already lying on a table. A control that has just restarted takes
+        // scenes over from the displays, and those items carry the numbers of the run before it -
+        // handing out 1 again would have every display measuring the hub's new state against a
+        // higher number of its own and keeping its own (Part 4, conflict resolution). It cost this
+        // to notice: a gesture went up the wire, came back as a patch, and the number on it was
+        // lower than the one the item already had.
+        foreach (var item in scene.Items)
+        {
+            Raise(item.Revision);
+        }
+    }
+
+    /// <summary>
+    /// The next revision, and there is exactly one counter for the whole session. It lives here
+    /// rather than in <see cref="SessionApi"/> because it belongs to what it numbers: whoever puts
+    /// a scene in, from wherever, has to lift it.
+    /// </summary>
+    public long NextRevision() => Interlocked.Increment(ref _revision);
+
+    private void Raise(long revision)
+    {
+        var current = Volatile.Read(ref _revision);
+
+        while (revision > current)
+        {
+            var seen = Interlocked.CompareExchange(ref _revision, revision, current);
+
+            if (seen == current)
+            {
+                return;
+            }
+
+            current = seen;
+        }
+    }
 
     /// <summary>
     /// Whether this screen has a scene of OUR making. It is what bounds the one exception to

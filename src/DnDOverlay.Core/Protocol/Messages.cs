@@ -32,6 +32,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(ConfigUpdateMessage), "ConfigUpdate")]
 [JsonDerivedType(typeof(IdentifyScreensMessage), "IdentifyScreens")]
 [JsonDerivedType(typeof(AssetProgressMessage), "AssetProgress")]
+[JsonDerivedType(typeof(ItemTransformedMessage), "ItemTransformed")]
 public abstract record ProtocolMessage;
 
 /// <summary>
@@ -450,3 +451,36 @@ public sealed record AssetProgressMessage(IReadOnlyList<AssetLoad> Loads) : Prot
         return hash.ToHashCode();
     }
 }
+
+/// <summary>
+/// What a player did to a picture at the table: pushed it, zoomed it, turned it. It is an
+/// INTENTION and not a fact - the hub hands out the revision and distributes the result, which is
+/// what makes the order globally unambiguous with several hands on several tables (Part 4).
+/// <para>
+/// Throttled per ITEM at about 20 Hz and sent once more, bindingly, when the fingers leave. Per
+/// item rather than globally: two pictures moved at once would otherwise slow each other down,
+/// and the throttling happens BEFORE the queue, because throttling is a decision and dropping is
+/// an emergency measure (Part 4).
+/// </para>
+/// </summary>
+/// <param name="Screen">
+/// A bare <see cref="ScreenId"/> is right here: this travels over the device's own socket, so the
+/// hub knows the device from the connection - the one answer a device cannot get wrong.
+/// </param>
+/// <param name="KnownRevision">
+/// The revision the display had for this item when it took hold of it. The hub does not weigh it
+/// against anything - a finger on the table is the most recent truth there is - but it says
+/// whether the picture that was grabbed was the current one, and that is the only way a lost
+/// patch shows up as anything other than "the table jumped".
+/// </param>
+/// <param name="Grabbed">
+/// True on the first report of a gesture. It is what brings the picture to the front: the display
+/// raises it locally the moment it is touched and takes the binding number from the hub right
+/// afterwards (Part 3), and a flag on the message it is already sending beats a second message
+/// that could arrive in the wrong order.
+/// </param>
+public sealed record ItemTransformedMessage(
+    ScreenId Screen,
+    ItemTransform Transform,
+    long KnownRevision,
+    bool Grabbed) : ProtocolMessage;

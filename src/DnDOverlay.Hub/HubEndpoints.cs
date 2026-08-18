@@ -224,6 +224,7 @@ public static class HubEndpoints
         DisplayConnections connections,
         PairingDirectory pairing,
         SessionEvents events,
+        ISessionApi session,
         IOptions<HubOptions> options,
         TimeProvider time,
         ILoggerFactory loggers)
@@ -312,6 +313,7 @@ public static class HubEndpoints
                 catalog,
                 connections,
                 events,
+                session,
                 // Optional on purpose: the hub is a library and must run without one. Where a
                 // process log is registered - which is every real control - forwarded entries land
                 // in the same file and the same ring buffer as its own (Part 8).
@@ -528,6 +530,7 @@ public static class HubEndpoints
         ScreenCatalog catalog,
         DisplayConnections connections,
         SessionEvents events,
+        ISessionApi session,
         ProcessLog? processLog,
         HubOptions options,
         ILogger logger,
@@ -601,6 +604,27 @@ public static class HubEndpoints
                         if (catalog.Apply(device.Device, update.Update))
                         {
                             HubLog.ScreenCommandIgnored(logger, device.Name);
+                        }
+
+                        break;
+
+                    case ItemTransformedMessage transformed:
+                        // The screen comes from the message and the DEVICE from the connection,
+                        // and the pair is checked here: a screen this socket is not addressed by
+                        // is not this device's to move (Part 4).
+                        if (connection.Screens.FirstOrDefault(
+                                candidate => candidate.Screen == transformed.Screen) is { } target)
+                        {
+                            await session.TransformItemAsync(
+                                target,
+                                transformed.Transform,
+                                fromTable: true,
+                                toFront: transformed.Grabbed,
+                                cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            HubLog.ForeignScreenRefused(logger, device.Name, transformed.Screen.Value);
                         }
 
                         break;
