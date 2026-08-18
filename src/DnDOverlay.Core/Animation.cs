@@ -175,6 +175,15 @@ public static class AnimationBudget
     public const int DefaultMaximum = 8;
 
     /// <summary>
+    /// How many items a screen is reckoned to carry at 1080p - derived from the budget rather than
+    /// set (Part 6). It is not a limit anybody enforces; it is the number past which the display is
+    /// beyond what it was measured for, and the point at which per-item feedback stops being worth
+    /// its cost (measured in the hand-run of M3b: 722 loading pictures, and the rings alone held the
+    /// UI thread for seconds).
+    /// </summary>
+    public const int ItemsPerScreen = 30;
+
+    /// <summary>
     /// What may run, given a scene.
     /// <para>
     /// <b>The background goes first</b> when it moves: it fills the screen, so it is both the most

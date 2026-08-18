@@ -246,6 +246,9 @@
   <data name="E3023_FrameTimes" xml:space="preserve">
     <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %.</value>
   </data>
+  <data name="E3027_SurfaceMeasured" xml:space="preserve">
+    <value>{ScreenId} draws on {WidthDip}x{HeightDip} DIP for a screen of {Size} at {Dpi} DPI.</value>
+  </data>
   <data name="E3026_RenderPath" xml:space="preserve">
     <value>Render path: tier {Tier}, mode {Mode}.</value>
   </data>

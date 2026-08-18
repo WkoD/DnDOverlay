@@ -237,7 +237,18 @@ public sealed partial class App : Application, IDisposable
         // Said once, at the start: without it there is no way to tell whether forced software
         // rendering took - and that is how the first hand-run of 37a ended (checks/M3.md).
         var tier = RenderCapability.Tier >> 16;
-        var mode = RenderOptions.ProcessRenderMode.ToString();
+
+        // <b>Read from the registry, not from the API</b>, and that is the correction the second
+        // hand-run forced: RenderOptions.ProcessRenderMode stays "Default" while the machine renders
+        // in software, because the switch that 37a asks for is DisableHWAcceleration and nothing in
+        // WPF reports it back. The line said "mode Default" under forced software rendering, which
+        // is exactly the question it was built to answer.
+        var forced = Registry.GetValue(
+            @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Avalon.Graphics", "DisableHWAcceleration", 0);
+
+        var mode = forced is int and not 0
+            ? "software (DisableHWAcceleration=1)"
+            : RenderOptions.ProcessRenderMode.ToString();
 
         DisplayLog.RenderPath(_logger, tier, mode);
 
@@ -546,6 +557,14 @@ public sealed partial class App : Application, IDisposable
         // arrival happens to correct it.
         window.SurfaceChanged += () => Draw(new ScreenRef(_device, screen));
 
+        window.Surveyed += (widthDip, heightDip, monitor) =>
+        {
+            var wide = (int)Math.Round(widthDip);
+            var high = (int)Math.Round(heightDip);
+
+            DisplayLog.SurfaceMeasured(_logger, screen, wide, high, monitor.Screen.Size, monitor.Screen.Dpi);
+        };
+
         // What a hand at the table does, on its way to the hub. The window keeps the gesture, this
         // decides how often it is reported and puts it on the wire (Part 4).
         window.Transformed += reported => Report(screen, reported);
@@ -563,9 +582,15 @@ public sealed partial class App : Application, IDisposable
 
         // More pictures were ready than one pass hangs up. Background priority on purpose: input
         // goes first, which is the whole reason they are staggered (Part 1, order of precedence).
+        // <b>Input priority, and the difference is measured</b> (hand-run of M3b, second run): at
+        // Background priority the follow-up pass only runs when the machine has nothing else to do,
+        // so 722 arriving pictures appeared as "first one, then nothing, then all at once" - the
+        // passes were starved for the whole 24-second load. Input priority puts a hand at the table
+        // first and a picture right after it, which is the order of precedence rather than an
+        // absence of one.
         window.MoreToShow += () => Dispatcher.InvokeAsync(
             () => Draw(new ScreenRef(_device, screen)),
-            System.Windows.Threading.DispatcherPriority.Background);
+            System.Windows.Threading.DispatcherPriority.Input);
 
         _windows[screen] = window;
         window.Show();

@@ -76,6 +76,22 @@ internal static partial class DisplayLog
         ILogger logger, int fetched, long milliseconds, long bytes, int peak, int alreadyHere);
 
     /// <summary>
+    /// The surface a scene is drawn on, beside the screen it is meant to cover.
+    /// <para>
+    /// A picture is stretched exactly when these two disagree in SHAPE: the scene is normalised
+    /// against the screen's aspect ratio and then drawn onto this surface. The second hand-run
+    /// reported stretching after a change from 1920×1080 to 1600×1200 that nothing in the log could
+    /// explain (37c3) - this is the line that will say which of the two was wrong.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3027,
+        Level = LogLevel.Information,
+        Message = "{ScreenId} draws on {WidthDip}x{HeightDip} DIP for a screen of {Size} at {Dpi} DPI.")]
+    internal static partial void SurfaceMeasured(
+        ILogger logger, ScreenId screenId, int widthDip, int heightDip, PixelSize size, double dpi);
+
+    /// <summary>
     /// What the render path is, written once at startup.
     /// <para>
     /// <b>Part 11 asks for it in the log's HEADER, and it cannot go there:</b> the header is written

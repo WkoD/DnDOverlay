@@ -85,6 +85,9 @@ internal sealed class OverlayWindow : Window
     private SceneState _scene = SceneState.Empty;
     private ScreenContext? _context;
 
+    /// <summary>How many arrival highlights are running right now - they are animations too.</summary>
+    private int _flashes;
+
     /// <summary>Where the mouse was at the last step of a drag, in stage DIP.</summary>
     private System.Windows.Point _mouseAt;
 
@@ -167,7 +170,17 @@ internal sealed class OverlayWindow : Window
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
 
-        _stage.SizeChanged += (_, _) => SurfaceChanged?.Invoke();
+        _stage.SizeChanged += (_, _) =>
+        {
+            // The surface and the screen it is supposed to be, side by side. A picture is stretched
+            // exactly when these two disagree in SHAPE - the scene is normalised against the
+            // screen's aspect ratio and drawn onto this surface - and the second hand-run reported
+            // stretching that nothing in the log could explain (37c3). One line, and the next run
+            // says which of the two is wrong.
+            Surveyed?.Invoke(_stage.ActualWidth, _stage.ActualHeight, _monitor);
+
+            SurfaceChanged?.Invoke();
+        };
     }
 
     internal ScreenId ScreenId => _monitor.Screen.ScreenId;
@@ -237,6 +250,11 @@ internal sealed class OverlayWindow : Window
     /// the source holds (<see cref="DecodeSteps"/>).
     /// </summary>
     internal event Action<AssetId, int>? Sharpen;
+
+    /// <summary>
+    /// The surface changed size: its width and height in DIP, and the monitor it is meant to cover.
+    /// </summary>
+    internal event Action<double, double, MonitorInfo>? Surveyed;
 
     /// <summary>
     /// More pictures are ready than this pass would hang up. Whoever handles it draws again, at
@@ -422,6 +440,17 @@ internal sealed class OverlayWindow : Window
         _rings.Children.Clear();
 
         if (!scene.ItemsVisible)
+        {
+            return;
+        }
+
+        // <b>Beyond the item budget the rings are what stops the table.</b> Measured in the second
+        // hand-run: with 722 pictures loading at once the UI thread stood still for up to 13
+        // seconds, and every one of those passes was building 722 fresh rings - a Grid, an ellipse
+        // and an arc geometry each, four times a second. Part 6 puts thirty items on a 1080p screen;
+        // past that the individual ring says nothing anybody can read anyway, and the feedback that
+        // something is happening is the pictures arriving one after another.
+        if (loading.Count > AnimationBudget.ItemsPerScreen)
         {
             return;
         }
@@ -1243,6 +1272,16 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
+        // The same argument the animation budget makes (Part 6): a hundred highlights at once are
+        // a hundred animations on the UI thread, and they say nothing - when everything is new,
+        // nothing stands out. The point of the highlight is a thirteenth picture among twelve.
+        if (_flashes >= AnimationBudget.DefaultMaximum)
+        {
+            return;
+        }
+
+        _flashes++;
+
         var pane = new System.Windows.Shapes.Rectangle
         {
             Fill = Brushes.White,
@@ -1261,7 +1300,11 @@ internal sealed class OverlayWindow : Window
 
         // Taken off again when it has finished, or every arrival of the evening would leave a
         // transparent pane on the picture and the table would slowly fill up with them.
-        fade.Completed += (_, _) => mount.Element.Children.Remove(pane);
+        fade.Completed += (_, _) =>
+        {
+            mount.Element.Children.Remove(pane);
+            _flashes--;
+        };
 
         pane.BeginAnimation(OpacityProperty, fade);
     }
