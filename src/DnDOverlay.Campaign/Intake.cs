@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using DnDOverlay.Core;
 
 namespace DnDOverlay.Campaign;
@@ -127,9 +126,19 @@ public sealed record IntakeReport(
 /// it is a test.
 /// </para>
 /// </summary>
-public sealed class Intake(IAssetSink stock)
+public sealed class Intake(IAssetSink stock, TimeProvider time)
 {
     private readonly IAssetSink _stock = stock ?? throw new ArgumentNullException(nameof(stock));
+
+    /// <summary>
+    /// The clock the reading is taken from - handed in, like every other one (rule 10). It was
+    /// <see cref="System.Diagnostics.Stopwatch"/> until the reading's own test began to fail on a busy build machine:
+    /// two wall-clock measurements compared against each other say nothing when the machine can
+    /// stall between them, and the test that guards "every picture says what it cost" was then
+    /// guarding it with a coin toss. With the clock handed in, the dwell and the reading are the
+    /// same number and the assertion is exact.
+    /// </summary>
+    private readonly TimeProvider _time = time ?? throw new ArgumentNullException(nameof(time));
 
     /// <summary>
     /// Takes every source in, in order, reporting as it goes.
@@ -173,7 +182,7 @@ public sealed class Intake(IAssetSink stock)
             // Started here rather than inside the stock, because what is being measured is what the
             // DM waits for: reaching the bytes counts too, and a URL import spends most of its
             // seconds there.
-            var clock = Stopwatch.GetTimestamp();
+            var clock = _time.GetTimestamp();
 
             try
             {
@@ -199,7 +208,7 @@ public sealed class Intake(IAssetSink stock)
                     taken.Add(new IntakeTaken(
                         stocked.Asset,
                         stocked.Standing,
-                        (long)Stopwatch.GetElapsedTime(clock).TotalMilliseconds));
+                        (long)_time.GetElapsedTime(clock).TotalMilliseconds));
                     break;
 
                 case IngestResult.Refused turned:

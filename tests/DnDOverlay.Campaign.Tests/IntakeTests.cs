@@ -82,7 +82,7 @@ public sealed class IntakeTests : IDisposable
     public async Task TheReportKeepsTheThreeOutcomesApart()
     {
         var stock = Open();
-        var intake = new Intake(stock);
+        var intake = new Intake(stock, _time);
 
         // The same bytes twice, so the second is a duplicate rather than a second entry.
         var twice = Source("Zwilling");
@@ -112,7 +112,7 @@ public sealed class IntakeTests : IDisposable
             .Select(number => Source("Bild " + number))
             .ToArray();
 
-        await new Intake(stock).TakeInAsync(
+        await new Intake(stock, _time).TakeInAsync(
             sources,
             new Reporter(seen.Add),
             TestContext.Current.CancellationToken);
@@ -140,7 +140,7 @@ public sealed class IntakeTests : IDisposable
             .Select(number => Source("Bild " + number))
             .ToArray();
 
-        var report = await new Intake(stock).TakeInAsync(
+        var report = await new Intake(stock, _time).TakeInAsync(
             sources,
             new Reporter(step =>
             {
@@ -186,10 +186,8 @@ public sealed class IntakeTests : IDisposable
         var slow = report.Taken.Single(taken => taken.Asset.Name == "Langsam");
         var quick = report.Taken.Single(taken => taken.Asset.Name == "Schnell");
 
-        Assert.True(slow.Milliseconds >= 40, $"the slow one reported {slow.Milliseconds} ms");
-        Assert.True(
-            quick.Milliseconds < slow.Milliseconds,
-            $"both reported the same: {quick.Milliseconds} ms and {slow.Milliseconds} ms");
+        Assert.Equal(40, slow.Milliseconds);
+        Assert.Equal(0, quick.Milliseconds);
     }
 
     /// <summary>
@@ -216,7 +214,7 @@ public sealed class IntakeTests : IDisposable
     {
         var stock = Open();
 
-        var report = await new Intake(stock).TakeInAsync(
+        var report = await new Intake(stock, _time).TakeInAsync(
             [Throwing("Verschwunden"), Source("Danach")],
             progress: null,
             TestContext.Current.CancellationToken);
@@ -230,7 +228,7 @@ public sealed class IntakeTests : IDisposable
     [Fact]
     public async Task AnEmptyRunIsAnEmptyReport()
     {
-        var report = await new Intake(Open()).TakeInAsync(
+        var report = await new Intake(Open(), _time).TakeInAsync(
             [], progress: null, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, report.Count);
@@ -238,7 +236,7 @@ public sealed class IntakeTests : IDisposable
     }
 
     private async Task<IntakeReport> Run(params IntakeSource[] sources) =>
-        await new Intake(Open()).TakeInAsync(sources, progress: null, TestContext.Current.CancellationToken);
+        await new Intake(Open(), _time).TakeInAsync(sources, progress: null, TestContext.Current.CancellationToken);
 
     private AssetStore Open() => AssetStore.Open(_directory, _codec, _time);
 
@@ -250,13 +248,22 @@ public sealed class IntakeTests : IDisposable
     /// A source that takes its time getting at its bytes - a large file, a slow address. The delay
     /// sits in reaching them rather than in the codec, because that is part of what the DM waits
     /// for and therefore part of what the reading has to cover.
+    /// <para>
+    /// It DWELLS ON THE RUN'S OWN CLOCK rather than in real time. Waiting for real milliseconds
+    /// made the assertion a race: on a loaded build machine the source that dwells for 40 ms and the
+    /// one that dwells for none both come out at whatever the scheduler gave them, and the run that
+    /// failed in CI reported 587 ms for the quick one against 75 ms for the slow one. Advancing the
+    /// handed-in clock measures the same thing - does the reading follow what the picture cost - and
+    /// measures it exactly.
+    /// </para>
     /// </summary>
-    private static IntakeSource Dwelling(string name, TimeSpan dwell) =>
-        new(name, async _ =>
+    private IntakeSource Dwelling(string name, TimeSpan dwell) =>
+        new(name, _ =>
         {
-            await Task.Delay(dwell, TestContext.Current.CancellationToken);
+            _time.Advance(dwell);
 
-            return new IntakeBytes.Ready(Encoding.UTF8.GetBytes("picture of " + name));
+            return ValueTask.FromResult<IntakeBytes>(
+                new IntakeBytes.Ready(Encoding.UTF8.GetBytes("picture of " + name)));
         });
 
     private static IntakeSource Broken(string name) =>

@@ -113,7 +113,7 @@ public sealed class FreeSpaceTests : IDisposable
     {
         var store = Open(free: 1024);
 
-        var report = await new Intake(store).TakeInAsync(
+        var report = await new Intake(store, _time).TakeInAsync(
             [Source("Eins"), Source("Zwei"), Source("Drei")],
             progress: null,
             TestContext.Current.CancellationToken);

@@ -42,6 +42,20 @@ internal sealed class StagePanel : StackPanel
     private readonly TextBox _address = new() { Width = 260, Margin = new Thickness(0, 0, 8, 0) };
 
     private readonly ListBox _items = new() { MinHeight = 90, Margin = new Thickness(0, 0, 0, 8) };
+
+    /// <summary>
+    /// How many entries the list shows before it starts to scroll.
+    /// <para>
+    /// It grows inside a <see cref="StackPanel"/>, which offers its children all the height they
+    /// ask for - so a screen carrying seven hundred pictures made a list seven hundred rows tall and
+    /// pushed everything below it, the grips for the very items it was listing, out of the window.
+    /// Found at the table (hand-run of M3b, step 0.5).
+    /// </para>
+    /// </summary>
+    private const int VisibleItems = 10;
+
+    /// <summary>At most one measurement waiting for the layout, so a hidden panel cannot spin.</summary>
+    private bool _capping;
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 16, 0), IsChecked = true };
     private readonly CheckBox _background = new() { Content = "Background", IsChecked = true };
 
@@ -222,7 +236,60 @@ internal sealed class StagePanel : StackPanel
         }
 
         _items.SelectedIndex = selected >= 0 && selected < _items.Items.Count ? selected : 0;
+
+        CapToVisibleItems();
     }
+
+    /// <summary>
+    /// Holds the list to <see cref="VisibleItems"/> rows and lets its own scrollbar take the rest.
+    /// <para>
+    /// The height is MEASURED off the first row rather than written down in device-independent
+    /// pixels: the row follows the font and the font follows the system's text size, so a number
+    /// here would be ten rows on this machine and six on the next one.
+    /// </para>
+    /// </summary>
+    private void CapToVisibleItems() => CapToVisibleItems(mayWaitForLayout: true);
+
+    private void CapToVisibleItems(bool mayWaitForLayout)
+    {
+        if (_items.Items.Count <= VisibleItems)
+        {
+            // Short enough to stand whole. Left uncapped so it shrinks back with its content.
+            _items.MaxHeight = double.PositiveInfinity;
+            return;
+        }
+
+        if (_items.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement { ActualHeight: > 0 } row)
+        {
+            _items.MaxHeight = (row.ActualHeight * VisibleItems) + Chrome();
+            return;
+        }
+
+        if (mayWaitForLayout && !_capping)
+        {
+            // The rows are made during layout, so there is nothing to measure yet. Once.
+            _capping = true;
+
+            _ = Dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                () =>
+                {
+                    _capping = false;
+                    CapToVisibleItems(mayWaitForLayout: false);
+                });
+
+            return;
+        }
+
+        // The layout has been asked and produced nothing to measure - the panel is not on the
+        // screen. An estimate from the font caps it anyway, because a list that is only capped when
+        // it happens to be visible is not capped at all.
+        _items.MaxHeight = (_items.FontFamily.LineSpacing * _items.FontSize * VisibleItems) + Chrome();
+    }
+
+    private double Chrome() =>
+        _items.Padding.Top + _items.Padding.Bottom
+        + _items.BorderThickness.Top + _items.BorderThickness.Bottom;
 
     private bool _redrawing;
     private bool _again;

@@ -24,7 +24,7 @@ namespace DnDOverlay.Control;
 /// that is supposed to let it in.
 /// </para>
 /// </summary>
-internal sealed class Entrances(IAssetSink stock, ControlSettings settings)
+internal sealed class Entrances(IAssetSink stock, ControlSettings settings, TimeProvider time)
 {
     /// <summary>
     /// The clipboard's order of preference (Part 7). <c>"PNG"</c> comes before the device
@@ -34,7 +34,7 @@ internal sealed class Entrances(IAssetSink stock, ControlSettings settings)
     /// </summary>
     private const string LosslessBitmap = "PNG";
 
-    private readonly Intake _intake = new(stock);
+    private readonly Intake _intake = new(stock, time);
 
     /// <summary>
     /// Sources for files, whatever they turn out to hold - and for folders, because check step 29a

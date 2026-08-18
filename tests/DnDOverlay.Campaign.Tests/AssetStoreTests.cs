@@ -324,5 +324,17 @@ internal sealed class FakeTimeProvider : TimeProvider
 {
     internal DateTimeOffset Now { get; set; } = new(2026, 8, 14, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>
+    /// The elapsed-time side of the same clock, so that a duration MEASURED under test moves only
+    /// when a test moves it. Without it <see cref="TimeProvider.GetTimestamp"/> falls through to the
+    /// real high-resolution counter, and a test about a duration is then a test about how busy the
+    /// build machine is.
+    /// </summary>
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
     public override DateTimeOffset GetUtcNow() => Now;
+
+    public override long GetTimestamp() => Now.UtcTicks;
+
+    internal void Advance(TimeSpan by) => Now += by;
 }

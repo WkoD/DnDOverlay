@@ -1172,7 +1172,14 @@ public sealed partial class App : Application, IDisposable
 
         // Redrawn on every arrival AND while the readings change, because the ring lives on the
         // ungoverned layer: it has to keep turning while the rest of the scene sits still.
-        var turning = Task.Run(() => TurnRingsAsync(_shutdown.Token));
+        //
+        // <b>Started, not waited for.</b> Measured at the table (hand-run of M3b, step 0.5): the run
+        // used to end with the loop, and the loop ends a quarter of a second after the last picture
+        // is done, because that is its beat. With one patch per picture that quarter second sat
+        // between EVERY two pictures - 796 runs whose fetching added up to six seconds took six
+        // minutes. The rings are decoration on a layer nobody waits for, and a load run that waits
+        // for them pays their beat for every picture it brings.
+        _ = Task.Run(() => TurnRingsAsync(_shutdown.Token), _shutdown.Token);
 
         var steps = scene.Items
             .OfType<ImageItem>()
@@ -1188,8 +1195,6 @@ public sealed partial class App : Application, IDisposable
         {
             Decode(arrived, steps.GetValueOrDefault(arrived.Asset));
         }
-
-        await turning.ConfigureAwait(false);
 
         var run = await loading.ConfigureAwait(false);
 

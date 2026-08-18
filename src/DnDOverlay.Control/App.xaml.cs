@@ -206,7 +206,7 @@ public sealed partial class App : Application, IDisposable
         var window = new MainWindow(
             session,
             new PairingDesk(session, secrets, _settings, TimeProvider.System),
-            new Entrances(store, _settings),
+            new Entrances(store, _settings, TimeProvider.System),
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
             _log);
 
