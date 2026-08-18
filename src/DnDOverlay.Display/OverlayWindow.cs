@@ -209,6 +209,20 @@ internal sealed class OverlayWindow : Window
     internal event Action<Reported>? Transformed;
 
     /// <summary>
+    /// This item is being drawn larger than the bitmap it has. The step above is asked for once per
+    /// crossing; whether there is one left is the application's question, because only it knows what
+    /// the source holds (<see cref="DecodeSteps"/>).
+    /// </summary>
+    internal event Action<AssetId, int>? Sharpen;
+
+    /// <summary>
+    /// More pictures are ready than this pass would hang up. Whoever handles it draws again, at
+    /// background priority - the point is to let input through in between (Part 1, order of
+    /// precedence).
+    /// </summary>
+    internal event Action? MoreToShow;
+
+    /// <summary>
     /// A player swiped a picture into the slot bar, or took one back out by touching it. Where it
     /// then lies is not reported: that follows from the list of parked pictures and this screen's
     /// park edge, and the hub works it out with the same function this window would have used.
@@ -294,6 +308,10 @@ internal sealed class OverlayWindow : Window
 
         var (width, height) = Surface(context);
 
+        // One picture may be hung up in this pass, and whether anything had to wait for the next.
+        var hung = false;
+        var waiting = false;
+
         // Which pictures may move is decided over the scene, in Core, before anything is built -
         // a continuous animation on a software-rendered transparent overlay is the most expensive
         // case this application has (Part 6).
@@ -324,13 +342,27 @@ internal sealed class OverlayWindow : Window
                 // between renders does not decide what lies on top of what.
                 Panel.SetZIndex(mount.Element, item.ZOrder);
 
-                Show(
-                    mount,
-                    source,
-                    image.AssetId,
-                    moving.GetValueOrDefault(image.AssetId),
-                    animating.Items.Contains(image.ItemId),
-                    image.AnimationPaused);
+                // <b>At most one picture is hung up per pass.</b> Twenty arriving at once would
+                // otherwise all be built into the visual tree in one drawing - and that drawing is
+                // the frame a hand at the table is waiting for (Part 11, the priority rule). What is
+                // left over comes on the next pass, which is asked for below.
+                if (Show(
+                        mount,
+                        source,
+                        image.AssetId,
+                        moving.GetValueOrDefault(image.AssetId),
+                        animating.Items.Contains(image.ItemId),
+                        image.AnimationPaused,
+                        hung))
+                {
+                    hung = true;
+                }
+                else if (mount.Applied != source)
+                {
+                    waiting = true;
+                }
+
+                Ask(image, Layout.ItemToRect(item, context), context, source);
 
                 // A held item keeps the geometry the finger gave it. Writing the scene's over it
                 // would drag the picture back to where the hub last knew it, twenty times a second,
@@ -377,6 +409,35 @@ internal sealed class OverlayWindow : Window
             {
                 _rings.Children.Add(Ring(Layout.ItemToRect(item, context), fraction, width, height));
             }
+        }
+
+        if (waiting)
+        {
+            MoreToShow?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Asks for a sharper decode when an item is being drawn larger than the bitmap it has.
+    /// <para>
+    /// The comparison is against the BITMAP rather than against a note kept somewhere: what is on
+    /// the screen knows its own width, and a second table over the same question is the shape that
+    /// cost 2 GB in M2b.
+    /// </para>
+    /// </summary>
+    private void Ask(ImageItem item, CoreRect rect, ScreenContext context, ImageSource source)
+    {
+        if (source is not BitmapSource bitmap)
+        {
+            return;
+        }
+
+        // In physical pixels of this screen - the unit a decode step is measured in.
+        var needed = (int)Math.Round(rect.Width * context.Size.Width);
+
+        if (needed > bitmap.PixelWidth && bitmap.PixelWidth < item.Meta.PixelWidth)
+        {
+            Sharpen?.Invoke(item.AssetId, needed);
         }
     }
 
@@ -1004,13 +1065,18 @@ internal sealed class OverlayWindow : Window
     /// Brings one place up to date with the picture it should show. What has to happen is decided in
     /// <see cref="PictureTransition"/> - here is only the doing of it.
     /// </summary>
-    private static void Show(
+    /// <returns>
+    /// Whether a picture was actually built into the tree here - the cost the one-per-pass budget
+    /// is about. Switching an animation on or holding it still is not that cost.
+    /// </returns>
+    private static bool Show(
         Mount mount,
         ImageSource source,
         AssetId asset,
         byte[]? bytes,
         bool admitted,
-        bool paused)
+        bool paused,
+        bool spent = false)
     {
         // A picture may only move if the budget admitted it AND the bytes to move it are here. The
         // second half is not a detail: the animated path needs the BYTES rather than the decoded
@@ -1025,6 +1091,13 @@ internal sealed class OverlayWindow : Window
         // the second is the one that has to go up.
         var action = PictureTransition.Next(
             mount.State, mount.Showing, asset, ReferenceEquals(mount.Applied, source), canMove, paused);
+
+        // The budget is spent and this would put a picture up: leave the place as it is and let the
+        // next pass do it. Everything cheaper still happens.
+        if (spent && PictureTransition.Costs(action))
+        {
+            return false;
+        }
 
         switch (action)
         {
@@ -1059,6 +1132,8 @@ internal sealed class OverlayWindow : Window
         mount.Showing = asset;
         mount.Applied = source;
         mount.State = PictureTransition.After(mount.State, action);
+
+        return PictureTransition.Costs(action);
     }
 
     /// <summary>

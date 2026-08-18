@@ -136,6 +136,18 @@ public static class PictureTransition
     }
 
     /// <summary>What the place shows once <paramref name="action"/> has been carried out.</summary>
+    /// <summary>
+    /// Whether this action actually builds a picture into the tree - the expensive half.
+    /// <para>
+    /// It is what the one-per-render-pass budget counts (Part 11, the priority rule): twenty
+    /// pictures finishing at once would otherwise all be hung up in the drawing that a hand at the
+    /// table is waiting for. Starting an animation and putting a still up cost; resuming one that
+    /// is already there, holding it, or leaving a place alone do not.
+    /// </para>
+    /// </summary>
+    public static bool Costs(PictureAction action) =>
+        action is PictureAction.Start or PictureAction.Freeze;
+
     public static PictureState After(PictureState state, PictureAction action) => action switch
     {
         PictureAction.Start or PictureAction.Resume => PictureState.Moving,

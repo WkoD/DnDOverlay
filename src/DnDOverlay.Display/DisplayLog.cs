@@ -76,6 +76,18 @@ internal static partial class DisplayLog
         ILogger logger, int fetched, long milliseconds, long bytes, int peak, int alreadyHere);
 
     /// <summary>
+    /// A picture was decoded a step larger because it is being drawn larger than it was decoded.
+    /// Debug rather than Information: it happens whenever somebody zooms, and it is a reading for
+    /// the evening when the table went soft or slow, not news (Part 6).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3025,
+        Level = LogLevel.Debug,
+        Message = "{Name} decoded again at {StepPixels} px, up from {BeforePixels} px.")]
+    internal static partial void PictureSharpened(
+        ILogger logger, string name, int beforePixels, int stepPixels);
+
+    /// <summary>
     /// The frame times of the last stretch. <b>Until M5a this line IS the display</b> - the
     /// diagnostic bar and the options window are later milestones, and the acceptance of M3, M4 and
     /// M5 each asks for the measurement (Part 10). It goes out on Information because it is a

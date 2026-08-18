@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading.Channels;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
 using DnDOverlay.Core.Logging;
@@ -108,6 +109,12 @@ public sealed partial class App : Application, IDisposable
     /// thread - see <see cref="FrameWatch"/>.
     /// </summary>
     private FrameWatch? _frames;
+
+    /// <summary>
+    /// Pictures whose next step is being decoded right now. Without it every drawing during a zoom
+    /// would ask again while the first answer was still on its way.
+    /// </summary>
+    private readonly HashSet<AssetId> _sharpening = [];
     private Uri _hubHttp = null!;
     private string _assetPath = Protocol.AssetPath;
 
@@ -533,6 +540,16 @@ public sealed partial class App : Application, IDisposable
         window.Transformed += reported => Report(screen, reported);
         window.Parked += (item, parked) => _outbox?.TryWrite(new ItemParkedMessage(screen, item, parked));
 
+        // Zoomed past its step: the next one is decoded from the bytes already in the store, so a
+        // sharper picture costs a decode and never a second download (Part 6).
+        window.Sharpen += (asset, needed) => Sharpen(screen, asset, needed);
+
+        // More pictures were ready than one pass hangs up. Background priority on purpose: input
+        // goes first, which is the whole reason they are staggered (Part 1, order of precedence).
+        window.MoreToShow += () => Dispatcher.InvokeAsync(
+            () => Draw(new ScreenRef(_device, screen)),
+            System.Windows.Threading.DispatcherPriority.Background);
+
         _windows[screen] = window;
         window.Show();
 
@@ -912,7 +929,7 @@ public sealed partial class App : Application, IDisposable
             case SceneSnapshotMessage snapshot:
                 _scenes[snapshot.Screen] = snapshot.Scene;
                 LetGoOfWhatNoSceneNeeds();
-                await EnsureImagesAsync(snapshot.Scene).ConfigureAwait(false);
+                await EnsureImagesAsync(snapshot.Scene, snapshot.Screen.Screen).ConfigureAwait(false);
                 await RenderAsync(snapshot.Screen).ConfigureAwait(false);
                 break;
 
@@ -1044,7 +1061,7 @@ public sealed partial class App : Application, IDisposable
 
             LetGoOfWhatNoSceneNeeds();
 
-            await EnsureImagesAsync(scene).ConfigureAwait(false);
+            await EnsureImagesAsync(scene, group.Key.Screen).ConfigureAwait(false);
             await RenderAsync(group.Key).ConfigureAwait(false);
 
             foreach (var item in arrived)
@@ -1075,8 +1092,15 @@ public sealed partial class App : Application, IDisposable
     /// drawing finds it.
     /// </para>
     /// </summary>
-    private async Task EnsureImagesAsync(SceneState scene)
+    private async Task EnsureImagesAsync(SceneState scene, ScreenId screen)
     {
+        // The base step, in physical pixels of THIS screen: a picture is decoded to the screen's
+        // longer edge and no further, because the pixels above that are memory nobody can see
+        // (Part 6). Zooming past the step asks for the next one, later and once (Sharpen).
+        var edge = _contexts.TryGetValue(screen, out var context)
+            ? Math.Max(context.Size.Width, context.Size.Height)
+            : 0;
+
         var wanted = new List<AssetWanted>();
 
         if (scene.Background is { } background && !_images.ContainsKey(background.AssetId))
@@ -1105,9 +1129,19 @@ public sealed partial class App : Application, IDisposable
         // ungoverned layer: it has to keep turning while the rest of the scene sits still.
         var turning = Task.Run(() => TurnRingsAsync(scene, _shutdown.Token));
 
+        var steps = scene.Items
+            .OfType<ImageItem>()
+            .Select(item => (item.AssetId, item.Meta))
+            .Append(scene.Background is { } layer ? (layer.AssetId, layer.Meta) : default)
+            .Where(pair => pair.Meta is not null)
+            .GroupBy(pair => pair.AssetId)
+            .ToDictionary(
+                group => group.Key,
+                group => DecodeSteps.Base(edge, group.First().Meta.PixelWidth, group.First().Meta.PixelHeight));
+
         await foreach (var arrived in arrivals.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
         {
-            Decode(arrived);
+            Decode(arrived, steps.GetValueOrDefault(arrived.Asset));
         }
 
         await turning.ConfigureAwait(false);
@@ -1170,7 +1204,7 @@ public sealed partial class App : Application, IDisposable
     /// picture STANDS at its place blurred within a second and is replaced when the original lands
     /// (Part 5) - never the other way round.
     /// </summary>
-    private void Decode(AssetArrived arrived)
+    private void Decode(AssetArrived arrived, int pixelWidth)
     {
         if (arrived.IsThumbnail && _images.ContainsKey(arrived.Asset))
         {
@@ -1179,7 +1213,8 @@ public sealed partial class App : Application, IDisposable
 
         try
         {
-            var decoded = PictureDecoder.Decode(arrived.Bytes);
+            // A thumbnail is already the small step and is never stepped down further.
+            var decoded = PictureDecoder.Decode(arrived.Bytes, arrived.IsThumbnail ? 0 : pixelWidth);
 
             _images[arrived.Asset] = decoded;
 
@@ -1364,6 +1399,91 @@ public sealed partial class App : Application, IDisposable
             reported.Transform,
             reported.KnownRevision,
             reported.Grabbed));
+    }
+
+    /// <summary>
+    /// Decodes one picture a step larger, because it is being drawn larger than it was decoded.
+    /// <para>
+    /// The bytes come out of the store, so this costs a decode and never a second transfer. It is
+    /// one step per crossing and capped at the source; zooming out asks for nothing, which is why
+    /// there is no way back down in here (<see cref="DecodeSteps"/>).
+    /// </para>
+    /// <para>
+    /// Animated pictures are left alone: their frames are built from the bytes by
+    /// <c>AnimatedPicture</c>, and a still decoded beside them would be a second picture for the
+    /// same item.
+    /// </para>
+    /// </summary>
+    private void Sharpen(ScreenId screen, AssetId asset, int needed)
+    {
+        if (_moving.ContainsKey(asset)
+            || !_sharpening.Add(asset)
+            || !_images.TryGetValue(asset, out var current)
+            || current is not BitmapSource bitmap)
+        {
+            return;
+        }
+
+        try
+        {
+            var source = SourceWidth(asset);
+
+            if (DecodeSteps.Next(bitmap.PixelWidth, needed, source) is not { } step)
+            {
+                return;
+            }
+
+            // The ORIGINAL out of the store, never the thumbnail: sharpening a thumbnail would
+            // produce a bigger blurred picture, which is worse than the small one it replaced.
+            if (!_cache.TryGet(asset, out var bytes))
+            {
+                return;
+            }
+
+            _images[asset] = PictureDecoder.Decode(bytes, step);
+
+            var name = NameOf(asset);
+            var before = bitmap.PixelWidth;
+
+            DisplayLog.PictureSharpened(_logger, name, before, step);
+
+            Draw(new ScreenRef(_device, screen));
+        }
+        catch (NotSupportedException error)
+        {
+            // The bytes decoded once already, so this is not a picture we cannot read - it is a
+            // failure of THIS decode, and the picture on the screen stays what it is.
+            DisplayLog.AssetFailed(_logger, NameOf(asset), asset, error.Message);
+        }
+        finally
+        {
+            _sharpening.Remove(asset);
+        }
+    }
+
+    /// <summary>
+    /// How many pixels the source has, from the scenes that carry the picture. Zero when nothing
+    /// does any more - a picture dropped while its sharpening was on its way.
+    /// </summary>
+    private int SourceWidth(AssetId asset)
+    {
+        foreach (var scene in _scenes.Values)
+        {
+            foreach (var item in scene.Items.OfType<ImageItem>())
+            {
+                if (item.AssetId == asset)
+                {
+                    return item.Meta.PixelWidth;
+                }
+            }
+
+            if (scene.Background is { } background && background.AssetId == asset)
+            {
+                return background.Meta.PixelWidth;
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>

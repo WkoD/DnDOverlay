@@ -123,4 +123,25 @@ public sealed class AnimationBudgetTests
 
     private static BackgroundItem MovingBackground() =>
         Build.Background() with { Meta = Build.Meta() with { IsAnimated = true } };
+
+    /// <summary>
+    /// <b>What the one-per-render-pass budget counts.</b> Twenty pictures finishing at once would
+    /// otherwise all be built into the visual tree in one drawing - and that drawing is the frame a
+    /// hand at the table is waiting for (Part 11, the priority rule).
+    /// <para>
+    /// Only building a picture costs. Resuming an animation that is already there, holding one
+    /// still, or leaving a place alone are not the expensive half, and counting them would stagger
+    /// pauses and resumes for no reason.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(PictureAction.Start, true)]
+    [InlineData(PictureAction.Freeze, true)]
+    [InlineData(PictureAction.Resume, false)]
+    [InlineData(PictureAction.Hold, false)]
+    [InlineData(PictureAction.Leave, false)]
+    public void Only_putting_a_picture_up_costs_a_place_in_the_pass(PictureAction action, bool costs)
+    {
+        Assert.Equal(costs, PictureTransition.Costs(action));
+    }
 }

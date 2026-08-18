@@ -246,6 +246,9 @@
   <data name="E3023_FrameTimes" xml:space="preserve">
     <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %.</value>
   </data>
+  <data name="E3025_PictureSharpened" xml:space="preserve">
+    <value>{Name} decoded again at {StepPixels} px, up from {BeforePixels} px.</value>
+  </data>
   <data name="E3024_FrameBudgetMissed" xml:space="preserve">
     <value>{ScreenName} is not holding its frame budget: median {MedianMs} ms against {BudgetMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, CPU {CpuPercent} %.</value>
   </data>

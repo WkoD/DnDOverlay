@@ -29,7 +29,17 @@ public static class PictureDecoder
     /// The caller catches it.
     /// </para>
     /// </exception>
-    public static BitmapSource Decode(byte[] bytes)
+    /// <param name="pixelWidth">
+    /// The step to decode at, in physical pixels, or <c>0</c> for the picture as it is
+    /// (<see cref="DecodeSteps"/>).
+    /// <para>
+    /// WIC scales while it decodes, so the pixels above the step are never built in the first
+    /// place - that is the difference between a step and a resize, and it is the whole memory
+    /// saving. <b>Never larger than the source:</b> asking for more pixels than there are adds no
+    /// detail and spends the memory twice, which is why the step is capped before it gets here.
+    /// </para>
+    /// </param>
+    public static BitmapSource Decode(byte[] bytes, int pixelWidth = 0)
     {
         ArgumentNullException.ThrowIfNull(bytes);
 
@@ -43,6 +53,14 @@ public static class PictureDecoder
         // a lazy hold on a disposed MemoryStream and fails at the first draw instead of here.
         image.CacheOption = BitmapCacheOption.OnLoad;
         image.StreamSource = stream;
+
+        if (pixelWidth > 0)
+        {
+            // Width alone: the height follows the aspect ratio, and setting both would let a
+            // rounding difference between the two squash the picture.
+            image.DecodePixelWidth = pixelWidth;
+        }
+
         image.EndInit();
 
         image.Freeze();
