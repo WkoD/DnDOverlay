@@ -146,6 +146,17 @@ internal sealed class StagePanel : StackPanel
                 _session.SetShowNameAsync(Screen()!.Value, item.ItemId, !item.ShowName))),
             Button("Hold/run animation", (_, _) => WithItem(item =>
                 _session.SetAnimationPausedAsync(Screen()!.Value, item.ItemId, !item.AnimationPaused)))));
+
+        // The three commands M3a built. They had no caller outside the hub's own inbound path, and a
+        // step counts as closed when a CALLER is named rather than a test (Guide C12) - besides
+        // which the hand-run has to be able to lock something in order to find out that the table
+        // will not move it (Part 11, step 21).
+        Children.Add(Row(
+            Button("Lock/unlock", (_, _) => WithItem(item =>
+                _session.SetLockedAsync(Screen()!.Value, item.ItemId, !item.Locked))),
+            Button("Unlock all", (_, _) => Run(screen => _session.UnlockAllAsync(screen))),
+            Button("Park/unpark", (_, _) => WithItem(item =>
+                _session.ParkItemAsync(Screen()!.Value, item.ItemId, !item.Parked)))));
     }
 
     /// <summary>
@@ -153,6 +164,38 @@ internal sealed class StagePanel : StackPanel
     /// is what the hub holds and never a second copy kept in step by hand (rule 1).
     /// </summary>
     internal async Task RefreshAsync()
+    {
+        // A gesture at the table arrives about twenty times a second, and each patch asks for a
+        // redraw. Coalescing rather than queueing: whoever asks while one is running gets the ONE
+        // that follows it, so the list always ends up showing the last state without twenty
+        // rebuilds a second going through the hub - the control has to stay usable while the table
+        // is busy (Part 1, order of precedence; Part 11, step 17).
+        if (_redrawing)
+        {
+            _again = true;
+
+            return;
+        }
+
+        _redrawing = true;
+
+        try
+        {
+            await DrawAsync().ConfigureAwait(true);
+
+            while (_again)
+            {
+                _again = false;
+                await DrawAsync().ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            _redrawing = false;
+        }
+    }
+
+    private async Task DrawAsync()
     {
         if (Screen() is not { } screen)
         {
@@ -180,6 +223,9 @@ internal sealed class StagePanel : StackPanel
 
         _items.SelectedIndex = selected >= 0 && selected < _items.Items.Count ? selected : 0;
     }
+
+    private bool _redrawing;
+    private bool _again;
 
     private ScreenRef? Screen() => _target();
 
@@ -582,6 +628,16 @@ internal sealed class StagePanel : StackPanel
         return row;
     }
 
+    /// <summary>
+    /// One line per item, and from M3 on it carries the VALUES.
+    /// <para>
+    /// <b>This line is what "done when" is measured against</b> (Part 10): every manipulation at the
+    /// table has to be visible in the control at once, and until M4 there is no thumbnail to see it
+    /// in - so position, angle, scale, <c>ZOrder</c>, locked and parked stand at the entry and change
+    /// with every release. Without them the sentence would be checking a display that does not exist
+    /// yet.
+    /// </para>
+    /// </summary>
     private sealed record ItemEntry(ImageItem Item)
     {
         internal ItemId ItemId => Item.ItemId;
@@ -590,11 +646,16 @@ internal sealed class StagePanel : StackPanel
         {
             var marks = string.Concat(
                 Item.ShowName ? " [name]" : string.Empty,
+                Item.Locked ? " [locked]" : string.Empty,
+                Item.Parked ? " [parked]" : string.Empty,
                 Item.Meta.IsAnimated ? Item.AnimationPaused ? " [held]" : " [moving]" : string.Empty);
 
+            // Two decimals on the normalised values: at 1920 pixels a hundredth is 19 of them, which
+            // is what a hand-run needs to see move. More digits would turn a list into a wall.
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"{Item.Name} - {Item.Meta.PixelWidth}x{Item.Meta.PixelHeight} {Item.Meta.Format}{marks}");
+                $"{Item.Name} - {Item.CenterX:F2},{Item.CenterY:F2} "
+                + $"x{Item.Scale:F2} {Item.RotationDeg:F0}° z{Item.ZOrder} r{Item.Revision}{marks}");
         }
     }
 }

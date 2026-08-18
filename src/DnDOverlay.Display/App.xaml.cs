@@ -976,36 +976,72 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
+    /// <summary>
+    /// Applies one patch, screen by screen rather than operation by operation.
+    /// <para>
+    /// The grouping is not tidiness. Two questions are asked of a WHOLE patch and cannot be asked of
+    /// a single operation: what has just <see cref="Arrival">arrived</see> - which depends on whether
+    /// the patch does nothing but add - and how often a screen is redrawn, which for a load of twenty
+    /// items is the difference between one drawing and twenty.
+    /// </para>
+    /// </summary>
     private async Task ApplyAsync(ScenePatch patch)
     {
-        foreach (var op in patch.Ops)
+        foreach (var group in patch.Ops.GroupBy(op => op.Screen))
         {
             // A screen this device does not have is discarded and logged. It stays as a net
             // rather than as a division of labour: it covers the window between a hot-plug and
             // the next ScreensChanged, in which both sides briefly believe different things
             // (Part 4).
-            if (!_contexts.TryGetValue(op.Screen.Screen, out var context))
+            if (!_contexts.TryGetValue(group.Key.Screen, out var context))
             {
-                DisplayLog.UnknownScreenDiscarded(_logger, op.Screen.Screen);
+                DisplayLog.UnknownScreenDiscarded(_logger, group.Key.Screen);
                 continue;
             }
 
-            var scene = _scenes.TryGetValue(op.Screen, out var known) ? known : SceneState.Empty;
+            var ops = group.Select(op => op.Op).ToList();
+            var scene = _scenes.TryGetValue(group.Key, out var known) ? known : SceneState.Empty;
 
-            _scenes[op.Screen] = SceneReducer.Apply(scene, op.Op, context);
+            // Asked BEFORE the operations are applied, because "was this screen already occupied?"
+            // has no answer afterwards.
+            var arrived = Arrival.Marked(scene, ops);
 
-            if (op.Op is RemoveItem removed)
+            foreach (var op in ops)
             {
-                // An item that goes away while a hand was on it leaves an entry in the throttle
-                // that nothing would ever clear again - its binding report is the one that never
-                // comes (Part 4, conflict rule 4).
-                _throttle.Forget(removed.Item);
+                scene = SceneReducer.Apply(scene, op, context);
+
+                if (op is RemoveItem removed)
+                {
+                    // An item that goes away while a hand was on it leaves an entry in the throttle
+                    // that nothing would ever clear again - its binding report is the one that never
+                    // comes (Part 4, conflict rule 4).
+                    _throttle.Forget(removed.Item);
+                }
             }
+
+            _scenes[group.Key] = scene;
 
             LetGoOfWhatNoSceneNeeds();
 
-            await EnsureImagesAsync(_scenes[op.Screen]).ConfigureAwait(false);
-            await RenderAsync(op.Screen).ConfigureAwait(false);
+            await EnsureImagesAsync(scene).ConfigureAwait(false);
+            await RenderAsync(group.Key).ConfigureAwait(false);
+
+            foreach (var item in arrived)
+            {
+                await Dispatcher.InvokeAsync(() => Flash(group.Key.Screen, item)).Task.ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lights a newly arrived picture up. On the UI thread, and after the drawing - the place has to
+    /// exist before anything can be laid over it.
+    /// </summary>
+    private void Flash(ScreenId screen, ItemId item)
+    {
+        if (_windows.TryGetValue(screen, out var window))
+        {
+            window.Flash(item);
         }
     }
 

@@ -1090,6 +1090,48 @@ internal sealed class OverlayWindow : Window
     }
 
     /// <summary>
+    /// Lights a picture up briefly because it has just arrived. Which pictures those are is decided
+    /// in <see cref="Arrival"/>, over the patch - here is only the flash.
+    /// <para>
+    /// A pane over the picture rather than its opacity: opacity cannot go above one, so brightening
+    /// would mean dimming everything else first. The pane fades from bright to nothing and is gone
+    /// afterwards, which is what <c>FillBehavior.Stop</c> is for - a highlight that stayed would be
+    /// a picture that arrived for ever.
+    /// </para>
+    /// </summary>
+    internal void Flash(ItemId item)
+    {
+        if (_context is not { } context
+            || context.ArrivalHighlightSeconds <= 0
+            || !_mounts.TryGetValue(item, out var mount))
+        {
+            return;
+        }
+
+        var pane = new System.Windows.Shapes.Rectangle
+        {
+            Fill = Brushes.White,
+            Opacity = 0,
+            IsHitTestVisible = false,
+        };
+
+        mount.Element.Children.Add(pane);
+
+        var fade = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
+
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0.55, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(
+            0,
+            KeyTime.FromTimeSpan(TimeSpan.FromSeconds(context.ArrivalHighlightSeconds))));
+
+        // Taken off again when it has finished, or every arrival of the evening would leave a
+        // transparent pane on the picture and the table would slowly fill up with them.
+        fade.Completed += (_, _) => mount.Element.Children.Remove(pane);
+
+        pane.BeginAnimation(OpacityProperty, fade);
+    }
+
+    /// <summary>
     /// Hangs the padlock on a place, or takes it off again.
     /// <para>
     /// <b>It is the reason "unlock all" needs no undo</b> (Part 3): whoever can see which five
