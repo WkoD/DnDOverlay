@@ -693,15 +693,18 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3020 | `AssetsLoaded` | Information |
 | 3021 | `LockedItemNotMoved` | Information |
 | 3022 | `ForeignScreenRefused` | Warning |
+| 3023 | `FrameTimes` | Information |
+| 3024 | `FrameBudgetMissed` | Warning |
 
-**Next free: 3023.**
+**Next free: 3025.**
 
 3019 sits in the display range although what it changes is a process-wide flag — the subject of
 the sentence is whether a screen stays lit, and that is what decides the range. Both directions
 are worth the same line, and the second one more than the first: from the room, a device that was
 *told* to let go looks exactly like one that failed to hold on.
 
-Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 by the **display** — the range
+Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 and 3023–3024 by the
+**display** — the range
 follows the subject of the sentence, never the assembly it is written in. Only one of the three
 inventory findings is a warning, and that is the point of telling them apart: a missing screen
 loses nothing, a new one is a fact, and a screen whose **metrics changed** has had its images

@@ -243,6 +243,12 @@
   <data name="E3022_ForeignScreenRefused" xml:space="preserve">
     <value>{DeviceName} reported a gesture for {ScreenName}, which is not one of its screens.</value>
   </data>
+  <data name="E3023_FrameTimes" xml:space="preserve">
+    <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %.</value>
+  </data>
+  <data name="E3024_FrameBudgetMissed" xml:space="preserve">
+    <value>{ScreenName} is not holding its frame budget: median {MedianMs} ms against {BudgetMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, CPU {CpuPercent} %.</value>
+  </data>
 
   <!-- 4000-4999 · Operations: what a process does to itself. -->
 

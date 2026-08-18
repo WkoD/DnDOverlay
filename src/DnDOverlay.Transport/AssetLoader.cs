@@ -50,7 +50,16 @@ public sealed record AssetLoadFailure(AssetId Asset, string Detail);
 /// The background goes first. It is the layer everything else lies on, and a table that gets its
 /// portraits before its map has been assembled in the wrong order in front of everyone (Part 5).
 /// </param>
-public sealed record AssetWanted(AssetId Asset, AssetMeta Meta, bool IsBackground = false);
+/// <param name="IsParked">
+/// A parked picture goes last (Part 11). It lies in the slot bar at the edge, tidied away by the
+/// players themselves - so it is the one thing on the table that nobody is currently looking at, and
+/// it must not be in front of the portrait the DM has just sent.
+/// </param>
+public sealed record AssetWanted(
+    AssetId Asset,
+    AssetMeta Meta,
+    bool IsBackground = false,
+    bool IsParked = false);
 
 /// <summary>
 /// One picture's bytes, ready to be decoded by whoever can.
@@ -92,12 +101,21 @@ public sealed class AssetLoader
     private readonly AssetCache _cache;
     private readonly AssetProgressTracker _progress;
     private readonly int _maxConcurrent;
+    private readonly Func<bool> _busy;
 
+    /// <param name="busy">
+    /// Whether a hand is on the table right now. While it is, downloads drop to ONE at a time: the
+    /// gesture at the table outranks new pictures, and it is the first rule of the order of
+    /// precedence rather than a nicety (Part 1). Handed in as a question rather than as a state,
+    /// because the answer changes between two pictures of the same run - and the loader must not be
+    /// able to look at a window.
+    /// </param>
     public AssetLoader(
         AssetClient client,
         AssetCache cache,
         AssetProgressTracker progress,
-        int maxConcurrent = DefaultMaxConcurrent)
+        int maxConcurrent = DefaultMaxConcurrent,
+        Func<bool>? busy = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(cache);
@@ -108,6 +126,7 @@ public sealed class AssetLoader
         _cache = cache;
         _progress = progress;
         _maxConcurrent = maxConcurrent;
+        _busy = busy ?? (static () => false);
     }
 
     /// <summary>The most downloads that were in flight at once. For the test that says three is three.</summary>
@@ -146,11 +165,13 @@ public sealed class AssetLoader
         var started = Stopwatch.GetTimestamp();
         var run = new Tally();
 
-        // Background first, and otherwise the order the scene gave. Distinct, because two items on
-        // one picture are one download.
+        // Background first, parked last, and in between the order the scene gave. Distinct, because
+        // two items on one picture are one download - and the distinct comes FIRST, so a picture
+        // that is both parked here and lying there keeps the more urgent of its two places.
         var order = wanted
-            .DistinctBy(item => item.Asset)
             .OrderByDescending(item => item.IsBackground)
+            .ThenBy(item => item.IsParked)
+            .DistinctBy(item => item.Asset)
             .ToList();
 
         // Announced BEFORE anything is fetched, so the first reading already carries every picture
@@ -169,6 +190,11 @@ public sealed class AssetLoader
         }
 
         using var slots = new SemaphoreSlim(_maxConcurrent);
+
+        // The second gate, held only while a hand is on the table. Two gates rather than one whose
+        // count changes: a semaphore cannot be shrunk under the tasks already waiting on it, and the
+        // answer to "is somebody pushing a picture right now?" changes in the middle of a run.
+        using var alone = new SemaphoreSlim(1);
         var inFlight = 0;
 
         var running = order.Select(async item =>
@@ -182,8 +208,19 @@ public sealed class AssetLoader
 
             await slots.WaitAsync(cancellationToken).ConfigureAwait(false);
 
+            // Asked here rather than once per run: a gesture that begins while five pictures are on
+            // their way has to slow THEM down, and one that ends must not keep the rest waiting.
+            var yielding = _busy();
+
+            if (yielding)
+            {
+                await alone.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             try
             {
+                // Counted after both gates, so the peak is what was really in flight - counting at
+                // the first gate would report three while two of them were still waiting.
                 Note(run, Interlocked.Increment(ref inFlight));
 
                 await FetchAsync(hubBaseAddress, assetPath, item, token, arrivals, run, cancellationToken)
@@ -192,6 +229,12 @@ public sealed class AssetLoader
             finally
             {
                 Interlocked.Decrement(ref inFlight);
+
+                if (yielding)
+                {
+                    alone.Release();
+                }
+
                 slots.Release();
             }
         });

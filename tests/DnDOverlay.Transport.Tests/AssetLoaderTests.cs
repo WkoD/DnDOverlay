@@ -67,6 +67,63 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     /// <summary>
+    /// A parked picture goes last. It lies in the slot bar at the edge, tidied away by the players
+    /// themselves - the one thing on the table nobody is currently looking at, so it must not be in
+    /// front of the portrait the DM has just sent (Part 11).
+    /// </summary>
+    [Fact]
+    public async Task A_parked_picture_is_asked_for_last()
+    {
+        var stub = new Counterpart();
+        var loader = Loader(stub);
+
+        await LoadAsync(loader, [Want(1, parked: true), Want(2), Want(3, background: true)]);
+
+        Assert.Equal(
+            [Asset(3), Asset(2), Asset(1)],
+            [.. stub.Asked.Select(asked => asked.Asset).Distinct()]);
+    }
+
+    /// <summary>
+    /// <b>While a hand is on the table, downloads drop to one at a time.</b> The gesture beats new
+    /// pictures - first rule of the order of precedence, and the one the players notice (Part 1).
+    /// </summary>
+    [Fact]
+    public async Task While_somebody_is_pushing_a_picture_only_one_download_runs()
+    {
+        var stub = new Counterpart { Dwell = TimeSpan.FromMilliseconds(60) };
+        var loader = Loader(stub, busy: () => true);
+
+        await LoadAsync(loader, [.. Enumerable.Range(1, 6).Select(n => Want(n))]);
+
+        Assert.Equal(1, loader.PeakConcurrency);
+    }
+
+    /// <summary>
+    /// And it is asked per picture rather than once per run: a gesture that ends must not keep the
+    /// rest of the run waiting behind a decision taken before it began.
+    /// </summary>
+    [Fact]
+    public async Task A_gesture_that_ends_gives_the_downloads_their_slots_back()
+    {
+        var stub = new Counterpart { Dwell = TimeSpan.FromMilliseconds(60) };
+        var pushing = true;
+        var loader = Loader(stub, busy: () => pushing);
+
+        var wanted = Enumerable.Range(1, 9).Select(n => Want(n)).ToList();
+
+        var run = LoadAsync(loader, wanted);
+
+        // Long enough that the first pictures went down one at a time, then the hand leaves.
+        await Task.Delay(150, TestContext.Current.CancellationToken);
+        pushing = false;
+
+        await run;
+
+        Assert.Equal(3, loader.PeakConcurrency);
+    }
+
+    /// <summary>
     /// A run says what it came to, and the numbers are about THIS run.
     /// <para>
     /// The M2c hand-run had to time the pictures by hand, because the only duration in either
@@ -308,8 +365,12 @@ public sealed class AssetLoaderTests : IDisposable
         await running;
     }
 
-    private AssetLoader Loader(Counterpart stub) =>
-        new(new AssetClient(new HttpClient(stub)), new AssetCache(_directory), new AssetProgressTracker());
+    private AssetLoader Loader(Counterpart stub, Func<bool>? busy = null) =>
+        new(
+            new AssetClient(new HttpClient(stub)),
+            new AssetCache(_directory),
+            new AssetProgressTracker(),
+            busy: busy);
 
     private static async Task<List<AssetArrived>> LoadAsync(
         AssetLoader loader, IReadOnlyList<AssetWanted> wanted)
@@ -331,8 +392,8 @@ public sealed class AssetLoaderTests : IDisposable
         return collected;
     }
 
-    private static AssetWanted Want(int n, bool background = false) =>
-        new(Asset(n), Meta(Convert.ToHexStringLower(SHA256.HashData(Body(n)))), background);
+    private static AssetWanted Want(int n, bool background = false, bool parked = false) =>
+        new(Asset(n), Meta(Convert.ToHexStringLower(SHA256.HashData(Body(n)))), background, parked);
 
     private static AssetMeta Meta(string contentHash) =>
         new(64, 64, "png", Bytes: 64, IsAnimated: false, ContentHash: contentHash);

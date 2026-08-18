@@ -76,6 +76,49 @@ internal static partial class DisplayLog
         ILogger logger, int fetched, long milliseconds, long bytes, int peak, int alreadyHere);
 
     /// <summary>
+    /// The frame times of the last stretch. <b>Until M5a this line IS the display</b> - the
+    /// diagnostic bar and the options window are later milestones, and the acceptance of M3, M4 and
+    /// M5 each asks for the measurement (Part 10). It goes out on Information because it is a
+    /// reading and not a complaint; whether the budget was missed is the line below.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3023,
+        Level = LogLevel.Information,
+        Message = "Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, "
+            + "cadence {CadenceMs} ms, CPU {CpuPercent} %.")]
+    internal static partial void FrameTimes(
+        ILogger logger,
+        int seconds,
+        double medianMs,
+        double p95Ms,
+        double maxMs,
+        double cadenceMs,
+        double cpuPercent);
+
+    /// <summary>
+    /// The device says of its own accord that a screen is not holding its budget (Part 6).
+    /// <para>
+    /// <b>Once per session and screen</b>, and again only on a marked deterioration - the same brake
+    /// the stock warning has. Without it the line would be switched off after the third evening, and
+    /// then it would be missing exactly when it is needed. Its whole purpose is that "the table is
+    /// juddering" stops being the DM's diagnosis and becomes a line with numbers in it.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3024,
+        Level = LogLevel.Warning,
+        Message = "{ScreenName} is not holding its frame budget: median {MedianMs} ms against "
+            + "{BudgetMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, CPU {CpuPercent} %.")]
+    internal static partial void FrameBudgetMissed(
+        ILogger logger,
+        string screenName,
+        double medianMs,
+        double budgetMs,
+        double p95Ms,
+        double maxMs,
+        double cpuPercent);
+
+    /// <summary>
     /// The counterpart to <c>OverlayOpened</c>, and it is worth its own line: on a machine that
     /// nobody is looking at, "the table went dark" is otherwise a fact with no explanation. A
     /// screen turned inactive and one merely suppressed look identical from the room (Part 3).

@@ -181,6 +181,12 @@ internal sealed class OverlayWindow : Window
     internal ScreenState State { get; set; } = ScreenState.Enabled;
 
     /// <summary>
+    /// Whether a hand is on something here. The load path asks it before every picture: while
+    /// somebody is pushing, downloads drop to one at a time (Part 1, order of precedence).
+    /// </summary>
+    internal bool Holding => _held.Count > 0;
+
+    /// <summary>
     /// What one report of a running gesture carries. A record rather than four arguments, because
     /// three of them are booleans and a call site with three booleans in a row is a place to make a
     /// mistake that compiles.

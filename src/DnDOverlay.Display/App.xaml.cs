@@ -102,6 +102,12 @@ public sealed partial class App : Application, IDisposable
     /// M4 must not start a second one.
     /// </summary>
     private readonly TransformThrottle _throttle = new();
+
+    /// <summary>
+    /// The frame-time source. One per process, because WPF composes every window on one render
+    /// thread - see <see cref="FrameWatch"/>.
+    /// </summary>
+    private FrameWatch? _frames;
     private Uri _hubHttp = null!;
     private string _assetPath = Protocol.AssetPath;
 
@@ -216,6 +222,11 @@ public sealed partial class App : Application, IDisposable
             Wanted = loaded.Value.Device.KeepAwake ?? true,
         };
 
+        // The frame counter starts with the process, not with the first overlay: a device that
+        // renders badly while nothing is on it yet is worth knowing about too, and the window is
+        // thirty seconds either way (Part 10).
+        _frames = new FrameWatch(_logger, PlayingScreens);
+
         _device = new DeviceId(loaded.Value.DeviceId);
 
         _http = new HttpClient();
@@ -225,7 +236,14 @@ public sealed partial class App : Application, IDisposable
         // In M2 it is bound to the session; emptying it on exit and adopting it after a crash are
         // M5a.
         _cache = new AssetCache(Path.Combine(_dataRoot.Path, "cache"));
-        _loader = new AssetLoader(_assets, _cache, _progress);
+        // The loader asks whether a hand is on the table before every picture: while one is,
+        // downloads drop to one at a time. First rule of the order of precedence - the gesture
+        // at the table beats new pictures (Part 1).
+        _loader = new AssetLoader(
+            _assets,
+            _cache,
+            _progress,
+            busy: () => _windows.Values.Any(window => window.Holding));
 
         DisplayLog.DataRootChosen(_logger, _dataRoot.Path);
         Report(_logger, loaded);
@@ -559,6 +577,9 @@ public sealed partial class App : Application, IDisposable
         // Before the dispatcher stops - the request is held on the UI thread, and a thread that is
         // gone cannot be asked to let go.
         _wake?.Dispose();
+
+        // The composition tick would otherwise keep a handler on a process that is going away.
+        _frames?.Dispose();
 
         // Anything outstanding goes to disk before the process does (Part 6).
         _configuration?.Flush();
@@ -1066,7 +1087,7 @@ public sealed partial class App : Application, IDisposable
         wanted.AddRange(scene.Items
             .OfType<ImageItem>()
             .Where(item => !_images.ContainsKey(item.AssetId))
-            .Select(item => new AssetWanted(item.AssetId, item.Meta)));
+            .Select(item => new AssetWanted(item.AssetId, item.Meta, IsParked: item.Parked)));
 
         if (wanted.Count == 0)
         {
@@ -1344,6 +1365,17 @@ public sealed partial class App : Application, IDisposable
             reported.KnownRevision,
             reported.Grabbed));
     }
+
+    /// <summary>
+    /// The screens being played right now, by the name the DM would recognise. Asked at the moment
+    /// of writing rather than held: a warning that named a screen which had been unplugged two
+    /// minutes earlier would send somebody looking at the wrong table.
+    /// </summary>
+    private IReadOnlyCollection<string> PlayingScreens() =>
+    [
+        .. _windows.Keys.Select(screen =>
+            _names.TryGetValue(screen, out var named) ? named : screen.Value),
+    ];
 
     private Task RenderAsync(ScreenRef screen) => Dispatcher.InvokeAsync(() => Draw(screen)).Task;
 

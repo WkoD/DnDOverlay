@@ -1,0 +1,165 @@
+using System.Diagnostics;
+using System.Windows.Media;
+using DnDOverlay.Core;
+using Microsoft.Extensions.Logging;
+
+namespace DnDOverlay.Display;
+
+/// <summary>
+/// Counts the frames this process actually draws and says what they came to.
+/// <para>
+/// <b>The source, and until M5a also the only way to read it</b> (Part 10): the numbers are needed
+/// at the end of M3, M4 and M5 and on every new display PC, while the bar at the device is M5a and
+/// the options window M6. So the counter is built with the gestures and read out of the log file.
+/// The arithmetic is in <see cref="FrameTimes"/>, in Core - here is the tick, the CPU share and the
+/// two lines.
+/// </para>
+/// <para>
+/// <b>One counter per process, not per screen, and that is a property of WPF rather than a
+/// shortcut:</b> all windows are composed on one render thread, so there is one tick stream. A
+/// counter per screen would be three copies of the same number. What IS per screen is the
+/// judgement - each screen's budget follows the cadence it is drawn at, and the warning names the
+/// screen whose budget was missed (Part 6).
+/// </para>
+/// </summary>
+internal sealed class FrameWatch : IDisposable
+{
+    /// <summary>
+    /// How often the reading goes into the log. The window is thirty seconds, so this is one line
+    /// per window - a hand-run reads them in sequence, and a faster line would fill the file with
+    /// numbers that overlap each other.
+    /// </summary>
+    private static readonly TimeSpan ReportEvery = TimeSpan.FromSeconds(30);
+
+    private readonly FrameTimes _frames = new();
+    private readonly ILogger _logger;
+    private readonly Func<IReadOnlyCollection<string>> _screens;
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+
+    /// <summary>Screens already warned in this session - the brake against a line nobody reads.</summary>
+    private readonly Dictionary<string, double> _warned = new(StringComparer.Ordinal);
+
+    private TimeSpan _lastRender;
+    private long _lastReportMs;
+    private TimeSpan _lastCpu;
+    private long _lastCpuAtMs;
+    private double _cpuPercent;
+
+    /// <param name="screens">
+    /// The screens being played right now, by name. Asked at reporting time rather than kept:
+    /// a screen can come and go between two windows, and a list held here would name one that left.
+    /// </param>
+    internal FrameWatch(ILogger logger, Func<IReadOnlyCollection<string>> screens)
+    {
+        _logger = logger;
+        _screens = screens;
+        _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
+
+        CompositionTarget.Rendering += OnRendering;
+    }
+
+    public void Dispose() => CompositionTarget.Rendering -= OnRendering;
+
+    /// <summary>
+    /// One composition tick. <see cref="RenderingEventArgs.RenderingTime"/> rather than a clock of
+    /// our own: it is the time the frame was composed at, so the interval between two of them is the
+    /// frame time and not the time our handler happened to run.
+    /// </summary>
+    private void OnRendering(object? sender, EventArgs e)
+    {
+        if (e is not RenderingEventArgs rendering)
+        {
+            return;
+        }
+
+        var now = rendering.RenderingTime;
+        var atMs = (long)now.TotalMilliseconds;
+
+        if (_lastRender != TimeSpan.Zero)
+        {
+            _frames.Add(atMs, (now - _lastRender).TotalMilliseconds);
+        }
+
+        _lastRender = now;
+
+        if (atMs - _lastReportMs < (long)ReportEvery.TotalMilliseconds)
+        {
+            return;
+        }
+
+        _lastReportMs = atMs;
+
+        Report(atMs);
+    }
+
+    private void Report(long atMs)
+    {
+        if (_frames.Read(atMs) is not { } reading)
+        {
+            return;
+        }
+
+        // Rounded into locals rather than inside the call: the analyser is right that arguments to
+        // a logger should cost nothing, and these are read twice anyway.
+        var cpu = Round(CpuPercent());
+        var median = Round(reading.MedianMs);
+        var p95 = Round(reading.P95Ms);
+        var max = Round(reading.MaxMs);
+        var cadence = Round(reading.CadenceMs);
+        var seconds = (int)FrameTimes.DefaultWindow.TotalSeconds;
+
+        DisplayLog.FrameTimes(_logger, seconds, median, p95, max, cadence, cpu);
+
+        if (!reading.Missed)
+        {
+            return;
+        }
+
+        foreach (var screen in _screens())
+        {
+            // Once per session and screen, and again only when it has got markedly worse - a fifth
+            // worse is the same brake the stock warning uses. Without it the line would be switched
+            // off after the third evening.
+            if (_warned.TryGetValue(screen, out var before) && reading.MedianMs < before * 1.2)
+            {
+                continue;
+            }
+
+            _warned[screen] = reading.MedianMs;
+
+            var budget = Round(reading.BudgetMs);
+
+            DisplayLog.FrameBudgetMissed(_logger, screen, median, budget, p95, max, cpu);
+        }
+    }
+
+    /// <summary>
+    /// How much of one core this process has used since the last reading. Across all cores, because
+    /// the question is what the machine is spending on us and a percentage per core would read as
+    /// "12 %" on a machine that is fully occupied by us.
+    /// </summary>
+    private double CpuPercent()
+    {
+        var elapsedMs = _clock.ElapsedMilliseconds - _lastCpuAtMs;
+
+        if (elapsedMs <= 0)
+        {
+            return _cpuPercent;
+        }
+
+        var cpu = Process.GetCurrentProcess().TotalProcessorTime;
+        var used = (cpu - _lastCpu).TotalMilliseconds;
+
+        _lastCpu = cpu;
+        _lastCpuAtMs = _clock.ElapsedMilliseconds;
+        _cpuPercent = used / elapsedMs / Environment.ProcessorCount * 100;
+
+        return _cpuPercent;
+    }
+
+    /// <summary>
+    /// One decimal. These numbers are read by a person against a threshold, and the fourth decimal
+    /// of a frame time is noise that makes two readings look different when they are not.
+    /// </summary>
+    private static double Round(double value) => Math.Round(value, 1);
+}
