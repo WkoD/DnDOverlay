@@ -47,6 +47,8 @@ does not exist here, and the address is typed into a browser by a person standin
 | `ScreensChanged` | display → control | a new screen inventory after a hot-plug or a resolution change — facts only |
 | `ConfigUpdate` | control **↔** display | changed display parameters as a **delta**; from the control additionally the screen wish and the transient finding |
 | `IdentifyScreens` | control → display | nothing — every overlay of that device shows its own name, large, for a few seconds |
+| `ItemTransformed` | display → control | one item's new place, size and angle as an **intention**, with the revision the display had when the hand took hold, and whether this is the first report of the gesture |
+| `ItemParked` | display → control | a player swiped an item into the slot bar, or took one back out of it |
 
 `IdentifyScreens` carries no payload on purpose: the device knows its own screens and what each of
 them is called, and a list of names from the control would be a second copy that could disagree
@@ -55,6 +57,17 @@ transient exists to protect rank 1 while the table is busy, and this is pressed 
 being set up, when a press that silently does nothing would be worse than a late one. Screens
 without an overlay show nothing: an inactive one was given back to Windows, and answering the
 question there would break that promise.
+
+`ItemTransformed` is **throttled per item** at about 20 Hz before it is queued, and sent once more
+bindingly when the fingers leave. Per item rather than globally, or two pictures moved at once would
+halve each other's reporting; before the queue rather than in it, because throttling is a decision
+about how much detail a movement needs while dropping is an emergency measure — and in the queue the
+binding final report would be the message most likely to be dropped.
+
+`ItemParked` carries **no position**. Where a parked picture lies follows from the list of parked
+pictures and the screen's park edge, and both ends work it out with the same function: sending
+coordinates would leave a gap in the bar as soon as one picture left it, and a scene loaded onto
+another screen would carry the first screen's edge with it.
 
 `Welcome` carries a **path**, never an absolute URL and never host and port. Those come from the
 socket the message arrived on. A remembered base URL is a trap: when the machine moves between

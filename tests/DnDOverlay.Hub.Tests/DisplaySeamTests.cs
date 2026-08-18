@@ -213,6 +213,40 @@ public sealed class DisplaySeamTests : IAsyncLifetime
         await Finished(pump);
     }
 
+    /// <summary>
+    /// The other half of the same wire: a swipe into the slot bar. It is the gesture the players use
+    /// most to clear the table, and until M3b there was no message for it at all - Part 4 has the
+    /// operation and never gave the table a way to ask for it.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task AParkFromTheClientPutsTheItemIntoTheBar()
+    {
+        using var run = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+
+        var item = new ItemId(Guid.Parse("11111111-2222-3333-4444-666666666666"));
+        var inbox = Channel.CreateUnbounded<ProtocolMessage>();
+        var outbox = Channel.CreateUnbounded<ProtocolMessage>();
+
+        var pump = Start(inbox, outbox, run.Token, Lying(item));
+
+        await Until<WelcomeMessage>(inbox, run.Token);
+        await Until<SceneSnapshotMessage>(inbox, run.Token);
+
+        await outbox.Writer.WriteAsync(new ItemParkedMessage(Screen, item, Parked: true), run.Token);
+
+        var patch = await Until<ScenePatchMessage>(inbox, run.Token);
+        var op = Assert.IsType<ParkItem>(Assert.Single(patch.Patch.Ops).Op);
+
+        Assert.Equal(item, op.Item);
+        Assert.True(op.Parked);
+
+        // Where it now lies is NOT in the message and not in the operation - both ends work it out
+        // from the list of parked pictures and the screen's park edge.
+        await run.CancelAsync();
+        await Finished(pump);
+    }
+
     private Task Start(
         Channel<ProtocolMessage> inbox,
         Channel<ProtocolMessage> outbox,

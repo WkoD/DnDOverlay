@@ -1,12 +1,16 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DnDOverlay.Core;
 using DnDOverlay.Platform.Windows;
 using DnDOverlay.Rendering.Windows;
+using CoreManipulation = DnDOverlay.Core.Manipulation;
+using CorePoint = DnDOverlay.Core.Point;
 using CoreRect = DnDOverlay.Core.Rect;
 
 namespace DnDOverlay.Display;
@@ -63,6 +67,33 @@ internal sealed class OverlayWindow : Window
 
     /// <summary>The background's place, which has no item id to be keyed by.</summary>
     private Mount? _backdrop;
+
+    /// <summary>
+    /// The items a hand is on right now, with the values the gesture has produced so far.
+    /// <para>
+    /// While something is held, the LOCAL gesture wins: incoming transforms for it are passed over
+    /// until the fingers leave, and a second hand on the same picture is not a foreign access
+    /// (Part 4, conflict rule 3). This table is what makes that decidable.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<ItemId, Hold> _held = [];
+
+    /// <summary>
+    /// What was last drawn here, so a gesture can be answered without asking anybody: whether the
+    /// screen takes gestures at all, whether this item is locked, whether a focus lies.
+    /// </summary>
+    private SceneState _scene = SceneState.Empty;
+    private ScreenContext? _context;
+
+    /// <summary>Where the mouse was at the last step of a drag, in stage DIP.</summary>
+    private System.Windows.Point _mouseAt;
+
+    /// <summary>
+    /// When and where the last tap ended, for the double tap that turns a picture to whoever
+    /// tapped. <c>0</c> means "no tap is waiting for a second one".
+    /// </summary>
+    private long _lastTap;
+    private System.Windows.Point _lastTapDip;
 
     private readonly TextBlock _name;
     private readonly Border _nameplate;
@@ -142,6 +173,43 @@ internal sealed class OverlayWindow : Window
     internal ScreenId ScreenId => _monitor.Screen.ScreenId;
 
     /// <summary>
+    /// How this screen stands. It decides whether gestures do anything at all: on
+    /// <see cref="ScreenState.Disabled"/> everything stays visible and no gesture works, and every
+    /// touch gets the same short answer a locked picture gives - a player must not have to guess
+    /// which of the two it was (Part 6).
+    /// </summary>
+    internal ScreenState State { get; set; } = ScreenState.Enabled;
+
+    /// <summary>
+    /// What one report of a running gesture carries. A record rather than four arguments, because
+    /// three of them are booleans and a call site with three booleans in a row is a place to make a
+    /// mistake that compiles.
+    /// </summary>
+    /// <param name="KnownRevision">
+    /// The revision this display had for the item when the hand took hold of it - not the newest it
+    /// has seen since. That is what makes "was the picture that was grabbed the current one?"
+    /// answerable at the other end.
+    /// </param>
+    internal readonly record struct Reported(
+        ItemTransform Transform,
+        long KnownRevision,
+        bool Grabbed,
+        bool Binding);
+
+    /// <summary>
+    /// A player moved a picture. The values are LOCAL and already held at the edge; what the hub
+    /// makes of them comes back as a patch.
+    /// </summary>
+    internal event Action<Reported>? Transformed;
+
+    /// <summary>
+    /// A player swiped a picture into the slot bar, or took one back out by touching it. Where it
+    /// then lies is not reported: that follows from the list of parked pictures and this screen's
+    /// park edge, and the hub works it out with the same function this window would have used.
+    /// </summary>
+    internal event Action<ItemId, bool>? Parked;
+
+    /// <summary>
     /// Raised when the surface the scene is drawn on has changed size. Whoever draws has to draw
     /// again - the scene is normalised, so every coordinate on it is a fraction of exactly this
     /// surface.
@@ -206,9 +274,19 @@ internal sealed class OverlayWindow : Window
         IReadOnlyDictionary<AssetId, double> loading)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(context);
 
-        var width = _stage.ActualWidth > 0 ? _stage.ActualWidth : context.WidthInDip;
-        var height = _stage.ActualHeight > 0 ? _stage.ActualHeight : context.HeightInDip;
+        _scene = scene;
+        _context = context;
+
+        // A hand on a picture that is no longer in the scene: the manipulation is ended rather than
+        // frozen, which is what a scene change under a finger has to look like (Part 4, rule 4).
+        foreach (var gone in _held.Keys.Where(id => scene.Items.All(item => item.ItemId != id)).ToList())
+        {
+            _held.Remove(gone);
+        }
+
+        var (width, height) = Surface(context);
 
         // Which pictures may move is decided over the scene, in Core, before anything is built -
         // a continuous animation on a software-rendered transparent overlay is the most expensive
@@ -248,14 +326,25 @@ internal sealed class OverlayWindow : Window
                     animating.Items.Contains(image.ItemId),
                     image.AnimationPaused);
 
-                Lay(
-                    mount,
-                    Layout.ItemToRect(item, context),
-                    item.RotationDeg,
-                    width,
-                    height,
-                    image.ShowName ? image.Name : null,
-                    context.ImageTextSize);
+                // A held item keeps the geometry the finger gave it. Writing the scene's over it
+                // would drag the picture back to where the hub last knew it, twenty times a second,
+                // for as long as somebody is pushing it (Part 4, conflict rule 3).
+                if (!_held.ContainsKey(image.ItemId))
+                {
+                    Lay(
+                        mount,
+                        Layout.ItemToRect(item, context),
+                        item.RotationDeg,
+                        width,
+                        height,
+                        image.ShowName ? image.Name : null,
+                        context.ImageTextSize);
+                }
+
+                // The padlock is drawn either way: seeing which pictures are locked is what makes
+                // "unlock all" harmless, and it has to be visible at the table as well as in the
+                // thumbnail (Part 3).
+                Latch(mount, item.Locked);
             }
         }
 
@@ -291,7 +380,480 @@ internal sealed class OverlayWindow : Window
         var mount = Raise();
         _mounts[item] = mount;
 
+        Handle(item, mount);
+
         return mount;
+    }
+
+    /// <summary>
+    /// Makes one place answer hands and mice. Attached once when the place is made, because these
+    /// are the handlers of an element that outlives every render (see <see cref="Mount"/>).
+    /// <para>
+    /// <b>The item answers the hit test and the stage does not</b>, and that pair is the whole
+    /// pass-through story: a touch on empty table goes to MapTool underneath, a touch on a picture
+    /// is ours (spike A, mode A). A locked picture stays hit-testable on purpose - it owes the
+    /// finger an answer, and that answer is a flash rather than silence (Part 6).
+    /// </para>
+    /// </summary>
+    private void Handle(ItemId item, Mount mount)
+    {
+        var element = mount.Element;
+
+        element.IsHitTestVisible = true;
+        element.IsManipulationEnabled = true;
+
+        element.ManipulationStarting += (_, e) =>
+        {
+            // Measured against the stage, so a translation arrives in the units the scene is
+            // normalised in - and so two fingers on two pictures stay two manipulations.
+            e.ManipulationContainer = _stage;
+            e.Mode = ManipulationModes.All;
+            e.Handled = true;
+        };
+
+        element.ManipulationStarted += (_, e) =>
+        {
+            if (!Take(item, e.ManipulationOrigin))
+            {
+                e.Cancel();
+            }
+
+            e.Handled = true;
+        };
+
+        element.ManipulationDelta += (_, e) => Move(item, mount, e);
+        element.ManipulationInertiaStarting += (_, e) => Fling(item, e);
+        element.ManipulationCompleted += (_, e) => LetGo(item, mount, e);
+
+        element.MouseLeftButtonDown += (_, e) => MouseTake(item, element, e);
+        element.MouseMove += (_, e) => MouseDrag(item, mount, e);
+        element.MouseLeftButtonUp += (_, e) => MouseLetGo(item, mount, element, e);
+        element.MouseWheel += (_, e) => Wheel(item, mount, e);
+    }
+
+    /// <summary>
+    /// Takes hold of an item, or refuses to. A parked picture is taken OUT of the bar by being
+    /// touched, which is the only way back for the players (Part 6).
+    /// </summary>
+    private bool Take(ItemId item, System.Windows.Point origin)
+    {
+        if (_context is not { } context
+            || _scene.Items.FirstOrDefault(one => one.ItemId == item) is not { } current)
+        {
+            return false;
+        }
+
+        if (!CoreManipulation.AcceptsGestures(_scene, current, State))
+        {
+            // The one answer for all three reasons - padlock, disabled screen, focus lying. A
+            // player who gets nothing at all presses harder and decides the table is broken.
+            Refuse(item);
+
+            return false;
+        }
+
+        if (current.Parked)
+        {
+            Parked?.Invoke(item, false);
+        }
+
+        var (width, height) = Surface(context);
+
+        _held[item] = new Hold(current)
+        {
+            TapDip = origin,
+            Tap = new CorePoint(width <= 0 ? 0 : origin.X / width, height <= 0 ? 0 : origin.Y / height),
+        };
+
+        // Grabbed: what is taken hold of comes to the front, locally at once and bindingly from the
+        // hub right afterwards (Part 3).
+        Report(item, grabbed: true, binding: false);
+
+        return true;
+    }
+
+    /// <summary>One step of a hand on a picture, inertial or not.</summary>
+    private void Move(ItemId item, Mount mount, ManipulationDeltaEventArgs e)
+    {
+        e.Handled = true;
+
+        if (_context is not { } context || !_held.TryGetValue(item, out var hold))
+        {
+            // The picture went away under the finger - a scene change while somebody was holding
+            // it. Ending the manipulation is the difference between a picture that disappears and
+            // a finger frozen onto one that no longer exists (Part 4, conflict rule 4).
+            e.Complete();
+
+            return;
+        }
+
+        var (width, height) = Surface(context);
+        var delta = e.DeltaManipulation;
+
+        // Friction that rises towards the edge, and only while gliding: under the finger the clamp
+        // alone decides, or the picture would feel sticky in the hand (Part 6).
+        var damping = e.IsInertial ? CoreManipulation.EdgeResistance(hold.Item, context) : 1;
+
+        var step = new GestureStep(
+            width <= 0 ? 0 : delta.Translation.X / width * damping,
+            height <= 0 ? 0 : delta.Translation.Y / height * damping,
+            (delta.Scale.X + delta.Scale.Y) / 2,
+            delta.Rotation,
+            new CorePoint(
+                width <= 0 ? 0 : e.ManipulationOrigin.X / width,
+                height <= 0 ? 0 : e.ManipulationOrigin.Y / height));
+
+        var (moved, turning) = CoreManipulation.Step(hold.Item, hold.Turning, step, context);
+
+        hold.Item = moved;
+        hold.Turning = turning;
+        hold.Moved += Math.Abs(delta.Translation.X) + Math.Abs(delta.Translation.Y);
+
+        Place(mount, moved, context);
+        Report(item, grabbed: false, binding: false);
+
+        if (e.IsInertial && damping <= 0)
+        {
+            // At the point the clamp would take over there is nothing left to glide into.
+            e.Complete();
+        }
+    }
+
+    /// <summary>
+    /// The fingers have left and the picture would now glide. <b>This is where the park decision is
+    /// read</b>, because it is the moment the swipe had its speed - after the glide that speed is
+    /// nearly zero (Part 6).
+    /// </summary>
+    private void Fling(ItemId item, ManipulationInertiaStartingEventArgs e)
+    {
+        e.Handled = true;
+
+        if (_context is not { } context || !_held.TryGetValue(item, out var hold))
+        {
+            return;
+        }
+
+        // WPF measures in DIP per millisecond, the rule is written in DIP per second.
+        var velocity = e.InitialVelocities.LinearVelocity;
+
+        if (CoreManipulation.ShouldPark(hold.Item, velocity.X * 1000, velocity.Y * 1000, context))
+        {
+            Parked?.Invoke(item, true);
+            Still(e);
+
+            return;
+        }
+
+        if (!context.Inertia)
+        {
+            Still(e);
+
+            return;
+        }
+
+        // Proposal until measured (hand-run of M3b, step 18a): a fling of about 1 DIP/ms comes to
+        // rest in roughly half a second. Scaling and rotation keep their own behaviour - it is the
+        // pushing over distance that a table lying flat asks for (Part 6).
+        e.TranslationBehavior.DesiredDeceleration = 0.0025;
+    }
+
+    /// <summary>
+    /// No glide at all: the picture stays where the fingers left it.
+    /// <para>
+    /// Through the DISPLACEMENT rather than a <c>Complete</c> - this event has none, and a huge
+    /// deceleration would be a number chosen to look like zero. Nought displacement says what is
+    /// meant, and WPF ends the manipulation by itself once there is nowhere left to go.
+    /// </para>
+    /// </summary>
+    private static void Still(ManipulationInertiaStartingEventArgs e) =>
+        e.TranslationBehavior = new InertiaTranslationBehavior { DesiredDisplacement = 0 };
+
+    /// <summary>
+    /// The gesture is over: the angle settles onto a quarter turn if it is close enough - never
+    /// before, because a picture that clicks into place under the finger feels broken - and the
+    /// binding report goes out.
+    /// </summary>
+    private void LetGo(ItemId item, Mount mount, ManipulationCompletedEventArgs e)
+    {
+        e.Handled = true;
+
+        if (_context is not { } context || !_held.TryGetValue(item, out var hold))
+        {
+            return;
+        }
+
+        if (Tapped(hold, e.TotalManipulation.Translation))
+        {
+            // Two quick taps turn the picture to whoever tapped - the biggest comfort gain at a
+            // table lying flat, and the reason the snap angles are the quarter turns (Part 6).
+            hold.Item = CoreManipulation.HoldAtEdge(
+                hold.Item with { RotationDeg = CoreManipulation.TurnToMe(hold.Tap, context) },
+                context);
+        }
+        else
+        {
+            hold.Item = CoreManipulation.Settle(hold.Item, context);
+        }
+
+        Place(mount, hold.Item, context);
+        Report(item, grabbed: false, binding: true);
+
+        _held.Remove(item);
+    }
+
+    /// <summary>
+    /// Whether this manipulation was the second of two quick taps on nearly the same spot.
+    /// <para>
+    /// Decided at the END of a manipulation rather than on touch-down, so it never has to fight
+    /// WPF's input promotion: a tap IS a manipulation, one that moved almost nothing.
+    /// <c>Environment.TickCount64</c> because it only ever measures distances between two of its own
+    /// readings - a wall clock stepping backwards mid-evening would make a double tap unreachable.
+    /// </para>
+    /// </summary>
+    private bool Tapped(Hold hold, Vector total)
+    {
+        const double TapDip = 12;
+        const long TapMs = 300;
+        const double NearDip = 40;
+        const long TwiceMs = 400;
+
+        var now = Environment.TickCount64;
+
+        if (hold.Moved > TapDip || Math.Abs(total.X) + Math.Abs(total.Y) > TapDip || now - hold.Began > TapMs)
+        {
+            return false;
+        }
+
+        var twice = now - _lastTap <= TwiceMs
+            && Math.Abs(hold.TapDip.X - _lastTapDip.X) <= NearDip
+            && Math.Abs(hold.TapDip.Y - _lastTapDip.Y) <= NearDip;
+
+        // A third tap does not turn it again: the pair is spent, or holding a finger down and
+        // tapping would spin the picture.
+        _lastTap = twice ? 0 : now;
+        _lastTapDip = hold.TapDip;
+
+        return twice;
+    }
+
+    /// <summary>
+    /// A short flash, the same for all three reasons a gesture is suppressed. It is the answer the
+    /// finger gets, and it is the reason nobody presses harder (Part 3, Part 6).
+    /// </summary>
+    private void Refuse(ItemId item)
+    {
+        if (!_mounts.TryGetValue(item, out var mount))
+        {
+            return;
+        }
+
+        var flash = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
+
+        flash.KeyFrames.Add(new LinearDoubleKeyFrame(0.55, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(90))));
+        flash.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(220))));
+
+        mount.Element.BeginAnimation(OpacityProperty, flash);
+    }
+
+    /// <summary>
+    /// The mouse, which is not optional: not every display PC has touch, and the three grips are
+    /// the same ones the thumbnail will offer in M4 - left drag moves, the wheel zooms about the
+    /// cursor, Ctrl+drag turns (Part 6).
+    /// <para>
+    /// <b>The right button stays unassigned</b>, although it is free. A right drag to rotate would
+    /// be a grip that exists on one of the two surfaces only, and Ctrl+drag lies next to the left
+    /// hand anyway.
+    /// </para>
+    /// </summary>
+    private void MouseTake(ItemId item, Grid element, MouseButtonEventArgs e)
+    {
+        if (!Take(item, e.GetPosition(_stage)))
+        {
+            return;
+        }
+
+        _mouseAt = e.GetPosition(_stage);
+        element.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void MouseDrag(ItemId item, Mount mount, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed
+            || _context is not { } context
+            || !_held.TryGetValue(item, out var hold))
+        {
+            return;
+        }
+
+        var now = e.GetPosition(_stage);
+        var (width, height) = Surface(context);
+
+        var step = Keyboard.Modifiers.HasFlag(ModifierKeys.Control)
+            ? new GestureStep(0, 0, 1, Swept(hold.Item, _mouseAt, now, context), Centre(hold.Item))
+            : new GestureStep(
+                width <= 0 ? 0 : (now.X - _mouseAt.X) / width,
+                height <= 0 ? 0 : (now.Y - _mouseAt.Y) / height,
+                1,
+                0,
+                Centre(hold.Item));
+
+        var (moved, turning) = CoreManipulation.Step(hold.Item, hold.Turning, step, context);
+
+        hold.Item = moved;
+        hold.Turning = turning;
+        hold.Moved += Math.Abs(now.X - _mouseAt.X) + Math.Abs(now.Y - _mouseAt.Y);
+        _mouseAt = now;
+
+        Place(mount, moved, context);
+        Report(item, grabbed: false, binding: false);
+
+        e.Handled = true;
+    }
+
+    private void MouseLetGo(ItemId item, Mount mount, Grid element, MouseButtonEventArgs e)
+    {
+        element.ReleaseMouseCapture();
+
+        if (_context is not { } context || !_held.TryGetValue(item, out var hold))
+        {
+            return;
+        }
+
+        hold.Item = CoreManipulation.Settle(hold.Item, context);
+
+        Place(mount, hold.Item, context);
+        Report(item, grabbed: false, binding: true);
+
+        _held.Remove(item);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// The wheel zooms about the CURSOR, not about the picture's centre - the point under the
+    /// pointer stays under the pointer. Which way is larger is a per-screen setting, because Java
+    /// had it inverted and it is the one thing about a wheel everybody has an opinion on (Part 6).
+    /// </summary>
+    private void Wheel(ItemId item, Mount mount, MouseWheelEventArgs e)
+    {
+        if (_context is not { } context)
+        {
+            return;
+        }
+
+        if (_scene.Items.FirstOrDefault(one => one.ItemId == item) is not { } current)
+        {
+            return;
+        }
+
+        // A wheel notch is not a hold: it has no beginning and no end, so it reports bindingly at
+        // once. Taking hold for a single notch would mean a grab and a release per click of the
+        // wheel, and the picture would climb to the front on every one of them.
+        if (!_held.TryGetValue(item, out var hold))
+        {
+            if (!CoreManipulation.AcceptsGestures(_scene, current, State))
+            {
+                Refuse(item);
+
+                return;
+            }
+
+            hold = new Hold(current);
+        }
+
+        const double Notch = 1.1;
+
+        var factor = e.Delta > 0 == context.ScrollUpZoomsIn ? Notch : 1 / Notch;
+        var (width, height) = Surface(context);
+        var at = e.GetPosition(_stage);
+
+        var (moved, turning) = CoreManipulation.Step(
+            hold.Item,
+            hold.Turning,
+            new GestureStep(
+                0,
+                0,
+                factor,
+                0,
+                new CorePoint(width <= 0 ? 0 : at.X / width, height <= 0 ? 0 : at.Y / height)),
+            context);
+
+        hold.Item = moved;
+        hold.Turning = turning;
+
+        Place(mount, moved, context);
+
+        _held[item] = hold;
+        Report(item, grabbed: false, binding: true);
+
+        if (!Mouse.Captured?.Equals(mount.Element) ?? true)
+        {
+            // Nobody is dragging, so the hold existed only for this notch.
+            _held.Remove(item);
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// The angle the mouse swept around the item's centre between two positions. A mouse has one
+    /// point, so there is no pinch to take an angle from - the centre is the only pivot that makes
+    /// a drag read as a rotation.
+    /// </summary>
+    private double Swept(SceneItem item, System.Windows.Point from, System.Windows.Point to, ScreenContext context)
+    {
+        var (width, height) = Surface(context);
+
+        var centreX = item.CenterX * width;
+        var centreY = item.CenterY * height;
+
+        var before = Math.Atan2(from.Y - centreY, from.X - centreX);
+        var after = Math.Atan2(to.Y - centreY, to.X - centreX);
+
+        return (after - before) * 180 / Math.PI;
+    }
+
+    private static CorePoint Centre(SceneItem item) => new(item.CenterX, item.CenterY);
+
+    /// <summary>
+    /// The surface the scene is normalised against. The stage's own size wherever it has one - the
+    /// screen's reported size is the fallback for the moment before WPF has laid the window out,
+    /// and the two are not the same number (see <see cref="SurfaceChanged"/>).
+    /// </summary>
+    private (double Width, double Height) Surface(ScreenContext context) =>
+        (_stage.ActualWidth > 0 ? _stage.ActualWidth : context.WidthInDip,
+         _stage.ActualHeight > 0 ? _stage.ActualHeight : context.HeightInDip);
+
+    /// <summary>
+    /// Puts a held item where the gesture has it, without going through a full render. That is the
+    /// point of holding it locally: a redraw of the whole scene per delta would spend the frame
+    /// budget on the twenty pictures that did not move (Part 1, order of precedence).
+    /// </summary>
+    private void Place(Mount mount, SceneItem item, ScreenContext context)
+    {
+        var (width, height) = Surface(context);
+
+        Position(mount, Layout.ItemToRect(item, context), item.RotationDeg, width, height);
+    }
+
+    /// <summary>Hands the current local values of a held item outwards.</summary>
+    private void Report(ItemId item, bool grabbed, bool binding)
+    {
+        if (!_held.TryGetValue(item, out var hold))
+        {
+            return;
+        }
+
+        Transformed?.Invoke(new Reported(
+            new ItemTransform(
+                item,
+                hold.Item.CenterX,
+                hold.Item.CenterY,
+                hold.Item.Scale,
+                hold.Item.RotationDeg),
+            hold.Grabbed,
+            grabbed,
+            binding));
     }
 
     private Mount Raise()
@@ -506,15 +1068,7 @@ internal sealed class OverlayWindow : Window
         string? name,
         double textSize)
     {
-        var renderedWidth = rect.Width * width;
-        var renderedHeight = rect.Height * height;
-
-        mount.Element.Width = renderedWidth;
-        mount.Element.Height = renderedHeight;
-        mount.Turn.Angle = rotationDeg;
-
-        Canvas.SetLeft(mount.Element, rect.X * width);
-        Canvas.SetTop(mount.Element, rect.Y * height);
+        var (renderedWidth, renderedHeight) = Position(mount, rect, rotationDeg, width, height);
 
         // In DIP on the screen, not in normalised coordinates - the text does not scale with the
         // picture, which is the whole reason the cascade is measured rather than computed. The size
@@ -533,6 +1087,129 @@ internal sealed class OverlayWindow : Window
             mount.Caption = Label(caption, renderedWidth);
             mount.Element.Children.Add(mount.Caption);
         }
+    }
+
+    /// <summary>
+    /// Hangs the padlock on a place, or takes it off again.
+    /// <para>
+    /// <b>It is the reason "unlock all" needs no undo</b> (Part 3): whoever can see which five
+    /// pictures were locked can tap them back in seconds, so the sweep costs effort rather than
+    /// anything lost. Without the sign it would be a memory game.
+    /// </para>
+    /// <para>
+    /// Drawn rather than written as a glyph. A character from an icon font would be one font
+    /// dependency between a locked picture and a box on the table, and this is the sign a player
+    /// looks for when a picture will not move.
+    /// </para>
+    /// </summary>
+    private static void Latch(Mount mount, bool locked)
+    {
+        if (locked == (mount.Lock is not null))
+        {
+            return;
+        }
+
+        if (mount.Lock is { } hanging)
+        {
+            mount.Element.Children.Remove(hanging);
+            mount.Lock = null;
+
+            return;
+        }
+
+        var shackle = new System.Windows.Shapes.Path
+        {
+            Stroke = Brushes.White,
+            StrokeThickness = 2,
+            Data = Geometry.Parse("M 0,7 A 4,4 0 0 1 8,7"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+
+        var body = new Border
+        {
+            Background = Brushes.White,
+            CornerRadius = new CornerRadius(2),
+            Width = 14,
+            Height = 11,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+        };
+
+        var lock_ = new Grid { Width = 14, Height = 18 };
+
+        lock_.Children.Add(shackle);
+        lock_.Children.Add(body);
+
+        // On a dark plate, for the same reason the caption sits on a gradient: white on a light
+        // picture is invisible, and a sign that is only sometimes readable is not a sign.
+        mount.Lock = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0)),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(4, 3, 4, 3),
+            Margin = new Thickness(6),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            IsHitTestVisible = false,
+            Child = lock_,
+        };
+
+        mount.Element.Children.Add(mount.Lock);
+    }
+
+    /// <summary>
+    /// Writes one place's geometry, and hands back the size it came to in DIP - the caption is
+    /// measured against that, and a gesture needs none of it.
+    /// </summary>
+    private static (double Width, double Height) Position(
+        Mount mount,
+        CoreRect rect,
+        double rotationDeg,
+        double width,
+        double height)
+    {
+        var renderedWidth = rect.Width * width;
+        var renderedHeight = rect.Height * height;
+
+        mount.Element.Width = renderedWidth;
+        mount.Element.Height = renderedHeight;
+        mount.Turn.Angle = rotationDeg;
+
+        Canvas.SetLeft(mount.Element, rect.X * width);
+        Canvas.SetTop(mount.Element, rect.Y * height);
+
+        return (renderedWidth, renderedHeight);
+    }
+
+    /// <summary>
+    /// One item while a hand is on it: the values the gesture has produced so far, plus what the
+    /// tap detection needs.
+    /// <para>
+    /// The values live here rather than in the scene because the scene is the HUB's, and during a
+    /// gesture the two disagree on purpose - the finger is ahead of the wire (Part 4, conflict
+    /// rule 2). They become the scene's the moment the binding report comes back as a patch.
+    /// </para>
+    /// </summary>
+    private sealed class Hold(SceneItem item)
+    {
+        /// <summary>The live local values.</summary>
+        internal SceneItem Item { get; set; } = item;
+
+        internal Turning Turning { get; set; } = Turning.Beginning;
+
+        /// <summary>How far the hand has travelled in DIP - a tap is a gesture that barely moved.</summary>
+        internal double Moved { get; set; }
+
+        internal long Began { get; } = Environment.TickCount64;
+
+        /// <summary>The revision this item carried when the hand took hold of it.</summary>
+        internal long Grabbed { get; } = item.Revision;
+
+        /// <summary>Where it started, normalised, for "turn to me" - the edge nearest THAT point.</summary>
+        internal CorePoint Tap { get; init; }
+
+        internal System.Windows.Point TapDip { get; init; }
     }
 
     /// <summary>
@@ -572,6 +1249,9 @@ internal sealed class OverlayWindow : Window
         internal RotateTransform Turn { get; }
 
         internal Border? Caption { get; set; }
+
+        /// <summary>The padlock, while this item carries one.</summary>
+        internal UIElement? Lock { get; set; }
 
         internal AssetId? Showing { get; set; }
 

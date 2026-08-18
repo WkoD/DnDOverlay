@@ -33,6 +33,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(IdentifyScreensMessage), "IdentifyScreens")]
 [JsonDerivedType(typeof(AssetProgressMessage), "AssetProgress")]
 [JsonDerivedType(typeof(ItemTransformedMessage), "ItemTransformed")]
+[JsonDerivedType(typeof(ItemParkedMessage), "ItemParked")]
 public abstract record ProtocolMessage;
 
 /// <summary>
@@ -484,3 +485,25 @@ public sealed record ItemTransformedMessage(
     ItemTransform Transform,
     long KnownRevision,
     bool Grabbed) : ProtocolMessage;
+
+/// <summary>
+/// A player swiped a picture into the slot bar, or took one back out of it.
+/// <para>
+/// <b>Part 4 does not have this message, and that is a gap rather than a decision</b> (found while
+/// building M3b): parking is defined as "the players' tidying gesture, no edge case" in Part 6, and
+/// every other operation that a hand at the table can trigger has a way upwards. Without it the one
+/// gesture the players use most to clear the table could only be performed by the DM.
+/// </para>
+/// <para>
+/// It is deliberately NOT a field on <see cref="ItemTransformedMessage"/>, which reports where a
+/// picture lies. Where a parked picture lies is not reported at all - it follows from the list of
+/// parked pictures and the screen's park edge, and both ends work it out with the same function
+/// (<see cref="Parking"/>). A message carrying both would invite a sender to answer a question it
+/// must not answer.
+/// </para>
+/// <para>
+/// State rather than transient: it changes the scene, and a swipe that goes missing under load
+/// would leave a picture lying where the player put it down.
+/// </para>
+/// </summary>
+public sealed record ItemParkedMessage(ScreenId Screen, ItemId Item, bool Parked) : ProtocolMessage;

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Logging;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Core.Tests.Scene;
 using Microsoft.Extensions.Logging;
@@ -70,6 +71,33 @@ public sealed class ProtocolJsonTests
             new AssetLoad(new AssetId(new string('a', 64)), 0.4, AssetLoadState.Loading),
             new AssetLoad(new AssetId(new string('b', 64)), 1, AssetLoadState.Decoding),
         ]),
+
+        // An intention going upwards, with the revision the display had when the hand took hold.
+        new ItemTransformedMessage(
+            Screen.Screen,
+            new ItemTransform(new ItemId(Guid.Parse("22222222-0000-0000-0000-000000000001")), 0.3, 0.7, 0.25, 90),
+            KnownRevision: 17,
+            Grabbed: true),
+
+        new ItemParkedMessage(
+            Screen.Screen,
+            new ItemId(Guid.Parse("22222222-0000-0000-0000-000000000002")),
+            Parked: true),
+
+        // The five that had gone over real sockets in the seam tests and through no round trip of
+        // their own - which is how they stayed off this list without anybody noticing.
+        new PairingPendingMessage("482 913"),
+        new RejectedMessage(RejectionReason.Denied),
+        new PingMessage(RoundTripMs: 12),
+        new PongMessage(),
+        new LogEntryMessage(
+            3005,
+            "AssetFailed",
+            LogLevel.Warning,
+            new DateTimeOffset(2026, 8, 18, 20, 15, 0, TimeSpan.FromHours(2)),
+            [new LogValue("Asset", new string('a', 64)), new LogValue("Reason", "Unreadable")],
+            RawText: null,
+            Screen: Screen.Screen),
     ];
 
     public static TheoryData<ProtocolMessage> AllMessages() => [.. Messages];
@@ -83,6 +111,37 @@ public sealed class ProtocolJsonTests
         Assert.Equal(message, restored);
     }
 
+    /// <summary>
+    /// The list above is hand-written, so this is what stops it drifting - and it is here because it
+    /// was NOT, which cost a milestone's worth of coverage without anything going red.
+    /// <para>
+    /// <c>PatchOp</c> has had this guard since M1a; the messages did not, and M3a walked straight
+    /// into the gap: <c>ItemTransformed</c> was added, registered, sent over a real socket in a seam
+    /// test - and round-tripped by nothing. The one test that would have said so is this one.
+    /// </para>
+    /// <para>
+    /// <b>The lesson is not "add the message to the list".</b> A mechanism that exists for one
+    /// closed list and not for the closed list beside it is the shape to look for: the second list
+    /// looks guarded because the first one is.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Every_message_is_covered_here()
+    {
+        var declared = typeof(ProtocolMessage).Assembly
+            .GetTypes()
+            .Where(type => type.IsSubclassOf(typeof(ProtocolMessage)))
+            .Select(type => type.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+
+        var covered = Messages
+            .Select(message => message.GetType().Name)
+            .Distinct()
+            .OrderBy(name => name, StringComparer.Ordinal);
+
+        Assert.Equal(declared, covered);
+    }
+
     /// <summary>The envelope is <c>{ "t": "…" }</c>, and the wire name is the contract (rule 7).</summary>
     [Theory]
     [InlineData("Hello")]
@@ -93,6 +152,13 @@ public sealed class ProtocolJsonTests
     [InlineData("ConfigUpdate")]
     [InlineData("IdentifyScreens")]
     [InlineData("AssetProgress")]
+    [InlineData("ItemTransformed")]
+    [InlineData("ItemParked")]
+    [InlineData("PairingPending")]
+    [InlineData("Rejected")]
+    [InlineData("Ping")]
+    [InlineData("Pong")]
+    [InlineData("LogEntry")]
     public void The_wire_names_are_the_ones_the_plan_promises(string wireName)
     {
         var payloads = Messages

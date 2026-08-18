@@ -321,6 +321,57 @@ public sealed class ManipulationTests
     }
 
     /// <summary>
+    /// <b>Three things suppress a gesture and they are asked in one place</b> (Part 6). The answer
+    /// to the finger is the same for all three, so a player never has to guess which of them it
+    /// was - and one place cannot be the one that forgets the fourth.
+    /// </summary>
+    [Fact]
+    public void A_hand_may_take_hold_of_a_plain_item_on_a_plain_screen()
+    {
+        var item = Build.Item();
+
+        Assert.True(Manipulation.AcceptsGestures(Build.SceneWith(item), item, ScreenState.Enabled));
+        Assert.True(Manipulation.AcceptsGestures(Build.SceneWith(item), item, ScreenState.Diagnostic));
+    }
+
+    [Fact]
+    public void A_locked_item_takes_no_gesture()
+    {
+        var locked = Build.Item(locked: true);
+
+        Assert.False(Manipulation.AcceptsGestures(Build.SceneWith(locked), locked, ScreenState.Enabled));
+    }
+
+    [Theory]
+    [InlineData(ScreenState.Disabled)]
+    [InlineData(ScreenState.Blackout)]
+    [InlineData(ScreenState.Inactive)]
+    public void A_screen_that_is_not_playing_takes_no_gesture(ScreenState state)
+    {
+        var item = Build.Item();
+
+        Assert.False(Manipulation.AcceptsGestures(Build.SceneWith(item), item, state));
+    }
+
+    /// <summary>
+    /// A focus suppresses the WHOLE screen rather than the focused pictures: it is a way of showing
+    /// one picture, and a table that is being looked at is not being arranged (Part 3). It cannot
+    /// occur before M5b and is asked for anyway - a condition checked from the day the field exists
+    /// is not the one that gets forgotten when it starts being filled.
+    /// </summary>
+    [Fact]
+    public void A_focus_lying_on_the_screen_takes_the_gestures_of_every_item()
+    {
+        var focused = Build.Item();
+        var other = Build.Item();
+
+        var scene = Build.SceneWith(focused, other) with { FocusItems = [focused.ItemId] };
+
+        Assert.False(Manipulation.AcceptsGestures(scene, focused, ScreenState.Enabled));
+        Assert.False(Manipulation.AcceptsGestures(scene, other, ScreenState.Enabled));
+    }
+
+    /// <summary>
     /// Friction that rises towards the edge, not a wall: full push in the middle, nothing left
     /// where the clamp takes over.
     /// </summary>

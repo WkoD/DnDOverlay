@@ -95,6 +95,13 @@ public sealed partial class App : Application, IDisposable
     private AssetCache _cache = null!;
     private AssetLoader? _loader;
     private readonly AssetProgressTracker _progress = new();
+
+    /// <summary>
+    /// How often a running gesture is reported, per item. It lives here rather than per window
+    /// because it is one budget for one wire, and a picture dragged from one screen to another in
+    /// M4 must not start a second one.
+    /// </summary>
+    private readonly TransformThrottle _throttle = new();
     private Uri _hubHttp = null!;
     private string _assetPath = Protocol.AssetPath;
 
@@ -473,29 +480,40 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void Show(ScreenId screen)
     {
-        var wanted = _states.TryGetValue(screen, out var command)
-            && command.State != ScreenState.Inactive
-            && command.Suppress is null
-            && _monitors.ContainsKey(screen);
-
-        if (!wanted)
+        // Written as one refusal rather than as a "wanted" flag, because everything below needs the
+        // COMMAND and not only the answer: the state decides whether the screen takes gestures, and
+        // a flag would have thrown exactly that away.
+        if (!_states.TryGetValue(screen, out var command)
+            || command.State == ScreenState.Inactive
+            || command.Suppress is not null
+            || !_monitors.TryGetValue(screen, out var monitor))
         {
             Close(screen);
             return;
         }
 
-        if (_windows.ContainsKey(screen))
+        if (_windows.TryGetValue(screen, out var standing))
         {
+            // A state change that keeps the window. Enabled and Disabled differ only in whether
+            // gestures do anything, so the window stays and is simply told - which is what makes
+            // switching back take effect at once, with no rebuild and no flash (Part 11, step 37e).
+            standing.State = command.State;
+
             return;
         }
 
-        var window = new OverlayWindow(_monitors[screen], _windowed);
+        var window = new OverlayWindow(monitor, _windowed) { State = command.State };
 
         // Before Show, because the layout that gives the stage its size happens inside it. The
         // scene is normalised against the surface it is drawn on, so a surface that changes size
         // has to be drawn on again - otherwise the first drawing stands on a guess until the next
         // arrival happens to correct it.
         window.SurfaceChanged += () => Draw(new ScreenRef(_device, screen));
+
+        // What a hand at the table does, on its way to the hub. The window keeps the gesture, this
+        // decides how often it is reported and puts it on the wire (Part 4).
+        window.Transformed += reported => Report(screen, reported);
+        window.Parked += (item, parked) => _outbox?.TryWrite(new ItemParkedMessage(screen, item, parked));
 
         _windows[screen] = window;
         window.Show();
@@ -976,6 +994,14 @@ public sealed partial class App : Application, IDisposable
 
             _scenes[op.Screen] = SceneReducer.Apply(scene, op.Op, context);
 
+            if (op.Op is RemoveItem removed)
+            {
+                // An item that goes away while a hand was on it leaves an entry in the throttle
+                // that nothing would ever clear again - its binding report is the one that never
+                // comes (Part 4, conflict rule 4).
+                _throttle.Forget(removed.Item);
+            }
+
             LetGoOfWhatNoSceneNeeds();
 
             await EnsureImagesAsync(_scenes[op.Screen]).ConfigureAwait(false);
@@ -1242,6 +1268,45 @@ public sealed partial class App : Application, IDisposable
                 _progress.Settle();
             }
         }
+    }
+
+    /// <summary>
+    /// Puts one report of a running gesture on the wire, or lets it go.
+    /// <para>
+    /// Throttled per item at about 20 Hz, and the binding one at the end always goes (Part 4). The
+    /// decision itself is in <see cref="TransformThrottle"/>, in Core, where it can be asserted -
+    /// here is only the clock: <c>Environment.TickCount64</c> is monotonic, and a gesture is exactly
+    /// the place where a wall clock stepping back an hour would freeze the reporting for an hour.
+    /// </para>
+    /// <para>
+    /// A report while nothing is connected is dropped without a word. The picture is where the
+    /// player put it, the display keeps its own scene, and the <c>Hello</c> of the next connection
+    /// carries it - there is nothing to queue up here (Part 4).
+    /// </para>
+    /// </summary>
+    private void Report(ScreenId screen, OverlayWindow.Reported reported)
+    {
+        if (_outbox is not { } outbox)
+        {
+            return;
+        }
+
+        // A grab is never held back: it is what brings the picture to the front, and a front that
+        // arrives a twentieth of a second late is a picture that was under another one while
+        // somebody was already moving it.
+        if (!_throttle.Allows(
+            reported.Transform.Item,
+            Environment.TickCount64,
+            binding: reported.Binding || reported.Grabbed))
+        {
+            return;
+        }
+
+        outbox.TryWrite(new ItemTransformedMessage(
+            screen,
+            reported.Transform,
+            reported.KnownRevision,
+            reported.Grabbed));
     }
 
     private Task RenderAsync(ScreenRef screen) => Dispatcher.InvokeAsync(() => Draw(screen)).Task;

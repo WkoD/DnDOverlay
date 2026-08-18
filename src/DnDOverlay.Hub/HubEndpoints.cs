@@ -633,6 +633,20 @@ public static class HubEndpoints
 
                         break;
 
+                    case ItemParkedMessage parked:
+                        if (connection.Screens.FirstOrDefault(
+                                candidate => candidate.Screen == parked.Screen) is { } bar)
+                        {
+                            await session.ParkItemAsync(bar, parked.Item, parked.Parked, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            HubLog.ForeignScreenRefused(logger, device.Name, parked.Screen.Value);
+                        }
+
+                        break;
+
                     case AssetProgressMessage progress:
                         // Passed straight on, and the device is named from the CONNECTION rather
                         // than from the message - the one answer a device cannot get wrong. It is

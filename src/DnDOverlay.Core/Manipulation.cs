@@ -74,6 +74,37 @@ public static class Manipulation
     public const double ParkVelocityDip = 1000;
 
     /// <summary>
+    /// Whether a hand at the table may take hold of this item at all.
+    /// <para>
+    /// <b>Three things suppress a gesture, and they are asked in ONE place</b> (Part 6): the
+    /// padlock on the item, the screen state <c>Disabled</c>, and a focus lying on the screen. They
+    /// are asked together because the answer to the finger is the same in all three cases - a
+    /// player must not have to guess which of them it was - and because three separate checks are
+    /// three places to forget the fourth.
+    /// </para>
+    /// <para>
+    /// A focus suppresses the whole screen rather than the focused items: it is a way of PRESENTING
+    /// one picture, and the table is being looked at, not arranged (Part 3). It cannot occur before
+    /// M5b, and the field is asked for anyway - a condition that is checked from the day the field
+    /// exists cannot be the one that gets forgotten when it starts being filled.
+    /// </para>
+    /// <para>
+    /// The rescue marker is expressly not subject to this and lies above even a blackout (Part 6):
+    /// it is the way out of a table that has stopped answering, so the one condition it must not
+    /// have is "everything else works".
+    /// </para>
+    /// </summary>
+    public static bool AcceptsGestures(SceneState scene, SceneItem item, ScreenState state)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(item);
+
+        return state is not (ScreenState.Disabled or ScreenState.Blackout or ScreenState.Inactive)
+            && scene.FocusItems.Count == 0
+            && !item.Locked;
+    }
+
+    /// <summary>
     /// Applies one step of a gesture: turn, scale, move, and hold at the edge - in that order,
     /// because turning and scaling move the centre too when the pivot is not the centre.
     /// <para>
