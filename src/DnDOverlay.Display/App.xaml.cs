@@ -115,6 +115,9 @@ public sealed partial class App : Application, IDisposable
     /// would ask again while the first answer was still on its way.
     /// </summary>
     private readonly HashSet<AssetId> _sharpening = [];
+
+    /// <summary>Whether the ring loop is already running - there is exactly one for the process.</summary>
+    private int _turning;
     private Uri _hubHttp = null!;
     private string _assetPath = Protocol.AssetPath;
 
@@ -1169,7 +1172,7 @@ public sealed partial class App : Application, IDisposable
 
         // Redrawn on every arrival AND while the readings change, because the ring lives on the
         // ungoverned layer: it has to keep turning while the rest of the scene sits still.
-        var turning = Task.Run(() => TurnRingsAsync(scene, _shutdown.Token));
+        var turning = Task.Run(() => TurnRingsAsync(_shutdown.Token));
 
         var steps = scene.Items
             .OfType<ImageItem>()
@@ -1332,12 +1335,17 @@ public sealed partial class App : Application, IDisposable
     /// rather than on arrivals: between the first byte and the last there is no arrival at all,
     /// and a ring that only moved when a picture landed would jump instead of filling (Part 7).
     /// </summary>
-    private async Task TurnRingsAsync(SceneState scene, CancellationToken cancellationToken)
+    private async Task TurnRingsAsync(CancellationToken cancellationToken)
     {
-        var screens = _scenes
-            .Where(pair => ReferenceEquals(pair.Value, scene))
-            .Select(pair => pair.Key)
-            .ToList();
+        // <b>One loop for the process, not one per load.</b> Measured at the table (hand-run of
+        // M3b, step 0.5): every arriving picture is its own patch and therefore its own load run,
+        // and each run started a loop of its own that redrew every screen four times a second. With
+        // several hundred pictures that is several hundred full redraws per second, each one
+        // walking every item on the screen - the redraws were the load they were reporting on.
+        if (Interlocked.Exchange(ref _turning, 1) == 1)
+        {
+            return;
+        }
 
         try
         {
@@ -1346,15 +1354,21 @@ public sealed partial class App : Application, IDisposable
             {
                 await Task.Delay(ProgressInterval, cancellationToken).ConfigureAwait(false);
 
-                foreach (var screen in screens)
+                // Every screen that carries a window: the readings are per DEVICE, and a picture
+                // being fetched for one screen is drawn on whichever screens show it.
+                foreach (var screen in _windows.Keys.ToList())
                 {
-                    await RenderAsync(screen).ConfigureAwait(false);
+                    await RenderAsync(new ScreenRef(_device, screen)).ConfigureAwait(false);
                 }
             }
         }
         catch (OperationCanceledException)
         {
             // Shutting down.
+        }
+        finally
+        {
+            Volatile.Write(ref _turning, 0);
         }
     }
 

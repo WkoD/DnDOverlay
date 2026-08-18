@@ -349,7 +349,15 @@ internal sealed class OverlayWindow : Window
 
         var (width, height) = Surface(context);
 
-        // One picture may be hung up in this pass, and whether anything had to wait for the next.
+        // One picture may be hung up in this pass - <b>but only while a hand is on the table</b>.
+        //
+        // Part 11 puts both halves of the priority rule in one sentence: "while a manipulation is
+        // running, the number of parallel decodes drops to one and rises again afterwards; finished
+        // pictures are hung up staggered, at most one per render pass". Both clauses hang on the
+        // same condition, and applying the second one unconditionally is a misreading that was
+        // measured at the table: 700 arriving pictures took a visibly long time to appear, and the
+        // pace was mine. Nobody is helped by staggering when nobody is touching anything.
+        var staggering = Holding;
         var hung = false;
         var waiting = false;
 
@@ -394,7 +402,7 @@ internal sealed class OverlayWindow : Window
                         moving.GetValueOrDefault(image.AssetId),
                         animating.Items.Contains(image.ItemId),
                         image.AnimationPaused,
-                        hung))
+                        spent: staggering && hung))
                 {
                     hung = true;
                 }
