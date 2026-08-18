@@ -71,65 +71,6 @@ not contain it, and the application creates it on first use.
 Close a regularly installed Control before pressing F5: the single-instance mutex does not
 allow a second one, it brings the running window to the front.
 
-## Running the display on a second machine
-
-The two-machine steps of the acceptance need a display PC, and a display PC does not need a
-development environment: **no .NET, no editor, no installer, no administrator.** A self-contained
-publish is a folder you copy over and delete afterwards.
-
-On the development machine:
-
-```
-dotnet publish src/DnDOverlay.Display/DnDOverlay.Display.csproj ^
-  -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o out/display
-```
-
-That is eleven files and about 136 MB — the runtime travels inside the executable, and the four
-`.pdb` files travel beside it on purpose: without them an unhandled fault logs a stack trace
-without line numbers, and that is the one line a hand-run cannot go back and fetch.
-
-Copy the folder over, then start it from a command prompt:
-
-```
-DnDOverlay.Display.exe --host 192.168.1.23 --name TISCH --data D:\dnd-data
-```
-
-- **`--host`** skips discovery. Discovery listens on UDP 47800, which is an INCOMING port and
-  therefore a firewall question on a machine nobody has administrator rights on; the connection
-  itself is outgoing and needs no rule. Leave the switch off once, deliberately, to check that
-  discovery works — but not on the run where you are trying to measure something else.
-- **`--data`** puts configuration, image cache and logs in one folder of your choosing instead of
-  under `%LOCALAPPDATA%`. Removing the machine from the experiment is then deleting two folders.
-- **`--name`** is what the device list shows before anybody has renamed it.
-
-**Nothing will appear, and that is the silent start.** Every screen begins `Inactive` and stays
-that way until a control says otherwise, so the machine shows its own desktop and the taskbar
-stays free. In the control: allow the pairing request — comparing the code on the device — and then
-set the screens to `Enabled` in the *Devices* window. Only then does an overlay appear.
-
-**There is no way to quit it from the device yet.** The tray icon is M6 and the rescue marker is
-M5a, so until then it is Task Manager, or:
-
-```
-taskkill /IM DnDOverlay.Display.exe /F
-```
-
-The overlay never takes the foreground and passes input through wherever nothing is drawn, so the
-desktop underneath stays usable while it runs — including Task Manager.
-
-**A table driven as a second monitor needs its touch assigned to it.** Windows maps a digitizer to
-a display, and it guesses wrong as soon as there is more than one: *Tablet PC Settings* → *Setup*,
-then follow the prompt on the screen you are pointing at. Without it the fingers land on the other
-screen, which looks exactly like broken gesture handling.
-
-The log is `<data>\logs\display-0001.log`. Its header names version, protocol version and both
-languages; the frame-time lines (`3023`, and `3024` when a budget is missed) are what the
-acceptance of M3, M4 and M5 is read from until the diagnostic bar exists.
-
-The MSI under `installer/Display` is the other way in and the one the acceptance of M7 is about.
-It needs the .NET Desktop Runtime on the target and installs per user; for a measuring run the
-copied folder is the smaller intervention.
-
 ## Test data is generated, never committed
 
 `tests/DnDOverlay.TestData` builds every image, every malformed file and every token container
