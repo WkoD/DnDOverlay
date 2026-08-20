@@ -131,6 +131,24 @@ internal static partial class DisplayLog
         ILogger logger, string name, int beforePixels, int stepPixels);
 
     /// <summary>
+    /// What the hub made of one finished gesture, and how long it took to say so.
+    /// <para>
+    /// <b>Nothing in either log said anything about a gesture at all</b>, and three rounds at the
+    /// table were spent on questions only this line can answer: did the answer come, when, and did
+    /// it agree? The display puts a released picture where the hand left it and expects the round
+    /// trip to confirm rather than move it (conflict rule 2) - so a distance of nothing is the
+    /// normal case, and any distance at all is a disagreement between the two ends about the same
+    /// arithmetic.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3028,
+        Level = LogLevel.Information,
+        Message = "Gesture on {Name} confirmed after {Milliseconds} ms, {DriftDip} DIP from where it was let go.")]
+    internal static partial void GestureConfirmed(
+        ILogger logger, string name, long milliseconds, double driftDip);
+
+    /// <summary>
     /// The frame times of the last stretch. <b>Until M5a this line IS the display</b> - the
     /// diagnostic bar and the options window are later milestones, and the acceptance of M3, M4 and
     /// M5 each asks for the measurement (Part 10). It goes out on Information because it is a

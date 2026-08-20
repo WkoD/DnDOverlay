@@ -130,6 +130,14 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private readonly SemaphoreSlim _sharpener = new(1, 1);
 
+    /// <summary>
+    /// Gestures this device has let go of and the hub has not answered yet, with the place they
+    /// were let go at and the moment they were sent. It is what makes <c>3028</c> possible, and it
+    /// holds at most one entry per item: a second gesture on the same picture replaces the first,
+    /// because the answer to that one is no longer what anybody is waiting for.
+    /// </summary>
+    private readonly ConcurrentDictionary<ItemId, (ItemTransform Where, long AtMs)> _awaiting = new();
+
     /// <summary>Whether the ring loop is already running - there is exactly one for the process.</summary>
     private int _turning;
     private Uri _hubHttp = null!;
@@ -1111,6 +1119,11 @@ public sealed partial class App : Application, IDisposable
             {
                 scene = SceneReducer.Apply(scene, op, context);
 
+                if (op is TransformItem moved)
+                {
+                    Confirmed(moved, context, scene);
+                }
+
                 if (op is RemoveItem removed)
                 {
                     // An item that goes away while a hand was on it leaves an entry in the throttle
@@ -1481,6 +1494,11 @@ public sealed partial class App : Application, IDisposable
         // Core and both ends run them - so the patch that comes back confirms this rather than
         // moving anything. Written before the connection is even looked at: a display holding its
         // own scene while nothing is connected is the ordinary case, and the Hello carries it.
+        if (reported.Binding)
+        {
+            _awaiting[reported.Transform.Item] = (reported.Transform, Environment.TickCount64);
+        }
+
         if (reported.Grabbed || reported.Binding)
         {
             Settle(screen, reported.Transform, toFront: reported.Grabbed);
@@ -1513,6 +1531,33 @@ public sealed partial class App : Application, IDisposable
             reported.Transform,
             reported.KnownRevision,
             reported.Grabbed));
+    }
+
+    /// <summary>
+    /// Says what the hub made of a gesture this device let go of - once, for the answer that was
+    /// actually waited for. An operation for an item nobody here moved is a stranger's and passes
+    /// without a word.
+    /// </summary>
+    private void Confirmed(TransformItem moved, ScreenContext context, SceneState scene)
+    {
+        if (!_awaiting.TryRemove(moved.Item, out var mine))
+        {
+            return;
+        }
+
+        // In DIP rather than in the normalised fractions, because a thousandth of a screen means
+        // nothing to a reader and two pixels do. The two axes are separate fractions of two
+        // different edges, so each is converted with its own (Part 3).
+        var dx = (moved.CenterX - mine.Where.CenterX) * context.Size.Width;
+        var dy = (moved.CenterY - mine.Where.CenterY) * context.Size.Height;
+
+        var drift = Math.Round(Math.Sqrt((dx * dx) + (dy * dy)), 1);
+        var spent = Environment.TickCount64 - mine.AtMs;
+
+        var name = scene.Items.OfType<ImageItem>().FirstOrDefault(item => item.ItemId == moved.Item)?.Name
+            ?? moved.Item.Value.ToString()[..8];
+
+        DisplayLog.GestureConfirmed(_logger, name, spent, drift);
     }
 
     /// <summary>
