@@ -1468,6 +1468,24 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void Report(ScreenId screen, OverlayWindow.Reported reported)
     {
+        // <b>The binding report is written into this device's own scene at once</b>, and that is
+        // conflict rule 2 rather than an optimisation: "the display applies its gesture locally at
+        // once and corrects as soon as a broadcast arrives that it did not cause itself". Until now
+        // it did the opposite at the one moment that shows - on letting go the hold was dropped and
+        // the drawing fell back to the position the hub last knew, so the picture SPRANG BACK and
+        // only arrived where the hand had put it when the answer came round. Measured at the table
+        // (M3b, fifth Pro 4 run): during a load that answer took the whole load, and every movement
+        // of a minute replayed at its end.
+        //
+        // The values are the same ones the hub will compute - the reducer and the clamping are in
+        // Core and both ends run them - so the patch that comes back confirms this rather than
+        // moving anything. Written before the connection is even looked at: a display holding its
+        // own scene while nothing is connected is the ordinary case, and the Hello carries it.
+        if (reported.Binding)
+        {
+            Settle(screen, reported.Transform);
+        }
+
         if (_outbox is not { } outbox)
         {
             return;
@@ -1489,6 +1507,38 @@ public sealed partial class App : Application, IDisposable
             reported.Transform,
             reported.KnownRevision,
             reported.Grabbed));
+    }
+
+    /// <summary>
+    /// Lays a finished gesture into this device's own scene, through the reducer both ends share.
+    /// <para>
+    /// The revision stays as it was: numbering is the hub's alone (conflict rule 1), and a display
+    /// that invented one would win a comparison it has no business winning. What this changes is
+    /// only WHERE the picture is drawn until the hub says so too.
+    /// </para>
+    /// </summary>
+    private void Settle(ScreenId screen, ItemTransform transform)
+    {
+        var reference = new ScreenRef(_device, screen);
+
+        if (!_scenes.TryGetValue(reference, out var scene)
+            || !_contexts.TryGetValue(screen, out var context)
+            || scene.Items.FirstOrDefault(item => item.ItemId == transform.Item) is not { } standing)
+        {
+            return;
+        }
+
+        _scenes[reference] = SceneReducer.Apply(
+            scene,
+            new TransformItem(
+                transform.Item,
+                transform.CenterX,
+                transform.CenterY,
+                transform.Scale,
+                transform.RotationDeg,
+                standing.ZOrder,
+                standing.Revision),
+            context);
     }
 
     /// <summary>
