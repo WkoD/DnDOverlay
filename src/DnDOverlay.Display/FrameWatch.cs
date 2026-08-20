@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows.Media;
+using System.Windows.Threading;
 using DnDOverlay.Core;
 using Microsoft.Extensions.Logging;
 
@@ -31,10 +32,25 @@ internal sealed class FrameWatch : IDisposable
     /// </summary>
     private static readonly TimeSpan ReportEvery = TimeSpan.FromSeconds(30);
 
+    /// <summary>How often the UI thread is asked for a moment of its time.</summary>
+    private static readonly TimeSpan PulseEvery = TimeSpan.FromMilliseconds(100);
+
     private readonly FrameTimes _frames = new();
     private readonly ILogger _logger;
     private readonly Func<IReadOnlyCollection<string>> _screens;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
+
+    /// <summary>
+    /// A tick that wants the UI thread every tenth of a second, <b>at the priority the finger's own
+    /// events sit at</b>. How late it actually comes is how long a touch would have waited in the
+    /// same queue - and that is the difference between "the table stopped drawing" and "the table
+    /// stopped listening", which the frame times alone cannot tell apart.
+    /// </summary>
+    private readonly DispatcherTimer _pulse;
+
+    private long _pulseDueMs;
+    private double _lateMs;
+    private double _drawMs;
 
     /// <summary>Screens already warned in this session - the brake against a line nobody reads.</summary>
     private readonly Dictionary<string, double> _warned = new(StringComparer.Ordinal);
@@ -69,10 +85,40 @@ internal sealed class FrameWatch : IDisposable
         _screens = screens;
         _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
 
+        _pulse = new DispatcherTimer(DispatcherPriority.Input)
+        {
+            Interval = PulseEvery,
+        };
+
+        _pulse.Tick += OnPulse;
+        _pulseDueMs = _clock.ElapsedMilliseconds + (long)PulseEvery.TotalMilliseconds;
+        _pulse.Start();
+
         CompositionTarget.Rendering += OnRendering;
     }
 
-    public void Dispose() => CompositionTarget.Rendering -= OnRendering;
+    /// <summary>
+    /// How long the longest drawing of a screen took in this window, in milliseconds. Handed in
+    /// from where the drawing happens rather than measured here: only the caller knows where one
+    /// drawing begins and ends.
+    /// </summary>
+    internal void Drew(double milliseconds) => _drawMs = Math.Max(_drawMs, milliseconds);
+
+    private void OnPulse(object? sender, EventArgs e)
+    {
+        var now = _clock.ElapsedMilliseconds;
+
+        _lateMs = Math.Max(_lateMs, now - _pulseDueMs);
+        _pulseDueMs = now + (long)PulseEvery.TotalMilliseconds;
+    }
+
+    public void Dispose()
+    {
+        _pulse.Stop();
+        _pulse.Tick -= OnPulse;
+
+        CompositionTarget.Rendering -= OnRendering;
+    }
 
     /// <summary>
     /// One composition tick. <see cref="RenderingEventArgs.RenderingTime"/> rather than a clock of
@@ -130,7 +176,13 @@ internal sealed class FrameWatch : IDisposable
         _lastGcPause = pause;
         _lastGen2 = gen2;
 
-        DisplayLog.FrameTimes(_logger, seconds, median, p95, max, cadence, cpu, gcMs, sweeps);
+        var draw = Round(_drawMs);
+        var late = Round(_lateMs);
+
+        _drawMs = 0;
+        _lateMs = 0;
+
+        DisplayLog.FrameTimes(_logger, seconds, median, p95, max, cadence, cpu, gcMs, sweeps, draw, late);
 
         if (!reading.Missed)
         {

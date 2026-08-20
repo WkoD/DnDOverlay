@@ -140,7 +140,8 @@ internal static partial class DisplayLog
         EventId = 3023,
         Level = LogLevel.Information,
         Message = "Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, "
-            + "cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s).")]
+            + "cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), "
+            + "longest draw {DrawMs} ms, input {LateMs} ms late.")]
     internal static partial void FrameTimes(
         ILogger logger,
         int seconds,
@@ -150,7 +151,9 @@ internal static partial class DisplayLog
         double cadenceMs,
         double cpuPercent,
         double gcMs,
-        int sweeps);
+        int sweeps,
+        double drawMs,
+        double lateMs);
 
     /// <summary>
     /// The device says of its own accord that a screen is not holding its budget (Part 6).

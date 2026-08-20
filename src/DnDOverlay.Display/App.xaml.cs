@@ -1650,11 +1650,20 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
+        // Timed, because the frame times cannot say whose second it was. Measured at the table
+        // (M3b, 37c1): the picture stops between "the transfer is done" and "the picture is there",
+        // and everything the runner could switch off from outside - transfer, decode, disk, the
+        // rings, the arrival highlight - left it unchanged. What is left needs a WINDOW on the
+        // receiving screen, and this is the work that happens there.
+        var clock = Stopwatch.GetTimestamp();
+
         window.Render(
             _scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty,
             context,
             _images,
             _moving,
             Loading());
+
+        _frames?.Drew(Stopwatch.GetElapsedTime(clock).TotalMilliseconds);
     }
 }

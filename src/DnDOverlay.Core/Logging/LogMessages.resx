@@ -244,7 +244,7 @@
     <value>{DeviceName} reported a gesture for {ScreenName}, which is not one of its screens.</value>
   </data>
   <data name="E3023_FrameTimes" xml:space="preserve">
-    <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s).</value>
+    <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, input {LateMs} ms late.</value>
   </data>
   <data name="E3027_SurfaceMeasured" xml:space="preserve">
     <value>{ScreenId} draws on {WidthDip}x{HeightDip} DIP for a screen of {Size} at {Dpi} DPI.</value>
