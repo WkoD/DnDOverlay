@@ -1314,29 +1314,34 @@ public sealed partial class App : Application, IDisposable
                 group => group.Key,
                 group => DecodeSteps.Base(edge, group.First().Meta.PixelWidth, group.First().Meta.PixelHeight));
 
-        // <b>Thumbnails first, always.</b> Part 5 promises a picture STANDS at its place blurred
-        // within a second and is replaced when the original lands - and that promise is kept by the
-        // ORDER things are decoded in, not by the order they arrive in. While one picture is
-        // fetched at a time the two coincide: thumbnail, original, next picture. With three at a
-        // time they come apart, and the table showed it the same evening the parallel fetching
-        // first engaged: a full picture's decode costs one to two and a half seconds on that
-        // machine, and every thumbnail that landed during it waited behind it. The runner saw rings
-        // that filled over nothing where a blurred picture should have stood.
+        // <b>Thumbnails jump the queue; pictures keep their order.</b> Two rules, and they are about
+        // different things - the first is about kind, the second about time. Neither is about size.
         //
-        // So the arrivals are taken off the channel as fast as they come and decoded in the order
-        // that serves the table: everything small that is waiting, then one large one, then look
-        // again - a thumbnail that lands during a long decode goes next rather than last.
-        var small = new Queue<AssetArrived>();
-        var large = new Queue<AssetArrived>();
+        // Part 5 promises a picture STANDS at its place blurred within a second and is replaced when
+        // the original lands, and that promise is kept by the order things are DECODED in, not the
+        // order they arrive in. While one picture was fetched at a time the two coincided:
+        // thumbnail, original, next picture. With three at a time they come apart, and the table
+        // showed it the same evening the parallel fetching first engaged - a full decode costs one
+        // to two and a half seconds on that machine, and every thumbnail landing during it waited
+        // behind it. The runner saw rings filling over nothing where a blurred picture belonged.
+        //
+        // Among the originals the order is <b>the order they came in</b> and nothing else. <i>"The
+        // DM has already thought about the order when he sends them"</i> - sorting them here by
+        // anything of ours, size above all, would quietly overrule a decision somebody made on
+        // purpose.
+        var thumbnails = new Queue<AssetArrived>();
+        var pictures = new Queue<AssetArrived>();
 
         while (true)
         {
+            // Taken off the channel as fast as they come, so a thumbnail that lands in the middle of
+            // a long decode is already in hand when that decode ends.
             while (arrivals.Reader.TryRead(out var arrived))
             {
-                (arrived.IsThumbnail ? small : large).Enqueue(arrived);
+                (arrived.IsThumbnail ? thumbnails : pictures).Enqueue(arrived);
             }
 
-            if (small.Count == 0 && large.Count == 0)
+            if (thumbnails.Count == 0 && pictures.Count == 0)
             {
                 if (!await arrivals.Reader.WaitToReadAsync(_shutdown.Token).ConfigureAwait(false))
                 {
@@ -1346,7 +1351,7 @@ public sealed partial class App : Application, IDisposable
                 continue;
             }
 
-            var next = small.Count > 0 ? small.Dequeue() : large.Dequeue();
+            var next = thumbnails.Count > 0 ? thumbnails.Dequeue() : pictures.Dequeue();
 
             Decode(next, steps.GetValueOrDefault(next.Asset));
         }
