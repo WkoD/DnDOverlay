@@ -35,6 +35,21 @@ public sealed class AssetProgressTracker
     }
 
     /// <summary>
+    /// A request for this picture is going out now. It is the moment the ring at the table starts
+    /// to mean something - before it, the picture is only on the list.
+    /// </summary>
+    public void Fetching(AssetId asset)
+    {
+        lock (_gate)
+        {
+            if (_loads.TryGetValue(asset, out var load) && load.State is AssetLoadState.Waiting)
+            {
+                load.State = AssetLoadState.Loading;
+            }
+        }
+    }
+
+    /// <summary>
     /// A picture that was already in the store. Reported as finished <b>at once</b> and without a
     /// request ever going out - the ring must not appear for a picture nobody is waiting for
     /// (Part 5, Part 11).
@@ -162,6 +177,6 @@ public sealed class AssetProgressTracker
     {
         internal double Fraction { get; set; }
 
-        internal AssetLoadState State { get; set; } = AssetLoadState.Loading;
+        internal AssetLoadState State { get; set; } = AssetLoadState.Waiting;
     }
 }

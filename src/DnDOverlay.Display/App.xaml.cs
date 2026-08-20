@@ -1511,10 +1511,20 @@ public sealed partial class App : Application, IDisposable
     /// from. Taken from the tracker rather than kept a second time, so what turns at the table and
     /// what the control is told are the same number (Part 7).
     /// </summary>
+    /// <summary>
+    /// What has a ring on it right now.
+    /// <para>
+    /// <b>Only what is actually on its way</b> - not everything the run will fetch. The loader
+    /// announces every wanted picture before it fetches any, on purpose, because the control's list
+    /// answers "what is this table still waiting for". A ring answers something else: "something is
+    /// happening HERE". Found at the table (M3b), the first evening the arrangement stopped waiting
+    /// for its pictures: twenty rings stood in twenty empty places, three of them moving.
+    /// </para>
+    /// </summary>
     private Dictionary<AssetId, double> Loading() =>
         _progress.Reading() is { } reading
             ? reading.Loads
-                .Where(load => load.State is not AssetLoadState.Done)
+                .Where(load => load.State is not (AssetLoadState.Done or AssetLoadState.Waiting))
                 .ToDictionary(load => load.Asset, load => load.Fraction)
             : new Dictionary<AssetId, double>();
 

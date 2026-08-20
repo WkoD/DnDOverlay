@@ -315,6 +315,11 @@ public sealed class AssetLoader
     {
         try
         {
+            // From here the picture is actually on its way, and only from here does a ring at the
+            // table say anything: the announcement above put every wanted picture on the list at
+            // once, which is what the CONTROL needs and what the table must not be filled with.
+            _progress.Fetching(item.Asset);
+
             // The thumbnail first, and its failure is not the picture's failure: a stock that holds
             // no thumbnail for this asset is a slower start, not a missing picture.
             try

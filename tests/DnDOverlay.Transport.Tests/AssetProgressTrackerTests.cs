@@ -24,6 +24,44 @@ public sealed class AssetProgressTrackerTests
         Assert.Null(new AssetProgressTracker().Reading());
     }
 
+    /// <summary>
+    /// <b>Announced is not the same as coming.</b> The loader puts every wanted picture on the list
+    /// before it fetches any, because the control's list answers "what is this table still waiting
+    /// for" - and the ring at the table answers something else. Measured at the table (M3b): the
+    /// evening the arrangement stopped waiting for its pictures, twenty rings stood in twenty empty
+    /// places while three pictures were actually on their way.
+    /// </summary>
+    [Fact]
+    public void An_announced_picture_waits_until_its_request_goes_out()
+    {
+        var tracker = new AssetProgressTracker();
+
+        tracker.Started(Picture);
+
+        Assert.Equal(AssetLoadState.Waiting, Single(tracker).State);
+
+        tracker.Fetching(Picture);
+
+        Assert.Equal(AssetLoadState.Loading, Single(tracker).State);
+    }
+
+    /// <summary>
+    /// And it never goes back: a retry continues the attempt, so a picture that is already being
+    /// verified or decoded must not fall back to "on its way" because something asked again.
+    /// </summary>
+    [Fact]
+    public void Fetching_again_does_not_take_a_picture_backwards()
+    {
+        var tracker = new AssetProgressTracker();
+
+        tracker.Started(Picture);
+        tracker.Fetching(Picture);
+        tracker.Verifying(Picture);
+        tracker.Fetching(Picture);
+
+        Assert.Equal(AssetLoadState.Verifying, Single(tracker).State);
+    }
+
     [Fact]
     public void The_fraction_rises_as_bytes_arrive()
     {

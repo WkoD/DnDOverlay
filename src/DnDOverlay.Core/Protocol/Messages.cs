@@ -389,6 +389,21 @@ public static class Protocol
 /// </summary>
 public enum AssetLoadState
 {
+    /// <summary>
+    /// In the run and not started: the loader knows about this picture, no request has gone out for
+    /// it yet.
+    /// <para>
+    /// <b>The control wants it, the table does not.</b> The list the control shows answers "what is
+    /// this table still waiting for", and that is the whole run from the first moment (the loader
+    /// announces every wanted picture before it fetches any, deliberately). The ring at the table
+    /// answers a different question - "something is happening HERE" - and a ring standing still in
+    /// an empty place says the opposite. Found at the table (M3b): once the arrangement stopped
+    /// waiting for the pictures, twenty rings appeared at once for twenty pictures nobody had seen
+    /// yet, three of which were actually coming down.
+    /// </para>
+    /// </summary>
+    Waiting,
+
     /// <summary>Bytes are coming down.</summary>
     Loading,
 
