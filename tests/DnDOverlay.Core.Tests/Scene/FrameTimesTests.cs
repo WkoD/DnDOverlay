@@ -79,6 +79,97 @@ public sealed class FrameTimesTests
     }
 
     /// <summary>
+    /// <b>One doubled frame in twenty is not a stutter</b>, and this is the case the flat number
+    /// got wrong: two frames at 60 Hz are 33.3 ms, the threshold read <c>33</c>, so the reading the
+    /// rule meant to allow failed it by a third of a millisecond. Measured on the Pro 4, which
+    /// produces exactly this percentile while it is doing nothing at all - the threshold fired at
+    /// rest (hand-run of M3b, step 37a).
+    /// <para>
+    /// Asserted at both refresh rates, because the point of following the cadence is that nobody is
+    /// asked which one the screen has.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(16.7)]
+    [InlineData(8.3)]
+    public void A_doubled_frame_in_twenty_is_not_a_stutter(double frameMs)
+    {
+        var times = new FrameTimes();
+
+        // A tenth doubled rather than a twentieth: at exactly five percent the percentile lands
+        // just under them and the case would never reach the threshold it is about.
+        for (var frame = 0; frame < 200; frame++)
+        {
+            times.Add(frame * 20, frame % 10 == 0 ? frameMs * 2 : frameMs);
+        }
+
+        var reading = times.Read(4000);
+
+        Assert.NotNull(reading);
+        Assert.Equal(frameMs * 2, reading.Value.P95Ms, precision: 6);
+        Assert.False(reading.Value.Missed, "a single doubled frame in twenty counted as a stutter");
+    }
+
+    /// <summary>
+    /// The warning has to name what gave way. It read <i>"is not holding its frame budget: median
+    /// 16.7 ms against 17.7 ms"</i> at the table - accusing the one number that was fine, while the
+    /// maximum that actually broke stood further along the same sentence.
+    /// </summary>
+    [Fact]
+    public void The_reading_names_which_of_the_three_gave_way()
+    {
+        var times = new FrameTimes();
+
+        for (var frame = 0; frame < 200; frame++)
+        {
+            times.Add(frame * 20, frame == 100 ? 4000 : 16.7);
+        }
+
+        var reading = times.Read(4000);
+
+        Assert.NotNull(reading);
+        Assert.True(reading.Value.Missed);
+        Assert.Equal("max", reading.Value.Missing);
+    }
+
+    /// <summary>And all three when all three did.</summary>
+    [Fact]
+    public void All_three_are_named_when_all_three_gave_way()
+    {
+        var times = new FrameTimes();
+
+        for (var frame = 0; frame < 200; frame++)
+        {
+            times.Add(frame * 20, frame % 10 == 0 ? 16.7 : 400);
+        }
+
+        var reading = times.Read(4000);
+
+        Assert.NotNull(reading);
+        Assert.Equal("median, 95th, max", reading.Value.Missing);
+    }
+
+    /// <summary>And the other side of the same line: what the rule is actually about is a percentile ABOVE
+    /// two frames. Without this the change above would have widened the threshold to "never fires".
+    /// </summary>
+    [Fact]
+    public void A_percentile_above_two_frames_is_a_stutter()
+    {
+        var times = new FrameTimes();
+
+        for (var frame = 0; frame < 200; frame++)
+        {
+            times.Add(frame * 20, frame % 10 == 0 ? 50 : 16.7);
+        }
+
+        var reading = times.Read(4000);
+
+        Assert.NotNull(reading);
+        Assert.Equal(16.7, reading.Value.MedianMs, precision: 6);
+        Assert.True(reading.Value.Missed, "a percentile at three frames passed as steady");
+    }
+
+    /// <summary>
     /// Stuttering fails on its own number even when the median is fine - which is the point of
     /// having three: they fail differently and mean different things.
     /// </summary>

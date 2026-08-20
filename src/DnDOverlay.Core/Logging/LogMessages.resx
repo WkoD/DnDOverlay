@@ -193,7 +193,7 @@
     <value>Could not load asset {Name} ({AssetId}): {Detail}</value>
   </data>
   <data name="E3006_AssetDecoded" xml:space="preserve">
-    <value>Asset {Name} ({AssetId}) decoded at {Width}x{Height}.</value>
+    <value>Asset {Name} ({AssetId}) decoded at {Width}x{Height} in {Milliseconds} ms.</value>
   </data>
   <data name="E3007_ScreenAdded" xml:space="preserve">
     <value>New screen {Screen} ({Label}) - playing on it.</value>
@@ -244,7 +244,7 @@
     <value>{DeviceName} reported a gesture for {ScreenName}, which is not one of its screens.</value>
   </data>
   <data name="E3023_FrameTimes" xml:space="preserve">
-    <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %.</value>
+    <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s).</value>
   </data>
   <data name="E3027_SurfaceMeasured" xml:space="preserve">
     <value>{ScreenId} draws on {WidthDip}x{HeightDip} DIP for a screen of {Size} at {Dpi} DPI.</value>
@@ -256,7 +256,7 @@
     <value>{Name} decoded again at {StepPixels} px, up from {BeforePixels} px.</value>
   </data>
   <data name="E3024_FrameBudgetMissed" xml:space="preserve">
-    <value>{ScreenName} is not holding its frame budget: median {MedianMs} ms against {BudgetMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, CPU {CpuPercent} %.</value>
+    <value>{ScreenName} is not holding its frame budget, {Missing} over: median {MedianMs} ms against {BudgetMs} ms, 95th {P95Ms} ms against {StutterMs} ms, max {MaxMs} ms against 100 ms, CPU {CpuPercent} %.</value>
   </data>
 
   <!-- 4000-4999 · Operations: what a process does to itself. -->

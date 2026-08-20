@@ -45,6 +45,20 @@ internal sealed class FrameWatch : IDisposable
     private long _lastCpuAtMs;
     private double _cpuPercent;
 
+    /// <summary>
+    /// What the garbage collector had stopped the world for when the last window was reported, and
+    /// how many times it had swept the oldest generation.
+    /// <para>
+    /// <b>They are here because the maximum alone cannot say who took the second.</b> Measured at
+    /// the table (hand-run of M3b, 37c1): frames of up to 4.1 s while the median stayed at 16.7 -
+    /// so the table stops dead a few times a minute and every average says it is fine. A pause of
+    /// the collector stops every thread, which looks exactly like that; so does a decode on the
+    /// wrong thread. These two numbers separate the two without a guess (Guide <c>G1</c>).
+    /// </para>
+    /// </summary>
+    private TimeSpan _lastGcPause;
+    private int _lastGen2;
+
     /// <param name="screens">
     /// The screens being played right now, by name. Asked at reporting time rather than kept:
     /// a screen can come and go between two windows, and a list held here would name one that left.
@@ -108,7 +122,15 @@ internal sealed class FrameWatch : IDisposable
         var cadence = Round(reading.CadenceMs);
         var seconds = (int)FrameTimes.DefaultWindow.TotalSeconds;
 
-        DisplayLog.FrameTimes(_logger, seconds, median, p95, max, cadence, cpu);
+        var pause = GC.GetTotalPauseDuration();
+        var gen2 = GC.CollectionCount(2);
+        var gcMs = Round((pause - _lastGcPause).TotalMilliseconds);
+        var sweeps = gen2 - _lastGen2;
+
+        _lastGcPause = pause;
+        _lastGen2 = gen2;
+
+        DisplayLog.FrameTimes(_logger, seconds, median, p95, max, cadence, cpu, gcMs, sweeps);
 
         if (!reading.Missed)
         {
@@ -128,8 +150,10 @@ internal sealed class FrameWatch : IDisposable
             _warned[screen] = reading.MedianMs;
 
             var budget = Round(reading.BudgetMs);
+            var stutter = Round(reading.StutterMs);
 
-            DisplayLog.FrameBudgetMissed(_logger, screen, median, budget, p95, max, cpu);
+            DisplayLog.FrameBudgetMissed(
+                _logger, screen, reading.Missing, median, budget, p95, stutter, max, cpu);
         }
     }
 

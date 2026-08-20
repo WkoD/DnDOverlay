@@ -46,12 +46,18 @@ internal static partial class DisplayLog
         Message = "Could not load asset {Name} ({AssetId}): {Detail}")]
     internal static partial void AssetFailed(ILogger logger, string name, AssetId assetId, string detail);
 
+    /// <summary>
+    /// One picture became a bitmap. <b>The duration is here because the hand-run of M3b could not
+    /// tell a slow decode from a stopped thread:</b> between "the ring is full" and "the picture is
+    /// there" the table answered nothing, and the line said only how many pixels came out. What it
+    /// costs is the first half of that gap; the frame line's GC numbers are the second.
+    /// </summary>
     [LoggerMessage(
         EventId = 3006,
         Level = LogLevel.Information,
-        Message = "Asset {Name} ({AssetId}) decoded at {Width}x{Height}.")]
+        Message = "Asset {Name} ({AssetId}) decoded at {Width}x{Height} in {Milliseconds} ms.")]
     internal static partial void AssetDecoded(
-        ILogger logger, string name, AssetId assetId, int width, int height);
+        ILogger logger, string name, AssetId assetId, int width, int height, long milliseconds);
 
     /// <summary>
     /// What one load run came to, said once at the end rather than per picture.
@@ -134,7 +140,7 @@ internal static partial class DisplayLog
         EventId = 3023,
         Level = LogLevel.Information,
         Message = "Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, "
-            + "cadence {CadenceMs} ms, CPU {CpuPercent} %.")]
+            + "cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s).")]
     internal static partial void FrameTimes(
         ILogger logger,
         int seconds,
@@ -142,7 +148,9 @@ internal static partial class DisplayLog
         double p95Ms,
         double maxMs,
         double cadenceMs,
-        double cpuPercent);
+        double cpuPercent,
+        double gcMs,
+        int sweeps);
 
     /// <summary>
     /// The device says of its own accord that a screen is not holding its budget (Part 6).
@@ -156,14 +164,17 @@ internal static partial class DisplayLog
     [LoggerMessage(
         EventId = 3024,
         Level = LogLevel.Warning,
-        Message = "{ScreenName} is not holding its frame budget: median {MedianMs} ms against "
-            + "{BudgetMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, CPU {CpuPercent} %.")]
+        Message = "{ScreenName} is not holding its frame budget, {Missing} over: median {MedianMs} ms "
+            + "against {BudgetMs} ms, 95th {P95Ms} ms against {StutterMs} ms, max {MaxMs} ms "
+            + "against 100 ms, CPU {CpuPercent} %.")]
     internal static partial void FrameBudgetMissed(
         ILogger logger,
         string screenName,
+        string missing,
         double medianMs,
         double budgetMs,
         double p95Ms,
+        double stutterMs,
         double maxMs,
         double cpuPercent);
 

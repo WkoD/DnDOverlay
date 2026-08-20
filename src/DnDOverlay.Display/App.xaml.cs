@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Channels;
@@ -1261,6 +1262,11 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
+        // Timed, because the table's silence between "the ring is full" and "the picture is there"
+        // has two possible owners and the log named neither: the decode itself, and a pause of the
+        // collector. This is the first of the two (hand-run of M3b, 37c1).
+        var clock = Stopwatch.GetTimestamp();
+
         try
         {
             // A thumbnail is already the small step and is never stepped down further.
@@ -1284,9 +1290,10 @@ public sealed partial class App : Application, IDisposable
                 // Looked up before the call rather than inside it: an argument that costs something
                 // must not be evaluated when the level would throw the line away (CA1873).
                 var name = NameOf(arrived.Asset);
+                var spent = (long)Stopwatch.GetElapsedTime(clock).TotalMilliseconds;
 
                 DisplayLog.AssetDecoded(
-                    _logger, name, arrived.Asset, decoded.PixelWidth, decoded.PixelHeight);
+                    _logger, name, arrived.Asset, decoded.PixelWidth, decoded.PixelHeight, spent);
             }
         }
         // A picture that arrives unreadable stays missing and the rest of the scene is drawn.
