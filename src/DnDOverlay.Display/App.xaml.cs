@@ -132,11 +132,17 @@ public sealed partial class App : Application, IDisposable
 
     /// <summary>
     /// Gestures this device has let go of and the hub has not answered yet, with the place they
-    /// were let go at and the moment they were sent. It is what makes <c>3028</c> possible, and it
-    /// holds at most one entry per item: a second gesture on the same picture replaces the first,
-    /// because the answer to that one is no longer what anybody is waiting for.
+    /// were let go at and the moment they were sent. It is what makes <c>3028</c> possible.
+    /// <para>
+    /// <b>A queue per item, not one slot</b>, and the first run of this line is why: it kept one
+    /// entry per picture, a second push replaced the first, and the answer to the first was then
+    /// measured against the second's place. It reported drifts of up to 918 DIP where the two ends
+    /// in fact agreed - the instrument's own fault, and exactly the sort of number that would have
+    /// been chased for an evening. Answers come back in the order they were sent, so the oldest
+    /// entry is the one being answered.
+    /// </para>
     /// </summary>
-    private readonly ConcurrentDictionary<ItemId, (ItemTransform Where, long AtMs)> _awaiting = new();
+    private readonly ConcurrentDictionary<ItemId, ConcurrentQueue<(ItemTransform Where, long AtMs)>> _awaiting = new();
 
     /// <summary>Whether the ring loop is already running - there is exactly one for the process.</summary>
     private int _turning;
@@ -1496,7 +1502,16 @@ public sealed partial class App : Application, IDisposable
         // own scene while nothing is connected is the ordinary case, and the Hello carries it.
         if (reported.Binding)
         {
-            _awaiting[reported.Transform.Item] = (reported.Transform, Environment.TickCount64);
+            var queue = _awaiting.GetOrAdd(reported.Transform.Item, _ => new ConcurrentQueue<(ItemTransform, long)>());
+
+            // Bounded, because an operation the hub never answers - the item was gone, or locked -
+            // would otherwise leave an entry that every later answer is measured against.
+            while (queue.Count >= 16)
+            {
+                _ = queue.TryDequeue(out _);
+            }
+
+            queue.Enqueue((reported.Transform, Environment.TickCount64));
         }
 
         if (reported.Grabbed || reported.Binding)
@@ -1540,7 +1555,7 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void Confirmed(TransformItem moved, ScreenContext context, SceneState scene)
     {
-        if (!_awaiting.TryRemove(moved.Item, out var mine))
+        if (!_awaiting.TryGetValue(moved.Item, out var queue) || !queue.TryDequeue(out var mine))
         {
             return;
         }
