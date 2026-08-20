@@ -1481,9 +1481,15 @@ public sealed partial class App : Application, IDisposable
         // Core and both ends run them - so the patch that comes back confirms this rather than
         // moving anything. Written before the connection is even looked at: a display holding its
         // own scene while nothing is connected is the ordinary case, and the Hello carries it.
-        if (reported.Binding)
+        if (reported.Grabbed || reported.Binding)
         {
-            Settle(screen, reported.Transform);
+            Settle(screen, reported.Transform, toFront: reported.Grabbed);
+
+            // Drawn at once, on the thread this already runs on: the scene now says something the
+            // window does not show yet - the new depth on a grab, the settled place on letting go -
+            // and waiting for the next drawing would put both back into the hub's round trip, which
+            // is exactly what this is here to end. It happens twice per gesture, not per step.
+            Draw(new ScreenRef(_device, screen));
         }
 
         if (_outbox is not { } outbox)
@@ -1510,14 +1516,26 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
-    /// Lays a finished gesture into this device's own scene, through the reducer both ends share.
+    /// Lays a gesture into this device's own scene, through the reducer both ends share.
     /// <para>
     /// The revision stays as it was: numbering is the hub's alone (conflict rule 1), and a display
     /// that invented one would win a comparison it has no business winning. What this changes is
-    /// only WHERE the picture is drawn until the hub says so too.
+    /// only WHERE the picture is drawn - and how high it lies - until the hub says so too.
+    /// </para>
+    /// <para>
+    /// <b>The grab raises it here too</b>, by the hub's own arithmetic. Part 3 promises that what is
+    /// taken hold of comes to the front "locally at once and bindingly from the hub right
+    /// afterwards", and the second half was the only half built: the picture rose when the answer
+    /// came back. On a quiet link that is ten milliseconds and nobody sees it. Under load the
+    /// runner saw it plainly - every pushed picture was "touched again" at the end of the load, one
+    /// after another, as the queued answers finally arrived with the depth each grab had earned.
     /// </para>
     /// </summary>
-    private void Settle(ScreenId screen, ItemTransform transform)
+    /// <param name="toFront">
+    /// Whether this is the grab. The formula is the hub's, deliberately duplicated rather than
+    /// approximated: a display that guessed a different depth would be corrected visibly.
+    /// </param>
+    private void Settle(ScreenId screen, ItemTransform transform, bool toFront)
     {
         var reference = new ScreenRef(_device, screen);
 
@@ -1536,7 +1554,7 @@ public sealed partial class App : Application, IDisposable
                 transform.CenterY,
                 transform.Scale,
                 transform.RotationDeg,
-                standing.ZOrder,
+                toFront ? Math.Max(standing.ZOrder, scene.TopZOrder + 1) : standing.ZOrder,
                 standing.Revision),
             context);
     }
