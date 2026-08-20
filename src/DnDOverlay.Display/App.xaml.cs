@@ -114,8 +114,21 @@ public sealed partial class App : Application, IDisposable
     /// <summary>
     /// Pictures whose next step is being decoded right now. Without it every drawing during a zoom
     /// would ask again while the first answer was still on its way.
+    /// <para>
+    /// Concurrent since the decode left the UI thread: the entry is made where the request is asked
+    /// for and taken back where the answer arrives, and those are two different threads.
+    /// </para>
     /// </summary>
-    private readonly HashSet<AssetId> _sharpening = [];
+    private readonly ConcurrentDictionary<AssetId, byte> _sharpening = new();
+
+    /// <summary>
+    /// <b>One sharpening at a time in the whole process.</b> Twenty items drawn larger than they
+    /// were decoded ask twenty times in one drawing, and off the UI thread that would be twenty
+    /// decodes at once - each of them up to forty megabytes. It is also what Part 11 asks for in as
+    /// many words: while a hand is on the table the number of parallel decodes drops to one, and a
+    /// zoom is exactly that.
+    /// </summary>
+    private readonly SemaphoreSlim _sharpener = new(1, 1);
 
     /// <summary>Whether the ring loop is already running - there is exactly one for the process.</summary>
     private int _turning;
@@ -643,6 +656,8 @@ public sealed partial class App : Application, IDisposable
 
         // The composition tick would otherwise keep a handler on a process that is going away.
         _frames?.Dispose();
+
+        _sharpener.Dispose();
 
         // Anything outstanding goes to disk before the process does (Part 6).
         _configuration?.Flush();
@@ -1484,23 +1499,56 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void Sharpen(ScreenId screen, AssetId asset, int needed)
     {
+        // Asked from the drawing, so this runs on the UI THREAD - and nothing here may cost
+        // anything. Everything that does is below, on a thread nobody is waiting on.
         if (_moving.ContainsKey(asset)
-            || !_sharpening.Add(asset)
             || !_images.TryGetValue(asset, out var current)
-            || current is not BitmapSource bitmap)
+            || current is not BitmapSource bitmap
+            || DecodeSteps.Next(bitmap.PixelWidth, needed, SourceWidth(asset)) is not { } step)
         {
+            return;
+        }
+
+        // The mark goes on AFTER the cheap questions, not before them. It used to be the second
+        // condition of the guard above, and an asset that fell out on a later one kept the mark for
+        // the rest of the session - that picture then never sharpened again.
+        if (!_sharpening.TryAdd(asset, 0))
+        {
+            return;
+        }
+
+        _ = Task.Run(() => SharpenAsync(screen, asset, bitmap.PixelWidth, step), _shutdown.Token);
+    }
+
+    /// <summary>
+    /// The expensive half of sharpening, off the UI thread.
+    /// <para>
+    /// <b>It used to be on it</b>, and that is a hand's worth of standing still: reading the whole
+    /// file back out of the store is 18 to 34 megabytes off the disk, and the decode above it builds
+    /// up to forty megabytes of bitmap - both on the thread that answers the finger, in the middle
+    /// of the zoom that asked for them. Found by reading the drawing path after the third Pro 4 run
+    /// (M3b); it had not fired in that run, but check steps 18 and 18a ask for exactly the zooming
+    /// that sets it off.
+    /// </para>
+    /// <para>
+    /// The decoded bitmap is frozen, so it crosses back without a copy - the same property that
+    /// lets the loader decode on its own thread.
+    /// </para>
+    /// </summary>
+    private async Task SharpenAsync(ScreenId screen, AssetId asset, int before, int step)
+    {
+        try
+        {
+            await _sharpener.WaitAsync(_shutdown.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _ = _sharpening.TryRemove(asset, out _);
             return;
         }
 
         try
         {
-            var source = SourceWidth(asset);
-
-            if (DecodeSteps.Next(bitmap.PixelWidth, needed, source) is not { } step)
-            {
-                return;
-            }
-
             // The ORIGINAL out of the store, never the thumbnail: sharpening a thumbnail would
             // produce a bigger blurred picture, which is worse than the small one it replaced.
             if (!_cache.TryGet(asset, out var bytes))
@@ -1508,14 +1556,24 @@ public sealed partial class App : Application, IDisposable
                 return;
             }
 
-            _images[asset] = PictureDecoder.Decode(bytes, step);
+            var decoded = PictureDecoder.Decode(bytes, step);
+
+            // Asked again after the decode: a picture can be taken off the table while its sharper
+            // version is on its way, and putting it back into the table of bitmaps would be memory
+            // no scene asks for - the very growth LetGoOfWhatNoSceneNeeds exists to prevent.
+            if (!_images.ContainsKey(asset))
+            {
+                return;
+            }
+
+            _images[asset] = decoded;
 
             var name = NameOf(asset);
-            var before = bitmap.PixelWidth;
 
             DisplayLog.PictureSharpened(_logger, name, before, step);
 
-            Draw(new ScreenRef(_device, screen));
+            await Dispatcher.InvokeAsync(() => Draw(new ScreenRef(_device, screen))).Task
+                .ConfigureAwait(false);
         }
         catch (NotSupportedException error)
         {
@@ -1523,9 +1581,14 @@ public sealed partial class App : Application, IDisposable
             // failure of THIS decode, and the picture on the screen stays what it is.
             DisplayLog.AssetFailed(_logger, NameOf(asset), asset, error.Message);
         }
+        catch (OperationCanceledException)
+        {
+            // Shutting down while a step was being decoded.
+        }
         finally
         {
-            _sharpening.Remove(asset);
+            _ = _sharpening.TryRemove(asset, out _);
+            _ = _sharpener.Release();
         }
     }
 
