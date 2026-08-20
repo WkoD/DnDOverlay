@@ -144,6 +144,12 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private readonly ConcurrentDictionary<ItemId, ConcurrentQueue<(ItemTransform Where, long AtMs)>> _awaiting = new();
 
+    /// <summary>Screens whose pictures are being fetched right now - one run each, no more.</summary>
+    private readonly ConcurrentDictionary<ScreenId, byte> _fetching = new();
+
+    /// <summary>Screens that were asked for again while their run was going.</summary>
+    private readonly ConcurrentDictionary<ScreenId, byte> _refetch = new();
+
     /// <summary>Whether the ring loop is already running - there is exactly one for the process.</summary>
     private int _turning;
     private Uri _hubHttp = null!;
@@ -1004,10 +1010,13 @@ public sealed partial class App : Application, IDisposable
                 break;
 
             case SceneSnapshotMessage snapshot:
+                // The same order as a patch, and for the same reason: the arrangement stands and is
+                // drawn at once, the pictures come after. A snapshot is the reconnect case, so it
+                // is exactly the moment somebody has a hand on the table and is waiting to be
+                // answered again.
                 _scenes[snapshot.Screen] = snapshot.Scene;
-                LetGoOfWhatNoSceneNeeds();
-                await EnsureImagesAsync(snapshot.Scene, snapshot.Screen.Screen).ConfigureAwait(false);
                 await RenderAsync(snapshot.Screen).ConfigureAwait(false);
+                Fetch(snapshot.Screen);
                 break;
 
             case ScenePatchMessage patch:
@@ -1141,10 +1150,22 @@ public sealed partial class App : Application, IDisposable
 
             _scenes[group.Key] = scene;
 
-            LetGoOfWhatNoSceneNeeds();
-
-            await EnsureImagesAsync(scene, group.Key.Screen).ConfigureAwait(false);
+            // <b>The state lands and is drawn; the pictures follow.</b> This used to wait here for
+            // the whole load - fetch and decode, about three seconds a picture on the table's own
+            // machine - and nothing else was read from the socket in the meantime, not even the
+            // hub's answer to a gesture somebody had just finished. Measured (M3b, sixth Pro 4 run,
+            // 3028): a released gesture came back after 0 ms once the table was quiet and after
+            // 2203 to 8141 ms while pictures were still arriving, and every one of those late
+            // answers carried a depth the hub had worked out seconds after the grab - so a picture
+            // somebody had long since moved was lifted over pictures that had not existed when it
+            // was taken hold of. Three separate complaints from the table came back to this one
+            // await.
+            //
+            // A picture whose place already stands must not be disturbed again because OTHER
+            // pictures are still coming: what a player sees, a player takes to be finished.
             await RenderAsync(group.Key).ConfigureAwait(false);
+
+            Fetch(group.Key);
 
             foreach (var item in arrived)
             {
@@ -1167,6 +1188,66 @@ public sealed partial class App : Application, IDisposable
         if (_windows.TryGetValue(screen, out var window))
         {
             window.Flash(item);
+        }
+    }
+
+    /// <summary>
+    /// Asks for whatever the current scene of this screen is still missing, off the receive loop.
+    /// <para>
+    /// <b>One run at a time per screen, and a second ask while one is going does not queue a second
+    /// run</b> - it marks the running one to look again when it is done. Queueing would give twenty
+    /// arriving pictures twenty runs of one picture each, which is exactly the shape that kept the
+    /// loader's three-at-a-time from ever engaging (<c>Peak=1</c> in every run of every hand-run so
+    /// far). Looking again instead means the next round sees everything that is still missing and
+    /// fetches it together.
+    /// </para>
+    /// </summary>
+    private void Fetch(ScreenRef screen)
+    {
+        if (!_fetching.TryAdd(screen.Screen, 0))
+        {
+            _refetch[screen.Screen] = 0;
+
+            return;
+        }
+
+        _ = Task.Run(() => FetchAsync(screen), _shutdown.Token);
+    }
+
+    private async Task FetchAsync(ScreenRef screen)
+    {
+        try
+        {
+            do
+            {
+                _ = _refetch.TryRemove(screen.Screen, out _);
+
+                var scene = _scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty;
+
+                // Here rather than on the receive loop: it walks the store on disk, and on the
+                // table's own machine that is not free.
+                LetGoOfWhatNoSceneNeeds();
+
+                await EnsureImagesAsync(scene, screen.Screen).ConfigureAwait(false);
+                await RenderAsync(screen).ConfigureAwait(false);
+            }
+            while (_refetch.ContainsKey(screen.Screen));
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
+        finally
+        {
+            _ = _fetching.TryRemove(screen.Screen, out _);
+
+            // Asked between the last look and letting go of the mark, which is a window of a few
+            // instructions and therefore certain to happen eventually. Without this the ask would
+            // be dropped and a picture would never arrive.
+            if (_refetch.ContainsKey(screen.Screen))
+            {
+                Fetch(screen);
+            }
         }
     }
 
