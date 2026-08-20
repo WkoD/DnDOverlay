@@ -566,7 +566,12 @@ public sealed record ScreenContext(
             // NUMBER is corrected afterwards and not the test (Guide G6).
             RotationDeadZoneDeg: 5,
             RotationSnapToleranceDeg: 4,
-            ArrivalHighlightSeconds: 2,
+
+            // The first of the five the hand-run has actually moved: 2 s was the proposal, and at
+            // the table it is not a flash but a state - the picture stands under a white veil for
+            // two whole seconds and only then is itself. What the highlight is for is being noticed
+            // among twelve others, and that is over in a fraction of a second.
+            ArrivalHighlightSeconds: 0.8,
             Inertia: true,
             ScrollUpZoomsIn: true);
     }
