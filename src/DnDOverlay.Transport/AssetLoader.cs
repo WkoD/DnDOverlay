@@ -315,11 +315,6 @@ public sealed class AssetLoader
     {
         try
         {
-            // From here the picture is actually on its way, and only from here does a ring at the
-            // table say anything: the announcement above put every wanted picture on the list at
-            // once, which is what the CONTROL needs and what the table must not be filled with.
-            _progress.Fetching(item.Asset);
-
             // The thumbnail first, and its failure is not the picture's failure: a stock that holds
             // no thumbnail for this asset is a slower start, not a missing picture.
             try
@@ -339,6 +334,15 @@ public sealed class AssetLoader
             {
                 // Slower, not broken.
             }
+
+            // <b>Only now does a ring mean anything</b>, and the order of these two lines is the
+            // whole point. The announcement further up put every wanted picture on the list at once
+            // - which is what the CONTROL needs, "what is this table still waiting for". A ring at
+            // the table says "the picture that belongs HERE is on its way", and until the thumbnail
+            // is handed over there is no here: the place is empty, and a ring turning over nothing
+            // is what the runner saw. The thumbnail goes first, then the ring, then the original
+            // replaces the blur - that is the sequence Part 5 describes.
+            _progress.Fetching(item.Asset);
 
             var bytes = await _client
                 .GetReportingAsync(

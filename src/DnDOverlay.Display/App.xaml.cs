@@ -1353,6 +1353,18 @@ public sealed partial class App : Application, IDisposable
 
             var next = thumbnails.Count > 0 ? thumbnails.Dequeue() : pictures.Dequeue();
 
+            // <b>A blur nobody has to wait for is not worth showing.</b> When a picture comes out of
+            // the store rather than off the wire, its thumbnail and its original land in the same
+            // instant - and taking all the thumbnails first then puts twenty blurred pictures on the
+            // table at once, followed by twenty sharpenings. The runner named it: everything appears
+            // together instead of one after another. So a thumbnail whose original is already in
+            // hand is dropped, and the pictures come up sharp, one after another, in the order they
+            // arrived - which for a full store is the order the DM sent them in.
+            if (next.IsThumbnail && pictures.Any(picture => picture.Asset == next.Asset))
+            {
+                continue;
+            }
+
             Decode(next, steps.GetValueOrDefault(next.Asset));
         }
 
