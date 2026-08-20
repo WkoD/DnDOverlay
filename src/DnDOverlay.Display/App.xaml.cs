@@ -1314,9 +1314,41 @@ public sealed partial class App : Application, IDisposable
                 group => group.Key,
                 group => DecodeSteps.Base(edge, group.First().Meta.PixelWidth, group.First().Meta.PixelHeight));
 
-        await foreach (var arrived in arrivals.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
+        // <b>Thumbnails first, always.</b> Part 5 promises a picture STANDS at its place blurred
+        // within a second and is replaced when the original lands - and that promise is kept by the
+        // ORDER things are decoded in, not by the order they arrive in. While one picture is
+        // fetched at a time the two coincide: thumbnail, original, next picture. With three at a
+        // time they come apart, and the table showed it the same evening the parallel fetching
+        // first engaged: a full picture's decode costs one to two and a half seconds on that
+        // machine, and every thumbnail that landed during it waited behind it. The runner saw rings
+        // that filled over nothing where a blurred picture should have stood.
+        //
+        // So the arrivals are taken off the channel as fast as they come and decoded in the order
+        // that serves the table: everything small that is waiting, then one large one, then look
+        // again - a thumbnail that lands during a long decode goes next rather than last.
+        var small = new Queue<AssetArrived>();
+        var large = new Queue<AssetArrived>();
+
+        while (true)
         {
-            Decode(arrived, steps.GetValueOrDefault(arrived.Asset));
+            while (arrivals.Reader.TryRead(out var arrived))
+            {
+                (arrived.IsThumbnail ? small : large).Enqueue(arrived);
+            }
+
+            if (small.Count == 0 && large.Count == 0)
+            {
+                if (!await arrivals.Reader.WaitToReadAsync(_shutdown.Token).ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            var next = small.Count > 0 ? small.Dequeue() : large.Dequeue();
+
+            Decode(next, steps.GetValueOrDefault(next.Asset));
         }
 
         var run = await loading.ConfigureAwait(false);
