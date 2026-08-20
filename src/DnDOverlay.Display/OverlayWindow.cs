@@ -264,6 +264,18 @@ internal sealed class OverlayWindow : Window
     internal event Action? MoreToShow;
 
     /// <summary>
+    /// How late one movement of the hand was handled, in milliseconds - the difference between the
+    /// moment the system stamped the event and the moment this window got to it.
+    /// <para>
+    /// <b>Measured on the finger's own events rather than on a stand-in.</b> A timer of ours says
+    /// what the dispatcher queue costs in general; only the event itself says what the hand waited
+    /// for, and the two came apart at the table: the queue was 300 ms behind while a whole load's
+    /// worth of movement replayed at the end (M3b, fourth Pro 4 run).
+    /// </para>
+    /// </summary>
+    internal event Action<int>? HandWaited;
+
+    /// <summary>
     /// A player swiped a picture into the slot bar, or took one back out by touching it. Where it
     /// then lies is not reported: that follows from the list of parked pictures and this screen's
     /// park edge, and the hub works it out with the same function this window would have used.
@@ -611,6 +623,13 @@ internal sealed class OverlayWindow : Window
     private void Move(ItemId item, Mount mount, ManipulationDeltaEventArgs e)
     {
         e.Handled = true;
+
+        // Inertia is the system's own arithmetic and arrives on our own clock, so it would report a
+        // latency nobody felt. Only a real hand counts.
+        if (!e.IsInertial)
+        {
+            HandWaited?.Invoke(Environment.TickCount - e.Timestamp);
+        }
 
         if (_context is not { } context || !_held.TryGetValue(item, out var hold))
         {

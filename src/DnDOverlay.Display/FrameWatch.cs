@@ -51,6 +51,7 @@ internal sealed class FrameWatch : IDisposable
     private long _pulseDueMs;
     private double _lateMs;
     private double _drawMs;
+    private double _handMs;
 
     /// <summary>Screens already warned in this session - the brake against a line nobody reads.</summary>
     private readonly Dictionary<string, double> _warned = new(StringComparer.Ordinal);
@@ -103,6 +104,12 @@ internal sealed class FrameWatch : IDisposable
     /// drawing begins and ends.
     /// </summary>
     internal void Drew(double milliseconds) => _drawMs = Math.Max(_drawMs, milliseconds);
+
+    /// <summary>
+    /// How late one movement of a real hand was handled. The stand-in above says what the queue
+    /// costs in general; this says what the finger actually waited for, and the two can differ.
+    /// </summary>
+    internal void HandWaited(int milliseconds) => _handMs = Math.Max(_handMs, milliseconds);
 
     private void OnPulse(object? sender, EventArgs e)
     {
@@ -178,11 +185,14 @@ internal sealed class FrameWatch : IDisposable
 
         var draw = Round(_drawMs);
         var late = Round(_lateMs);
+        var hand = Round(_handMs);
 
         _drawMs = 0;
         _lateMs = 0;
+        _handMs = 0;
 
-        DisplayLog.FrameTimes(_logger, seconds, median, p95, max, cadence, cpu, gcMs, sweeps, draw, late);
+        DisplayLog.FrameTimes(
+            _logger, seconds, median, p95, max, cadence, cpu, gcMs, sweeps, draw, late, hand);
 
         if (!reading.Missed)
         {

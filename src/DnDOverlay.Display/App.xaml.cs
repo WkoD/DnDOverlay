@@ -605,6 +605,8 @@ public sealed partial class App : Application, IDisposable
         // passes were starved for the whole 24-second load. Input priority puts a hand at the table
         // first and a picture right after it, which is the order of precedence rather than an
         // absence of one.
+        window.HandWaited += late => _frames?.HandWaited(late);
+
         window.MoreToShow += () => Dispatcher.InvokeAsync(
             () => Draw(new ScreenRef(_device, screen)),
             System.Windows.Threading.DispatcherPriority.Input);
@@ -1127,7 +1129,12 @@ public sealed partial class App : Application, IDisposable
 
             foreach (var item in arrived)
             {
-                await Dispatcher.InvokeAsync(() => Flash(group.Key.Screen, item)).Task.ConfigureAwait(false);
+                await Dispatcher
+                    .InvokeAsync(
+                        () => Flash(group.Key.Screen, item),
+                        System.Windows.Threading.DispatcherPriority.Input)
+                    .Task
+                    .ConfigureAwait(false);
             }
         }
     }
@@ -1630,7 +1637,27 @@ public sealed partial class App : Application, IDisposable
                 : screen.Value),
     ];
 
-    private Task RenderAsync(ScreenRef screen) => Dispatcher.InvokeAsync(() => Draw(screen)).Task;
+    /// <summary>
+    /// Draws a screen, <b>behind the hand rather than in front of it</b>.
+    /// <para>
+    /// It was posted at <c>Normal</c>, which outranks <c>Input</c> - the priority the finger's own
+    /// events arrive at. Every drawing therefore went ahead of every touch that was already waiting,
+    /// and during a load there are many: one for each arriving picture and four a second per screen
+    /// for the rings. Measured at the table (M3b, fourth Pro 4 run): the dispatcher was <b>200 to
+    /// 313 ms</b> late while a single drawing cost at most 40 ms, so what the hand waited for was a
+    /// QUEUE of drawings and not one slow one. The runner saw it from the other side: a pushed
+    /// picture stood still and every movement of the whole load replayed in a few milliseconds at
+    /// the end.
+    /// </para>
+    /// <para>
+    /// At <c>Input</c> a drawing shares the queue with the finger instead of jumping it. Not lower:
+    /// <c>Background</c> means "when the machine has nothing else to do", and during a manipulation
+    /// it never has - that is the same mistake the staggered pass made in the second Pro 4 run,
+    /// where pictures arrived in a block at the end (Part 11, the priority rule).
+    /// </para>
+    /// </summary>
+    private Task RenderAsync(ScreenRef screen) =>
+        Dispatcher.InvokeAsync(() => Draw(screen), System.Windows.Threading.DispatcherPriority.Input).Task;
 
     /// <summary>
     /// Draws one screen. Must run on the UI thread - windows are created and drawn there, and
