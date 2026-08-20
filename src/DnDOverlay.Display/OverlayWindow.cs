@@ -38,6 +38,12 @@ internal sealed class OverlayWindow : Window
     /// </summary>
     private static readonly TimeSpan ShowNameFor = TimeSpan.FromSeconds(4);
 
+    /// <summary>How wide the progress ring is at most, in DIP.</summary>
+    private const double RingSize = 56;
+
+    /// <summary>Below this it says nothing worth the pixels, so it is left off.</summary>
+    private const double RingFloor = 16;
+
     private MonitorInfo _monitor;
     private readonly bool _windowed;
     /// <summary>
@@ -57,8 +63,6 @@ internal sealed class OverlayWindow : Window
     /// rings are rebuilt on every render while the pictures beneath them are kept, and a ring can
     /// never end up behind the picture it is about.
     /// </summary>
-    private readonly Canvas _rings = new() { Background = null, IsHitTestVisible = false };
-
     /// <summary>
     /// The places on the stage, one per item, kept between renders. See <see cref="Mount"/> for why
     /// they are kept at all.
@@ -141,7 +145,6 @@ internal sealed class OverlayWindow : Window
         var root = new Grid { Background = null };
 
         root.Children.Add(_stage);
-        root.Children.Add(_rings);
         root.Children.Add(_nameplate);
 
         Title = monitor.Screen.Label;
@@ -373,6 +376,14 @@ internal sealed class OverlayWindow : Window
         var hung = false;
         var waiting = false;
 
+        // <b>Beyond the item budget the rings are what stops the table.</b> Measured in the second
+        // hand-run: with 722 pictures loading at once the UI thread stood still for up to 13
+        // seconds, and every one of those passes was building 722 fresh rings - a Grid, an ellipse
+        // and an arc geometry each, four times a second. Part 6 puts thirty items on a 1080p screen;
+        // past that the individual ring says nothing anybody can read anyway, and the feedback that
+        // something is happening is the pictures arriving one after another.
+        var ringing = scene.ItemsVisible && loading.Count <= AnimationBudget.ItemsPerScreen;
+
         // Which pictures may move is decided over the scene, in Core, before anything is built -
         // a continuous animation on a software-rendered transparent overlay is the most expensive
         // case this application has (Part 6).
@@ -444,6 +455,10 @@ internal sealed class OverlayWindow : Window
                 // "unlock all" harmless, and it has to be visible at the table as well as in the
                 // thumbnail (Part 3).
                 Latch(mount, item.Locked);
+
+                // The ring rides ON the picture, like the caption - see Turning for why it took a
+                // hand-run to get there.
+                Turning(mount, ringing && loading.TryGetValue(image.AssetId, out var coming) ? coming : -1);
             }
         }
 
@@ -451,44 +466,6 @@ internal sealed class OverlayWindow : Window
         {
             _stage.Children.Remove(mount.Element);
             _mounts.Remove(id);
-        }
-
-        // The rings live on their own layer above everything: they belong to the ungoverned layer,
-        // not to the scene. If a picture is being fetched, its place already stands - what is
-        // missing is the picture, and the ring says so where it will appear (Part 7). They are the
-        // one thing rebuilt every time, because a ring is a number and not a running clock.
-        _rings.Children.Clear();
-
-        if (!scene.ItemsVisible)
-        {
-            return;
-        }
-
-        // <b>Beyond the item budget the rings are what stops the table.</b> Measured in the second
-        // hand-run: with 722 pictures loading at once the UI thread stood still for up to 13
-        // seconds, and every one of those passes was building 722 fresh rings - a Grid, an ellipse
-        // and an arc geometry each, four times a second. Part 6 puts thirty items on a 1080p screen;
-        // past that the individual ring says nothing anybody can read anyway, and the feedback that
-        // something is happening is the pictures arriving one after another.
-        if (loading.Count > AnimationBudget.ItemsPerScreen)
-        {
-            return;
-        }
-
-        foreach (var item in scene.Items.OfType<ImageItem>())
-        {
-            if (!loading.TryGetValue(item.AssetId, out var fraction))
-            {
-                continue;
-            }
-
-            // At the place the FINGER has it, not the one the hub last knew. Measured at the table
-            // (hand-run of M3b, step 37b): a picture still loading could be pushed around while its
-            // ring stayed where it had first appeared - the ring is rebuilt from the scene, and
-            // during a gesture the scene is deliberately the older of the two truths.
-            var where = _held.TryGetValue(item.ItemId, out var hold) ? hold.Item : item;
-
-            _rings.Children.Add(Ring(Layout.ItemToRect(where, context), fraction, width, height));
         }
 
         if (waiting)
@@ -1046,36 +1023,103 @@ internal sealed class OverlayWindow : Window
     /// scene stream, which is why it keeps turning while everything else is slow - under load the
     /// feedback that explains the load must not be the first thing to stop (Part 7, rank 3).
     /// </summary>
-    private static Grid Ring(CoreRect rect, double fraction, double width, double height)
+    /// <summary>
+    /// Hangs the progress ring on a picture, moves it along, or takes it off again. A
+    /// <paramref name="fraction"/> below zero means "nothing is coming for this one".
+    /// <para>
+    /// <b>It rides ON the picture, like the caption, and that took a hand-run to arrive at.</b> The
+    /// rings used to live on a layer above the whole scene, which had two consequences the table
+    /// showed at once: a ring was drawn over pictures LYING ON TOP of the one it belonged to - so
+    /// whoever looked ascribed it to the wrong picture - and it was set down afresh at a computed
+    /// place on every drawing instead of being carried by the picture, so it lagged behind under a
+    /// finger. Inside the place both go away for nothing: the depth is the item's own, and the
+    /// movement is the item's own.
+    /// </para>
+    /// <para>
+    /// <b>What was given up for it, said plainly:</b> a ring on a covered picture is now covered
+    /// too. That was the argument for the layer above, and it does not hold - a ring over a
+    /// stranger's picture is not weaker information, it is wrong information, and if the covered
+    /// picture finishes before anybody brings it to the front, the ring was the only thing ever
+    /// seen of it and it stood in the wrong place. The question the layer really answered - "is
+    /// this table still busy?" - belongs to the control's list, which carries the whole run since
+    /// <see cref="AssetLoadState.Waiting"/> told the two apart.
+    /// </para>
+    /// </summary>
+    private static void Turning(Mount mount, double fraction)
     {
-        const double Size = 56;
-
-        var ring = new Grid { Width = Size, Height = Size, IsHitTestVisible = false };
-
-        ring.Children.Add(new System.Windows.Shapes.Ellipse
+        if (fraction < 0)
         {
-            Stroke = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
-            StrokeThickness = 5,
-            Fill = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0)),
-        });
+            if (mount.Ring is { } gone)
+            {
+                mount.Element.Children.Remove(gone);
+                mount.Ring = null;
+            }
 
-        // An arc rather than a second ellipse: a partial circle is what says "some of it", and a
-        // ring that only changed colour would read as a state rather than as a quantity.
-        var arc = new System.Windows.Shapes.Path
+            return;
+        }
+
+        // Measured against the picture it belongs to, because 56 DIP is wider than the smallest
+        // picture the table allows: MinScale is 80 DIP of height by default, and a portrait at that
+        // height is about 53 DIP across. Below the floor there is no ring at all - a circle of
+        // twelve pixels is a smudge, not a reading.
+        var edge = Math.Min(mount.Element.Width, mount.Element.Height);
+        var size = Math.Clamp(edge * 0.6, RingFloor, RingSize);
+
+        if (double.IsNaN(size) || size < RingFloor)
         {
-            Stroke = Brushes.White,
-            StrokeThickness = 5,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            Data = Arc(Size / 2, (Size / 2) - 4, Math.Clamp(fraction, 0, 1)),
-        };
+            if (mount.Ring is { } small)
+            {
+                mount.Element.Children.Remove(small);
+                mount.Ring = null;
+            }
 
-        ring.Children.Add(arc);
+            return;
+        }
 
-        Canvas.SetLeft(ring, ((rect.X + (rect.Width / 2)) * width) - (Size / 2));
-        Canvas.SetTop(ring, ((rect.Y + (rect.Height / 2)) * height) - (Size / 2));
+        var stroke = size / 11;
 
-        return ring;
+        if (mount.Ring is null)
+        {
+            var ring = new Grid
+            {
+                IsHitTestVisible = false,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+            };
+
+            ring.Children.Add(new System.Windows.Shapes.Ellipse
+            {
+                Stroke = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                Fill = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0)),
+            });
+
+            // An arc rather than a second ellipse: a partial circle is what says "some of it", and
+            // a ring that only changed colour would read as a state rather than as a quantity.
+            ring.Children.Add(new System.Windows.Shapes.Path
+            {
+                Stroke = Brushes.White,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+            });
+
+            mount.Element.Children.Add(ring);
+            mount.Ring = ring;
+        }
+
+        mount.Ring.Width = size;
+        mount.Ring.Height = size;
+
+        // Against the picture's own turn, so twelve o'clock stays up. A tilted picture may be
+        // tilted; how far it has got may not.
+        mount.Ring.RenderTransform = new RotateTransform(-mount.Turn.Angle);
+
+        ((System.Windows.Shapes.Ellipse)mount.Ring.Children[0]).StrokeThickness = stroke;
+
+        var filled = (System.Windows.Shapes.Path)mount.Ring.Children[1];
+
+        filled.StrokeThickness = stroke;
+        filled.Data = Arc(size / 2, (size / 2) - (stroke * 0.8), Math.Clamp(fraction, 0, 1));
     }
 
     /// <summary>The filled part, clockwise from twelve o'clock.</summary>
@@ -1508,6 +1552,9 @@ internal sealed class OverlayWindow : Window
         internal RotateTransform Turn { get; }
 
         internal Border? Caption { get; set; }
+
+        /// <summary>The progress ring, while this picture is still coming.</summary>
+        internal Grid? Ring { get; set; }
 
         /// <summary>The padlock, while this item carries one.</summary>
         internal UIElement? Lock { get; set; }
