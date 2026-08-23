@@ -131,6 +131,39 @@ internal static partial class DisplayLog
         ILogger logger, string name, int beforePixels, int stepPixels);
 
     /// <summary>
+    /// Everything that only means something over hours, once every five minutes.
+    /// <para>
+    /// <b>Written for an evening of real play</b>, where nobody is watching a log and the questions
+    /// afterwards are the slow ones: did the memory climb, did the store fill up, how much was
+    /// actually done, did the connection hold. Every other line in this file describes a moment;
+    /// this one describes a stretch, and a stretch is the only thing that can show a leak.
+    /// </para>
+    /// <para>
+    /// <b>It is also the proof of life.</b> The frame line stops when the composition does - a
+    /// table nobody touches for an hour writes nothing, and silence then looks exactly like a
+    /// process that died. This one comes off a clock, so a gap in it means the display is gone.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3029,
+        Level = LogLevel.Information,
+        Message = "Standing after {Uptime}: {Items} picture(s) on {Screens} screen(s), {Bitmaps} decoded, "
+            + "{MemoryMb} MB private (peak {PeakMb}), store {StoreMb} MB in {Files} file(s), "
+            + "{Gestures} gesture(s), {Connections} connection(s).")]
+    internal static partial void SessionPulse(
+        ILogger logger,
+        string uptime,
+        int items,
+        int screens,
+        int bitmaps,
+        long memoryMb,
+        long peakMb,
+        long storeMb,
+        int files,
+        int gestures,
+        int connections);
+
+    /// <summary>
     /// What the hub made of one finished gesture, and how long it took to say so.
     /// <para>
     /// <b>Nothing in either log said anything about a gesture at all</b>, and three rounds at the

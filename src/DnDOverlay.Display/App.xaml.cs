@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Channels;
@@ -66,6 +67,9 @@ public sealed partial class App : Application, IDisposable
     /// flickers.
     /// </summary>
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>How often the display says what an evening has done to it.</summary>
+    private static readonly TimeSpan PulseEvery = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// How each screen stands right now. Everything starts <see cref="ScreenState.Inactive"/>
@@ -143,6 +147,18 @@ public sealed partial class App : Application, IDisposable
     /// </para>
     /// </summary>
     private readonly ConcurrentDictionary<ItemId, ConcurrentQueue<(ItemTransform Where, long AtMs)>> _awaiting = new();
+
+    /// <summary>
+    /// What only means something over hours - the numbers <c>3029</c> carries. They are counted
+    /// rather than derived, because what is gone leaves no trace to derive from: a gesture that
+    /// finished an hour ago is nowhere in the scene, and a connection that dropped and came back
+    /// looks exactly like one that never did.
+    /// </summary>
+    private int _gestures;
+    private int _connections;
+    private long _peakBytes;
+
+    private readonly DateTimeOffset _up = DateTimeOffset.UtcNow;
 
     /// <summary>Screens whose pictures are being fetched right now - one run each, no more.</summary>
     private readonly ConcurrentDictionary<ScreenId, byte> _fetching = new();
@@ -270,6 +286,8 @@ public sealed partial class App : Application, IDisposable
         // renders badly while nothing is on it yet is worth knowing about too, and the window is
         // thirty seconds either way (Part 10).
         _frames = new FrameWatch(_logger, PlayingScreens);
+
+        _ = Task.Run(() => PulseAsync(_shutdown.Token), _shutdown.Token);
 
         // Said once, at the start: without it there is no way to tell whether forced software
         // rendering took - and that is how the first hand-run of 37a ended (checks/M3.md).
@@ -995,6 +1013,7 @@ public sealed partial class App : Application, IDisposable
         {
             case WelcomeMessage welcome:
                 _assetPath = welcome.AssetPath;
+                _connections++;
                 Remember(welcome);
                 break;
 
@@ -1556,6 +1575,67 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
+    /// Writes <c>3029</c> every five minutes, for as long as the process lives.
+    /// <para>
+    /// Off a clock and not off the composition, so that a gap in the line means the display is gone
+    /// rather than that nobody touched the table. Five minutes because the questions it answers are
+    /// slow ones - an evening of play is sixty of these lines, which can be read in one go, and a
+    /// climbing number is visible across them long before anybody notices anything at the table.
+    /// </para>
+    /// </summary>
+    private async Task PulseAsync(CancellationToken cancellationToken)
+    {
+        using var tick = new PeriodicTimer(PulseEvery);
+
+        try
+        {
+            while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                using var self = Process.GetCurrentProcess();
+
+                var bytes = self.PrivateMemorySize64;
+
+                _peakBytes = Math.Max(_peakBytes, bytes);
+
+                var scenes = _scenes.Where(pair => pair.Key.Device == _device).ToList();
+
+                // Worked out into locals rather than inside the call: an argument that costs
+                // something must not be evaluated when the level would throw the line away (CA1873).
+                // Total hours rather than a day-and-hours form: a display is meant to stay up, and
+                // "27:15:00" is read at a glance where "1.03:15:00" has to be worked out.
+                var standing = DateTimeOffset.UtcNow - _up;
+                var uptime = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{(int)standing.TotalHours}:{standing.Minutes:00}:{standing.Seconds:00}");
+                var items = scenes.Sum(pair => pair.Value.Items.Count);
+                var screens = scenes.Count;
+                var bitmaps = _images.Count;
+                var memoryMb = bytes / (1024 * 1024);
+                var peakMb = _peakBytes / (1024 * 1024);
+                var storeMb = _cache.Bytes / (1024 * 1024);
+                var files = _cache.Count;
+
+                DisplayLog.SessionPulse(
+                    _logger,
+                    uptime,
+                    items,
+                    screens,
+                    bitmaps,
+                    memoryMb,
+                    peakMb,
+                    storeMb,
+                    files,
+                    _gestures,
+                    _connections);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
+    }
+
+    /// <summary>
     /// How far each picture that is still coming has got - the source the progress ring is drawn
     /// from. Taken from the tracker rather than kept a second time, so what turns at the table and
     /// what the control is told are the same number (Part 7).
@@ -1642,6 +1722,8 @@ public sealed partial class App : Application, IDisposable
         // own scene while nothing is connected is the ordinary case, and the Hello carries it.
         if (reported.Binding)
         {
+            _gestures++;
+
             var queue = _awaiting.GetOrAdd(reported.Transform.Item, _ => new ConcurrentQueue<(ItemTransform, long)>());
 
             // Bounded, because an operation the hub never answers - the item was gone, or locked -
