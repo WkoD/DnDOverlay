@@ -131,6 +131,39 @@ internal static partial class DisplayLog
         ILogger logger, string name, int beforePixels, int stepPixels);
 
     /// <summary>
+    /// The hub put a released picture somewhere other than the hand did.
+    /// <para>
+    /// <b>A warning, and rare on purpose.</b> Both ends run the same reducer and the same clamps out
+    /// of Core, so agreement is the normal case and a difference means one of two things, neither of
+    /// them small: they disagree about arithmetic they share, or this line is measuring the wrong
+    /// gesture. Read at the table (evening of 23.08.2026): three of 123 gestures came back between
+    /// 18 and 957 DIP away, and the ordinary line could not say which of the two it was - it carried
+    /// the distance and not the places.
+    /// </para>
+    /// <para>
+    /// So both places travel, in the normalised units the two ends actually exchange. If the hub's
+    /// figure sits exactly on an edge or at the smallest scale, it clamped; if the hand's figure
+    /// belongs to a gesture further back, the queue behind this line has slipped.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3030,
+        Level = LogLevel.Warning,
+        Message = "Gesture on {Name} came back {DriftDip} DIP away after {Milliseconds} ms: let go at "
+            + "{MineX},{MineY} scale {MineScale}, hub says {HubX},{HubY} scale {HubScale}.")]
+    internal static partial void GestureCorrected(
+        ILogger logger,
+        string name,
+        double driftDip,
+        long milliseconds,
+        double mineX,
+        double mineY,
+        double mineScale,
+        double hubX,
+        double hubY,
+        double hubScale);
+
+    /// <summary>
     /// Everything that only means something over hours, once every five minutes.
     /// <para>
     /// <b>Written for an evening of real play</b>, where nobody is watching a log and the questions

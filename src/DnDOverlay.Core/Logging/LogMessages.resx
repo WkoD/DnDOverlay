@@ -246,6 +246,9 @@
   <data name="E3023_FrameTimes" xml:space="preserve">
     <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
   </data>
+  <data name="E3030_GestureCorrected" xml:space="preserve">
+    <value>Gesture on {Name} came back {DriftDip} DIP away after {Milliseconds} ms: let go at {MineX},{MineY} scale {MineScale}, hub says {HubX},{HubY} scale {HubScale}.</value>
+  </data>
   <data name="E3029_SessionPulse" xml:space="preserve">
     <value>Standing after {Uptime}: {Items} picture(s) on {Screens} screen(s), {Bitmaps} decoded, {MemoryMb} MB private (peak {PeakMb}), store {StoreMb} MB in {Files} file(s), {Gestures} gesture(s), {Connections} connection(s).</value>
   </data>
