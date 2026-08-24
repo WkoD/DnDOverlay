@@ -1010,7 +1010,7 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        (item, _) = Aimed(item, _mounts.GetValueOrDefault(item) ?? new Mount());
+        item = _fan is { Taken: true } taken ? taken.Card : item;
 
         if (_context is not { } context || !_held.TryGetValue(item, out var hold))
         {
