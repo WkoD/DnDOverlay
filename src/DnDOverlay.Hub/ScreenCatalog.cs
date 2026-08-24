@@ -414,7 +414,11 @@ public sealed class ScreenCatalog
                     pair.Value.State,
                     pair.Value.Info.Size,
                     pair.Value.Info.Dpi,
-                    ScreenSettings.Of(pair.Value.Context, pair.Value.Info.CustomName))),
+
+                    // The OPINION, not the full set - see ScreenSettings.Opinion. control.json used
+                    // to carry every parameter of every screen it had ever seen, which made a
+                    // corrected default unreachable on any machine that had run once (Guide G13).
+                    ScreenSettings.Opinion(pair.Value.Context, pair.Value.Info.CustomName))),
             ];
         }
     }

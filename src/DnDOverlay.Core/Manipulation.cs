@@ -22,6 +22,23 @@ public readonly record struct Turning(double Pending, bool Engaged)
 }
 
 /// <summary>
+/// How hard the fingers are currently pushing a picture against the edge clamp, across the park
+/// edge, in DIP. The second thing a gesture has to remember, and it is here beside
+/// <see cref="Turning"/> for the same reason: the thumbnail in M4 must not need one of its own.
+/// <para>
+/// <b>A pressure, not a distance travelled.</b> It grows only while the fingers ask for outward
+/// movement the clamp refuses, and it shrinks again the moment they come back - so a picture that
+/// merely rests against the edge all evening never reaches the threshold, and one deliberately
+/// shoved out does so in a single push.
+/// </para>
+/// </summary>
+public readonly record struct Push(double Dip)
+{
+    /// <summary>A gesture that has not pushed against anything yet.</summary>
+    public static Push Beginning => default;
+}
+
+/// <summary>
 /// One step of a manipulation, in the terms a touch or a mouse delivers it: how far the fingers
 /// moved, how far they spread, how far they turned, and around which point.
 /// </summary>
@@ -112,9 +129,10 @@ public static class Manipulation
     /// a picture that never rotates, which is a visible bug rather than a silent one.
     /// </para>
     /// </summary>
-    public static (SceneItem Item, Turning Turning) Step(
+    public static (SceneItem Item, Turning Turning, Push Push) Step(
         SceneItem item,
         Turning turning,
+        Push push,
         GestureStep step,
         ScreenContext screen)
     {
@@ -145,7 +163,44 @@ public static class Manipulation
             RotationDeg = Normalise(item.RotationDeg + rotationDeg),
         };
 
-        return (HoldAtEdge(moved, screen), next);
+        var held = HoldAtEdge(moved, screen);
+
+        return (held, next, Pushing(push, item, moved, held, screen));
+    }
+
+    /// <summary>
+    /// Updates the pressure against the park edge by one step: what the fingers asked for outwards,
+    /// minus what they were actually granted.
+    /// <para>
+    /// Written as one subtraction rather than a case analysis, and it holds in all four situations
+    /// worth naming. Free movement outwards asks and is granted the same, so nothing builds up.
+    /// Against the clamp nothing is granted, so the whole request builds up. Moving back inwards
+    /// grants a negative amount, which the <c>Math.Max</c> keeps out of the deduction - so the
+    /// pressure falls by exactly what the fingers came back, not by what the corner rule may have
+    /// pulled on top of it. And it never goes below nought, because a picture in the middle of the
+    /// table is not pushing against anything.
+    /// </para>
+    /// </summary>
+    private static Push Pushing(
+        Push push,
+        SceneItem before,
+        SceneItem wanted,
+        SceneItem held,
+        ScreenContext screen)
+    {
+        var (outX, outY) = screen.ParkEdge switch
+        {
+            ParkEdge.Left => (-1d, 0d),
+            ParkEdge.Right => (1d, 0d),
+            ParkEdge.Top => (0d, -1d),
+            _ => (0d, 1d),
+        };
+
+        double Outwards(SceneItem to) =>
+            ((to.CenterX - before.CenterX) * outX * screen.WidthInDip)
+            + ((to.CenterY - before.CenterY) * outY * screen.HeightInDip);
+
+        return new Push(Math.Max(0, push.Dip + Outwards(wanted) - Math.Max(0, Outwards(held))));
     }
 
     /// <summary>
@@ -258,10 +313,18 @@ public static class Manipulation
     /// <summary>
     /// Whether letting go here parks the picture instead of leaving it lying at the edge.
     /// <para>
-    /// Two conditions, and both are needed (Part 6). The picture has to be AT the park edge
-    /// already - a flick from the middle of the table is a push, and inertia carries it to the edge
-    /// where it stops. And it has to be travelling towards that edge fast enough, because without
-    /// the speed test one either parks by accident all evening or never manages to on purpose.
+    /// <b>One condition, and it used to be two.</b> Part 6 also required the picture to be AT the
+    /// park edge already - a flick from the middle was a push, and inertia carried it to the edge
+    /// where it stopped. The table said otherwise: four people sit round it, and somebody at the
+    /// far end had to shove a picture half an arm's length before the tidying gesture would even
+    /// take (hand-run of M3, G30). Dropped at the end of M3, deliberately.
+    /// </para>
+    /// <para>
+    /// <b>What the dropped condition was protecting, the speed still protects</b> - without a speed
+    /// test one either parks by accident all evening or never manages to on purpose. And what it is
+    /// no longer protecting is named: sliding a picture across the table to whoever sits AT the park
+    /// edge now parks it instead of leaving it in front of them. That is the price, and it is on the
+    /// closing run of M3.
     /// </para>
     /// </summary>
     /// <param name="velocityXDip">Speed at the moment of release, in DIP per second.</param>
@@ -275,17 +338,35 @@ public static class Manipulation
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var hull = Layout.ItemToHullRect(item, screen);
-
-        var (towards, reached) = screen.ParkEdge switch
+        var towards = screen.ParkEdge switch
         {
-            ParkEdge.Left => (-velocityXDip, hull.X <= Visible(screen, horizontal: true)),
-            ParkEdge.Right => (velocityXDip, hull.X + hull.Width >= 1 - Visible(screen, horizontal: true)),
-            ParkEdge.Top => (-velocityYDip, hull.Y <= Visible(screen, horizontal: false)),
-            _ => (velocityYDip, hull.Y + hull.Height >= 1 - Visible(screen, horizontal: false)),
+            ParkEdge.Left => -velocityXDip,
+            ParkEdge.Right => velocityXDip,
+            ParkEdge.Top => -velocityYDip,
+            _ => velocityYDip,
         };
 
-        return reached && towards >= ParkVelocityDip;
+        return towards >= ParkVelocityDip;
+    }
+
+    /// <summary>
+    /// Whether the fingers have pushed this picture far enough past the edge clamp that letting go
+    /// parks it. <c>ParkPushOutDip</c> of <c>0</c> switches the whole route off.
+    /// <para>
+    /// <b>The second way into the bar, and the only one a mouse has</b> (decided at the end of M3).
+    /// A flick needs a velocity, and a mouse cannot give one that means anything; pushing a picture
+    /// out over the edge is the same intention expressed slowly, and it works with either hand.
+    /// </para>
+    /// <para>
+    /// <b>Only across the park edge.</b> Pushed out on the left and reappearing on the right would
+    /// be bewildering, and there is exactly one bar per screen (Part 6).
+    /// </para>
+    /// </summary>
+    public static bool PushedIntoTheBar(Push push, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        return screen.ParkPushOutDip > 0 && push.Dip >= screen.ParkPushOutDip;
     }
 
     /// <summary>

@@ -142,6 +142,7 @@ public sealed record ScreenSettings(
     PlacementMode? Placement = null,
     int? DefaultRotationDeg = null,
     ParkEdge? ParkEdge = null,
+    double? ParkPushOutDip = null,
     double? ImageTextSize = null,
     double? RotationDeadZoneDeg = null,
     double? RotationSnapToleranceDeg = null,
@@ -172,6 +173,7 @@ public sealed record ScreenSettings(
         && Placement is null
         && DefaultRotationDeg is null
         && ParkEdge is null
+        && ParkPushOutDip is null
         && ImageTextSize is null
         && RotationDeadZoneDeg is null
         && RotationSnapToleranceDeg is null
@@ -198,12 +200,41 @@ public sealed record ScreenSettings(
             Placement: context.Placement,
             DefaultRotationDeg: context.DefaultRotationDeg,
             ParkEdge: context.ParkEdge,
+            ParkPushOutDip: context.ParkPushOutDip,
             ImageTextSize: context.ImageTextSize,
             RotationDeadZoneDeg: context.RotationDeadZoneDeg,
             RotationSnapToleranceDeg: context.RotationSnapToleranceDeg,
             ArrivalHighlightSeconds: context.ArrivalHighlightSeconds,
             Inertia: context.Inertia,
             ScrollUpZoomsIn: context.ScrollUpZoomsIn);
+    }
+
+    /// <summary>
+    /// What of this screen's set is actually somebody's opinion - everything that differs from the
+    /// defaults for a screen of this size. This is what goes into a FILE; the full set of
+    /// <see cref="Of"/> is what goes on the WIRE as a baseline.
+    /// <para>
+    /// <b>Without it a corrected default reaches no machine that has ever run</b> (Guide G13). Every
+    /// known screen used to have the full set written out, so a value nobody had ever touched stood
+    /// in control.json and display.json as though somebody had chosen it - and the hand-run of M3
+    /// duly measured the old arrival highlight against a build that carried the new one. Now a value
+    /// that equals the default is simply not written, and the file heals itself the next time it is
+    /// saved.
+    /// </para>
+    /// <para>
+    /// <b>The price, and it is real:</b> a value the DM deliberately set TO the default is
+    /// indistinguishable from one they never touched, so changing that default later moves their
+    /// screen too. For a table where every parameter is a starting point that is the wanted
+    /// behaviour rather than the tolerated one - but it is a choice, not an oversight.
+    /// </para>
+    /// </summary>
+    public static ScreenSettings Opinion(ScreenContext context, string? customName)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Diff(
+            Of(ScreenContext.Default(context.Size, context.Dpi), customName: null),
+            Of(context, customName));
     }
 
     /// <summary>Lays this delta over a context, leaving untouched whatever it does not mention.</summary>
@@ -221,6 +252,7 @@ public sealed record ScreenSettings(
             Placement = Placement ?? context.Placement,
             DefaultRotationDeg = DefaultRotationDeg ?? context.DefaultRotationDeg,
             ParkEdge = ParkEdge ?? context.ParkEdge,
+            ParkPushOutDip = ParkPushOutDip ?? context.ParkPushOutDip,
             ImageTextSize = ImageTextSize ?? context.ImageTextSize,
             RotationDeadZoneDeg = RotationDeadZoneDeg ?? context.RotationDeadZoneDeg,
             RotationSnapToleranceDeg = RotationSnapToleranceDeg ?? context.RotationSnapToleranceDeg,
@@ -256,6 +288,7 @@ public sealed record ScreenSettings(
             Placement: newer.Placement ?? older.Placement,
             DefaultRotationDeg: newer.DefaultRotationDeg ?? older.DefaultRotationDeg,
             ParkEdge: newer.ParkEdge ?? older.ParkEdge,
+            ParkPushOutDip: newer.ParkPushOutDip ?? older.ParkPushOutDip,
             ImageTextSize: newer.ImageTextSize ?? older.ImageTextSize,
             RotationDeadZoneDeg: newer.RotationDeadZoneDeg ?? older.RotationDeadZoneDeg,
             RotationSnapToleranceDeg: newer.RotationSnapToleranceDeg ?? older.RotationSnapToleranceDeg,
@@ -288,6 +321,7 @@ public sealed record ScreenSettings(
                 ? null
                 : after.DefaultRotationDeg,
             ParkEdge: before.ParkEdge == after.ParkEdge ? null : after.ParkEdge,
+            ParkPushOutDip: before.ParkPushOutDip == after.ParkPushOutDip ? null : after.ParkPushOutDip,
             ImageTextSize: before.ImageTextSize == after.ImageTextSize ? null : after.ImageTextSize,
             RotationDeadZoneDeg: before.RotationDeadZoneDeg == after.RotationDeadZoneDeg
                 ? null
@@ -480,6 +514,23 @@ public sealed record ScreenContext(
     ParkEdge ParkEdge,
 
     /// <summary>
+    /// How far past the edge clamp the fingers have to push a picture across the park edge for
+    /// letting go to park it, in DIP. <c>0</c> switches this route into the bar off.
+    /// <para>
+    /// <b>The second way to park, and the only one a mouse has</b> (decided at the end of M3). A
+    /// flick needs a velocity that means something, and a mouse cannot give one; pushing out is the
+    /// same intention expressed slowly. Only across the park edge - pushed out on the left and
+    /// reappearing on the right would bewilder, and there is one bar per screen (Part 6).
+    /// </para>
+    /// <para>
+    /// In DIP on purpose, the same currency the edge clamp is written in. A fraction of the picture
+    /// would make a large one park later than a small one, and a fraction of the screen would be a
+    /// THIRD yardstick beside the two that already exist.
+    /// </para>
+    /// </summary>
+    double ParkPushOutDip,
+
+    /// <summary>
     /// How tall the name in a picture is drawn, in DIP on that screen (Part 6).
     /// <para>
     /// Per screen and not once for the program, because the only thing that separates the three
@@ -579,6 +630,11 @@ public sealed record ScreenContext(
             Placement: PlacementMode.Flow,
             DefaultRotationDeg: 0,
             ParkEdge: ParkEdge.Right,
+
+            // One slot width, so pushing a picture a whole further slot out of the screen is what
+            // parks it - a distance nobody covers by accident while nudging something into place.
+            // A proposal until the closing run of M3 has had fingers on it (Guide G6).
+            ParkPushOutDip: 96,
 
             // Around one and a half times Windows' standard text: readable at arm's length on the
             // table without a small portrait running straight into the truncation (decided in

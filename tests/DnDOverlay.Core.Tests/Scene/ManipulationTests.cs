@@ -18,10 +18,11 @@ public sealed class ManipulationTests
     private static SceneItem Apply(SceneItem item, ScreenContext screen, params GestureStep[] steps)
     {
         var turning = Turning.Beginning;
+        var push = Push.Beginning;
 
         foreach (var step in steps)
         {
-            (item, turning) = Manipulation.Step(item, turning, step, screen);
+            (item, turning, push) = Manipulation.Step(item, turning, push, step, screen);
         }
 
         return item;
@@ -360,13 +361,104 @@ public sealed class ManipulationTests
     }
 
     /// <summary>
-    /// A flick from the middle of the table is a push. Inertia carries it to the edge, where it
-    /// stops - parking is what happens to a picture that is already there (Part 6).
+    /// <b>A flick from the middle of the table parks, and that is a change</b> (end of M3). It used
+    /// to be a push: the picture had to be at the edge already, and inertia carried it there. At a
+    /// table four people sit round, that meant shoving a picture half an arm's length before the
+    /// tidying gesture would take (hand-run of M3, G30).
     /// </summary>
     [Fact]
-    public void A_flick_from_the_middle_is_a_push()
+    public void A_flick_from_the_middle_parks_and_a_slow_push_from_the_middle_does_not()
     {
-        Assert.False(Manipulation.ShouldPark(Build.Item(centerX: 0.5), 5000, 0, Build.Screen()));
+        var screen = Build.Screen();
+        var middle = Build.Item(centerX: 0.5);
+
+        Assert.True(Manipulation.ShouldPark(middle, Manipulation.ParkVelocityDip + 1, 0, screen));
+        Assert.False(Manipulation.ShouldPark(middle, Manipulation.ParkVelocityDip - 1, 0, screen));
+    }
+
+    /// <summary>
+    /// The second way into the bar: pushed out over the park edge rather than flicked at it. It is
+    /// a PRESSURE and not a distance travelled - what is asked for outwards and refused.
+    /// </summary>
+    [Fact]
+    public void Pushing_a_picture_out_over_the_park_edge_parks_it()
+    {
+        var screen = Build.Screen();
+        var item = Manipulation.HoldAtEdge(Build.Item(centerX: 5), screen);
+        var push = Push.Beginning;
+
+        Assert.False(Manipulation.PushedIntoTheBar(push, screen));
+
+        // A tenth of the screen further out, in ten steps, all of them refused by the clamp.
+        for (var i = 0; i < 10; i++)
+        {
+            (item, _, push) = Manipulation.Step(
+                item,
+                Turning.Beginning,
+                push,
+                new GestureStep(0.01, 0, 1, 0, new Point(0.5, 0.5)),
+                screen);
+        }
+
+        Assert.True(push.Dip >= screen.ParkPushOutDip);
+        Assert.True(Manipulation.PushedIntoTheBar(push, screen));
+    }
+
+    /// <summary>
+    /// Coming back releases the pressure, or a picture resting against the edge would park itself
+    /// after an evening of being nudged about.
+    /// </summary>
+    [Fact]
+    public void Coming_back_from_the_edge_takes_the_pressure_off_again()
+    {
+        var screen = Build.Screen();
+        var item = Manipulation.HoldAtEdge(Build.Item(centerX: 5), screen);
+        var push = Push.Beginning;
+
+        for (var i = 0; i < 10; i++)
+        {
+            (item, _, push) = Manipulation.Step(
+                item, Turning.Beginning, push, new GestureStep(0.01, 0, 1, 0, new Point(0.5, 0.5)), screen);
+        }
+
+        Assert.True(Manipulation.PushedIntoTheBar(push, screen));
+
+        for (var i = 0; i < 10; i++)
+        {
+            (item, _, push) = Manipulation.Step(
+                item, Turning.Beginning, push, new GestureStep(-0.01, 0, 1, 0, new Point(0.5, 0.5)), screen);
+        }
+
+        Assert.Equal(0, push.Dip, 6);
+        Assert.False(Manipulation.PushedIntoTheBar(push, screen));
+    }
+
+    /// <summary>
+    /// Only across the park edge. There is one bar per screen, and pushed out on the left to
+    /// reappear on the right would bewilder (Part 6).
+    /// </summary>
+    [Fact]
+    public void Pushing_out_over_another_edge_builds_no_pressure()
+    {
+        var screen = Build.Screen();
+        var item = Manipulation.HoldAtEdge(Build.Item(centerY: 5), screen);
+        var push = Push.Beginning;
+
+        for (var i = 0; i < 20; i++)
+        {
+            (item, _, push) = Manipulation.Step(
+                item, Turning.Beginning, push, new GestureStep(0, 0.01, 1, 0, new Point(0.5, 0.5)), screen);
+        }
+
+        Assert.Equal(0, push.Dip, 6);
+        Assert.False(Manipulation.PushedIntoTheBar(push, screen));
+    }
+
+    /// <summary>Nought switches the whole route off, the same shape the other switches use.</summary>
+    [Fact]
+    public void A_push_out_distance_of_nought_switches_the_route_off()
+    {
+        Assert.False(Manipulation.PushedIntoTheBar(new Push(10000), Build.Screen() with { ParkPushOutDip = 0 }));
     }
 
     [Fact]

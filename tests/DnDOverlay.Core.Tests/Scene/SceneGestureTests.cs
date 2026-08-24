@@ -97,8 +97,15 @@ public sealed class SceneGestureTests
             [.. after.Items.Select(item => (item.CenterX, item.CenterY, item.Scale, item.RotationDeg, item.ZOrder))]);
     }
 
+    /// <summary>
+    /// <b>Parking keeps the size and turns the picture straight</b> - the two halves of Part 6's
+    /// sentence were split at the end of M3. Keeping the angle quietly broke a DIFFERENT promise of
+    /// Part 6, that every slot keeps a finger-sized target: the bar spaces its slots by a fixed
+    /// 96 DIP, and a turned picture puts only a corner into that space. Keeping the size costs
+    /// nothing of the kind - a large picture hangs further out and is easier to hit.
+    /// </summary>
     [Fact]
-    public void Parking_lays_the_item_into_the_bar_and_keeps_its_size_and_rotation()
+    public void Parking_lays_the_item_into_the_bar_straight_and_keeps_its_size()
     {
         var item = Build.Item(centerX: 0.5, centerY: 0.5, scale: 0.3, rotationDeg: 45);
 
@@ -111,9 +118,48 @@ public sealed class SceneGestureTests
 
         Assert.True(parked.Parked);
         Assert.Equal(0.3, parked.Scale);
-        Assert.Equal(45, parked.RotationDeg);
+        Assert.Equal(Screen.DefaultRotationDeg, parked.RotationDeg);
         Assert.Equal(Parking.SlotCentre(parked, 0, 1, Screen).X, parked.CenterX, precision: 9);
         Assert.Equal(Parking.SlotCentre(parked, 0, 1, Screen).Y, parked.CenterY, precision: 9);
+    }
+
+    /// <summary>
+    /// Straight means the screen's OWN straight, not zero. A screen whose pictures arrive at 180°
+    /// is one people sit at from the other side, and parking it to zero would put the bar upside
+    /// down relative to everything else on that table.
+    /// </summary>
+    [Fact]
+    public void Straight_is_the_angle_this_screen_hands_pictures_out_at()
+    {
+        var screen = Screen with { DefaultRotationDeg = 180 };
+        var item = Build.Item(rotationDeg: 45);
+
+        var after = SceneReducer.Apply(
+            Build.SceneWith(item),
+            new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9),
+            screen);
+
+        Assert.Equal(180, after.Items[0].RotationDeg);
+    }
+
+    /// <summary>
+    /// Coming back out of the bar changes no angle. The rotation is spent at the moment of parking
+    /// and not remembered - decided at the end of M3, with the price named: whoever aligned a
+    /// picture and then tidied it away aligns it again afterwards.
+    /// </summary>
+    [Fact]
+    public void Unparking_leaves_the_angle_where_parking_left_it()
+    {
+        var item = Build.Item(rotationDeg: 45);
+        var scene = Build.SceneWith(item);
+
+        var parked = SceneReducer.Apply(
+            scene, new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9), Screen);
+
+        var back = SceneReducer.Apply(
+            parked, new ParkItem(item.ItemId, Parked: false, ZOrder: 5, Revision: 10), Screen);
+
+        Assert.Equal(Screen.DefaultRotationDeg, back.Items[0].RotationDeg);
     }
 
     /// <summary>

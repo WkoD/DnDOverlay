@@ -240,11 +240,12 @@ public sealed class GestureCommandTests
     }
 
     /// <summary>
-    /// Parking keeps size and rotation - the Java version reset both and undid the work of lining
-    /// a picture up (Part 6) - and coming back out brings the picture to the front (Part 3).
+    /// Parking keeps the size and turns the picture straight, and coming back out brings it to the
+    /// front (Part 3, Part 6 as revised at the end of M3). The Java version reset the SIZE too and
+    /// undid the work of lining a picture up; that half of the objection still stands.
     /// </summary>
     [Fact]
-    public async Task Parking_keeps_size_and_rotation_and_unparking_comes_to_the_front()
+    public async Task Parking_keeps_size_but_turns_straight_and_unparking_comes_to_the_front()
     {
         using var session = Session(out var screens);
         screens.Report(Device, [Info()], reported: null);
@@ -261,7 +262,7 @@ public sealed class GestureCommandTests
 
         Assert.True(parked.Parked);
         Assert.Equal(0.3, parked.Scale, precision: 9);
-        Assert.Equal(90, parked.RotationDeg);
+        Assert.Equal(Context().DefaultRotationDeg, parked.RotationDeg);
         Assert.Equal(parked, Manipulation.HoldAtEdge(parked, Context()));
 
         await session.ParkItemAsync(Target, item, parked: false, Cancellation);

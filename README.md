@@ -97,12 +97,12 @@ Several people at once, without being told how.
 | Rotate | turn with two fingers | hold Ctrl and drag, about the centre |
 | Bring to the front | touch it | click it |
 | Turn it to face you | double tap | — |
-| Park it at the edge | flick towards the park edge | — |
-| Fetch it back | touch the parked picture | — |
+| Park it at the edge | flick towards the park edge | push it out past that edge |
+| Fetch it back | touch the parked picture | click it |
 
 The **right mouse button stays unassigned on purpose**: a grip that exists on only one of the
 two surfaces is worse than a grip missing from both, and Ctrl+drag sits under the same hand
-anyway. Parking has no mouse equivalent yet — an angle takes two hands, and a flick takes one.
+anyway.
 
 Four things make the gestures survive an evening rather than merely work:
 
@@ -113,8 +113,10 @@ Four things make the gestures survive an evening rather than merely work:
 - **A picture may hang over the edge, but not disappear.** What stays reachable is measured
   against the picture as it is really drawn, corners and all, so a picture turned 37° in a
   corner is as grabbable as one lying straight.
-- **A flick parks, a slow push does not.** Otherwise you park by accident all evening.
-  A parked picture keeps its size and its angle, so aligning it was not wasted.
+- **Two ways into the bar.** A flick towards the park edge from anywhere on the table, or
+  pushing the picture out past that edge — the second is slower, deliberate, and the only one a
+  mouse has. A parked picture keeps its size and is turned straight, so the bar stays a row of
+  finger-sized targets rather than a row of corners.
 - **A picture you are holding stays under your hand**, whatever else arrives on the screen
   meanwhile.
 
@@ -131,6 +133,7 @@ behind your back.
 | `placement` | `Flow` | where a new picture goes: `Flow` fills free places side by side and wraps, `Cascade` stacks with a growing offset from the centre |
 | `defaultRotationDeg` | `0` | the angle a picture arrives at — for a table people sit around |
 | `parkEdge` | `Right` | which edge a parked picture waits at |
+| `parkPushOutDip` | `96` | how far past that edge a picture must be pushed for letting go to park it; `0` switches the push-out route off |
 
 Every display keeps its own copy of the pictures it has shown, up to **4 GiB** — so moving a
 picture from one screen to another, hiding it and bringing it back, or putting the same map up

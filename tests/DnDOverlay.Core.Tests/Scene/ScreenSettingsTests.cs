@@ -191,4 +191,81 @@ public sealed class ScreenSettingsTests
             $"a screen parameter of type {current.GetType().Name} has no 'different' value here - "
             + "add one, or this parameter is silently not being checked"),
     };
+
+    /// <summary>
+    /// <b>A screen that has no opinion writes nothing</b> - the state Part 6 carried as an open
+    /// contradiction until the end of M3. Without it a corrected default reaches no machine that
+    /// has ever run, because every known screen had the full set standing in its file as though
+    /// somebody had chosen it (Guide G13).
+    /// </summary>
+    [Fact]
+    public void A_screen_that_follows_every_default_has_nothing_to_say()
+    {
+        Assert.True(ScreenSettings.Opinion(Context, customName: null).IsEmpty);
+    }
+
+    /// <summary>
+    /// And it says exactly what it does have an opinion about - one field, not the other fourteen.
+    /// A test that only asked "not empty" would pass on the old behaviour too.
+    /// </summary>
+    [Fact]
+    public void One_changed_value_is_the_only_thing_written()
+    {
+        var opinion = ScreenSettings.Opinion(Context with { ScaleOnLoad = 0.25 }, customName: null);
+
+        Assert.Equal(0.25, opinion.ScaleOnLoad);
+        Assert.Equal(new ScreenSettings(ScaleOnLoad: 0.25), opinion);
+    }
+
+    /// <summary>A name is an opinion like any other, and the only one that is not a number.</summary>
+    [Fact]
+    public void A_name_somebody_gave_the_screen_is_an_opinion()
+    {
+        Assert.Equal(new ScreenSettings(CustomName: "Tisch"), ScreenSettings.Opinion(Context, "Tisch"));
+    }
+
+    /// <summary>
+    /// The round trip that makes the thinning safe: what is written, laid back over the defaults of
+    /// a screen of that size, is the set it came from. Every field at a value of its own, so a
+    /// field forgotten in Opinion cannot hide behind a default that happens to match.
+    /// </summary>
+    [Fact]
+    public void What_is_written_lays_back_over_the_defaults_unchanged()
+    {
+        var mine = Context with
+        {
+            MinVisiblePixels = 111,
+            MinScale = 0.11,
+            MaxScale = 11,
+            ScaleOnLoad = 0.11,
+            MaxWidthOnLoad = 0.11,
+            Placement = PlacementMode.Cascade,
+            DefaultRotationDeg = 180,
+            ParkEdge = ParkEdge.Top,
+            ParkPushOutDip = 111,
+            ImageTextSize = 11,
+            RotationDeadZoneDeg = 11,
+            RotationSnapToleranceDeg = 11,
+            ArrivalHighlightSeconds = 11,
+            Inertia = false,
+            ScrollUpZoomsIn = false,
+        };
+
+        var written = ScreenSettings.Opinion(mine, "Tisch");
+
+        Assert.Equal(mine, written.ApplyTo(ScreenContext.Default(mine.Size, mine.Dpi)));
+        Assert.Equal("Tisch", written.CustomName);
+    }
+
+    /// <summary>
+    /// The price, written down as a test so nobody rediscovers it as a fault: a value deliberately
+    /// set TO the default is indistinguishable from one nobody touched, so a later change of that
+    /// default moves this screen too. Wanted behaviour at a table where every parameter is a
+    /// starting point - but a choice, not an oversight.
+    /// </summary>
+    [Fact]
+    public void A_value_set_to_the_default_is_not_told_apart_from_no_opinion()
+    {
+        Assert.True(ScreenSettings.Opinion(Context with { MaxScale = Context.MaxScale }, null).IsEmpty);
+    }
 }

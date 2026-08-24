@@ -773,11 +773,18 @@ internal sealed class OverlayWindow : Window
                 width <= 0 ? 0 : e.ManipulationOrigin.X / width,
                 height <= 0 ? 0 : e.ManipulationOrigin.Y / height));
 
-        var (moved, turning) = CoreManipulation.Step(hold.Item, hold.Turning, step, context);
+        var (moved, turning, push) = CoreManipulation.Step(hold.Item, hold.Turning, hold.Push, step, context);
 
         hold.Item = moved;
         hold.Turning = turning;
         hold.Moved += Math.Abs(delta.Translation.X) + Math.Abs(delta.Translation.Y);
+
+        // Only a hand pushes. A glide runs into the clamp and would otherwise pile up pressure the
+        // fingers never applied - which is exactly the objection the idea was written down with.
+        if (!e.IsInertial)
+        {
+            hold.Push = push;
+        }
 
         Place(mount, moved, context);
         Report(item, grabbed: false, binding: false);
@@ -787,6 +794,30 @@ internal sealed class OverlayWindow : Window
             // At the point the clamp would take over there is nothing left to glide into.
             e.Complete();
         }
+    }
+
+    /// <summary>
+    /// Puts a picture into the slot bar at the end of a gesture and falls silent.
+    /// <para>
+    /// The silence is the point: where a parked picture lies follows from the LIST of parked
+    /// pictures, so a transform reported afterwards would answer a question this gesture does not
+    /// get to answer - and it would win, because it arrives second. And the redraw has to be asked
+    /// for, because a held picture is deliberately passed over by the drawing (conflict rule 3) and
+    /// this way out reports nothing that would trigger one.
+    /// </para>
+    /// </summary>
+    private void Park(ItemId item)
+    {
+        if (!_held.TryGetValue(item, out var hold))
+        {
+            return;
+        }
+
+        hold.Parked = true;
+        _held.Remove(item);
+
+        Parked?.Invoke(item, true);
+        Settled?.Invoke();
     }
 
     /// <summary>
@@ -871,6 +902,16 @@ internal sealed class OverlayWindow : Window
             // The other way out of this method reports a binding transform and is drawn by the
             // application; this one reports nothing, so it has to ask.
             Settled?.Invoke();
+
+            return;
+        }
+
+        if (CoreManipulation.PushedIntoTheBar(hold.Push, context))
+        {
+            // Pushed out over the park edge rather than flicked at it - the slow way to tidy up,
+            // and the only one a mouse has (Part 6, decided at the end of M3). Read HERE and not in
+            // Fling, because a slow push has no velocity and WPF has no inertia to announce.
+            Park(item);
 
             return;
         }
@@ -1016,10 +1057,11 @@ internal sealed class OverlayWindow : Window
                 0,
                 Centre(hold.Item));
 
-        var (moved, turning) = CoreManipulation.Step(hold.Item, hold.Turning, step, context);
+        var (moved, turning, push) = CoreManipulation.Step(hold.Item, hold.Turning, hold.Push, step, context);
 
         hold.Item = moved;
         hold.Turning = turning;
+        hold.Push = push;
         hold.Moved += Math.Abs(now.X - _mouseAt.X) + Math.Abs(now.Y - _mouseAt.Y);
         _mouseAt = now;
 
@@ -1035,6 +1077,16 @@ internal sealed class OverlayWindow : Window
 
         if (_context is not { } context || !_held.TryGetValue(item, out var hold))
         {
+            return;
+        }
+
+        if (CoreManipulation.PushedIntoTheBar(hold.Push, context))
+        {
+            // The one route into the bar a mouse has at all: it cannot flick, so without this a
+            // display PC without touch could never park anything (Part 6, end of M3).
+            Park(item);
+            e.Handled = true;
+
             return;
         }
 
@@ -1085,9 +1137,10 @@ internal sealed class OverlayWindow : Window
         var (width, height) = Surface(context);
         var at = e.GetPosition(_stage);
 
-        var (moved, turning) = CoreManipulation.Step(
+        var (moved, turning, push) = CoreManipulation.Step(
             hold.Item,
             hold.Turning,
+            hold.Push,
             new GestureStep(
                 0,
                 0,
@@ -1098,6 +1151,7 @@ internal sealed class OverlayWindow : Window
 
         hold.Item = moved;
         hold.Turning = turning;
+        hold.Push = push;
 
         Place(mount, moved, context);
 
@@ -1660,6 +1714,12 @@ internal sealed class OverlayWindow : Window
         internal SceneItem Item { get; set; } = item;
 
         internal Turning Turning { get; set; } = Turning.Beginning;
+
+        /// <summary>
+        /// How hard this gesture is pushing the picture against the park edge. Fed only by a real
+        /// hand, never by a glide, and read once when the hand leaves.
+        /// </summary>
+        internal Push Push { get; set; } = Push.Beginning;
 
         /// <summary>How far the hand has travelled in DIP - a tap is a gesture that barely moved.</summary>
         internal double Moved { get; set; }

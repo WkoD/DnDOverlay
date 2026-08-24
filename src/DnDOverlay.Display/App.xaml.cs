@@ -637,7 +637,11 @@ public sealed partial class App : Application, IDisposable
             [
                 .. _contexts.Select(pair => new ScreenPreferences(
                     pair.Key.Value,
-                    ScreenSettings.Of(pair.Value, _names.GetValueOrDefault(pair.Key)))),
+
+                    // The OPINION, not the full set: a value nobody ever touched is not written, so
+                    // a corrected default reaches this machine on the next start instead of being
+                    // overwritten by its own file (Guide G13, ScreenSettings.Opinion).
+                    ScreenSettings.Opinion(pair.Value, _names.GetValueOrDefault(pair.Key)))),
             ],
             Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted),
         };
