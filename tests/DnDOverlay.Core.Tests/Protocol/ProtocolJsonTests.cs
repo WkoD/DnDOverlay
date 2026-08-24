@@ -84,6 +84,18 @@ public sealed class ProtocolJsonTests
             new ItemId(Guid.Parse("22222222-0000-0000-0000-000000000002")),
             Parked: true),
 
+        // Every finger on one screen in one message, each with its own identity and its own path
+        // since the last send - two people pointing must not arrive as one zigzag (Part 4).
+        new TouchPointsMessage(
+            Screen.Screen,
+            [
+                new TouchTrail(7, [new TouchPoint(0.10, 0.20, 90), new TouchPoint(0.12, 0.24, 0)]),
+                new TouchTrail(8, [new TouchPoint(0.80, 0.55, 40)]),
+            ]),
+
+        // The empty list is a statement and not an absence: the last finger has lifted (Part 4).
+        new TouchPointsMessage(Screen.Screen, []),
+
         // The five that had gone over real sockets in the seam tests and through no round trip of
         // their own - which is how they stayed off this list without anybody noticing.
         new PairingPendingMessage("482 913"),

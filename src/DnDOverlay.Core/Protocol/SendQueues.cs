@@ -1,9 +1,7 @@
 using System.Net.WebSockets;
 using System.Threading.Channels;
-using DnDOverlay.Core.Protocol;
-using Microsoft.Extensions.Logging;
 
-namespace DnDOverlay.Hub;
+namespace DnDOverlay.Core.Protocol;
 
 /// <summary>
 /// The three queues in front of one socket, and the single loop that writes them.
@@ -16,24 +14,37 @@ namespace DnDOverlay.Hub;
 /// the load.
 /// </para>
 /// <para>
+/// <b>It sits in Core and serves both ends of the wire.</b> Until M3 the hub owned it and the
+/// display had a single unbounded channel - and touch points and gestures run on exactly that
+/// one. A second version of the discard rules would be the seam of M2 with another name
+/// (<c>WebSocketFraming</c> stood twice, and the ends drifted until one stopped sending a token).
+/// The classes belong to the protocol, so the queues do too (M3, siting question 2).
+/// </para>
+/// <para>
 /// It owns the socket, and that is deliberate. "Exactly one writer per socket" is then a property
 /// of the construction rather than a rule somebody has to keep - and it has to be kept from the
 /// moment the socket is accepted, because the heartbeat runs during the pairing wait as well
 /// (Part 4). Two concurrent sends on one WebSocket are not allowed.
 /// </para>
 /// </summary>
-internal sealed class SendQueues : IDisposable
+public sealed class SendQueues : IMessageSink, IDisposable
 {
     private readonly WebSocket _socket;
-    private readonly string _address;
     private readonly TimeProvider _time;
-    private readonly ILogger _logger;
+    private readonly ISendReport _report;
     private readonly TimeSpan _writeTimeout;
     private readonly long _maxStateBytes;
 
     private readonly Channel<byte[]> _state;
     private readonly Channel<byte[]> _progress;
-    private readonly Channel<byte[]> _transient;
+
+    /// <summary>
+    /// Rank 4, one slot per kind. It holds MESSAGES where the other two hold bytes, and it has to:
+    /// replacement may mean merging, and a merge needs the content. It is also the only tier whose
+    /// item changes between being queued and being written - a trail's ages are relative to the
+    /// moment it goes out, so the wait is charged to it here rather than guessed at the far end.
+    /// </summary>
+    private readonly TransientSlots<ProtocolMessage> _transient;
 
     /// <summary>
     /// One signal for all three queues. Waiting on three channels at once would leave a waiter
@@ -48,23 +59,27 @@ internal sealed class SendQueues : IDisposable
     private long _stateBytes;
     private volatile bool _finishing;
 
-    /// <param name="address">
-    /// Who is at the other end. The address rather than the device, because these queues exist
-    /// from the moment the socket is accepted - before any <c>Hello</c> has said which device this
-    /// is. It is also what a person uses to tell two connections apart while setting up (Part 3).
+    /// <param name="report">
+    /// Where the three things that can go wrong on a socket are said. It is handed in rather than
+    /// logged from here, because the event identifiers belong to the process that owns the
+    /// connection: the hub names the address it was talking to, the display names the hub (Part 8).
     /// </param>
-    internal SendQueues(WebSocket socket, string address, HubOptions options, TimeProvider time, ILogger logger)
+    public SendQueues(WebSocket socket, SendLimits limits, ISendReport report, TimeProvider time)
     {
+        ArgumentNullException.ThrowIfNull(socket);
+        ArgumentNullException.ThrowIfNull(limits);
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(time);
+
         _socket = socket;
-        _address = address;
         _time = time;
-        _logger = logger;
-        _writeTimeout = options.WriteTimeout;
-        _maxStateBytes = options.MaxStateBytes;
+        _report = report;
+        _writeTimeout = limits.WriteTimeout;
+        _maxStateBytes = limits.MaxStateBytes;
 
         // Wait, so that a full state queue fails the TryWrite instead of blocking the caller.
         // Blocking would carry the slowest device's backlog into the hub's own command path.
-        _state = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(options.MaxStateMessages)
+        _state = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(limits.MaxStateMessages)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -77,11 +92,7 @@ internal sealed class SendQueues : IDisposable
             SingleReader = true,
         });
 
-        _transient = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(options.MaxTransientMessages)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-        });
+        _transient = new TransientSlots<ProtocolMessage>(limits.MaxTransientSlots, time);
     }
 
     /// <summary>
@@ -89,27 +100,30 @@ internal sealed class SendQueues : IDisposable
     /// for too long, not taking anything, or refusing to be written to at all. Whoever owns the
     /// socket watches this and unwinds - nobody reaches into another handler's socket.
     /// </summary>
-    internal CancellationToken Closing => _closing.Token;
+    public CancellationToken Closing => _closing.Token;
 
     /// <summary>Completes once the pump has stopped, whether it drained or gave up.</summary>
-    internal Task Drained => _drained.Task;
+    public Task Drained => _drained.Task;
 
     /// <summary>Queues a message in the class it belongs to.</summary>
-    internal bool TrySend(ProtocolMessage message) => TrySend(message, SendClasses.Of(message));
+    public bool TrySend(ProtocolMessage message) => TrySend(message, SendClasses.Of(message));
 
     /// <summary>
-    /// Queues a message in a class chosen by the caller. Only the tests use this - it is how the
-    /// two rear queues can be driven before there is any message that belongs in them (Part 10).
+    /// Queues a message in a class chosen by the caller. Beyond the tests this is for a sender
+    /// that knows something the classification cannot - not for overriding it.
     /// </summary>
-    internal bool TrySend(ProtocolMessage message, SendClass @class)
+    public bool TrySend(ProtocolMessage message, SendClass @class)
     {
-        var payload = ProtocolJson.Serialise(message);
+        ArgumentNullException.ThrowIfNull(message);
 
+        // Rank 4 keeps the message rather than its bytes: it may still be merged with the next
+        // one, and serialising something that is about to be replaced is work spent on a payload
+        // nobody will see.
         var queued = @class switch
         {
-            SendClass.Progress => Offer(_progress, payload),
-            SendClass.Transient => Offer(_transient, payload),
-            _ => OfferState(payload),
+            SendClass.Transient => _transient.Offer(message),
+            SendClass.Progress => _progress.Writer.TryWrite(ProtocolJson.Serialise(message)),
+            _ => OfferState(ProtocolJson.Serialise(message)),
         };
 
         if (queued)
@@ -125,7 +139,7 @@ internal sealed class SendQueues : IDisposable
     /// message is the whole point of the connection ending - a refusal, which the device is meant
     /// to act on and cannot if the socket merely stops answering (Part 4).
     /// </summary>
-    internal void Finish(ProtocolMessage last)
+    public void Finish(ProtocolMessage last)
     {
         _ = TrySend(last, SendClass.State);
         _finishing = true;
@@ -133,7 +147,7 @@ internal sealed class SendQueues : IDisposable
     }
 
     /// <summary>Ends this connection. What happens next belongs to whoever owns the socket.</summary>
-    internal void RequestClose()
+    public void RequestClose()
     {
         if (!_closing.IsCancellationRequested)
         {
@@ -142,7 +156,7 @@ internal sealed class SendQueues : IDisposable
     }
 
     /// <summary>The single writer. Everything that goes onto this socket comes through here.</summary>
-    internal async Task PumpAsync(CancellationToken cancellationToken)
+    public async Task PumpAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -194,10 +208,23 @@ internal sealed class SendQueues : IDisposable
             return true;
         }
 
-        return _progress.Reader.TryRead(out payload!) || _transient.Reader.TryRead(out payload!);
-    }
+        if (_progress.Reader.TryRead(out payload!))
+        {
+            return true;
+        }
 
-    private static bool Offer(Channel<byte[]> queue, byte[] payload) => queue.Writer.TryWrite(payload);
+        // Serialised here rather than where it was queued, because here is where its ages are
+        // finally true: the wait in the slot is part of how old every point in it is.
+        if (_transient.TryTake(out var message))
+        {
+            payload = ProtocolJson.Serialise(message!);
+            return true;
+        }
+
+        payload = [];
+
+        return false;
+    }
 
     /// <summary>
     /// Bounded by count <b>and</b> by bytes, because one <c>SceneSnapshot</c> with twenty items
@@ -218,7 +245,7 @@ internal sealed class SendQueues : IDisposable
         }
 
         Interlocked.Add(ref _stateBytes, -payload.Length);
-        HubLog.StateQueueFull(_logger, _address, _state.Reader.Count, Interlocked.Read(ref _stateBytes));
+        _report.StateQueueFull(_state.Reader.Count, Interlocked.Read(ref _stateBytes));
         RequestClose();
 
         return false;
@@ -249,17 +276,81 @@ internal sealed class SendQueues : IDisposable
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested)
         {
-            HubLog.WriteTimedOut(_logger, _address, _writeTimeout);
+            _report.WriteTimedOut(_writeTimeout);
             RequestClose();
 
             return false;
         }
         catch (WebSocketException exception)
         {
-            HubLog.SendFailed(_logger, exception, _address);
+            _report.SendFailed(exception);
             RequestClose();
 
             return false;
         }
     }
+}
+
+/// <summary>
+/// Somewhere a message can be handed to be sent, without the caller knowing what carries it.
+/// <para>
+/// It exists for the two senders that have no business knowing about a socket - the log forwarder
+/// and the progress reporter both run for the length of one connection and simply want their line
+/// on the wire. Handing them the queues themselves would tie their tests to a WebSocket.
+/// </para>
+/// </summary>
+public interface IMessageSink
+{
+    /// <summary>
+    /// Queues a message in the class it belongs to. <see langword="false"/> means it was not
+    /// taken - for a state message that is the connection ending, for a transient one it is
+    /// ordinary.
+    /// </summary>
+    bool TrySend(ProtocolMessage message);
+}
+
+/// <summary>
+/// What the three queues in front of one socket may hold, and how long one write may take.
+/// </summary>
+/// <param name="MaxStateMessages">
+/// The state queue, by count. Generous enough for a scene with many items arriving in one go;
+/// beyond that the counterpart is demonstrably taking nothing off the socket (Part 4).
+/// </param>
+/// <param name="MaxStateBytes">
+/// And by bytes, because one <c>SceneSnapshot</c> with twenty items weighs as much as a hundred
+/// small messages. Either ceiling ends the connection on its own.
+/// </param>
+/// <param name="MaxTransientSlots">
+/// How many kinds of transient may wait at once - touch points per screen, and from M5 the
+/// diagnostics and the window list. Part 4 gives each of them a capacity of one, so the tier is
+/// bounded by how many kinds this build has rather than by a queue length.
+/// </param>
+/// <param name="WriteTimeout">
+/// How long one write may take before the counterpart counts as gone. Longer than any Wi-Fi
+/// dropout worth keeping a connection for, shorter than a DM's patience (Part 4).
+/// </param>
+public sealed record SendLimits(
+    int MaxStateMessages,
+    long MaxStateBytes,
+    int MaxTransientSlots,
+    TimeSpan WriteTimeout);
+
+/// <summary>
+/// The three things that can go wrong on a socket, said by whoever owns the connection.
+/// <para>
+/// It is an interface rather than a logger because the event identifiers differ by process: the
+/// hub names the address at the far end, the display names the hub it was talking to, and both
+/// numbers are in their own catalogue (Part 8).
+/// </para>
+/// </summary>
+public interface ISendReport
+{
+    /// <summary>The state queue could take no more, so the connection is ending.</summary>
+    void StateQueueFull(int queued, long bytes);
+
+    /// <summary>One write did not finish inside the limit; the peer is treated as gone.</summary>
+    void WriteTimedOut(TimeSpan limit);
+
+    /// <summary>The socket refused a write outright.</summary>
+    void SendFailed(WebSocketException exception);
 }

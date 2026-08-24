@@ -98,4 +98,30 @@ internal static partial class TransportLog
         Level = LogLevel.Warning,
         Message = "Could not listen on UDP {Port}; a host will have to be given by hand.")]
     internal static partial void ListeningFailed(ILogger logger, Exception exception, int port);
+
+    /// <summary>
+    /// The state queue in front of this device's own socket could take no more, so the connection
+    /// is ending and the ordinary reconnect will put the truth back (Part 4).
+    /// <para>
+    /// It has a line at this end for the first time in M3c. Until then the display wrote into one
+    /// unbounded channel, which could not fill and therefore could not say anything - a queue
+    /// without a ceiling does not fail, it grows.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1051,
+        Level = LogLevel.Warning,
+        Message = "The control at {HubUri} is not taking messages ({Queued} queued, {Bytes} bytes); "
+                  + "closing and reconnecting.")]
+    internal static partial void SendQueueFull(ILogger logger, Uri hubUri, int queued, long bytes);
+
+    /// <summary>
+    /// One write did not finish inside the limit. A control that has accepted nothing in ten
+    /// seconds is gone, whatever the socket still claims (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1052,
+        Level = LogLevel.Warning,
+        Message = "A message to {HubUri} did not go out within {Limit}; treating the control as gone.")]
+    internal static partial void SendTimedOut(ILogger logger, Uri hubUri, TimeSpan limit);
 }

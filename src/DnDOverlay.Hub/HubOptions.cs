@@ -78,12 +78,17 @@ public sealed class HubOptions
     public long MaxStateBytes { get; set; } = 8 * 1024 * 1024;
 
     /// <summary>
-    /// The transient queue. Part 4 gives <c>TouchPoints</c>, <c>Diagnostics</c> and
-    /// <c>WindowList</c> a replacing slot of one each; until those messages exist there is one
-    /// small queue that drops its oldest, which is the floor under that rule rather than a
-    /// substitute for it (M3, M5).
+    /// The transient tier, by how many KINDS may wait at once. Part 4 gives <c>TouchPoints</c>,
+    /// <c>Diagnostics</c> and <c>WindowList</c> a replacing slot of one each, and touch points get
+    /// one per screen - so the ceiling is the number of slots this build can open rather than a
+    /// queue length.
+    /// <para>
+    /// <b>This replaces the floor that stood here until M3c</b>: one small queue dropping its
+    /// oldest, which the option's own comment called the floor under the rule rather than a
+    /// substitute for it. The messages exist now, so the rule from Part 4 applies.
+    /// </para>
     /// </summary>
-    public int MaxTransientMessages { get; set; } = 8;
+    public int MaxTransientSlots { get; set; } = 8;
 
     /// <summary>
     /// How long one write may take before the counterpart counts as gone. Longer than any Wi-Fi
@@ -95,6 +100,10 @@ public sealed class HubOptions
     /// </para>
     /// </summary>
     public TimeSpan WriteTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>What the three queues in front of one socket are given, gathered from the four above.</summary>
+    public SendLimits SendLimits =>
+        new(MaxStateMessages, MaxStateBytes, MaxTransientSlots, WriteTimeout);
 
     /// <summary>The heartbeat's beat, so the connection indicator is right without a noticeable lag.</summary>
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(5);

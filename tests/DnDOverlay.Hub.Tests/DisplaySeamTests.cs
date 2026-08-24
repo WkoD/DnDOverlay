@@ -98,7 +98,7 @@ public sealed class DisplaySeamTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         var inbox = Channel.CreateUnbounded<ProtocolMessage>();
-        var pump = Start(inbox, Channel.CreateUnbounded<ProtocolMessage>(), run.Token);
+        var pump = Start(inbox, new TaskCompletionSource<SendQueues>(), run.Token);
 
         var welcome = await Until<WelcomeMessage>(inbox, run.Token);
         Assert.Equal(Protocol.AssetPath, welcome.AssetPath);
@@ -131,7 +131,7 @@ public sealed class DisplaySeamTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         var inbox = Channel.CreateUnbounded<ProtocolMessage>();
-        var pump = Start(inbox, Channel.CreateUnbounded<ProtocolMessage>(), run.Token);
+        var pump = Start(inbox, new TaskCompletionSource<SendQueues>(), run.Token);
 
         await Until<WelcomeMessage>(inbox, run.Token);
 
@@ -177,7 +177,7 @@ public sealed class DisplaySeamTests : IAsyncLifetime
 
         var item = new ItemId(Guid.Parse("11111111-2222-3333-4444-555555555555"));
         var inbox = Channel.CreateUnbounded<ProtocolMessage>();
-        var outbox = Channel.CreateUnbounded<ProtocolMessage>();
+        var outbox = new TaskCompletionSource<SendQueues>();
 
         var pump = Start(inbox, outbox, run.Token, Lying(item));
 
@@ -190,13 +190,12 @@ public sealed class DisplaySeamTests : IAsyncLifetime
 
         Assert.Equal(item, Assert.Single(snapshot.Scene.Items).ItemId);
 
-        await outbox.Writer.WriteAsync(
+        Assert.True((await outbox.Task).TrySend(
             new ItemTransformedMessage(
                 Screen,
                 new ItemTransform(item, 0.8, 0.3, 0.25, 90),
                 KnownRevision: 1,
-                Grabbed: true),
-            run.Token);
+                Grabbed: true)));
 
         var patch = await Until<ScenePatchMessage>(inbox, run.Token);
         var op = Assert.IsType<TransformItem>(Assert.Single(patch.Patch.Ops).Op);
@@ -226,14 +225,14 @@ public sealed class DisplaySeamTests : IAsyncLifetime
 
         var item = new ItemId(Guid.Parse("11111111-2222-3333-4444-666666666666"));
         var inbox = Channel.CreateUnbounded<ProtocolMessage>();
-        var outbox = Channel.CreateUnbounded<ProtocolMessage>();
+        var outbox = new TaskCompletionSource<SendQueues>();
 
         var pump = Start(inbox, outbox, run.Token, Lying(item));
 
         await Until<WelcomeMessage>(inbox, run.Token);
         await Until<SceneSnapshotMessage>(inbox, run.Token);
 
-        await outbox.Writer.WriteAsync(new ItemParkedMessage(Screen, item, Parked: true), run.Token);
+        Assert.True((await outbox.Task).TrySend(new ItemParkedMessage(Screen, item, Parked: true)));
 
         var patch = await Until<ScenePatchMessage>(inbox, run.Token);
         var op = Assert.IsType<ParkItem>(Assert.Single(patch.Patch.Ops).Op);
@@ -247,17 +246,37 @@ public sealed class DisplaySeamTests : IAsyncLifetime
         await Finished(pump);
     }
 
+    /// <summary>
+    /// Starts a real client and hands back the queues it sends through, so a test can say what a
+    /// hand at the table would have said.
+    /// <para>
+    /// Since M3c the outgoing side is <see cref="SendQueues"/> at both ends of the wire rather
+    /// than a channel at this one, so the way to speak is to be handed the queues when the socket
+    /// stands (Part 4, M3 siting question 2).
+    /// </para>
+    /// </summary>
     private Task Start(
         Channel<ProtocolMessage> inbox,
-        Channel<ProtocolMessage> outbox,
+        TaskCompletionSource<SendQueues> outbox,
         CancellationToken cancellationToken,
         IReadOnlyList<ScreenScene>? scenes = null)
     {
         var client = new DisplayClient(NullLogger<DisplayClient>.Instance);
 
         return Task.Run(
-            () => client.RunAsync(_ws, Hello(scenes), inbox.Writer, outbox, cancellationToken), cancellationToken);
+            () => client.RunAsync(
+                _ws,
+                Hello(scenes),
+                inbox.Writer,
+                Limits,
+                queues => outbox.SetResult(queues),
+                cancellationToken),
+            cancellationToken);
     }
+
+    /// <summary>The real ceilings; nothing in these tests goes anywhere near them.</summary>
+    private static SendLimits Limits { get; } =
+        new(MaxStateMessages: 256, MaxStateBytes: 8 * 1024 * 1024, MaxTransientSlots: 8, TimeSpan.FromSeconds(10));
 
     private static HelloMessage Hello(IReadOnlyList<ScreenScene>? scenes = null) =>
         new(

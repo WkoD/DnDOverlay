@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Core.Protocol;
 using Microsoft.Extensions.Logging;
@@ -41,7 +40,7 @@ internal sealed class LogForwarding(ProcessLog log, LogLevel atLeast)
     /// Runs for the length of one connection. It does NOT log anything itself - a line about
     /// forwarding would produce a line to forward, and that is a loop with no bottom (Part 8).
     /// </summary>
-    public async Task RunAsync(ChannelWriter<ProtocolMessage> outbox, CancellationToken cancellationToken)
+    public async Task RunAsync(IMessageSink outbox, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outbox);
 
@@ -79,7 +78,19 @@ internal sealed class LogForwarding(ProcessLog log, LogLevel atLeast)
                 {
                     foreach (var record in batch)
                     {
-                        await outbox.WriteAsync(Message(record), cancellationToken).ConfigureAwait(false);
+                        if (outbox.TrySend(Message(record)))
+                        {
+                            continue;
+                        }
+
+                        // The state queue is full, which means this connection is already closing
+                        // (Part 4). Nothing is lost by stopping here: the mark has not moved, so
+                        // the entries stay in the ring for whoever connects next.
+                        //
+                        // Until M3c this waited on a bounded channel instead, because there was no
+                        // ceiling at this end that could be reached. Now both ends answer a
+                        // counterpart that takes nothing the same way.
+                        return;
                     }
 
                     // Moved only after the entries are in the outbox, so a connection that ends
@@ -91,10 +102,6 @@ internal sealed class LogForwarding(ProcessLog log, LogLevel atLeast)
         catch (OperationCanceledException)
         {
             // The connection ended, or the application is going away.
-        }
-        catch (ChannelClosedException)
-        {
-            // The socket went first; the mark stays where it was and the next connection resumes.
         }
         finally
         {

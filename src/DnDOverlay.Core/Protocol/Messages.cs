@@ -34,6 +34,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(AssetProgressMessage), "AssetProgress")]
 [JsonDerivedType(typeof(ItemTransformedMessage), "ItemTransformed")]
 [JsonDerivedType(typeof(ItemParkedMessage), "ItemParked")]
+[JsonDerivedType(typeof(TouchPointsMessage), "TouchPoints")]
 public abstract record ProtocolMessage;
 
 /// <summary>

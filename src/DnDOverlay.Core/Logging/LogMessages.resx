@@ -158,6 +158,12 @@
   <data name="E1048_UnknownControlHeard" xml:space="preserve">
     <value>Control {ControlId} ({Name}) is announcing itself, but this device belongs to {BoundTo}. If that control was set up again, the pairing has to be reset AT this device.</value>
   </data>
+  <data name="E1051_SendQueueFull" xml:space="preserve">
+    <value>The control at {HubUri} is not taking messages ({Queued} queued, {Bytes} bytes); closing and reconnecting.</value>
+  </data>
+  <data name="E1052_SendTimedOut" xml:space="preserve">
+    <value>A message to {HubUri} did not go out within {Limit}; treating the control as gone.</value>
+  </data>
   <data name="E1049_ConnectionLoopFailed" xml:space="preserve">
     <value>The search for a control ended unexpectedly - this device will not connect again until it is restarted.</value>
   </data>

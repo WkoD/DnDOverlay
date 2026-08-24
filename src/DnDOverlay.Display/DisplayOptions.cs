@@ -23,6 +23,19 @@ internal sealed record DisplayOptions(
     bool Windowed,
     string? DataRoot)
 {
+    /// <summary>
+    /// What the three queues in front of this device's socket may hold. The same shape the hub
+    /// uses, with the same numbers, because it is the same rule at the other end of one wire
+    /// (Part 4).
+    /// <para>
+    /// It is a constant rather than a setting: the ceilings say when a counterpart has stopped
+    /// taking anything, and that is not a matter of taste. The hub's are settable only because a
+    /// test has to be able to reach them.
+    /// </para>
+    /// </summary>
+    internal static SendLimits SendLimits { get; } =
+        new(MaxStateMessages: 256, MaxStateBytes: 8 * 1024 * 1024, MaxTransientSlots: 8, TimeSpan.FromSeconds(10));
+
     internal static DisplayOptions Parse(IReadOnlyList<string> args)
     {
         string? host = null;

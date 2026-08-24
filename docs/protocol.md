@@ -585,6 +585,8 @@ the same application that draws.
 | 1048 | `UnknownControlHeard` | Information | transport |
 | 1049 | `ConnectionLoopFailed` | Error | display |
 | 1050 | `BeaconTargetsChanged` | Information | hub |
+| 1051 | `SendQueueFull` | Warning | transport |
+| 1052 | `SendTimedOut` | Warning | transport |
 
 **1049 is the line that exists because its absence was the fault.** The loop that looks for a
 control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
@@ -605,11 +607,19 @@ and 1039 are Information. And it has to be: **the control gates its own file at 
 has no setting to lower it**, so a Debug line in the hub is one that can never be read. Measured
 the hard way — the first cut was Debug, and the line simply was not there.
 
-**Next free: 1051.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**1051 and 1052 are 1043 and 1044 at the other end of the wire**, and they exist because until
+M3c there was nothing at that end to say them: the display wrote into one unbounded channel, which
+cannot fill and therefore cannot report. Since the three send queues moved into Core and serve both
+ends, a control that stops taking messages is answered the same way a device is — the connection
+ends and the ordinary reconnect puts the truth back. **The third case, a socket that refuses a
+write outright, gets no line here**: the receive side already reports the end, and two lines for
+one event would be noise exactly when the log is being read.
+
+**Next free: 1053.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
-1042, the send side 1043–1045, and log forwarding 1046–1047. **1050 belongs to discovery without
-adjoining it** — a number is never moved to keep a range tidy, because the number is the contract
-and the tidiness is not.
+1042, the send side 1043–1045 with its counterparts at 1051–1052, and log forwarding 1046–1047.
+**1050 belongs to discovery without adjoining it** — a number is never moved to keep a range tidy,
+because the number is the contract and the tidiness is not.
 
 **1017 and 1048 are the same finding at two levels, and the pair exists because of a dead end.**
 A display discards the beacons of any control it is not bound to — that is the rule that keeps a

@@ -192,7 +192,7 @@ public sealed partial class App : Application, IDisposable
     /// while there is none. A hot-plug while nothing is connected therefore reports nothing - and
     /// needs to report nothing, because the next <c>Hello</c> carries the inventory anyway.
     /// </summary>
-    private ChannelWriter<ProtocolMessage>? _outbox;
+    private SendQueues? _outbox;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -457,7 +457,7 @@ public sealed partial class App : Application, IDisposable
         var screens = Inventory();
 
         DisplayLog.ScreensReported(_logger, screens.Count);
-        _outbox?.TryWrite(new ScreensChangedMessage(screens));
+        _ = _outbox?.TrySend(new ScreensChangedMessage(screens));
     }
 
     private IReadOnlyList<ScreenInfo> Inventory() =>
@@ -634,7 +634,7 @@ public sealed partial class App : Application, IDisposable
             // A gesture that ended in the bar sends no binding transform, so its throttle entry
             // would otherwise stay behind for good.
             _throttle.Forget(item);
-            _outbox?.TryWrite(new ItemParkedMessage(screen, item, parked));
+            _ = _outbox?.TrySend(new ItemParkedMessage(screen, item, parked));
         };
 
         // Zoomed past its step: the next one is decoded from the bytes already in the store, so a
@@ -867,20 +867,7 @@ public sealed partial class App : Application, IDisposable
 
         _hubHttp = new Uri($"http://{target.Host}:{target.Port}/");
 
-        // Bounded, and written to with a wait rather than a drop: a stalled socket must slow the
-        // forwarding down, not lose entries. What is then left over piles up in the ring buffer,
-        // which is bounded in its turn and says how much it lost.
-        var outbox = Channel.CreateBounded<ProtocolMessage>(new BoundedChannelOptions(256)
-        {
-            SingleReader = true,
-        });
-
         var hubUri = new Uri($"ws://{target.Host}:{target.Port}{Protocol.DisplayPath}");
-        var pump = Task.Run(() => client.RunAsync(hubUri, hello, inbox.Writer, outbox, _shutdown.Token));
-
-        // What a hot-plug and a locally changed setting reach the wire through, for as long as
-        // this connection stands.
-        _outbox = outbox.Writer;
 
         // Runs for the length of THIS CONNECTION, and the token has to say so - not the one that
         // means "the application is going away". The forwarder parks in a wait that only a new log
@@ -890,12 +877,34 @@ public sealed partial class App : Application, IDisposable
         // and never looks for a control any more.
         using var connected = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
 
-        // The mark it reads from survives the connection, so whatever came up while there was none
-        // goes out with the next one (Part 8).
-        var forwarding = Task.Run(() => _forwarding!.RunAsync(outbox.Writer, connected.Token));
+        Task forwarding = Task.CompletedTask;
+        Task reporting = Task.CompletedTask;
 
-        // Same lifetime as the forwarder, and for the same reason: it belongs to THIS connection.
-        var reporting = Task.Run(() => ReportProgressAsync(outbox.Writer, connected.Token));
+        // Handed the three queues the moment the socket stands. Until M3c this end had one
+        // unbounded channel, so nothing here could be dropped and nothing could be replaced -
+        // and gestures and touch points are exactly what needs both (Part 4, M3 siting question 2).
+        void Ready(SendQueues queues)
+        {
+            // What a hot-plug, a locally changed setting and every gesture reach the wire through,
+            // for as long as this connection stands.
+            _outbox = queues;
+
+            // The mark it reads from survives the connection, so whatever came up while there was
+            // none goes out with the next one (Part 8).
+            forwarding = Task.Run(() => _forwarding!.RunAsync(queues, connected.Token));
+
+            // Same lifetime as the forwarder, and for the same reason: it belongs to THIS
+            // connection.
+            reporting = Task.Run(() => ReportProgressAsync(queues, connected.Token));
+        }
+
+        var pump = Task.Run(() => client.RunAsync(
+            hubUri,
+            hello,
+            inbox.Writer,
+            DisplayOptions.SendLimits,
+            Ready,
+            _shutdown.Token));
 
         var attempt = Attempt.Fruitless;
 
@@ -926,10 +935,9 @@ public sealed partial class App : Application, IDisposable
         _wake!.Connected = false;
 
         _outbox = null;
-        outbox.Writer.TryComplete();
 
-        // Completing the channel does not reach the forwarder - it is waiting on the ring buffer,
-        // not on the channel - so the connection has to say out loud that it is over.
+        // The forwarder is waiting on the ring buffer rather than on anything the socket owns, so
+        // the connection has to say out loud that it is over.
         await connected.CancelAsync().ConfigureAwait(false);
 
         await pump.ConfigureAwait(false);
@@ -954,7 +962,7 @@ public sealed partial class App : Application, IDisposable
         ArgumentNullException.ThrowIfNull(update);
 
         Remember();
-        _outbox?.TryWrite(new ConfigUpdateMessage(update));
+        _ = _outbox?.TrySend(new ConfigUpdateMessage(update));
     }
 
     /// <summary>
@@ -1680,7 +1688,7 @@ public sealed partial class App : Application, IDisposable
     /// (Part 4). It runs for as long as the connection does: the readings travel in the progress
     /// queue, so a slow socket overwrites them rather than queueing them up.
     /// </summary>
-    private async Task ReportProgressAsync(ChannelWriter<ProtocolMessage> outbox, CancellationToken cancellationToken)
+    private async Task ReportProgressAsync(SendQueues outbox, CancellationToken cancellationToken)
     {
         using var tick = new PeriodicTimer(ProgressInterval);
 
@@ -1688,7 +1696,7 @@ public sealed partial class App : Application, IDisposable
         {
             if (_progress.Reading() is { } reading)
             {
-                outbox.TryWrite(reading);
+                _ = outbox.TrySend(reading);
 
                 // Settled only after it has gone out, so a finished or failed picture is reported
                 // once and then drops out of the readings.
@@ -1769,7 +1777,7 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        outbox.TryWrite(new ItemTransformedMessage(
+        _ = outbox.TrySend(new ItemTransformedMessage(
             screen,
             reported.Transform,
             reported.KnownRevision,

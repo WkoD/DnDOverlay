@@ -254,7 +254,11 @@ public static class HubEndpoints
         // connection displaced by a newer one.
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        using var outgoing = new SendQueues(socket, address, options.Value, time, logger);
+        using var outgoing = new SendQueues(
+            socket,
+            options.Value.SendLimits,
+            new SocketReport(address, logger),
+            time);
         var liveness = new Liveness(time, options.Value, outgoing.TrySend);
 
         // Whoever decides this connection is over - a full state queue, a write that timed out,

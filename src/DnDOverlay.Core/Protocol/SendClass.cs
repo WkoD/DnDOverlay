@@ -44,11 +44,14 @@ public static class SendClasses
     /// </summary>
     public static SendClass Of(ProtocolMessage message) => message switch
     {
-        // The first message that is not state, and therefore the first one that makes the ranking
-        // do any work at all. Until M2 the two lower queues were built and empty (Part 4, Part 10);
-        // the transient one still is, and fills with TouchPoints, Diagnostics, WindowList and
-        // SpotlightPulse in M3 and M5.
+        // The first message that is not state, and therefore the first one that made the ranking
+        // do any work at all. Until M2 the two lower queues were built and empty (Part 4, Part 10).
         AssetProgressMessage => SendClass.Progress,
+
+        // The first thing in rank 4, and the reason the rank exists: ten messages a second from
+        // every table, every one of which is worthless the moment the next arrives. Diagnostics,
+        // WindowList and SpotlightPulse join it in M4 and M5.
+        TouchPointsMessage => SendClass.Transient,
         _ => SendClass.State,
     };
 }

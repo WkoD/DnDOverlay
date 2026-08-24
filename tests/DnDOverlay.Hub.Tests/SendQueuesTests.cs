@@ -83,23 +83,78 @@ public sealed class SendQueuesTests
     }
 
     /// <summary>
-    /// Transient traffic drops its oldest and says nothing about it - that is ordinary operation,
-    /// not an incident.
+    /// Transient traffic keeps a slot per kind and the newer reading replaces the older one -
+    /// silently, because that is ordinary operation and not an incident.
+    /// <para>
+    /// <b>This replaces the floor that stood here until M3c.</b> Until the transient messages
+    /// existed there was one small queue dropping its oldest, and the option that sized it said so
+    /// in its own comment. Part 4 gives each kind a capacity of ONE; five readings of one kind are
+    /// therefore one message, not the last two of five.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task Transient_traffic_drops_the_oldest_without_a_word()
+    public async Task Transient_traffic_keeps_one_of_each_kind_without_a_word()
     {
         using var socket = new RecordingSocket();
-        using var queues = Queues(socket, options => options.MaxTransientMessages = 2);
+        using var queues = Queues(socket);
 
         for (var i = 1; i <= 5; i++)
         {
             Assert.True(queues.TrySend(Marked(i), SendClass.Transient));
         }
 
-        int[] written = [9, 4, 5];
+        int[] written = [9, 5];
 
         Assert.Equal(written, await DrainAsync(queues, socket));
+    }
+
+    /// <summary>
+    /// Two kinds are two slots, and neither pushes the other out - which is what "capacity one per
+    /// kind" has to mean if the diagnostics of M5 are not to be silenced by a hand on the table.
+    /// <para>
+    /// The touch points of two screens are two kinds by the same rule: a table with two screens has
+    /// two independent sets of fingers on it (Part 4).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Two_screens_worth_of_fingers_do_not_push_each_other_out()
+    {
+        using var socket = new RecordingSocket();
+        using var queues = Queues(socket, time: new ManualTime());
+
+        Assert.True(queues.TrySend(Fingers("DISPLAY1", 0.1)));
+        Assert.True(queues.TrySend(Fingers("DISPLAY2", 0.2)));
+        Assert.True(queues.TrySend(Fingers("DISPLAY1", 0.3)));
+
+        var sent = await FingersOutAsync(queues, socket);
+
+        Assert.Equal(2, sent.Count);
+
+        // The first screen kept its place in the order rather than going to the back when it was
+        // replaced: a busy hand must not be able to hold a quieter screen behind it for ever. And
+        // it kept both of its points, because replacing a trail combines it.
+        Assert.Equal("DISPLAY1", sent[0].Screen.Value);
+        Assert.Equal([0.1, 0.3], Assert.Single(sent[0].Touches).Points.Select(point => point.X));
+        Assert.Equal("DISPLAY2", sent[1].Screen.Value);
+        Assert.Equal([0.2], Assert.Single(sent[1].Touches).Points.Select(point => point.X));
+    }
+
+    /// <summary>
+    /// The one transient that does not simply overwrite: the trails are combined, so what is
+    /// discarded is the delay and never the movement (Part 4).
+    /// </summary>
+    [Fact]
+    public async Task A_replaced_trail_keeps_the_points_it_displaced()
+    {
+        using var socket = new RecordingSocket();
+        using var queues = Queues(socket, time: new ManualTime());
+
+        Assert.True(queues.TrySend(Fingers("DISPLAY1", 0.1, 0.2)));
+        Assert.True(queues.TrySend(Fingers("DISPLAY1", 0.3)));
+
+        var sent = Assert.Single(await FingersOutAsync(queues, socket));
+
+        Assert.Equal([0.1, 0.2, 0.3], Assert.Single(sent.Touches).Points.Select(point => point.X));
     }
 
     /// <summary>
@@ -301,6 +356,25 @@ public sealed class SendQueuesTests
     /// </summary>
     private static PingMessage Marked(int mark) => new(mark);
 
+    /// <summary>One finger on one screen, at the given places, all of them just touched.</summary>
+    private static TouchPointsMessage Fingers(string screen, params double[] xs) =>
+        new(new ScreenId(screen), [new TouchTrail(1, [.. xs.Select(x => new TouchPoint(x, 0.5, 0))])]);
+
+    /// <summary>
+    /// Runs the pump to the end and reads back only the touch points. The sentinel that stops it
+    /// is a state message, so it is written first and filtered out here.
+    /// </summary>
+    private static async Task<List<TouchPointsMessage>> FingersOutAsync(
+        SendQueues queues,
+        RecordingSocket socket)
+    {
+        queues.Finish(Marked(9));
+
+        await queues.PumpAsync(CancellationToken.None);
+
+        return [.. socket.Written.Select(payload => ProtocolJson.Parse(payload)).OfType<TouchPointsMessage>()];
+    }
+
     private static SendQueues Queues(
         WebSocket socket,
         Action<HubOptions>? tune = null,
@@ -310,7 +384,11 @@ public sealed class SendQueuesTests
 
         tune?.Invoke(options);
 
-        return new SendQueues(socket, "127.0.0.1", options, time ?? TimeProvider.System, NullLogger.Instance);
+        return new SendQueues(
+            socket,
+            options.SendLimits,
+            new SocketReport("127.0.0.1", NullLogger.Instance),
+            time ?? TimeProvider.System);
     }
 
     /// <summary>
