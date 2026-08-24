@@ -67,6 +67,29 @@ public sealed class TouchLog(TimeProvider time)
     }
 
     /// <summary>
+    /// A finger the system no longer knows about. Its last points still go out - it was there until
+    /// somebody stopped seeing it - but nothing new is invented for it.
+    /// <para>
+    /// <b>It exists because resting and stuck are the same thing from here.</b> Windows raises no
+    /// event for a finger that does not move, which is why a resting one is reported at its place
+    /// (above); the price is that a touch whose lift never arrives is reported at its place for
+    /// ever. Measured on the first run of the gesture block: exactly ten reports a second carrying
+    /// exactly one point each, for over ten minutes, on a table nobody was at. Whoever calls this
+    /// has the second source that the events do not carry.
+    /// </para>
+    /// </summary>
+    public void Vanished(long touch)
+    {
+        lock (_gate)
+        {
+            if (_fingers.TryGetValue(touch, out var finger))
+            {
+                finger.Gone = true;
+            }
+        }
+    }
+
+    /// <summary>
     /// Everything since the last call, as one message - or <see langword="null"/> when there is
     /// nothing to say, which is the ordinary state of a table nobody is touching.
     /// <para>
@@ -81,6 +104,7 @@ public sealed class TouchLog(TimeProvider time)
 
         lock (_gate)
         {
+            var were = _fingers.Count;
             var trails = new List<TouchTrail>(_fingers.Count);
 
             foreach (var (touch, finger) in _fingers)
@@ -96,11 +120,15 @@ public sealed class TouchLog(TimeProvider time)
                 _ = _fingers.Remove(gone);
             }
 
-            if (_fingers.Count == 0 && trails.Count > 0)
+            if (were > 0 && _fingers.Count == 0)
             {
                 // The last finger has gone, but its own points go out first: the empty list is
                 // owed for the next round, so it says "and now nobody" rather than losing the end
                 // of the movement to say it.
+                //
+                // Owed even when there were no points left to send, which is the case for a finger
+                // that VANISHED rather than lifted: the receiver would otherwise sit out its decay
+                // before letting go of a touch we already know is over.
                 _lifted = true;
             }
 

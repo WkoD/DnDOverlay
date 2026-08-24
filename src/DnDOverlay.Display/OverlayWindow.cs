@@ -44,6 +44,13 @@ internal sealed class OverlayWindow : Window
     /// <summary>Below this it says nothing worth the pixels, so it is left off.</summary>
     private const double RingFloor = 16;
 
+    /// <summary>
+    /// How far above the scene a held picture is drawn. Far enough that no depth the hub hands out
+    /// can reach it, and an offset rather than a single top value so that two hands on two pictures
+    /// keep their order relative to each other.
+    /// </summary>
+    private const int HeldAbove = 1 << 20;
+
     private MonitorInfo _monitor;
     private readonly bool _windowed;
     /// <summary>
@@ -106,6 +113,24 @@ internal sealed class OverlayWindow : Window
     private readonly Border _nameplate;
     private readonly DispatcherTimer _naming;
 
+    /// <summary>
+    /// Every touch this window has seen go down and not come up, by the identity it is reported
+    /// under. It is the second source the touch events cannot give: whether the system still knows
+    /// the finger.
+    /// </summary>
+    private readonly Dictionary<long, TouchDevice> _down = [];
+
+    /// <summary>
+    /// Sweeps <see cref="_down"/> for touches the system has let go of without telling us.
+    /// <para>
+    /// Once a second and at the dispatcher's ordinary background priority - it is housekeeping and
+    /// must never compete with a finger, which is the whole reason the reporting itself was kept
+    /// off this thread. A second of a ghost costs nothing; ten a second for ten minutes is what it
+    /// replaces.
+    /// </para>
+    /// </summary>
+    private readonly DispatcherTimer _sweep;
+
     internal OverlayWindow(MonitorInfo monitor, bool windowed)
     {
         _monitor = monitor;
@@ -138,6 +163,10 @@ internal sealed class OverlayWindow : Window
 
         _naming = new DispatcherTimer { Interval = ShowNameFor };
         _naming.Tick += (_, _) => Hide(_nameplate);
+
+        _sweep = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _sweep.Tick += (_, _) => Sweep();
+        _sweep.Start();
 
         // A grid over the canvas rather than another item on it: the name belongs above every
         // image and is not part of the scene. Background stays null, so the layer costs no
@@ -226,11 +255,44 @@ internal sealed class OverlayWindow : Window
 
         if (lifted)
         {
+            _ = _down.Remove(e.TouchDevice.Id);
+
             Fingers.Lifted(e.TouchDevice.Id, x, y);
         }
         else
         {
+            _down[e.TouchDevice.Id] = e.TouchDevice;
+
             Fingers.Moved(e.TouchDevice.Id, x, y);
+        }
+    }
+
+    /// <summary>
+    /// Forgets every touch the system no longer has, and tells the log so.
+    /// <para>
+    /// <b>Found in the log of the first gesture run, and nowhere else.</b> Something lay on the
+    /// screen, its lift never arrived, and the resting-finger rule reported the spot ten times a
+    /// second for over ten minutes - the count of reports looked healthy, and only the points per
+    /// report gave it away. Resting and stuck cannot be told apart from the events, because Windows
+    /// raises none for either; they can be told apart by asking whether the touch still exists.
+    /// </para>
+    /// <para>
+    /// The identity is compared as well as the flag: touch identities are reused, so an entry whose
+    /// device now reports a different one is a finger that ended without being seen to.
+    /// </para>
+    /// </summary>
+    private void Sweep()
+    {
+        foreach (var (touch, device) in _down.ToList())
+        {
+            if (device.IsActive && device.Id == touch)
+            {
+                continue;
+            }
+
+            _ = _down.Remove(touch);
+
+            Fingers.Vanished(touch);
         }
     }
 
@@ -381,6 +443,7 @@ internal sealed class OverlayWindow : Window
     {
         // A running timer holds this window alive and would tick into a closed one.
         _naming.Stop();
+        _sweep.Stop();
 
         base.OnClosed(e);
     }
@@ -469,7 +532,17 @@ internal sealed class OverlayWindow : Window
 
                 // Depth by Z index rather than by the order things were added, so keeping a place
                 // between renders does not decide what lies on top of what.
-                Panel.SetZIndex(mount.Element, item.ZOrder);
+                // A held picture is drawn above everything, and keeps its own depth relative to
+                // anything else being held. It is a local statement about NOW, not a change to the
+                // scene: the hand is on it, so it belongs on top, and the moment the hand leaves it
+                // falls back to whatever the hub says.
+                //
+                // Found at the table (hand-run of M3, step 17): a picture arriving while somebody
+                // was pushing another one landed on top of it - the hub hands every new item the
+                // next depth up, and a hand at the table had no way to outrank an arrival.
+                Panel.SetZIndex(
+                    mount.Element,
+                    _held.ContainsKey(image.ItemId) ? HeldAbove + item.ZOrder : item.ZOrder);
 
                 // <b>At most one picture is hung up per pass.</b> Twenty arriving at once would
                 // otherwise all be built into the visual tree in one drawing - and that drawing is
@@ -816,9 +889,34 @@ internal sealed class OverlayWindow : Window
         }
 
         Place(mount, hold.Item, context);
-        Report(item, grabbed: false, binding: true);
+
+        // Asked to the front a second time when something overtook this picture while it was being
+        // pushed. Without it the hand wins only until it lets go: the picture is drawn on top for
+        // the length of the gesture and then drops back under the arrival, which reads as the
+        // table taking the picture away at the exact moment it was put down.
+        Report(item, grabbed: Overtaken(item), binding: true);
 
         _held.Remove(item);
+    }
+
+    /// <summary>
+    /// Whether anything lies over this picture right now - an arrival, or one somebody else brought
+    /// to the front while this hand was busy.
+    /// <para>
+    /// Read from the scene at the moment of release rather than remembered from the grab, and the
+    /// difference matters: what the grab was granted is the hub's answer, which the display learns
+    /// only when the patch comes back. Asking "is it still on top?" needs no memory and is right
+    /// whenever it is asked.
+    /// </para>
+    /// </summary>
+    private bool Overtaken(ItemId item)
+    {
+        if (_scene.Items.FirstOrDefault(candidate => candidate.ItemId == item) is not { } mine)
+        {
+            return false;
+        }
+
+        return _scene.Items.Any(candidate => candidate.ItemId != item && candidate.ZOrder > mine.ZOrder);
     }
 
     /// <summary>

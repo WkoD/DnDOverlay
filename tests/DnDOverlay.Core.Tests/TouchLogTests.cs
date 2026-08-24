@@ -173,6 +173,40 @@ public sealed class TouchLogTests
     }
 
     /// <summary>
+    /// A finger the system has let go of without saying so stops being reported - and the empty
+    /// list still goes out, so nobody has to sit out the decay for a touch we already know is over.
+    /// <para>
+    /// <b>Measured before it was built</b> (first run of the gesture block): something lay on the
+    /// screen, its lift never arrived, and the resting rule reported the spot ten times a second
+    /// with one point each for over ten minutes. Resting and stuck cannot be told apart from the
+    /// events - Windows raises none for either - so the window asks whether the touch still exists
+    /// and says so here.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_finger_the_system_lost_stops_being_reported()
+    {
+        var time = new ManualTime();
+        var log = new TouchLog(time);
+
+        log.Moved(1, 0.4, 0.6);
+
+        _ = log.Take(Table);
+
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        // Still down as far as anybody here knows: reported at its place, once per round.
+        Assert.Single(Assert.Single(log.Take(Table)!.Touches).Points);
+
+        log.Vanished(1);
+
+        // The last word about it, and then silence - not ten reports a second for ever.
+        Assert.Empty(log.Take(Table)!.Touches);
+        Assert.Null(log.Take(Table));
+        Assert.Null(log.Take(Table));
+    }
+
+    /// <summary>
     /// The cap takes from the front, so a finger that has been drawing for a while during a stall
     /// keeps its head. The trail gets shorter, never the message bigger (Part 4).
     /// </summary>
