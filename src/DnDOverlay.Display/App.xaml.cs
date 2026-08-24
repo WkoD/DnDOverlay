@@ -705,6 +705,10 @@ public sealed partial class App : Application, IDisposable
             _ = _outbox?.TrySend(new ItemParkedMessage(screen, item, parked));
         };
 
+        // A gesture ended with nothing to report - the park - so the scene has moved and nothing
+        // else will ask for a drawing.
+        window.Settled += () => Draw(new ScreenRef(_device, screen));
+
         // Zoomed past its step: the next one is decoded from the bytes already in the store, so a
         // sharper picture costs a decode and never a second download (Part 6).
         window.Sharpen += (asset, needed) => Sharpen(screen, asset, needed);

@@ -325,6 +325,17 @@ internal sealed class OverlayWindow : Window
     internal event Action<int>? HandWaited;
 
     /// <summary>
+    /// A gesture ended without anything to report, and the scene now says something the glass does
+    /// not show. Whoever draws has to draw again.
+    /// <para>
+    /// It exists for the park: every other way a gesture ends sends a binding transform, and the
+    /// application draws where it settles that. A park sends <c>ItemParked</c> instead and answers
+    /// no question about position at all, so nothing downstream was left to trigger a drawing.
+    /// </para>
+    /// </summary>
+    internal event Action? Settled;
+
+    /// <summary>
     /// A player swiped a picture into the slot bar, or took one back out by touching it. Where it
     /// then lies is not reported: that follows from the list of parked pictures and this screen's
     /// park edge, and the hub works it out with the same function this window would have used.
@@ -778,6 +789,15 @@ internal sealed class OverlayWindow : Window
             // ends from the LIST. A binding transform here would be this gesture answering a
             // question it does not get to answer - and it would win, because it arrives second.
             _held.Remove(item);
+
+            // And drawn again, which is the half that was missing (hand-run of M3, step 18): the
+            // hub's patch for the park usually arrives while the hand is still counted as holding,
+            // and a held picture is deliberately passed over by the drawing (conflict rule 3). So
+            // the patch was applied to the scene and never reached the glass, the picture stayed
+            // lying where it was, and it jumped into the bar only when somebody next touched it.
+            // The other way out of this method reports a binding transform and is drawn by the
+            // application; this one reports nothing, so it has to ask.
+            Settled?.Invoke();
 
             return;
         }

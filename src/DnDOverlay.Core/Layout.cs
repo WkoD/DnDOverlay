@@ -73,8 +73,27 @@ public static class Layout
         var cos = Math.Abs(Math.Cos(radians));
         var sin = Math.Abs(Math.Sin(radians));
 
-        var width = (rect.Width * cos) + (rect.Height * sin);
-        var height = (rect.Width * sin) + (rect.Height * cos);
+        // Through units of screen HEIGHT on both axes, and that detour is the whole point: the
+        // rotation happens on the glass, not in the normalised system, where one unit across is not
+        // one unit down. Mixing a normalised width with a normalised height in one trigonometric
+        // sum gives a rectangle that is neither - on 16:9 at 46 degrees it came out a third too
+        // wide and a quarter too short.
+        //
+        // <b>Found at the table</b> (hand-run of M3, step 18a): the clamp allows the centre out to
+        // "half a hull past the edge", so an over-wide hull hands out slack that does not exist. A
+        // picture at 46 degrees walked entirely off the left of the screen while the clamp believed
+        // 96 DIP of it were still showing - measured at centre -0.285, every one of the four
+        // corners at x below zero.
+        //
+        // The warning was already written down, one file over, on Manipulation.Pivot: "a rotation
+        // applied to normalised offsets directly shears the picture across the table on anything
+        // that is not square". The sibling function did it anyway.
+        var aspect = screen.AspectRatio <= 0 ? 1 : screen.AspectRatio;
+
+        var acrossInHeights = rect.Width * aspect;
+
+        var width = ((acrossInHeights * cos) + (rect.Height * sin)) / aspect;
+        var height = (acrossInHeights * sin) + (rect.Height * cos);
 
         return new Rect(item.CenterX - (width / 2), item.CenterY - (height / 2), width, height);
     }

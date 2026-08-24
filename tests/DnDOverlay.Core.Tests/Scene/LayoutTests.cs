@@ -52,6 +52,63 @@ public sealed class LayoutTests
         Assert.Equal(0.5, hull.X + (hull.Width / 2), precision: 9);
     }
 
+    /// <summary>
+    /// The hull is the bounding box of the picture as it is actually drawn, and this is the test
+    /// that says so - by working the four corners out independently and comparing.
+    /// <para>
+    /// <b>The test above passed while the hull was wrong</b>, which is why this one exists. It
+    /// asked whether the hull was bigger than the item and whether it stayed centred; both hold for
+    /// any wrong answer that is too big. It also used a square picture on a screen the helper makes,
+    /// so a fault that only appears when one normalised unit across is not one down had nowhere to
+    /// show itself.
+    /// </para>
+    /// <para>
+    /// <b>Found at the table</b> (hand-run of M3, step 18a): the rotation was applied to normalised
+    /// offsets directly, which on 16:9 at 46 degrees made the hull a third too wide and a quarter
+    /// too short. The clamp lets the centre out by half a hull, so the surplus width was slack that
+    /// did not exist - and a picture walked entirely off the screen while the clamp believed 96 DIP
+    /// of it were showing.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(45)]
+    [InlineData(46)]
+    [InlineData(90)]
+    [InlineData(135)]
+    [InlineData(200)]
+    public void The_hull_is_exactly_the_box_around_the_turned_corners(double rotationDeg)
+    {
+        // A wide screen and a picture that is not square: on anything square the fault this guards
+        // against cannot appear.
+        var screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
+        var item = Build.Item(scale: 0.5, aspectRatio: 1.5, rotationDeg: rotationDeg);
+
+        var rect = Layout.ItemToRect(item, screen);
+        var hull = Layout.ItemToHullRect(item, screen);
+
+        // The corners, turned on the GLASS and brought back - the same detour the renderer and
+        // Manipulation.Pivot make, and the one the hull has to agree with.
+        var radians = rotationDeg * Math.PI / 180d;
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+        var across = rect.Width / 2 * screen.AspectRatio;
+        var down = rect.Height / 2;
+
+        var xs = new List<double>();
+        var ys = new List<double>();
+
+        foreach (var (dx, dy) in new[] { (-across, -down), (across, -down), (across, down), (-across, down) })
+        {
+            xs.Add(item.CenterX + (((dx * cos) - (dy * sin)) / screen.AspectRatio));
+            ys.Add(item.CenterY + (dx * sin) + (dy * cos));
+        }
+
+        Assert.Equal(xs.Min(), hull.X, precision: 9);
+        Assert.Equal(xs.Max(), hull.X + hull.Width, precision: 9);
+        Assert.Equal(ys.Min(), hull.Y, precision: 9);
+        Assert.Equal(ys.Max(), hull.Y + hull.Height, precision: 9);
+    }
+
     [Fact]
     public void An_unrotated_item_has_no_separate_hull()
     {
