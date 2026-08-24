@@ -173,6 +173,16 @@ internal sealed class OverlayWindow : Window
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
 
+        // PREVIEW, and it has to be. A touch that lands on a picture is turned into a manipulation
+        // and never surfaces as a bubbling touch event again, so the bubbling half would see only
+        // the fingers that hit nothing - which is the opposite of what Part 4 asks for. Tunnelling
+        // from the window catches all of them, on a picture or on the bare table, and it is
+        // deliberately passive: nothing here marks an event handled, so the gestures underneath are
+        // untouched (Part 4, "am Tisch aendert sich nichts").
+        PreviewTouchDown += (_, e) => Noted(e, lifted: false);
+        PreviewTouchMove += (_, e) => Noted(e, lifted: false);
+        PreviewTouchUp += (_, e) => Noted(e, lifted: true);
+
         _stage.SizeChanged += (_, _) =>
         {
             // The surface and the screen it is supposed to be, side by side. A picture is stretched
@@ -187,6 +197,42 @@ internal sealed class OverlayWindow : Window
     }
 
     internal ScreenId ScreenId => _monitor.Screen.ScreenId;
+
+    /// <summary>
+    /// Every finger on this screen since anybody last asked. Filled from the UI thread, drained
+    /// from a timer, and read at the display by nobody: the trails exist for the thumbnail in the
+    /// control (Part 4, Part 7).
+    /// </summary>
+    internal TouchLog Fingers { get; } = new(TimeProvider.System);
+
+    /// <summary>
+    /// Writes one touch into the log, as a fraction of the surface - the same normalisation the
+    /// scene uses, so the control can lay one over the other without knowing this screen's size
+    /// (Part 3).
+    /// </summary>
+    private void Noted(TouchEventArgs e, bool lifted)
+    {
+        var width = _stage.ActualWidth;
+        var height = _stage.ActualHeight;
+
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var at = e.GetTouchPoint(_stage).Position;
+        var x = at.X / width;
+        var y = at.Y / height;
+
+        if (lifted)
+        {
+            Fingers.Lifted(e.TouchDevice.Id, x, y);
+        }
+        else
+        {
+            Fingers.Moved(e.TouchDevice.Id, x, y);
+        }
+    }
 
     /// <summary>
     /// The screen changed its resolution, its scaling or its place, and this window follows it.

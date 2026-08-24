@@ -247,6 +247,71 @@ public sealed class DisplaySeamTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The third thing a table sends upwards, and the one nothing at the table can show: every
+    /// finger on the screen, on its way to the DM's thumbnail (Part 4, Part 7).
+    /// <para>
+    /// <b>This is where M3c is proved, and it has to be here.</b> The two visible steps travel to
+    /// M4 with the thumbnail, so the hand-run cannot see any of it - what the touch points SHOW
+    /// needs a surface that does not exist yet. What can be shown now is the wire: a real client
+    /// sends, the real hub takes it, and a subscriber gets it with the device named from the
+    /// connection rather than from the message.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task FingersOnTheTableReachAnObserverOfTheSession()
+    {
+        using var run = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+
+        var inbox = Channel.CreateUnbounded<ProtocolMessage>();
+        var outbox = new TaskCompletionSource<SendQueues>();
+
+        var pump = Start(inbox, outbox, run.Token);
+
+        await Until<WelcomeMessage>(inbox, run.Token);
+
+        // Subscribed only now: the opening picture is taken under the publishing lock, so anything
+        // published before this would be gone rather than late (Part 4).
+        using var watching = _app.Services.GetRequiredService<SessionEvents>().Open(() => Nothing);
+
+        Assert.True((await outbox.Task).TrySend(new TouchPointsMessage(
+            Screen,
+            [new TouchTrail(7, [new TouchPoint(0.25, 0.75, 0)])])));
+
+        var reported = await FirstAsync<SessionEvent.TouchPoints>(watching, run.Token);
+        var trail = Assert.Single(reported.Touches);
+
+        Assert.Equal(7, trail.Touch);
+        Assert.Equal(0.25, Assert.Single(trail.Points).X);
+
+        // Named from the CONNECTION, which is the one answer a device cannot get wrong or forge.
+        Assert.Equal(Device, reported.Screen.Device);
+        Assert.Equal(Screen, reported.Screen.Screen);
+
+        await run.CancelAsync();
+        await Finished(pump);
+    }
+
+    /// <summary>The opening picture for a subscriber that only wants what happens next.</summary>
+    private static readonly SessionEvent Nothing = new SessionEvent.DevicesChanged([]);
+
+    private static async Task<T> FirstAsync<T>(
+        SessionEvents.Subscription watching,
+        CancellationToken cancellationToken)
+        where T : SessionEvent
+    {
+        await foreach (var @event in watching.ReadAllAsync(cancellationToken))
+        {
+            if (@event is T found)
+            {
+                return found;
+            }
+        }
+
+        throw new InvalidOperationException($"the stream ended before a {typeof(T).Name} arrived");
+    }
+
+    /// <summary>
     /// Starts a real client and hands back the queues it sends through, so a test can say what a
     /// hand at the table would have said.
     /// <para>

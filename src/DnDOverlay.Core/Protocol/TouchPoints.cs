@@ -98,80 +98,21 @@ public sealed record TouchPointsMessage(ScreenId Screen, IReadOnlyList<TouchTrai
     public string Slot => string.Concat("touch:", Screen.Value);
 
     /// <summary>How long ago the most recent point of this message was touched.</summary>
-    public int YoungestMs =>
-        Touches.Count == 0
-            ? 0
-            : Touches.Min(trail => trail.Points.Count == 0 ? 0 : trail.Points.Min(point => point.AgeMs));
+    public int YoungestMs => TouchTrails.YoungestMs(Touches);
 
-    /// <summary>
-    /// This message laid over the one it displaces, per finger - <b>the trails are combined, not
-    /// discarded</b>.
-    /// <para>
-    /// That is what separates this from every other transient: the delay may be thrown away, the
-    /// movement may not. A plain overwrite under load would drop exactly the points that make the
-    /// line, and what arrived would be a string of beads with no direction (Part 4).
-    /// </para>
-    /// <para>
-    /// A finger the waiting message knew and this one does not is kept: it lifted between the two
-    /// sends, and where it went on its way up is as much part of the gesture as the rest.
-    /// </para>
-    /// </summary>
-    public ProtocolMessage Over(ProtocolMessage waiting, int gapMs)
-    {
+    /// <inheritdoc cref="TouchTrails.Combine" />
+    public ProtocolMessage Over(ProtocolMessage waiting, int gapMs) =>
         // Anything else in this slot is another screen's or another build's, and laying those over
         // one another would invent a trail. Keeping the newer one is the ordinary transient answer.
-        if (waiting is not TouchPointsMessage older || older.Screen != Screen)
-        {
-            return this;
-        }
+        waiting is TouchPointsMessage older && older.Screen == Screen
+            ? new TouchPointsMessage(Screen, TouchTrails.Combine(older.Touches, gapMs, Touches))
+            : this;
 
-        // The waiting message was built gapMs before this one, so every one of its points is that
-        // much older on THIS message's clock. Without the shift, the seam between two merged sends
-        // would be the one place where the fading jumps.
-        var carried = older.Touches.ToDictionary(trail => trail.Touch, trail => trail.Points);
-        var combined = new List<TouchTrail>(carried.Count + Touches.Count);
-
-        foreach (var trail in Touches)
-        {
-            combined.Add(carried.Remove(trail.Touch, out var before)
-                ? new TouchTrail(trail.Touch, Join(before, gapMs, trail.Points))
-                : trail);
-        }
-
-        // In the waiting message's own order, not the dictionary's: a receiver that draws them in
-        // the order they arrive should not see them shuffle from one send to the next.
-        foreach (var lifted in older.Touches.Where(trail => carried.ContainsKey(trail.Touch)))
-        {
-            combined.Add(new TouchTrail(lifted.Touch, Join(lifted.Points, gapMs, [])));
-        }
-
-        return new TouchPointsMessage(Screen, combined);
-    }
-
-    /// <summary>
-    /// The message with every age moved on by what the wait cost - or nothing at all, when even
-    /// its youngest point is by now too old to be worth a finger circle where no finger is.
-    /// </summary>
-    public ProtocolMessage? Sent(int waitedMs)
-    {
-        // The empty list is the one message a wait cannot spoil: it says a hand LEFT, and that
-        // stays true however long it took to get out.
-        if (Touches.Count == 0)
-        {
-            return this;
-        }
-
-        if (YoungestMs + waitedMs > SendAgeMs)
-        {
-            return null;
-        }
-
-        return waitedMs == 0
-            ? this
-            : new TouchPointsMessage(Screen, [.. Touches.Select(trail => new TouchTrail(
-                trail.Touch,
-                [.. trail.Points.Select(point => point with { AgeMs = point.AgeMs + waitedMs })]))]);
-    }
+    /// <inheritdoc cref="TouchTrails.Sent" />
+    public ProtocolMessage? Sent(int waitedMs) =>
+        TouchTrails.Sent(Touches, waitedMs) is { } touches
+            ? touches == Touches ? this : new TouchPointsMessage(Screen, touches)
+            : null;
 
     public bool Equals(TouchPointsMessage? other) =>
         other is not null && Screen == other.Screen && Touches.SequenceEqual(other.Touches);
@@ -188,10 +129,104 @@ public sealed record TouchPointsMessage(ScreenId Screen, IReadOnlyList<TouchTrai
 
         return hash.ToHashCode();
     }
+}
+
+/// <summary>
+/// What combining and ageing trails means, in one place.
+/// <para>
+/// Two things carry them - the message on the wire and the session event a control reads - and
+/// the rules of Part 4 are about the TRAILS rather than about either wrapper. Written twice they
+/// would be one rule with two chances to be wrong, and the half that a second control sees is the
+/// half nobody at the table would notice.
+/// </para>
+/// </summary>
+public static class TouchTrails
+{
+    /// <summary>
+    /// The arriving trails laid over the waiting ones, per finger - <b>combined, not discarded</b>.
+    /// <para>
+    /// That is what separates this from every other transient: the delay may be thrown away, the
+    /// movement may not. A plain overwrite under load would drop exactly the points that make the
+    /// line, and what arrived would be a string of beads with no direction (Part 4).
+    /// </para>
+    /// <para>
+    /// A finger the waiting side knew and the arriving one does not is kept: it lifted between the
+    /// two sends, and where it went on its way up is as much part of the gesture as the rest.
+    /// </para>
+    /// </summary>
+    /// <param name="gapMs">
+    /// How much earlier the waiting trails were made. Every one of their points is that much older
+    /// on the arriving side's clock; without the shift the seam between two merged sends would be
+    /// the one place where the fading jumps.
+    /// </param>
+    public static IReadOnlyList<TouchTrail> Combine(
+        IReadOnlyList<TouchTrail> waiting,
+        int gapMs,
+        IReadOnlyList<TouchTrail> arriving)
+    {
+        ArgumentNullException.ThrowIfNull(waiting);
+        ArgumentNullException.ThrowIfNull(arriving);
+
+        var carried = waiting.ToDictionary(trail => trail.Touch, trail => trail.Points);
+        var combined = new List<TouchTrail>(carried.Count + arriving.Count);
+
+        foreach (var trail in arriving)
+        {
+            combined.Add(carried.Remove(trail.Touch, out var before)
+                ? new TouchTrail(trail.Touch, Join(before, gapMs, trail.Points))
+                : trail);
+        }
+
+        // In the waiting side's own order rather than the dictionary's: a receiver that draws them
+        // as they arrive should not see them shuffle from one send to the next.
+        foreach (var lifted in waiting.Where(trail => carried.ContainsKey(trail.Touch)))
+        {
+            combined.Add(new TouchTrail(lifted.Touch, Join(lifted.Points, gapMs, [])));
+        }
+
+        return combined;
+    }
+
+    /// <summary>How long ago the most recent of these points was touched.</summary>
+    public static int YoungestMs(IReadOnlyList<TouchTrail> touches)
+    {
+        ArgumentNullException.ThrowIfNull(touches);
+
+        return touches.Count == 0
+            ? 0
+            : touches.Min(trail => trail.Points.Count == 0 ? 0 : trail.Points.Min(point => point.AgeMs));
+    }
 
     /// <summary>
-    /// Older points first, aged onto the newer message's clock, then the newer ones - and the cap
-    /// taken off the front, so what is lost is the tail of the trail rather than its head.
+    /// The trails with every age moved on by what the wait cost - or <see langword="null"/> when
+    /// even the youngest point is by now too old to be worth a finger circle where no finger is.
+    /// <para>
+    /// The empty list is the one case a wait cannot spoil: it says a hand LEFT, and that stays
+    /// true however long it took to get out.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<TouchTrail>? Sent(IReadOnlyList<TouchTrail> touches, int waitedMs)
+    {
+        ArgumentNullException.ThrowIfNull(touches);
+
+        if (touches.Count == 0 || waitedMs == 0)
+        {
+            return touches;
+        }
+
+        if (YoungestMs(touches) + waitedMs > TouchPointsMessage.SendAgeMs)
+        {
+            return null;
+        }
+
+        return [.. touches.Select(trail => new TouchTrail(
+            trail.Touch,
+            [.. trail.Points.Select(point => point with { AgeMs = point.AgeMs + waitedMs })]))];
+    }
+
+    /// <summary>
+    /// Older points first, aged onto the newer clock, then the newer ones - and the cap taken off
+    /// the front, so what is lost is the tail of the trail rather than its head.
     /// </summary>
     private static List<TouchPoint> Join(
         IReadOnlyList<TouchPoint> before,

@@ -384,15 +384,35 @@ public sealed record ScreenConfigUpdate(
 /// exactly what it is (Part 4).
 /// </para>
 /// </summary>
+/// <param name="TouchPoints">
+/// Whether this device reports its fingers at all - the ONE switch in the control, for every
+/// device at once (Part 4, Part 7).
+/// <para>
+/// <b>It rides on this message but it is not a device setting</b>, and the difference is the
+/// reason it sits here beside <see cref="ScreenConfigUpdate.Command"/> rather than in
+/// <see cref="DeviceSettings"/>. Nothing about it can be seen or operated at the table: what the
+/// trails show needs the thumbnail, so the switch belongs where the picture is. That it also stops
+/// the sending is a consequence, not a preference of the device's (Part 6). Like the screen wish
+/// it therefore has exactly one writer and travels one way; a device that sends it is passed over
+/// and the fact logged.
+/// </para>
+/// <para>
+/// <see langword="null"/> is "nothing said", as everywhere in this record. A display that has
+/// never heard from a control reports its fingers, because the default in the control is on and a
+/// device cannot know it was turned off.
+/// </para>
+/// </param>
 public sealed record ConfigUpdate(
     IReadOnlyList<ScreenConfigUpdate> Screens,
-    DeviceSettings? Device = null)
+    DeviceSettings? Device = null,
+    bool? TouchPoints = null)
 {
     /// <summary>Nothing to say - the answer when a diff over both halves comes up empty.</summary>
     public static readonly ConfigUpdate None = new([]);
 
     [JsonIgnore]
-    public bool IsEmpty => Screens.Count == 0 && (Device is null || Device.IsEmpty);
+    public bool IsEmpty =>
+        Screens.Count == 0 && (Device is null || Device.IsEmpty) && TouchPoints is null;
 
     /// <summary>
     /// Structural over the screen list, for the same reason every other list-bearing DTO is: a
@@ -400,12 +420,16 @@ public sealed record ConfigUpdate(
     /// never equal the one that was sent.
     /// </summary>
     public bool Equals(ConfigUpdate? other) =>
-        other is not null && Device == other.Device && Screens.SequenceEqual(other.Screens);
+        other is not null
+        && Device == other.Device
+        && TouchPoints == other.TouchPoints
+        && Screens.SequenceEqual(other.Screens);
 
     public override int GetHashCode()
     {
         var hash = new HashCode();
         hash.Add(Device);
+        hash.Add(TouchPoints);
 
         foreach (var screen in Screens)
         {

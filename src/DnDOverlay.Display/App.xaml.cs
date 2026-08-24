@@ -33,6 +33,13 @@ public sealed partial class App : Application, IDisposable
     private readonly Dictionary<ScreenId, OverlayWindow> _windows = [];
 
     /// <summary>
+    /// The touch log of every open screen, kept beside <see cref="_windows"/> because it is read
+    /// from somewhere else: the reporter runs on a background thread at 10 Hz, and the window
+    /// table belongs to the UI thread (Part 4).
+    /// </summary>
+    private readonly ConcurrentDictionary<ScreenId, TouchLog> _touching = new();
+
+    /// <summary>
     /// The names the DM gave, apart from the hardware. <c>_monitors</c> holds what Windows says
     /// and its <c>Label</c> is therefore always the default one; laying the custom name over it
     /// here keeps the default available for the moment a name is taken away again (Part 6).
@@ -67,6 +74,13 @@ public sealed partial class App : Application, IDisposable
     /// flickers.
     /// </summary>
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// How often the fingers on this table are reported. Ten a second (Part 4): fast enough that a
+    /// line traced across the map arrives as a line, slow enough that four people pointing is a
+    /// tenth of the traffic one picture makes.
+    /// </summary>
+    private static readonly TimeSpan TouchInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>How often the display says what an evening has done to it.</summary>
     private static readonly TimeSpan PulseEvery = TimeSpan.FromMinutes(5);
@@ -193,6 +207,13 @@ public sealed partial class App : Application, IDisposable
     /// needs to report nothing, because the next <c>Hello</c> carries the inventory anyway.
     /// </summary>
     private SendQueues? _outbox;
+
+    /// <summary>
+    /// Whether the fingers on this table are reported. On until a control says otherwise: the
+    /// switch lives in the control, and a device that has never heard from one cannot know it was
+    /// turned off (Part 4, Part 7).
+    /// </summary>
+    private volatile bool _reportingTouches = true;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -542,6 +563,16 @@ public sealed partial class App : Application, IDisposable
             _wake!.Wanted = device.KeepAwake ?? _wake.Wanted;
         }
 
+        // Not stored and not reported back, unlike everything above it: this is the control's one
+        // switch for every device, and a device has no opinion about it to preserve (Part 6). A
+        // restart therefore reports fingers again until the control says otherwise, which is the
+        // right way round - the control knows, the table does not.
+        if (update.TouchPoints is { } reporting)
+        {
+            _reportingTouches = reporting;
+            DisplayLog.TouchReporting(_logger, reporting ? "on" : "off");
+        }
+
         Remember();
         DisplayLog.SettingsApplied(_logger, update.Screens.Count);
     }
@@ -656,6 +687,11 @@ public sealed partial class App : Application, IDisposable
             System.Windows.Threading.DispatcherPriority.Input);
 
         _windows[screen] = window;
+
+        // The sender walks this rather than the windows: it runs on a background thread, and the
+        // window table belongs to the UI one.
+        _touching[screen] = window.Fingers;
+
         window.Show();
 
         DisplayLog.OverlayOpened(_logger, screen, _windowed ? "windowed" : "overlay");
@@ -668,6 +704,8 @@ public sealed partial class App : Application, IDisposable
 
     private void Close(ScreenId screen)
     {
+        _ = _touching.TryRemove(screen, out _);
+
         if (!_windows.Remove(screen, out var window))
         {
             return;
@@ -879,6 +917,7 @@ public sealed partial class App : Application, IDisposable
 
         Task forwarding = Task.CompletedTask;
         Task reporting = Task.CompletedTask;
+        Task touching = Task.CompletedTask;
 
         // Handed the three queues the moment the socket stands. Until M3c this end had one
         // unbounded channel, so nothing here could be dropped and nothing could be replaced -
@@ -896,6 +935,8 @@ public sealed partial class App : Application, IDisposable
             // Same lifetime as the forwarder, and for the same reason: it belongs to THIS
             // connection.
             reporting = Task.Run(() => ReportProgressAsync(queues, connected.Token));
+
+            touching = Task.Run(() => ReportTouchesAsync(queues, connected.Token));
         }
 
         var pump = Task.Run(() => client.RunAsync(
@@ -1682,6 +1723,41 @@ public sealed partial class App : Application, IDisposable
                 && background.AssetId == asset
                 && background.Meta.IsAnimated)
             || scene.Items.OfType<ImageItem>().Any(item => item.AssetId == asset && item.Meta.IsAnimated));
+
+    /// <summary>
+    /// Sends every finger on every screen, ten times a second and <b>only while there are any</b>.
+    /// <para>
+    /// It never touches the dispatcher, and that is deliberate: the log is written from the UI
+    /// thread and drained from here, so ten reports a second can never queue behind a hand. A
+    /// dispatcher hop at this rate is exactly the traffic that made a load stutter in M3b.
+    /// </para>
+    /// <para>
+    /// One message per screen rather than per finger - four people with six fingers make one
+    /// message with six entries. They travel in the transient queue, so a socket that cannot keep
+    /// up drops them and nothing else: that is the whole point of rank 4 (Part 1, Part 4).
+    /// </para>
+    /// </summary>
+    private async Task ReportTouchesAsync(SendQueues outbox, CancellationToken cancellationToken)
+    {
+        using var tick = new PeriodicTimer(TouchInterval);
+
+        // Taken once and held: the set of windows changes on the UI thread, and walking it from
+        // here would be reading a dictionary somebody else is writing. A screen that appears or
+        // goes during a connection is picked up on the next round.
+        while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+        {
+            foreach (var (screen, log) in _touching.ToArray())
+            {
+                // Drained even while the switch is off, and it has to be: otherwise the first
+                // message after switching back on would carry a trail from minutes ago, and the
+                // 200 ms rule would throw the whole thing away without anybody knowing why.
+                if (log.Take(screen) is { } fingers && _reportingTouches)
+                {
+                    _ = outbox.TrySend(fingers);
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Sends what is being loaded, two to four times a second and <b>only while something is</b>

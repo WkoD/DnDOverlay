@@ -114,8 +114,10 @@ public sealed class SessionStreamTests
     /// per endpoint: what is transient may be dropped, and dropping it costs the subscriber nothing
     /// but the moment it described (Part 4).
     /// <para>
-    /// Nothing in M1b publishes in this class - the traffic arrives with <c>TouchPoints</c> in M3.
-    /// The test hands the class in expressly, exactly as the send-queue tests do.
+    /// <b>It also shows that the ranks are separate.</b> A whole state queue's worth of transients
+    /// leaves the state queue untouched - which is what M3c had to fix: with one channel for all
+    /// three, a table with four hands on it would fill 256 slots with finger positions in seconds
+    /// and the next patch would end a stream that was merely busy.
     /// </para>
     /// </summary>
     [Fact]
@@ -134,10 +136,13 @@ public sealed class SessionStreamTests
             .ReadAllAsync(TestContext.Current.CancellationToken)
             .GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
-        for (var i = 0; i < SessionEvents.Capacity; i++)
-        {
-            Assert.True(await stream.MoveNextAsync());
-        }
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal(new Beat(0), stream.Current);
+
+        // One, not two hundred and fifty-six: a kind holds a slot rather than a queue, and the
+        // newer reading replaces the older one (Part 4).
+        Assert.True(await stream.MoveNextAsync());
+        Assert.IsType<Flicker>(stream.Current);
 
         // Still open, and still carrying state - which is the whole difference to the case above.
         events.Publish(new Beat(1));

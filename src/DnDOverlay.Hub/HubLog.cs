@@ -299,6 +299,17 @@ internal static partial class HubLog
     internal static partial void LogRateExceeded(ILogger logger, string deviceName, int limit, LogLevel level);
 
     /// <summary>
+    /// A device is reporting its fingers faster than any table could produce them. The reports are
+    /// refused from here on; said once for the connection, because a line per refusal would be the
+    /// flood it is about (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1053,
+        Level = LogLevel.Warning,
+        Message = "{DeviceName} is sending more than {Limit} touch reports a second; the rest are refused.")]
+    internal static partial void TouchRateExceeded(ILogger logger, string deviceName, int limit);
+
+    /// <summary>
     /// A screen nobody has met. It becomes <c>Enabled</c> like every unknown one, and this is a
     /// plain fact - the way onwards is "reassign screen", should the derivation have moved
     /// (Part 3).

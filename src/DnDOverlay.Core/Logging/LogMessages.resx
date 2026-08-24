@@ -158,6 +158,9 @@
   <data name="E1048_UnknownControlHeard" xml:space="preserve">
     <value>Control {ControlId} ({Name}) is announcing itself, but this device belongs to {BoundTo}. If that control was set up again, the pairing has to be reset AT this device.</value>
   </data>
+  <data name="E1053_TouchRateExceeded" xml:space="preserve">
+    <value>{DeviceName} is sending more than {Limit} touch reports a second; the rest are refused.</value>
+  </data>
   <data name="E1051_SendQueueFull" xml:space="preserve">
     <value>The control at {HubUri} is not taking messages ({Queued} queued, {Bytes} bytes); closing and reconnecting.</value>
   </data>
@@ -251,6 +254,9 @@
   </data>
   <data name="E3023_FrameTimes" xml:space="preserve">
     <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
+  </data>
+  <data name="E3031_TouchReporting" xml:space="preserve">
+    <value>Touch points from this table are {Reporting}.</value>
   </data>
   <data name="E3030_GestureCorrected" xml:space="preserve">
     <value>Gesture on {Name} came back {DriftDip} DIP away after {Milliseconds} ms: let go at {MineX},{MineY} scale {MineScale}, hub says {HubX},{HubY} scale {HubScale}.</value>

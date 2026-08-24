@@ -137,4 +137,66 @@ public abstract record SessionEvent
             return hash.ToHashCode();
         }
     }
+
+    /// <summary>
+    /// Every finger on one screen, on its way to the thumbnail (Part 7). The DM sees what somebody
+    /// at the table is pointing at, and that is the whole purpose.
+    /// <para>
+    /// <b>The first event of this stream in rank 4</b>, and therefore the first time the ranking
+    /// has anything to protect the rest of it from: a table with four hands on it produces ten of
+    /// these a second per screen, and a control that has fallen behind wants none of them and every
+    /// patch. Until now the classes were declared here and nothing published below state
+    /// (Part 4).
+    /// </para>
+    /// <para>
+    /// The screen carries its device, as every patch does: <c>/ws/control</c> carries every device
+    /// over one connection, so an event that named only the screen would be ambiguous the moment
+    /// two tables were connected (Part 4).
+    /// </para>
+    /// </summary>
+    public sealed record TouchPoints(ScreenRef Screen, IReadOnlyList<TouchTrail> Touches)
+        : SessionEvent, IReplacing<SessionEvent>
+    {
+        /// <summary>
+        /// Rank 4: dropped without a word when a subscriber cannot keep up. A finger position from
+        /// a moment ago is not inaccurate, it is worthless.
+        /// </summary>
+        public override SendClass SendClass => SendClass.Transient;
+
+        /// <summary>
+        /// One slot per screen and device. Two tables have two independent sets of fingers, and so
+        /// do two screens of one table.
+        /// </summary>
+        public string Slot => string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"touch:{Screen.Device.Value}:{Screen.Screen.Value}");
+
+        /// <inheritdoc cref="TouchTrails.Combine" />
+        public SessionEvent Over(SessionEvent waiting, int gapMs) =>
+            waiting is TouchPoints older && older.Screen == Screen
+                ? new TouchPoints(Screen, TouchTrails.Combine(older.Touches, gapMs, Touches))
+                : this;
+
+        /// <inheritdoc cref="TouchTrails.Sent" />
+        public SessionEvent? Sent(int waitedMs) =>
+            TouchTrails.Sent(Touches, waitedMs) is { } touches
+                ? touches == Touches ? this : new TouchPoints(Screen, touches)
+                : null;
+
+        public bool Equals(TouchPoints? other) =>
+            other is not null && Screen == other.Screen && Touches.SequenceEqual(other.Touches);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(Screen);
+
+            foreach (var trail in Touches)
+            {
+                hash.Add(trail);
+            }
+
+            return hash.ToHashCode();
+        }
+    }
 }

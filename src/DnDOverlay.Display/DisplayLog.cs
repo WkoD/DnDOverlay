@@ -424,4 +424,18 @@ internal static partial class DisplayLog
         Message = "The search for a control ended unexpectedly - this device will not connect again "
                   + "until it is restarted.")]
     internal static partial void ConnectionLoopFailed(ILogger logger, Exception exception);
+
+    /// <summary>
+    /// Whether this table reports its fingers - the control's one switch, arriving here.
+    /// <para>
+    /// It is written because nothing else about it can be seen: at the table the switch changes
+    /// nothing at all, which is the promise (Part 4). Without a line, "the DM sees no fingers"
+    /// would have two indistinguishable causes - switched off, or not arriving.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3031,
+        Level = LogLevel.Information,
+        Message = "Touch points from this table are {Reporting}.")]
+    internal static partial void TouchReporting(ILogger logger, string reporting);
 }

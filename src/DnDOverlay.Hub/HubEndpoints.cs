@@ -589,6 +589,7 @@ public static class HubEndpoints
             }
 
             var relay = new LogRelay(processLog, time, logger, device.Device, device.Name);
+            var fingers = new TouchRelay(events, time, logger, device.Name);
 
             // Pongs never get here: they are noted where they are heard, because they say nothing
             // about the session - they say the socket is alive.
@@ -647,6 +648,21 @@ public static class HubEndpoints
                         else
                         {
                             HubLog.ForeignScreenRefused(logger, device.Name, parked.Screen.Value);
+                        }
+
+                        break;
+
+                    case TouchPointsMessage report:
+                        // Same pairing check as a gesture: a screen this socket is not addressed
+                        // by is not this device's to speak for (Part 4).
+                        if (connection.Screens.FirstOrDefault(
+                                candidate => candidate.Screen == report.Screen) is { } table)
+                        {
+                            fingers.Take(table, report);
+                        }
+                        else
+                        {
+                            HubLog.ForeignScreenRefused(logger, device.Name, report.Screen.Value);
                         }
 
                         break;

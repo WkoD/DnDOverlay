@@ -587,6 +587,7 @@ the same application that draws.
 | 1050 | `BeaconTargetsChanged` | Information | hub |
 | 1051 | `SendQueueFull` | Warning | transport |
 | 1052 | `SendTimedOut` | Warning | transport |
+| 1053 | `TouchRateExceeded` | Warning | hub |
 
 **1049 is the line that exists because its absence was the fault.** The loop that looks for a
 control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
@@ -615,9 +616,10 @@ ends and the ordinary reconnect puts the truth back. **The third case, a socket 
 write outright, gets no line here**: the receive side already reports the end, and two lines for
 one event would be noise exactly when the log is being read.
 
-**Next free: 1053.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**Next free: 1054.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
-1042, the send side 1043–1045 with its counterparts at 1051–1052, and log forwarding 1046–1047.
+1042, the send side 1043–1045 with its counterparts at 1051–1052, and log forwarding 1046–1047 with
+the touch rate beside it at 1053.
 **1050 belongs to discovery without adjoining it** — a number is never moved to keep a range tidy,
 because the number is the contract and the tidiness is not.
 
@@ -711,15 +713,20 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3028 | `GestureConfirmed` | Information |
 | 3029 | `SessionPulse` | Information |
 | 3030 | `GestureCorrected` | Warning |
+| 3031 | `TouchReporting` | Information |
 
-**Next free: 3031.**
+**Next free: 3032.**
+
+**3031 exists because nothing else about the switch can be seen.** At the table it changes
+nothing at all — that is the promise (Part 4) — so without a line "the DM sees no fingers" would
+have two causes that look identical: switched off, or not arriving.
 
 3019 sits in the display range although what it changes is a process-wide flag — the subject of
 the sentence is whether a screen stays lit, and that is what decides the range. Both directions
 are worth the same line, and the second one more than the first: from the room, a device that was
 *told* to let go looks exactly like one that failed to hold on.
 
-Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 and 3023–3030 by the
+Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 and 3023–3031 by the
 **display** — the range
 follows the subject of the sentence, never the assembly it is written in. Only one of the three
 inventory findings is a warning, and that is the point of telling them apart: a missing screen
