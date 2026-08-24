@@ -99,6 +99,120 @@ public static class Layout
     }
 
     /// <summary>
+    /// The four corners of the item as it is actually drawn, normalised, clockwise from the top
+    /// left of the unturned picture.
+    /// <para>
+    /// The hull is the box around these; where the two are needed apart is a corner, because the
+    /// box reaches into it and the picture need not.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<Point> ItemToQuad(SceneItem item, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var rect = ItemToRect(item, screen);
+        var aspect = screen.AspectRatio <= 0 ? 1 : screen.AspectRatio;
+
+        // Through screen heights on both axes, where a rotation is a rotation.
+        var across = rect.Width / 2 * aspect;
+        var down = rect.Height / 2;
+
+        var radians = item.RotationDeg * Math.PI / 180d;
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+
+        return
+        [
+            .. new[] { (-across, -down), (across, -down), (across, down), (-across, down) }
+                .Select(corner => new Point(
+                    item.CenterX + (((corner.Item1 * cos) - (corner.Item2 * sin)) / aspect),
+                    item.CenterY + (corner.Item1 * sin) + (corner.Item2 * cos))),
+        ];
+    }
+
+    /// <summary>
+    /// How much of the picture is on the glass, in square DIP.
+    /// <para>
+    /// <b>This is the number the "nothing vanishes" promise is really about</b>, and the reason it
+    /// exists is a hand-run: the edge clamp holds each axis on its own against the hull, which is
+    /// exactly right at an edge and says nothing at a CORNER. There the two axes can be satisfied
+    /// by two different corners of a turned picture - the box pokes into the visible strip above,
+    /// the picture pokes into it below - and between them lies nothing at all. Measured at 37
+    /// degrees: both axes reporting their full 96 DIP, and <b>zero</b> square DIP of picture on the
+    /// screen (checks/M3.md, G31).
+    /// </para>
+    /// </summary>
+    public static double VisibleAreaInDip(SceneItem item, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var polygon = ItemToQuad(item, screen).ToList();
+
+        // Clipped against the four edges of the screen in turn - the ordinary way to intersect a
+        // convex shape with a rectangle, and a turned picture is convex.
+        foreach (var (nx, ny, offset) in Edges)
+        {
+            if (polygon.Count == 0)
+            {
+                return 0;
+            }
+
+            polygon = Clip(polygon, nx, ny, offset);
+        }
+
+        if (polygon.Count < 3)
+        {
+            return 0;
+        }
+
+        var twice = 0d;
+
+        for (var i = 0; i < polygon.Count; i++)
+        {
+            var a = polygon[i];
+            var b = polygon[(i + 1) % polygon.Count];
+
+            twice += (a.X * b.Y) - (b.X * a.Y);
+        }
+
+        return Math.Abs(twice) / 2 * screen.WidthInDip * screen.HeightInDip;
+    }
+
+    /// <summary>The screen as four inward half-planes: left, right, top, bottom.</summary>
+    private static readonly (double X, double Y, double Offset)[] Edges =
+        [(1, 0, 0), (-1, 0, -1), (0, 1, 0), (0, -1, -1)];
+
+    private static List<Point> Clip(List<Point> polygon, double nx, double ny, double offset)
+    {
+        var kept = new List<Point>(polygon.Count + 1);
+
+        for (var i = 0; i < polygon.Count; i++)
+        {
+            var a = polygon[i];
+            var b = polygon[(i + 1) % polygon.Count];
+
+            var da = (nx * a.X) + (ny * a.Y) - offset;
+            var db = (nx * b.X) + (ny * b.Y) - offset;
+
+            if (da >= 0)
+            {
+                kept.Add(a);
+            }
+
+            if (da >= 0 != db >= 0)
+            {
+                var t = da / (da - db);
+
+                kept.Add(new Point(a.X + ((b.X - a.X) * t), a.Y + ((b.Y - a.Y) * t)));
+            }
+        }
+
+        return kept;
+    }
+
+    /// <summary>
     /// The scale a freshly inserted image gets, capped on BOTH axes.
     /// <para>
     /// A 5000×500 panorama at <c>ScaleOnLoad</c> 0.5 would be 540 px tall and 5400 px wide -

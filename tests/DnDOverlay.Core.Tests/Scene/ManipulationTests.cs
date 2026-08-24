@@ -84,6 +84,65 @@ public sealed class ManipulationTests
     /// normalised minimum for both. On a 16:9 table the sideways one is 1.78 times as long, so a
     /// single number leaves 96 DIP at the top and 54 at the side.
     /// </summary>
+    /// <summary>
+    /// <b>Nothing vanishes, and in a corner that takes a different measurement.</b> The clamp holds
+    /// each axis on its own against the hull, which is exactly right at an edge and blind at a
+    /// corner: there both hold at once, satisfied by two DIFFERENT corners of a turned picture,
+    /// with nothing between them.
+    /// <para>
+    /// Found at the table twice. The first time it was a unit error in the hull; that was fixed and
+    /// the picture <b>still</b> disappeared, which is what this test is really about - measured at
+    /// 37 degrees with both axes reporting their full 96 DIP and <b>zero</b> square DIP of picture
+    /// on the screen (checks/M3.md, G31).
+    /// </para>
+    /// <para>
+    /// Walked into the corner step by step rather than placed there, because that is how a hand
+    /// does it and because the clamp is applied per step - a single jump could pass while the path
+    /// to it does not.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(0.6, 37)]
+    [InlineData(1.0, 37)]
+    [InlineData(1.5, 37)]
+    [InlineData(2.5, 37)]
+    [InlineData(1.5, 45)]
+    [InlineData(1.5, 135)]
+    [InlineData(1.5, 200)]
+    public void A_turned_picture_keeps_a_graspable_patch_in_every_corner(double aspectRatio, double rotationDeg)
+    {
+        var screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
+        var patch = screen.MinVisiblePixels * screen.MinVisiblePixels;
+
+        foreach (var (towardsX, towardsY) in new[] { (-1, -1), (1, -1), (1, 1), (-1, 1) })
+        {
+            SceneItem item = Build.Item(aspectRatio: aspectRatio) with
+            {
+                CenterX = 0.5,
+                CenterY = 0.5,
+                Scale = 0.39,
+                RotationDeg = rotationDeg,
+            };
+
+            for (var step = 0; step < 400; step++)
+            {
+                item = Manipulation.HoldAtEdge(
+                    item with
+                    {
+                        CenterX = item.CenterX + (towardsX * 0.01),
+                        CenterY = item.CenterY + (towardsY * 0.01),
+                    },
+                    screen);
+            }
+
+            var showing = Layout.VisibleAreaInDip(item, screen);
+
+            Assert.True(
+                showing >= patch - 1,
+                $"corner {towardsX}/{towardsY}: only {showing:F0} of {patch} square DIP left on the screen");
+        }
+    }
+
     [Fact]
     public void The_remainder_is_the_same_length_sideways_as_it_is_downwards()
     {

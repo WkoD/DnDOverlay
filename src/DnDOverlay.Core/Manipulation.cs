@@ -305,10 +305,79 @@ public static class Manipulation
 
         var hull = Layout.ItemToHullRect(item, screen);
 
-        return item with
+        var held = item with
         {
             CenterX = Hold(item.CenterX, hull.Width, Visible(screen, horizontal: true)),
             CenterY = Hold(item.CenterY, hull.Height, Visible(screen, horizontal: false)),
+        };
+
+        return Reachable(held, screen);
+    }
+
+    /// <summary>
+    /// Pulls a picture back until a graspable patch of it is really on the glass.
+    /// <para>
+    /// <b>The clamp above is right at an edge and blind in a corner.</b> It holds each axis on its
+    /// own against the hull, and at a corner both hold at once - satisfied by two DIFFERENT corners
+    /// of a turned picture, with nothing between them. Measured at 37 degrees: both axes reporting
+    /// their full 96 DIP and <b>zero</b> square DIP of picture on the screen (checks/M3.md, G31).
+    /// </para>
+    /// <para>
+    /// So the area is asked afterwards, and only then: at an edge it costs one measurement and
+    /// changes nothing, which is why the cheap clamp stays in front of it rather than being
+    /// replaced. Where it does bite, the picture is drawn back along the line to the middle of the
+    /// screen - the one direction that is always right, and the one a hand would take.
+    /// </para>
+    /// <para>
+    /// <b>The threshold is the same promise the clamp makes, written as an area:</b> as much as a
+    /// square of <see cref="ScreenContext.MinVisiblePixels"/> a side. For an UNTURNED picture pushed
+    /// into a corner the clamp already leaves exactly that, so nothing changes for the case that
+    /// worked - and a picture with less area than that has to stay whole, because it cannot leave
+    /// more behind than it has.
+    /// </para>
+    /// </summary>
+    private static SceneItem Reachable(SceneItem item, ScreenContext screen)
+    {
+        var patch = screen.MinVisiblePixels * screen.MinVisiblePixels;
+        var rect = Layout.ItemToRect(item, screen);
+        var whole = rect.Width * screen.WidthInDip * rect.Height * screen.HeightInDip;
+        var required = Math.Min(patch, whole);
+
+        if (required <= 0 || Layout.VisibleAreaInDip(item, screen) >= required)
+        {
+            return item;
+        }
+
+        // Towards the middle, which always satisfies: a picture centred on the screen shows either
+        // a full patch or the whole of itself. Halving the interval twenty times lands well inside
+        // a pixel, and it is the same answer every time for the same input - a gesture must not
+        // jitter because a search wandered.
+        var (fromX, fromY) = (item.CenterX, item.CenterY);
+        var (lo, hi) = (0d, 1d);
+
+        for (var step = 0; step < 20; step++)
+        {
+            var middle = (lo + hi) / 2;
+            var tried = item with
+            {
+                CenterX = fromX + ((0.5 - fromX) * middle),
+                CenterY = fromY + ((0.5 - fromY) * middle),
+            };
+
+            if (Layout.VisibleAreaInDip(tried, screen) >= required)
+            {
+                hi = middle;
+            }
+            else
+            {
+                lo = middle;
+            }
+        }
+
+        return item with
+        {
+            CenterX = fromX + ((0.5 - fromX) * hi),
+            CenterY = fromY + ((0.5 - fromY) * hi),
         };
     }
 
