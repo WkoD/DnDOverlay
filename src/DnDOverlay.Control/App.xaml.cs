@@ -207,6 +207,7 @@ public sealed partial class App : Application, IDisposable
             session,
             new PairingDesk(session, secrets, _settings, TimeProvider.System),
             new Entrances(store, _settings, TimeProvider.System),
+            _settings,
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
             _log);
 

@@ -205,6 +205,26 @@ public interface ISessionApi
     Task ApplyConfigAsync(DeviceId device, ConfigUpdate update, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether the tables report their fingers - <b>one switch for every device</b> (Part 4,
+    /// Part 7).
+    /// <para>
+    /// It lives here rather than in <see cref="ApplyConfigAsync"/> per device because it is one
+    /// value and not a per-device wish: a device that connects later has to be told what it is,
+    /// and only somewhere central knows. Nothing about it can be seen or operated at the table, so
+    /// there is nothing at the far end that could be overwritten.
+    /// </para>
+    /// <para>
+    /// It is not persisted here. The control owns it, in <c>control.json</c>, and sets it at
+    /// startup - the hub keeps it for the length of the run so a display that arrives afterwards
+    /// hears it (Part 6, Part 7).
+    /// </para>
+    /// </summary>
+    bool TouchPoints { get; }
+
+    /// <inheritdoc cref="TouchPoints" />
+    Task SetTouchPointsAsync(bool reporting, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Makes every overlay of one device show its own name, large, for a few seconds (Part 6).
     /// <para>
     /// With two devices of two screens each there is otherwise nothing that says which tile is

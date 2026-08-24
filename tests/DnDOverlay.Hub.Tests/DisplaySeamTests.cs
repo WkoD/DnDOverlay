@@ -292,6 +292,44 @@ public sealed class DisplaySeamTests : IAsyncLifetime
         await Finished(pump);
     }
 
+    /// <summary>
+    /// The one switch, both halves: a device is told where it stands as it connects, and it is
+    /// told again when the DM moves it (Part 4, Part 7).
+    /// <para>
+    /// The connecting half is the one that is easy to leave out and hard to notice missing. There
+    /// is no per-device wish here to keep - it is one value for everybody - so a device that was
+    /// switched off while the DM turned the trails off would report them again for ever, and the
+    /// only symptom would be traffic nobody looks at.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task ADeviceIsToldWhereTheTouchSwitchStandsAndWhenItMoves()
+    {
+        using var run = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+
+        await session.SetTouchPointsAsync(false, run.Token);
+
+        var inbox = Channel.CreateUnbounded<ProtocolMessage>();
+        var pump = Start(inbox, new TaskCompletionSource<SendQueues>(), run.Token);
+
+        var told = await Until<ConfigUpdateMessage>(inbox, run.Token);
+
+        Assert.False(told.Update.TouchPoints);
+
+        // And again while it is standing there.
+        await session.SetTouchPointsAsync(true, run.Token);
+
+        var moved = await Until<ConfigUpdateMessage>(inbox, run.Token);
+
+        Assert.True(moved.Update.TouchPoints);
+
+        await run.CancelAsync();
+        await Finished(pump);
+    }
+
     /// <summary>The opening picture for a subscriber that only wants what happens next.</summary>
     private static readonly SessionEvent Nothing = new SessionEvent.DevicesChanged([]);
 

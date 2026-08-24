@@ -49,6 +49,7 @@ does not exist here, and the address is typed into a browser by a person standin
 | `IdentifyScreens` | control → display | nothing — every overlay of that device shows its own name, large, for a few seconds |
 | `ItemTransformed` | display → control | one item's new place, size and angle as an **intention**, with the revision the display had when the hand took hold, and whether this is the first report of the gesture |
 | `ItemParked` | display → control | a player swiped an item into the slot bar, or took one back out of it |
+| `TouchPoints` | display → control | every finger on **one screen**, normalised: per touch an identity and the path it has taken since the last send, each point carrying its own age. An empty list says the last finger has lifted |
 
 `IdentifyScreens` carries no payload on purpose: the device knows its own screens and what each of
 them is called, and a list of names from the control would be a second copy that could disagree
@@ -293,14 +294,30 @@ explains the load.
 |---|---|---|---|
 | **state** | everything that has to arrive | 256 messages **and** 8 MB | the connection is treated as dead and closed |
 | **progress** | `AssetProgress` (M2) | 1, replacing | overwritten — the newer reading is the right one |
-| **transient** | `TouchPoints`, `Diagnostics`, `WindowList`, `SpotlightPulse` (M3, M5) | small | oldest dropped, without a word |
+| **transient** | `TouchPoints` (M3c), `Diagnostics`, `WindowList`, `SpotlightPulse` (M5) | one slot per kind, replacing | the older reading is displaced, without a word |
 
 They are served in that order, so the precedence arises on its own: under sustained load the
 touch points stop getting a turn while the progress still does, and nothing had to throttle
 either of them explicitly.
 
-Two of the three carry no message yet — the classes are declared and the queues are built
-regardless, because there must be no moment in which a socket is written *without* these rules.
+**One set of queues serves both ends of the wire.** Until M3c the hub owned them and the display
+wrote into a single unbounded channel — and gestures, touch points and the progress readings all
+run on exactly that one. A second version of the discard rules would have been the seam of M2
+under another name, so they sit in `Core` and both ends use them.
+
+**Rank 4 is a slot per kind, not a queue.** Each transient message has a capacity of one: touch
+points per screen, diagnostics and the window list per device. A slot that is replaced keeps its
+turn rather than going to the back — otherwise a screen with a hand on it would hold a quieter one
+behind it for as long as the hand stayed down. Until the transient messages existed there was one
+small queue dropping its oldest, which was the floor under this rule rather than the rule.
+
+**What replacement means is left to the message.** Only the queue knows what is still unsent, so
+only the queue can decide to replace; only the message knows what its content means, so only the
+message can say how two of them combine and what a wait costs them. `TouchPoints` is the one that
+does not simply overwrite — the trails are combined per finger, capped at 32 points from the front,
+because the delay may be discarded and the movement may not. It is also the reason rank 4 is
+serialised on the way OUT rather than on the way in: a trail's ages are relative to the moment it
+is sent, so the wait in the slot is charged to it there.
 
 **A full state queue means neither drop nor wait.** It is a deterministic condition, not a time
 window, and it says this connection can no longer be held consistent: it is closed, and the
@@ -318,6 +335,11 @@ a rule somebody has to keep — and it has to hold from the moment the socket is
 the pairing answers, the refusals and the heartbeat all go out while there is no device yet.
 
 ### The stream a surface reads
+
+Each subscriber's stream carries the same three ranks, and since M3c it carries them as three
+queues rather than one. One channel of 256 was right while nothing published below state; with
+touch points in it, a table with four hands on it fills those slots with finger positions in
+seconds, and the next patch would then end a stream that was merely busy rather than lost.
 
 A surface never polls. `ISessionApi.Subscribe` hands it a stream of `SessionEvent`, and that union
 is the definition of what a control can show at all: the control is a client of its own hub and

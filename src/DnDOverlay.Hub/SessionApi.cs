@@ -684,6 +684,27 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public bool TouchPoints { get; private set; } = true;
+
+    /// <inheritdoc />
+    public Task SetTouchPointsAsync(bool reporting, CancellationToken cancellationToken = default)
+    {
+        TouchPoints = reporting;
+
+        // Every connected device at once. One that is switched off is not queued for: it is told
+        // when it connects, out of this same value (HubEndpoints), because there is no per-device
+        // wish here that a catalogue could keep.
+        var update = new ConfigUpdateMessage(new ConfigUpdate([], TouchPoints: reporting));
+
+        foreach (var connection in _connections.All)
+        {
+            _ = connection.TrySend(update);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default)
     {
         // No gate and no catalogue: this changes nothing that could be read back. A device that is

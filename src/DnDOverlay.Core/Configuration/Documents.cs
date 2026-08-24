@@ -113,6 +113,21 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// DM would be looking at "Clipboard 1 (2)" without ever having done anything twice.
     /// </summary>
     public int CountedNameNext { get; set; } = 1;
+
+    /// <summary>
+    /// Whether the tables report their fingers, so the DM can see what somebody is pointing at
+    /// (Part 7).
+    /// <para>
+    /// <b>One setting for every device</b>, and that is the whole reason it is here rather than in
+    /// <see cref="KnownScreen"/> or beside a device: nothing about it can be seen or operated at a
+    /// table, so a per-device copy would be five answers to a question with one (Part 4, Part 6).
+    /// </para>
+    /// <para>
+    /// On by default, and set at the hub at startup: a display that has never heard from a control
+    /// reports, because it cannot know it was turned off.
+    /// </para>
+    /// </summary>
+    public bool ShowTouchPoints { get; set; } = true;
 }
 
 /// <summary>

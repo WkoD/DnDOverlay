@@ -21,6 +21,7 @@ internal sealed class MainWindow : Window, IDisposable
 {
     private readonly ISessionApi _session;
     private readonly PairingDesk _pairing;
+    private readonly ControlSettings _settings;
     private readonly Uri _address;
     private readonly LogList _log;
     private readonly CancellationTokenSource _listening = new();
@@ -41,11 +42,13 @@ internal sealed class MainWindow : Window, IDisposable
         ISessionApi session,
         PairingDesk pairing,
         Entrances entrances,
+        ControlSettings settings,
         Uri address,
         ProcessLog log)
     {
         _session = session;
         _pairing = pairing;
+        _settings = settings;
         _address = address;
         _log = new LogList(log, "Control") { Height = 200 };
 
@@ -75,6 +78,7 @@ internal sealed class MainWindow : Window, IDisposable
         });
         panel.Children.Add(_list);
         panel.Children.Add(StateRow());
+        panel.Children.Add(TouchRow());
         panel.Children.Add(_stage);
         panel.Children.Add(_status);
         panel.Children.Add(_log);
@@ -348,6 +352,54 @@ internal sealed class MainWindow : Window, IDisposable
         row.Children.Add(apply);
 
         return row;
+    }
+
+    /// <summary>
+    /// The one switch for every device: whether the tables report the fingers on them (Part 4,
+    /// Part 7).
+    /// <para>
+    /// It is here and nowhere else - not on the device page and not in the tray window - because
+    /// at the table it changes nothing anybody could see or operate. What the trails SHOW needs
+    /// the thumbnail, so the switch belongs where the picture is; that it also stops the sending
+    /// is a consequence rather than a device's preference (Part 6).
+    /// </para>
+    /// <para>
+    /// Nothing is drawn from it yet: the thumbnail is M4. What it does today is decide whether the
+    /// traffic exists at all, and that is worth having before there is a surface for it - it is
+    /// the rank-4 load every other limit is measured against.
+    /// </para>
+    /// </summary>
+    private CheckBox TouchRow()
+    {
+        var wanted = _settings.Current.ShowTouchPoints;
+
+        var box = new CheckBox
+        {
+            Content = "Show touch points",
+            IsChecked = wanted,
+            Margin = new Thickness(0, 0, 0, 12),
+        };
+
+        // Told once at startup as well, not only when it changes: the hub keeps this for the run
+        // and a display that connects afterwards is answered out of it, so a control that never
+        // spoke would leave every table reporting whatever it defaults to.
+        _ = _session.SetTouchPointsAsync(wanted);
+
+        void Set(bool reporting)
+        {
+            _settings.Update(configuration => configuration with { ShowTouchPoints = reporting });
+
+            _ = _session.SetTouchPointsAsync(reporting);
+
+            _status.Text = reporting
+                ? "Tables report their touch points."
+                : "Tables no longer report their touch points.";
+        }
+
+        box.Checked += (_, _) => Set(true);
+        box.Unchecked += (_, _) => Set(false);
+
+        return box;
     }
 
     /// <summary>

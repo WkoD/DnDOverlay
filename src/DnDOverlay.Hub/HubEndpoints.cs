@@ -576,12 +576,13 @@ public static class HubEndpoints
             // How each of this device's screens stands, plus whatever the control changed while it
             // was away. It goes out BEFORE the scenes, because a display starts silent: until this
             // arrives it has no window anywhere, and the wish is what puts one down (Part 3).
-            var settings = catalog.Drain(device.Device);
+            // The touch switch is stamped on here rather than kept per device, because there is
+            // no per-device wish to keep: it is the control's one switch for everybody, and a
+            // device that was away while it moved has to hear the current answer either way
+            // (Part 4, Part 7). That makes this message unconditional, which it was not before.
+            var settings = catalog.Drain(device.Device) with { TouchPoints = session.TouchPoints };
 
-            if (!settings.IsEmpty)
-            {
-                connection.TrySend(new ConfigUpdateMessage(settings));
-            }
+            connection.TrySend(new ConfigUpdateMessage(settings));
 
             foreach (var screen in connection.Screens)
             {
@@ -608,9 +609,11 @@ public static class HubEndpoints
                         break;
 
                     case ConfigUpdateMessage update:
-                        // Settings only. A screen wish or a finding from a device is passed over,
-                        // and saying so is the difference between a rule and a silence (Part 4).
-                        if (catalog.Apply(device.Device, update.Update))
+                        // Settings only. A screen wish, a finding or the touch switch coming FROM a
+                        // device is passed over, and saying so is the difference between a rule and
+                        // a silence (Part 4). All of them are born in the control and travel one
+                        // way; the switch joined that list in M3c.
+                        if (catalog.Apply(device.Device, update.Update) || update.Update.TouchPoints is not null)
                         {
                             HubLog.ScreenCommandIgnored(logger, device.Name);
                         }
