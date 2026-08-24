@@ -98,29 +98,27 @@ public sealed class SceneGestureTests
     }
 
     /// <summary>
-    /// <b>Parking keeps the size and turns the picture straight</b> - the two halves of Part 6's
-    /// sentence were split at the end of M3. Keeping the angle quietly broke a DIFFERENT promise of
-    /// Part 6, that every slot keeps a finger-sized target: the bar spaces its slots by a fixed
-    /// 96 DIP, and a turned picture puts only a corner into that space. Keeping the size costs
-    /// nothing of the kind - a large picture hangs further out and is easier to hit.
+    /// <b>A picture in the fan is at the size it arrived at and stands straight</b> (Part 6, rebuilt
+    /// at the end of M3). Nothing is remembered: dragging it back out has to be ONE movement, and a
+    /// picture that changed size and angle in the moment it is grasped cannot be dragged.
     /// </summary>
     [Fact]
-    public void Parking_lays_the_item_into_the_bar_straight_and_keeps_its_size()
+    public void Parking_puts_the_picture_into_the_fan_at_arrival_size_and_straight()
     {
         var item = Build.Item(centerX: 0.5, centerY: 0.5, scale: 0.3, rotationDeg: 45);
 
         var after = SceneReducer.Apply(
             Build.SceneWith(item),
-            new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9),
+            new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9, ParkedAt: 9),
             Screen);
 
         var parked = after.Items[0];
 
         Assert.True(parked.Parked);
-        Assert.Equal(0.3, parked.Scale);
+        Assert.Equal(Layout.ScaleOnLoad(item.AspectRatio, Screen), parked.Scale);
         Assert.Equal(Screen.DefaultRotationDeg, parked.RotationDeg);
-        Assert.Equal(Parking.SlotCentre(parked, 0, 1, Screen).X, parked.CenterX, precision: 9);
-        Assert.Equal(Parking.SlotCentre(parked, 0, 1, Screen).Y, parked.CenterY, precision: 9);
+        Assert.Equal(9, parked.ParkedAt);
+        Assert.Equal(Parking.Arrange(Build.SceneWith(parked), Screen).Items[0], parked);
     }
 
     /// <summary>
@@ -143,23 +141,26 @@ public sealed class SceneGestureTests
     }
 
     /// <summary>
-    /// Coming back out of the bar changes no angle. The rotation is spent at the moment of parking
-    /// and not remembered - decided at the end of M3, with the price named: whoever aligned a
-    /// picture and then tidied it away aligns it again afterwards.
+    /// Coming back out changes neither size nor angle: what the fan gave the picture is what comes
+    /// onto the table. The price is named in Part 6 - whoever lined a picture up and then tidied it
+    /// away lines it up again - and it buys the one thing that matters more, that pulling a picture
+    /// out is a single continuous movement.
     /// </summary>
     [Fact]
-    public void Unparking_leaves_the_angle_where_parking_left_it()
+    public void Unparking_changes_neither_size_nor_angle()
     {
-        var item = Build.Item(rotationDeg: 45);
+        var item = Build.Item(rotationDeg: 45, scale: 0.8);
         var scene = Build.SceneWith(item);
 
         var parked = SceneReducer.Apply(
-            scene, new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9), Screen);
+            scene, new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9, ParkedAt: 9), Screen);
 
         var back = SceneReducer.Apply(
             parked, new ParkItem(item.ItemId, Parked: false, ZOrder: 5, Revision: 10), Screen);
 
-        Assert.Equal(Screen.DefaultRotationDeg, back.Items[0].RotationDeg);
+        Assert.Equal(parked.Items[0].RotationDeg, back.Items[0].RotationDeg);
+        Assert.Equal(parked.Items[0].Scale, back.Items[0].Scale);
+        Assert.Equal(0, back.Items[0].ParkedAt);
     }
 
     /// <summary>

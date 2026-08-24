@@ -62,15 +62,11 @@ public static class SceneReducer
                         ZOrder = park.ZOrder,
                         Revision = park.Revision,
 
-                        // Parked straight, and only parked - the size is kept (Part 6, revised at
-                        // the end of M3). The two halves of that sentence were never equally
-                        // strong: keeping the angle quietly broke a different promise of Part 6,
-                        // that "every slot keeps a minimum size and the topmost is fully hittable",
-                        // because the bar spaces its slots by a fixed 96 DIP while a turned picture
-                        // puts only a CORNER into that space. Measured at the table: "a corner is
-                        // harder to hit than a whole edge". Keeping the size costs nothing of the
-                        // kind - a large picture hangs further out of the bar and is EASIER to hit.
-                        RotationDeg = park.Parked ? screen.DefaultRotationDeg : item.RotationDeg,
+                        // Size and angle are NOT set here. Parking.Arrange owns them and applies
+                        // them on every pass, which is what lets a scene move to a screen of a
+                        // different shape and arrive as a fan rather than a heap (Part 6, rebuilt
+                        // at the end of M3).
+                        ParkedAt = park.Parked ? park.ParkedAt : 0,
                     }),
                 screen),
             _ => scene,

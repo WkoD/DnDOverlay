@@ -33,7 +33,8 @@ internal static class Build
         bool animationPaused = false,
         bool locked = false,
         bool parked = false,
-        long revision = 1) =>
+        long revision = 1,
+        long parkedAt = 0) =>
         new(
             ItemId: id ?? new ItemId(Guid.NewGuid()),
             CenterX: centerX,
@@ -49,7 +50,8 @@ internal static class Build
             Meta: Meta(),
             Name: name,
             ShowName: showName,
-            AnimationPaused: animationPaused);
+            AnimationPaused: animationPaused,
+            ParkedAt: parkedAt);
 
     internal static BackgroundItem Background(
         AssetId? asset = null,

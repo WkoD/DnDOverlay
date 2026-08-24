@@ -240,12 +240,13 @@ public sealed class GestureCommandTests
     }
 
     /// <summary>
-    /// Parking keeps the size and turns the picture straight, and coming back out brings it to the
-    /// front (Part 3, Part 6 as revised at the end of M3). The Java version reset the SIZE too and
-    /// undid the work of lining a picture up; that half of the objection still stands.
+    /// A parked picture is at arrival size and straight, and coming back out brings it to the front
+    /// (Part 3, Part 6 as rebuilt at the end of M3). Nothing is remembered: pulling a picture out
+    /// of the fan is one continuous movement, and a picture that changed under the hand could not
+    /// be dragged.
     /// </summary>
     [Fact]
-    public async Task Parking_keeps_size_but_turns_straight_and_unparking_comes_to_the_front()
+    public async Task Parking_stows_the_picture_and_unparking_comes_to_the_front()
     {
         using var session = Session(out var screens);
         screens.Report(Device, [Info()], reported: null);
@@ -261,8 +262,9 @@ public sealed class GestureCommandTests
         var parked = (await session.GetSceneAsync(Target, Cancellation)).Items.Single(one => one.ItemId == item);
 
         Assert.True(parked.Parked);
-        Assert.Equal(0.3, parked.Scale, precision: 9);
+        Assert.Equal(Layout.ScaleOnLoad(parked.AspectRatio, Context()), parked.Scale, precision: 9);
         Assert.Equal(Context().DefaultRotationDeg, parked.RotationDeg);
+        Assert.True(parked.ParkedAt > 0, "the fan got no order");
         Assert.Equal(parked, Manipulation.HoldAtEdge(parked, Context()));
 
         await session.ParkItemAsync(Target, item, parked: false, Cancellation);
@@ -369,8 +371,7 @@ public sealed class GestureCommandTests
 
         Assert.True(parked.Parked);
         Assert.NotEqual(before.CenterX, parked.CenterX);
-        Assert.Equal(Parking.SlotCentre(parked, 0, 1, smaller).X, parked.CenterX, precision: 9);
-        Assert.Equal(Parking.SlotCentre(parked, 0, 1, smaller).Y, parked.CenterY, precision: 9);
+        Assert.Equal(Parking.Arrange(await session.GetSceneAsync(Target, Cancellation), smaller).Items[0], parked);
     }
 
     /// <summary>

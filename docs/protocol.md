@@ -65,10 +65,16 @@ halve each other's reporting; before the queue rather than in it, because thrott
 about how much detail a movement needs while dropping is an emergency measure — and in the queue the
 binding final report would be the message most likely to be dropped.
 
-`ItemParked` carries **no position**. Where a parked picture lies follows from the list of parked
-pictures and the screen's park edge, and both ends work it out with the same function: sending
-coordinates would leave a gap in the bar as soon as one picture left it, and a scene loaded onto
-another screen would carry the first screen's edge with it.
+`ItemParked` carries **no position, no size and no angle**. Where a parked picture lies, how large
+it is drawn and which way up it stands all follow from the list of parked pictures and the screen's
+park edge, and both ends work it out with the same function: sending coordinates would leave a gap
+in the fan as soon as one picture left it, and a scene loaded onto another screen would carry the
+first screen's edge with it.
+
+The one thing the hub does hand out is the fan's **order** — a number per parking, so the newest
+card lies at the near end. It is a field of its own rather than the revision it happens to equal
+today, because a later change to a parked item would otherwise reshuffle the fan without anybody
+asking.
 
 `Welcome` carries a **path**, never an absolute URL and never host and port. Those come from the
 socket the message arrived on. A remembered base URL is a trap: when the machine moves between

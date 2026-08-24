@@ -46,7 +46,19 @@ public abstract record SceneItem(
     int ZOrder,
     bool Locked,
     bool Parked,
-    long Revision);
+    long Revision,
+
+    /// <summary>
+    /// When this item went into the fan, as a number the hub hands out - <c>0</c> while it is not
+    /// parked. It orders the fan, and nothing else reads it.
+    /// <para>
+    /// A field of its own rather than the revision it happens to share today: a parked item's
+    /// revision is the parking only for as long as nothing else ever touches a parked item, and
+    /// the thumbnail of M4 will be able to. A number that answers two questions eventually answers
+    /// the wrong one.
+    /// </para>
+    /// </summary>
+    long ParkedAt = 0);
 
 /// <summary>An image on a screen.</summary>
 /// <param name="Name">
@@ -72,8 +84,10 @@ public sealed record ImageItem(
     AssetMeta Meta,
     string Name,
     bool ShowName,
-    bool AnimationPaused)
-    : SceneItem(ItemId, CenterX, CenterY, Scale, AspectRatio, RotationDeg, ZOrder, Locked, Parked, Revision);
+    bool AnimationPaused,
+    long ParkedAt = 0)
+    : SceneItem(
+        ItemId, CenterX, CenterY, Scale, AspectRatio, RotationDeg, ZOrder, Locked, Parked, Revision, ParkedAt);
 
 /// <summary>
 /// Where an item lies, as an INTENTION - what a display reports after a gesture and what the DM's

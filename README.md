@@ -98,13 +98,13 @@ Several people at once, without being told how.
 | Bring to the front | touch it | click it |
 | Turn it to face you | double tap | — |
 | Park it at the edge | flick towards the park edge | push it out past that edge |
-| Fetch it back | touch the parked picture | click it |
+| Fetch one back | run along the fan, then pull away from the edge | the same, with the button held |
 
 The **right mouse button stays unassigned on purpose**: a grip that exists on only one of the
 two surfaces is worse than a grip missing from both, and Ctrl+drag sits under the same hand
 anyway.
 
-Four things make the gestures survive an evening rather than merely work:
+Five things make the gestures survive an evening rather than merely work:
 
 - **Turning has a dead zone and snaps.** Two fingers always turn a picture a little; without a
   threshold everything on the table stands crooked after three hours. Small angles are
@@ -113,10 +113,16 @@ Four things make the gestures survive an evening rather than merely work:
 - **A picture may hang over the edge, but not disappear.** What stays reachable is measured
   against the picture as it is really drawn, corners and all, so a picture turned 37° in a
   corner is as grabbable as one lying straight.
-- **Two ways into the bar.** A flick towards the park edge from anywhere on the table, or
+- **Two ways into the fan.** A flick towards the park edge from anywhere on the table, or
   pushing the picture out past that edge — the second is slower, deliberate, and the only one a
-  mouse has. A parked picture keeps its size and is turned straight, so the bar stays a row of
-  finger-sized targets rather than a row of corners.
+  mouse has.
+- **The fan is a fan, and its length is the count.** Parked pictures lie along the park edge at
+  the size a picture arrives at, newest at the near end and on top, and the whole fan lies over
+  the table so the way back is never covered. Put enough away and the cards close up; that costs
+  nothing, because you do not pick a card by looking at it. Run a finger along the fan and each
+  card in turn steps out whole so you can see it; pull away from the edge and that one comes onto
+  the table, in one movement, without changing under your hand. Let go without pulling and
+  nothing has happened.
 - **A picture you are holding stays under your hand**, whatever else arrives on the screen
   meanwhile.
 

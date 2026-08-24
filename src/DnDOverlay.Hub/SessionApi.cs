@@ -574,14 +574,23 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return;
             }
 
+            var revision = _scenes.NextRevision();
+
             op = new ParkItem(
                 item,
                 parked,
 
-                // Coming back out of the bar counts as being touched; going in does not - a parked
-                // picture that jumped to the front would cover the table it was tidied off (Part 3).
+                // Coming back out of the fan counts as being touched, so it goes to the front like
+                // anything else that is touched. Going in needs no depth of its own: the fan is
+                // drawn ABOVE the whole table (Parking.FanAbove), because the one thing the players
+                // must always be able to reach is the way to get a picture back.
                 ZOrder: parked ? current.ZOrder : Math.Max(current.ZOrder, scene.TopZOrder + 1),
-                Revision: _scenes.NextRevision());
+                Revision: revision,
+
+                // The fan's own order. The same number the revision got, because it is the one
+                // monotonic counter the hub already keeps - but in a field of its own, so that a
+                // later change to a parked item cannot silently reshuffle the fan.
+                ParkedAt: parked ? revision : 0);
         }
         finally
         {

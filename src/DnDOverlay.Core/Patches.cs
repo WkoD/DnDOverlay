@@ -84,7 +84,7 @@ public sealed record SetLocked(ItemId Item, bool Locked) : PatchOp;
 /// screen's edge with it.
 /// </para>
 /// </summary>
-public sealed record ParkItem(ItemId Item, bool Parked, int ZOrder, long Revision) : PatchOp;
+public sealed record ParkItem(ItemId Item, bool Parked, int ZOrder, long Revision, long ParkedAt = 0) : PatchOp;
 
 /// <summary>
 /// Puts a picture on the background layer, replacing whatever was there. Removing is
