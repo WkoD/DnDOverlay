@@ -149,6 +149,24 @@ public sealed class TouchPointsTests
     }
 
     /// <summary>
+    /// <b>And measured even when the queue cost it nothing.</b> The age travels IN the message, so
+    /// a trail can be too old before it is ever queued - after a reconnect the collector hands over
+    /// points minutes old, and the common case is that they are taken out again at once.
+    /// <para>
+    /// The first cut had the age test behind a "nothing waited, nothing to do" shortcut, so the
+    /// rule was skipped in exactly the case it is normally in: found by reading rather than by a
+    /// test, because the theory above only ever passed a wait of 40 and 60 ms.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_trail_that_was_already_too_old_goes_nowhere_even_without_a_wait()
+    {
+        var message = Trails(new TouchTrail(1, [Point(0.1, 60_000), Point(0.2, 59_000)]));
+
+        Assert.Null(message.Sent(waitedMs: 0));
+    }
+
+    /// <summary>
     /// The one message a wait cannot spoil. "The last finger has lifted" stays true however long
     /// it took to get out, and dropping it as stale would leave the ghost it exists to remove.
     /// </summary>

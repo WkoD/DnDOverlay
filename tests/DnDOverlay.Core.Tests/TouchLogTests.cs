@@ -146,6 +146,33 @@ public sealed class TouchLogTests
     }
 
     /// <summary>
+    /// A finger is forgotten when its trail is taken, and that is the ONLY time - so whoever drains
+    /// this has to keep draining whether or not there is anywhere to send.
+    /// <para>
+    /// The reporter therefore runs with the process rather than with a connection. Built the other
+    /// way round first, and the cost is easy to miss: a table with nobody listening would keep one
+    /// entry per touch for as long as no control was there, on a device the last milestone spent
+    /// ten hours proving flat.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_lifted_finger_is_only_forgotten_when_its_trail_is_taken()
+    {
+        var log = new TouchLog(new ManualTime());
+
+        for (var touch = 0; touch < 50; touch++)
+        {
+            log.Moved(touch, 0.1, 0.1);
+            log.Lifted(touch, 0.1, 0.1);
+        }
+
+        // Everything at once, because nobody asked in between - and after it, nothing is left.
+        Assert.Equal(50, log.Take(Table)!.Touches.Count);
+        Assert.Empty(log.Take(Table)!.Touches);
+        Assert.Null(log.Take(Table));
+    }
+
+    /// <summary>
     /// The cap takes from the front, so a finger that has been drawing for a while during a stall
     /// keeps its head. The trail gets shorter, never the message bigger (Part 4).
     /// </summary>

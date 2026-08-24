@@ -203,19 +203,17 @@ public sealed class SessionEvents(TimeProvider? time = null)
 
         internal void Finish() => _finished = true;
 
-        /// <summary>Tells a waiting reader to look again. A wake-up that finds nothing costs a loop.</summary>
-        internal void Wake()
-        {
-            try
-            {
-                _work.Release();
-            }
-            catch (SemaphoreFullException)
-            {
-                // More wake-ups than the counter can hold means the reader is far behind and will
-                // find everything anyway. Nothing is lost by not counting this one.
-            }
-        }
+        /// <summary>
+        /// Tells a waiting reader to look again. A wake-up that finds nothing costs a loop, which
+        /// is why every subscriber gets one on every publish rather than only the ones written to.
+        /// <para>
+        /// It cannot overflow: a <see cref="SemaphoreSlim"/> created without a maximum takes
+        /// <see cref="int.MaxValue"/> of them. The first cut caught <c>SemaphoreFullException</c>
+        /// here and explained the case in a comment - a comment about something that cannot happen
+        /// is worse than none, because the next reader believes it.
+        /// </para>
+        /// </summary>
+        internal void Wake() => _work.Release();
 
         public void Dispose()
         {

@@ -59,6 +59,20 @@ public sealed class SendQueues : IMessageSink, IDisposable
     private long _stateBytes;
     private volatile bool _finishing;
 
+    /// <summary>
+    /// Set the moment this is disposed, so a sender that races the end of a connection is told
+    /// <b>no</b> instead of being thrown at.
+    /// <para>
+    /// It is an ordinary race and not a fault: the socket is disposed where it was opened, while a
+    /// hand on the table, the log forwarder and the two reporters are all still running - they stop
+    /// when the application notices the connection has ended, which is a continuation later. Until
+    /// M3c this end wrote into a channel, and a completed channel simply refuses; the move to these
+    /// queues turned that quiet refusal into an <c>ObjectDisposedException</c> on the UI thread and
+    /// in the forwarder, where it would have ended the reconnect loop for good.
+    /// </para>
+    /// </summary>
+    private volatile bool _disposed;
+
     /// <param name="report">
     /// Where the three things that can go wrong on a socket are said. It is handed in rather than
     /// logged from here, because the event identifiers belong to the process that owns the
@@ -116,6 +130,13 @@ public sealed class SendQueues : IMessageSink, IDisposable
     {
         ArgumentNullException.ThrowIfNull(message);
 
+        // Refused rather than queued: after disposal nothing writes this socket any more, so
+        // saying yes would be a lie - and the log forwarder believes it and moves its mark on.
+        if (_disposed)
+        {
+            return false;
+        }
+
         // Rank 4 keeps the message rather than its bytes: it may still be merged with the next
         // one, and serialising something that is about to be replaced is work spent on a payload
         // nobody will see.
@@ -149,9 +170,17 @@ public sealed class SendQueues : IMessageSink, IDisposable
     /// <summary>Ends this connection. What happens next belongs to whoever owns the socket.</summary>
     public void RequestClose()
     {
-        if (!_closing.IsCancellationRequested)
+        try
         {
-            _closing.Cancel();
+            if (!_closing.IsCancellationRequested)
+            {
+                _closing.Cancel();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Disposed while this was deciding. The connection is over either way, which is what
+            // the caller was asking for.
         }
     }
 
@@ -191,8 +220,15 @@ public sealed class SendQueues : IMessageSink, IDisposable
 
     public void Dispose()
     {
+        // The flag first, and before anything is torn down: from here every sender is answered
+        // rather than thrown at.
+        _disposed = true;
+
         _closing.Dispose();
-        _work.Dispose();
+
+        // _work is deliberately NOT disposed. A SemaphoreSlim only holds anything worth releasing
+        // once its wait handle has been asked for, and this one never is - whereas disposing it
+        // would make Release throw at exactly the senders this flag exists to answer.
     }
 
     /// <summary>

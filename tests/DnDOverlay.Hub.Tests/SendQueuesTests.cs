@@ -200,6 +200,42 @@ public sealed class SendQueuesTests
     }
 
     /// <summary>
+    /// A sender that races the end of a connection is told <b>no</b>, not thrown at.
+    /// <para>
+    /// It is an ordinary race rather than a fault: the socket is disposed where it was opened,
+    /// while a hand on the table, the log forwarder and the two reporters are all still running -
+    /// they stop a continuation later, when the application notices the connection has ended.
+    /// </para>
+    /// <para>
+    /// <b>It is also a regression this test exists for.</b> Until M3c the display wrote into a
+    /// channel, and a completed channel refuses quietly; moving both ends onto these queues turned
+    /// that into an <c>ObjectDisposedException</c> - on the UI thread it would have taken the
+    /// display down, and in the forwarder it would have ended the reconnect loop until a restart.
+    /// </para>
+    /// <para>
+    /// And it has to be <b>false</b> rather than a silent yes: the forwarder moves its mark on when
+    /// a line is accepted, so a lie here would lose exactly the entries that explain the
+    /// disconnection.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_disposed_set_of_queues_refuses_instead_of_throwing()
+    {
+        using var socket = new RecordingSocket();
+
+        var queues = Queues(socket);
+
+        queues.Dispose();
+
+        Assert.False(queues.TrySend(Marked(1), SendClass.State));
+        Assert.False(queues.TrySend(Marked(2), SendClass.Progress));
+        Assert.False(queues.TrySend(Fingers("DISPLAY1", 0.5)));
+
+        // Whoever owns the socket may still say the connection is over; it is over already.
+        queues.RequestClose();
+    }
+
+    /// <summary>
     /// A counterpart that holds the connection open and takes nothing off it would otherwise only
     /// be noticed once the queue had filled - late, and after the memory had already been spent.
     /// The write limit catches it sooner, and it cancels the send rather than merely giving up on

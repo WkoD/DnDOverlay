@@ -60,6 +60,12 @@ public sealed class ProtocolJsonTests
             ],
             new DeviceSettings(ForwardAtLeast: LogLevel.Debug, KeepAwake: false))),
 
+        // The one switch for every device (M3c). It is a FIELD on a type this list already covered,
+        // which is the hole this list cannot see by itself: the guard below compares TYPES, so a
+        // field added to a covered one is exactly as invisible as a type added to an uncovered
+        // list. Same shape as the ItemTransformed gap of M3a, one level down.
+        new ConfigUpdateMessage(new ConfigUpdate([], TouchPoints: false)),
+
         // Carries nothing, and that is the statement: the device knows its own screens and what
         // each is called, so a list from the control would be a second copy of the names (Part 6).
         new IdentifyScreensMessage(),

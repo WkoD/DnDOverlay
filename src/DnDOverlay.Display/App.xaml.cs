@@ -316,6 +316,13 @@ public sealed partial class App : Application, IDisposable
 
         _ = Task.Run(() => PulseAsync(_shutdown.Token), _shutdown.Token);
 
+        // With the process rather than with a connection, and that is not tidiness: the
+        // collector is emptied by this loop, so one that ran per connection would let a table
+        // with nobody listening accumulate a finger per touch for as long as no control was
+        // there. Whether anything is SENT is a question about the socket; whether the
+        // collector is drained is not.
+        _ = Task.Run(() => ReportTouchesAsync(_shutdown.Token), _shutdown.Token);
+
         // Said once, at the start: without it there is no way to tell whether forced software
         // rendering took - and that is how the first hand-run of 37a ended (checks/M3.md).
         var tier = RenderCapability.Tier >> 16;
@@ -571,6 +578,15 @@ public sealed partial class App : Application, IDisposable
         {
             _reportingTouches = reporting;
             DisplayLog.TouchReporting(_logger, reporting ? "on" : "off");
+        }
+
+        // The touch switch alone is NOT a reason to write a file or say a line. It travels on every
+        // connection - it has to, there is no per-device wish a catalogue could keep - so counting
+        // it here would mean a save and a "settings applied 0" per reconnect, on a device whose
+        // reconnects are exactly what one reads the log for.
+        if (update.Screens.Count == 0 && update.Device is null or { IsEmpty: true })
+        {
+            return;
         }
 
         Remember();
@@ -917,7 +933,6 @@ public sealed partial class App : Application, IDisposable
 
         Task forwarding = Task.CompletedTask;
         Task reporting = Task.CompletedTask;
-        Task touching = Task.CompletedTask;
 
         // Handed the three queues the moment the socket stands. Until M3c this end had one
         // unbounded channel, so nothing here could be dropped and nothing could be replaced -
@@ -935,8 +950,6 @@ public sealed partial class App : Application, IDisposable
             // Same lifetime as the forwarder, and for the same reason: it belongs to THIS
             // connection.
             reporting = Task.Run(() => ReportProgressAsync(queues, connected.Token));
-
-            touching = Task.Run(() => ReportTouchesAsync(queues, connected.Token));
         }
 
         var pump = Task.Run(() => client.RunAsync(
@@ -1737,23 +1750,24 @@ public sealed partial class App : Application, IDisposable
     /// up drops them and nothing else: that is the whole point of rank 4 (Part 1, Part 4).
     /// </para>
     /// </summary>
-    private async Task ReportTouchesAsync(SendQueues outbox, CancellationToken cancellationToken)
+    private async Task ReportTouchesAsync(CancellationToken cancellationToken)
     {
         using var tick = new PeriodicTimer(TouchInterval);
 
-        // Taken once and held: the set of windows changes on the UI thread, and walking it from
-        // here would be reading a dictionary somebody else is writing. A screen that appears or
-        // goes during a connection is picked up on the next round.
         while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
         {
             foreach (var (screen, log) in _touching.ToArray())
             {
-                // Drained even while the switch is off, and it has to be: otherwise the first
-                // message after switching back on would carry a trail from minutes ago, and the
-                // 200 ms rule would throw the whole thing away without anybody knowing why.
-                if (log.Take(screen) is { } fingers && _reportingTouches)
+                // ALWAYS drained - switch off, no control, no matter. The collector forgets a
+                // finger when its trail is taken, so a round that is skipped is a finger that is
+                // remembered for ever; and a trail kept from minutes ago would be thrown away by
+                // the 200 ms rule anyway, without anybody being able to see why.
+                var fingers = log.Take(screen);
+
+                if (fingers is not null && _reportingTouches)
                 {
-                    _ = outbox.TrySend(fingers);
+                    // Null between connections, which is the whole gate: there is nowhere to send.
+                    _ = _outbox?.TrySend(fingers);
                 }
             }
         }

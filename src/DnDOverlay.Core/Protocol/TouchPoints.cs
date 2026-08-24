@@ -209,7 +209,12 @@ public static class TouchTrails
     {
         ArgumentNullException.ThrowIfNull(touches);
 
-        if (touches.Count == 0 || waitedMs == 0)
+        // The empty list is the one case a wait cannot spoil, and it is the ONLY early way out. The
+        // age test has to come before the "nothing waited, nothing to do" shortcut: the age is
+        // carried by the message, so a trail can already be too old when it is queued - after a
+        // reconnect the collector hands over points minutes old, and with the shortcut in front
+        // they would all have gone out with a wait of zero.
+        if (touches.Count == 0)
         {
             return touches;
         }
@@ -217,6 +222,11 @@ public static class TouchTrails
         if (YoungestMs(touches) + waitedMs > TouchPointsMessage.SendAgeMs)
         {
             return null;
+        }
+
+        if (waitedMs == 0)
+        {
+            return touches;
         }
 
         return [.. touches.Select(trail => new TouchTrail(
