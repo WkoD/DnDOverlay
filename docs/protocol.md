@@ -737,6 +737,16 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3030 | `GestureCorrected` | Warning |
 | 3031 | `TouchReporting` | Information |
 
+**3029 gained two numbers in M3c**, and the second is the one that says anything: touch
+reports sent, and the points inside them. A count of reports cannot tell a working table
+from a broken one, because a finger that does not move is reported anyway, at the place it
+rests — so a display whose movements were being swallowed would go on reporting ten times a
+second at one point each, and the traffic would look healthy. **Points per report is what
+separates them**: a moving finger contributes as many as the digitizer delivers in a tick,
+capped at 32; a resting or a swallowed one contributes exactly one. Until the thumbnail of
+M4 there is nothing to look at, so this ratio is the whole evidence that the trails are
+collected at all.
+
 **Next free: 3032.**
 
 **3031 exists because nothing else about the switch can be seen.** At the table it changes

@@ -182,7 +182,8 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Standing after {Uptime}: {Items} picture(s) on {Screens} screen(s), {Bitmaps} decoded, "
             + "{MemoryMb} MB private (peak {PeakMb}), store {StoreMb} MB in {Files} file(s), "
-            + "{Gestures} gesture(s), {Connections} connection(s).")]
+            + "{Gestures} gesture(s), {Connections} connection(s), "
+            + "{TouchReports} touch report(s) carrying {TouchPoints} point(s).")]
     internal static partial void SessionPulse(
         ILogger logger,
         string uptime,
@@ -194,7 +195,9 @@ internal static partial class DisplayLog
         long storeMb,
         int files,
         int gestures,
-        int connections);
+        int connections,
+        int touchReports,
+        int touchPoints);
 
     /// <summary>
     /// What the hub made of one finished gesture, and how long it took to say so.

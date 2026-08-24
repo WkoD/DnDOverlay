@@ -178,6 +178,27 @@ public sealed partial class App : Application, IDisposable
     private int _connections;
     private long _peakBytes;
 
+    /// <summary>
+    /// Touch reports sent, and the points inside them. <b>Two numbers rather than one, and the
+    /// second is the one that says anything.</b>
+    /// <para>
+    /// A count of reports cannot tell a working table from a broken one, because of a rule two
+    /// screens up: a finger that does not move is reported anyway, at the place it rests. So if
+    /// the manipulation were swallowing every movement, the collector would see a finger go down
+    /// and then hold still - and would go on reporting it ten times a second, at one point each.
+    /// The traffic would not merely exist, it would look healthy.
+    /// </para>
+    /// <para>
+    /// <b>What separates the two is points per report.</b> A moving finger contributes as many as
+    /// the digitizer delivers in a tick - several, capped at 32; a resting or a swallowed one
+    /// contributes exactly one. A ratio near one means no movement was ever collected, and that is
+    /// the only reading at the table that can say so: what the trails SHOW needs the thumbnail of
+    /// M4, so until then this line is the whole evidence (checks/M3.md, T1).
+    /// </para>
+    /// </summary>
+    private int _touchReports;
+    private int _touchPoints;
+
     private readonly DateTimeOffset _up = DateTimeOffset.UtcNow;
 
     /// <summary>Screens whose pictures are being fetched right now - one run each, no more.</summary>
@@ -1694,7 +1715,9 @@ public sealed partial class App : Application, IDisposable
                     storeMb,
                     files,
                     _gestures,
-                    _connections);
+                    _connections,
+                    _touchReports,
+                    _touchPoints);
             }
         }
         catch (OperationCanceledException)
@@ -1764,11 +1787,21 @@ public sealed partial class App : Application, IDisposable
                 // the 200 ms rule anyway, without anybody being able to see why.
                 var fingers = log.Take(screen);
 
-                if (fingers is not null && _reportingTouches)
+                if (fingers is null || !_reportingTouches)
                 {
-                    // Null between connections, which is the whole gate: there is nowhere to send.
-                    _ = _outbox?.TrySend(fingers);
+                    continue;
                 }
+
+                // Null between connections, which is the whole gate: there is nowhere to send.
+                if (_outbox?.TrySend(fingers) is not true)
+                {
+                    continue;
+                }
+
+                // Counted where it actually went out, not where it was collected: a report the
+                // queue refused says nothing about the table (3029, and T1 reads the ratio).
+                _touchReports++;
+                _touchPoints += fingers.Touches.Sum(trail => trail.Points.Count);
             }
         }
     }
