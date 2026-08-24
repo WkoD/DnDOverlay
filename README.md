@@ -22,10 +22,11 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
         └──────────────┘ └──────────────┘
 ```
 
-> **Status: under construction.** Pictures already go from the DM's machine onto the screens:
-> displays find the control by themselves and are paired by hand, the campaign holds a stock,
-> and all four ways in work. Still missing are the gestures at the table, the DM's own surface,
-> and the installers, which are empty — so **nothing is installable yet**; it runs from a build.
+> **Status: under construction.** Pictures already go from the DM's machine onto the screens
+> and the players can move them: displays find the control by themselves and are paired by
+> hand, the campaign holds a stock, all four ways in work, and the table takes gestures. Still
+> missing are the DM's own surface and the installers, which are empty — so **nothing is
+> installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
 ## Documentation
@@ -84,6 +85,38 @@ The pixels are **not** touched in either case: same bytes in, same bytes out, mi
 metadata. A 562-byte PNG with a GPS tag leaves as 131 bytes with none.
 
 ## On the table
+
+The players move the pictures themselves, and they cannot break anything doing it: every grip
+has a way back, nothing can be made too small to grab, and nothing slides off the screen.
+Several people at once, without being told how.
+
+| Grip | Finger | Mouse |
+|---|---|---|
+| Move | drag | drag with the left button |
+| Scale | pinch | wheel, about the pointer |
+| Rotate | turn with two fingers | hold Ctrl and drag, about the centre |
+| Bring to the front | touch it | click it |
+| Turn it to face you | double tap | — |
+| Park it at the edge | flick towards the park edge | — |
+| Fetch it back | touch the parked picture | — |
+
+The **right mouse button stays unassigned on purpose**: a grip that exists on only one of the
+two surfaces is worse than a grip missing from both, and Ctrl+drag sits under the same hand
+anyway. Parking has no mouse equivalent yet — an angle takes two hands, and a flick takes one.
+
+Four things make the gestures survive an evening rather than merely work:
+
+- **Turning has a dead zone and snaps.** Two fingers always turn a picture a little; without a
+  threshold everything on the table stands crooked after three hours. Small angles are
+  discarded, and an angle close to straight is pulled straight **when you let go** — never
+  under your finger, which feels broken.
+- **A picture may hang over the edge, but not disappear.** What stays reachable is measured
+  against the picture as it is really drawn, corners and all, so a picture turned 37° in a
+  corner is as grabbable as one lying straight.
+- **A flick parks, a slow push does not.** Otherwise you park by accident all evening.
+  A parked picture keeps its size and its angle, so aligning it was not wasted.
+- **A picture you are holding stays under your hand**, whatever else arrives on the screen
+  meanwhile.
 
 Each screen carries its own parameters, and what you set at the table is never rearranged
 behind your back.

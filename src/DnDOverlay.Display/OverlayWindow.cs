@@ -1350,6 +1350,14 @@ internal sealed class OverlayWindow : Window
 
         _backdrop ??= Raise();
 
+        // It answers the hit test but gets no gesture handlers, and both halves are the point
+        // (Part 6): the background takes no gestures, AND touches on it are swallowed rather than
+        // handed down - whatever runs underneath is completely covered by it, so a finger there
+        // would be poking blindly into a map nobody can see. Raise() alone leaves the place at
+        // IsHitTestVisible = false, which is what an item needs until Handle() turns it on; a
+        // background never goes through Handle(), so it says so here.
+        _backdrop.Element.IsHitTestVisible = true;
+
         // Beneath everything, whatever Z order the items carry. The background is a layer and not
         // an item, so it does not compete for depth with them.
         Panel.SetZIndex(_backdrop.Element, int.MinValue);
