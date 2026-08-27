@@ -274,12 +274,13 @@ public sealed class ParkingTests
     }
 
     /// <summary>
-    /// <b>The peek sits under the hand</b>, wherever along the fan that hand is - so a card taken
-    /// straight out and one found by running along come away in the same grip (hand-run of M3,
-    /// A11). At its own place in the fan the offset depended on how far the hand had wandered.
+    /// <b>The peek is placed where it is asked for and nowhere else.</b> The display asks with the
+    /// point the hand LANDED on and asks only when the card changes, so the preview holds still
+    /// while the hand runs along the fan - a preview that slides along under the finger makes the
+    /// eye chase it (hand-run of M3).
     /// </summary>
     [Fact]
-    public void The_peek_follows_the_hand_along_the_fan()
+    public void The_peek_is_placed_where_it_is_asked_for()
     {
         var screen = Build.Screen();
         var card = Parking.Fan(Parked(5, screen))[2];
@@ -290,6 +291,24 @@ public sealed class ParkingTests
         Assert.Equal(0.3, high.Y, precision: 9);
         Assert.Equal(0.7, low.Y, precision: 9);
         Assert.Equal(high.X, low.X, precision: 9);
+    }
+
+    /// <summary>
+    /// <b>The band is the one boundary the fan has</b>, and both halves of the gesture read it: a
+    /// hand inside it is choosing a card, a hand outside it has taken one. Measuring the pull from
+    /// where the hand landed instead - and demanding it be longer than the run along the fan - meant
+    /// that after a good scroll it took half a screen to get a card out (hand-run of M3).
+    /// </summary>
+    [Fact]
+    public void Leaving_the_band_is_all_it_takes_however_far_the_hand_ran()
+    {
+        var screen = Build.Screen();
+        var band = screen.MinVisibleNormalisedX;
+
+        // Landed at the top of the fan, ran the whole way down it, then in by a hair.
+        Assert.True(Parking.OnTheFan(new Point(1 - (band / 2), 0.15), screen));
+        Assert.True(Parking.OnTheFan(new Point(1 - (band / 2), 0.85), screen));
+        Assert.False(Parking.OnTheFan(new Point(1 - band - 0.001, 0.85), screen));
     }
 
     /// <summary>

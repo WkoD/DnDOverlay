@@ -260,11 +260,11 @@ public static class Parking
     /// takes it onto the table, and the hand never has to go back.
     /// </para>
     /// <para>
-    /// <b>Under the hand rather than at the card's own place in the fan</b>, and that came from the
-    /// table (hand-run of M3, A11). At its own place the offset between hand and picture depended
-    /// on how far along the fan the hand had wandered, so a card taken straight out came away in
-    /// one grip and a card found by running along came away held somewhere unpredictable. Centred
-    /// under the hand it is the same grip every time.
+    /// <b>Where the hand LANDED, and it stays there while the hand runs on</b> (hand-run of M3).
+    /// Two wrong places came before it: the card's own slot in the fan, which made the offset
+    /// between hand and picture depend on how far somebody had wandered; and under the hand
+    /// itself, which dragged the shown card along the fan and made the eye chase it. It is a
+    /// PREVIEW - the one thing it has to do is hold still long enough to be looked at.
     /// </para>
     /// </summary>
     public static Point Peek(SceneItem item, Point at, ScreenContext screen)
@@ -299,53 +299,6 @@ public static class Parking
         return scene.Items.FirstOrDefault(item => item.ItemId == card && item.Parked) is { } found
             ? Peek(found, at, screen)
             : null;
-    }
-
-    /// <summary>
-    /// How far a hand has moved AWAY from the park edge and how far ALONG it, both in DIP.
-    /// <para>
-    /// The two together are what tells the two halves of the fan gesture apart: running along the
-    /// fan chooses a card, and pulling away from it takes that card onto the table. Both ends need
-    /// this arithmetic - the table now and the thumbnail in M4 - so it lives here.
-    /// </para>
-    /// </summary>
-    public static (double Away, double Along) Pull(ScreenContext screen, Point from, Point to)
-    {
-        ArgumentNullException.ThrowIfNull(screen);
-
-        var dx = (to.X - from.X) * screen.WidthInDip;
-        var dy = (to.Y - from.Y) * screen.HeightInDip;
-
-        return screen.ParkEdge switch
-        {
-            ParkEdge.Left => (dx, dy),
-            ParkEdge.Right => (-dx, dy),
-            ParkEdge.Top => (dy, dx),
-            _ => (-dy, dx),
-        };
-    }
-
-    /// <summary>
-    /// How far away from the edge a hand has to move before the peeked card comes out of the fan,
-    /// in DIP.
-    /// <para>
-    /// <b>Small on purpose, because the direction carries the decision and not the distance.</b>
-    /// Running along the fan and pulling away from it are perpendicular; what this number guards
-    /// against is a wobble, not a mistake. A proposal until the closing run of M3 has had fingers
-    /// on it (Guide G6).
-    /// </para>
-    /// </summary>
-    public const double PullOutDip = 24;
-
-    /// <summary>
-    /// Whether this movement means "take this card out" rather than "show me the next one". Both
-    /// halves are needed: far enough away from the edge, and more away than along.
-    /// </summary>
-    public static bool PullsOut(ScreenContext screen, Point from, Point to)
-    {
-        var (away, along) = Pull(screen, from, to);
-
-        return away > PullOutDip && away > Math.Abs(along);
     }
 
     /// <summary>

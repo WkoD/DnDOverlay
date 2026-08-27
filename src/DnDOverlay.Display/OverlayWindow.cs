@@ -798,27 +798,30 @@ internal sealed class OverlayWindow : Window
             return false;
         }
 
-        if (!Parking.PullsOut(context, fanning.From, now))
+        if (Parking.OnTheFan(now, context))
         {
             if (Parking.Pick(_scene, context, now) is { } next && next != fanning.Card)
             {
                 Unpeek(fanning.Card, context);
                 fanning.Card = next;
-            }
 
-            // Placed on every step, not only when the card changes: the peek rides UNDER the hand,
-            // so that a card taken straight out and one found by running along come away in the
-            // same grip (hand-run of M3, A11).
-            Peek(fanning.Card, now, context);
+                // At the place the hand LANDED, and only when the card changes - a preview that
+                // slid along under the finger made the eye chase it (hand-run of M3).
+                Peek(fanning.Card, fanning.From, context);
+            }
 
             return true;
         }
 
-        // Out of the fan. The picture keeps the place the peek gave it, so the hand carries on from
-        // where it already had hold of it and the drag is one movement (Part 6). Everything after
-        // this step is an ordinary push.
+        // The hand has left the band, so the card comes out. <b>That boundary and no other</b>: it
+        // is the same line that decides parking, so the fan owns exactly the band and the table
+        // owns the rest. Measured from the band rather than from where the hand landed, which was
+        // the fault - the old test wanted the pull to be longer than the run along the fan, so
+        // after a good scroll it took half a screen to get a card out (hand-run of M3).
+        //
+        // The picture keeps the place the peek gave it, so nothing jumps and the hand carries on.
         if (_scene.Items.FirstOrDefault(one => one.ItemId == fanning.Card) is not { } card
-            || Parking.Peek(_scene, context, fanning.Card, fanning.Shown) is not { } peek)
+            || Parking.Peek(_scene, context, fanning.Card, fanning.From) is not { } peek)
         {
             return false;
         }
@@ -845,13 +848,6 @@ internal sealed class OverlayWindow : Window
             || Parking.Peek(_scene, context, card, hand) is not { } at)
         {
             return;
-        }
-
-        if (_fan is { } fanning)
-        {
-            // Remembered, because the pull-out has to start from exactly where the peek stood -
-            // that is what makes the drag one movement rather than a jump.
-            fanning.Shown = hand;
         }
 
         Place(mount, item with { CenterX = at.X, CenterY = at.Y }, context);
@@ -2016,9 +2012,6 @@ internal sealed class OverlayWindow : Window
 
         /// <summary>Where the hand landed, in normalised coordinates. The pull is measured from it.</summary>
         internal CorePoint From { get; } = from;
-
-        /// <summary>Where the peek last stood, so the pull-out starts from exactly there.</summary>
-        internal CorePoint Shown { get; set; } = from;
 
         /// <summary>Whether the card has come out; from then on this is an ordinary push.</summary>
         internal bool Taken { get; set; }
