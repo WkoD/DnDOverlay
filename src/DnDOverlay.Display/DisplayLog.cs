@@ -441,4 +441,27 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Touch points from this table are {Reporting}.")]
     internal static partial void TouchReporting(ILogger logger, string reporting);
+
+    /// <summary>
+    /// What a release towards the park edge actually measured. Written whenever a hand lets a
+    /// picture go while it was heading for that edge, whether it parked or not.
+    /// <para>
+    /// <b>Three numbers instead of three guesses.</b> Both ways into the fan rest on thresholds
+    /// that were proposed rather than measured - how fast a flick is, how far it may travel, how
+    /// hard a push has to be - and the first hand-run said all three were wrong without being able
+    /// to say by how much. A line at every release turns the next run into arithmetic (Guide G6).
+    /// </para>
+    /// <para>
+    /// Debug, because it is one line per gesture and a table produces hundreds an evening. It costs
+    /// nothing at the level a display normally runs at, and it is there the moment somebody raises
+    /// the level to look.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3032,
+        Level = LogLevel.Debug,
+        Message = "Let go towards the park edge at {TowardsDip} DIP/s after {TravelDip} DIP, "
+                  + "{ShowingPercent} % of the picture still on the table: {Outcome}.")]
+    internal static partial void ParkGesture(
+        ILogger logger, long towardsDip, long travelDip, long showingPercent, string outcome);
 }

@@ -742,6 +742,7 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3029 | `SessionPulse` | Information |
 | 3030 | `GestureCorrected` | Warning |
 | 3031 | `TouchReporting` | Information |
+| 3032 | `ParkGesture` | Debug |
 
 **3029 gained two numbers in M3c**, and the second is the one that says anything: touch
 reports sent, and the points inside them. A count of reports cannot tell a working table
@@ -753,7 +754,14 @@ capped at 32; a resting or a swallowed one contributes exactly one. Until the th
 M4 there is nothing to look at, so this ratio is the whole evidence that the trails are
 collected at all.
 
-**Next free: 3032.**
+**Next free: 3033.**
+
+**3032 measures the two ways into the fan rather than describing them.** Both rest on numbers that
+were proposed and not measured - how fast a flick is, how far it may travel, how hard a push has to
+be - and the first hand-run could say all three were wrong without being able to say by how much.
+A line at every release towards the park edge turns the next run into arithmetic. Debug, because a
+table produces hundreds of gestures an evening: it costs nothing at the level a display normally
+runs at, and it is there the moment somebody raises the level to look.
 
 **3031 exists because nothing else about the switch can be seen.** At the table it changes
 nothing at all — that is the promise (Part 4) — so without a line "the DM sees no fingers" would
@@ -764,7 +772,7 @@ the sentence is whether a screen stays lit, and that is what decides the range. 
 are worth the same line, and the second one more than the first: from the room, a device that was
 *told* to let go looks exactly like one that failed to hold on.
 
-Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 and 3023–3031 by the
+Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 and 3023–3032 by the
 **display** — the range
 follows the subject of the sentence, never the assembly it is written in. Only one of the three
 inventory findings is a warning, and that is the point of telling them apart: a missing screen

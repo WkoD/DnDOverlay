@@ -117,7 +117,7 @@ public static class Parking
             return scene;
         }
 
-        var pitch = Pitch(fan.Count, screen);
+        var pitch = Pitch(fan, screen);
 
         return scene with
         {
@@ -149,16 +149,44 @@ public static class Parking
     /// them - which is the whole reason the fan can be TAKEN HOLD OF: once the slices are thinner
     /// than a finger, picking one is the fan's job and not the eye's.
     /// </para>
+    /// <para>
+    /// <b>What is left is measured against the LAST CARD'S BODY, not against its slice</b>, and
+    /// that correction came from the table (hand-run of M3, A12). Stepping the leading edges over
+    /// the whole bar put the last card's body past the end of the screen: thirty pictures ran off
+    /// the bottom, and the part hanging out could be seen but not reached, because picking stops
+    /// where the bar does. The fan has to END at the bar's end, so the room for the steps is the
+    /// bar minus one card.
+    /// </para>
     /// </summary>
-    public static double Pitch(int count, ScreenContext screen)
+    public static double Pitch(IReadOnlyList<SceneItem> fan, ScreenContext screen)
     {
+        ArgumentNullException.ThrowIfNull(fan);
         ArgumentNullException.ThrowIfNull(screen);
 
         var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
         var slice = Manipulation.Visible(screen, alongX);
         var room = BarEnd - BarStart;
 
-        return count <= 1 ? slice : Math.Min(slice, room / count);
+        if (fan.Count <= 1)
+        {
+            return slice;
+        }
+
+        var body = fan.Max(item => Extent(Stow(item, screen), screen));
+        var left = room - body;
+
+        // A card longer than the whole bar cannot be made to fit, and pretending otherwise would
+        // give a pitch of zero. Then the leading edges take the bar and the overhang is accepted -
+        // it is the picture that is too big, not the fan that is wrong.
+        return left <= 0 ? room / fan.Count : Math.Min(slice, left / (fan.Count - 1));
+    }
+
+    /// <summary>How long a card is along the fan, in the normalised unit of that axis.</summary>
+    private static double Extent(SceneItem stowed, ScreenContext screen)
+    {
+        var rect = Layout.ItemToRect(stowed, screen);
+
+        return screen.ParkEdge is ParkEdge.Left or ParkEdge.Right ? rect.Height : rect.Width;
     }
 
     /// <summary>
@@ -192,7 +220,7 @@ public static class Parking
             return null;
         }
 
-        var pitch = Pitch(fan.Count, screen);
+        var pitch = Pitch(fan, screen);
         var index = pitch <= 0 ? 0 : (int)Math.Floor((along - BarStart) / pitch);
 
         return fan[Math.Clamp(index, 0, fan.Count - 1)].ItemId;
@@ -200,16 +228,23 @@ public static class Parking
 
     /// <summary>
     /// Where a picture is drawn while it is being looked at: pulled clear of the fan towards the
-    /// middle of the screen until the whole of it is on the glass, and still in its own place along
-    /// the fan.
+    /// middle of the screen until the whole of it is on the glass, and <b>centred under the hand</b>
+    /// along the fan.
     /// <para>
     /// <b>Whole, not half.</b> The point of the peek is that somebody can tell whether this is the
     /// picture they meant, and half a picture answers that question only sometimes. It stays
     /// against the park edge, so the movement that follows - away from the edge - is the one that
     /// takes it onto the table, and the hand never has to go back.
     /// </para>
+    /// <para>
+    /// <b>Under the hand rather than at the card's own place in the fan</b>, and that came from the
+    /// table (hand-run of M3, A11). At its own place the offset between hand and picture depended
+    /// on how far along the fan the hand had wandered, so a card taken straight out came away in
+    /// one grip and a card found by running along came away held somewhere unpredictable. Centred
+    /// under the hand it is the same grip every time.
+    /// </para>
     /// </summary>
-    public static Point Peek(SceneItem item, int index, int count, ScreenContext screen)
+    public static Point Peek(SceneItem item, Point at, ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
@@ -217,36 +252,30 @@ public static class Parking
         var stowed = Stow(item, screen);
         var rect = Layout.ItemToRect(stowed, screen);
         var alongY = screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
-        var extent = alongY ? rect.Width : rect.Height;
 
-        var along = Centre(stowed, index, Pitch(count, screen), screen);
-        var across = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
-            ? extent / 2
-            : 1 - (extent / 2);
+        var across = alongY ? rect.Width : rect.Height;
+        var length = alongY ? rect.Height : rect.Width;
 
-        return alongY ? new Point(across, along.Y) : new Point(along.X, across);
+        // Held inside the screen along the fan, or reaching for the last card would put half the
+        // picture past the corner - the one place a parked picture may never be.
+        var hand = Math.Clamp(alongY ? at.Y : at.X, length / 2, 1 - (length / 2));
+
+        var out_ = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
+            ? across / 2
+            : 1 - (across / 2);
+
+        return alongY ? new Point(out_, hand) : new Point(hand, out_);
     }
 
-    /// <summary>
-    /// Where a picture is peeked at, resolved from the scene. The overload every caller should
-    /// reach for; the indexed one exists because the layout needs it too.
-    /// </summary>
-    public static Point? Peek(SceneState scene, ScreenContext screen, ItemId card)
+    /// <summary>Where a picture is peeked at, resolved from the scene.</summary>
+    public static Point? Peek(SceneState scene, ScreenContext screen, ItemId card, Point at)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var fan = Fan(scene);
-
-        for (var i = 0; i < fan.Count; i++)
-        {
-            if (fan[i].ItemId == card)
-            {
-                return Peek(fan[i], i, fan.Count, screen);
-            }
-        }
-
-        return null;
+        return scene.Items.FirstOrDefault(item => item.ItemId == card && item.Parked) is { } found
+            ? Peek(found, at, screen)
+            : null;
     }
 
     /// <summary>

@@ -113,9 +113,11 @@ Five things make the gestures survive an evening rather than merely work:
 - **A picture may hang over the edge, but not disappear.** What stays reachable is measured
   against the picture as it is really drawn, corners and all, so a picture turned 37° in a
   corner is as grabbable as one lying straight.
-- **Two ways into the fan.** A flick towards the park edge from anywhere on the table, or
-  pushing the picture out past that edge — the second is slower, deliberate, and the only one a
-  mouse has.
+- **Two ways into the fan.** A short quick flick towards the park edge from anywhere on the
+  table, or simply pushing the picture out over that edge until more of it is off the table than
+  on it. The park edge gives way while your hand is on it and holds against everything else, so
+  pushing something away is a thing you can just do; let go too early and it slides back. The
+  second way is the only one a mouse has.
 - **The fan is a fan, and its length is the count.** Parked pictures lie along the park edge at
   the size a picture arrives at, newest at the near end and on top, and the whole fan lies over
   the table so the way back is never covered. Put enough away and the cards close up; that costs
@@ -139,7 +141,7 @@ behind your back.
 | `placement` | `Flow` | where a new picture goes: `Flow` fills free places side by side and wraps, `Cascade` stacks with a growing offset from the centre |
 | `defaultRotationDeg` | `0` | the angle a picture arrives at — for a table people sit around |
 | `parkEdge` | `Right` | which edge a parked picture waits at |
-| `parkPushOutDip` | `96` | how far past that edge a picture must be pushed for letting go to park it; `0` switches the push-out route off |
+| `parkPushOutFraction` | `0.5` | how much of a picture must be over the park edge when you let go for it to be put away; `0` switches the push-out route off |
 
 Every display keeps its own copy of the pictures it has shown, up to **4 GiB** — so moving a
 picture from one screen to another, hiding it and bringing it back, or putting the same map up

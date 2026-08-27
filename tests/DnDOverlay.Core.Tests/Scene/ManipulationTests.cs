@@ -18,11 +18,10 @@ public sealed class ManipulationTests
     private static SceneItem Apply(SceneItem item, ScreenContext screen, params GestureStep[] steps)
     {
         var turning = Turning.Beginning;
-        var push = Push.Beginning;
 
         foreach (var step in steps)
         {
-            (item, turning, push) = Manipulation.Step(item, turning, push, step, screen);
+            (item, turning) = Manipulation.Step(item, turning, step, screen);
         }
 
         return item;
@@ -347,8 +346,8 @@ public sealed class ManipulationTests
         var screen = Build.Screen();
         var atEdge = Manipulation.HoldAtEdge(Build.Item(centerX: 5), screen);
 
-        Assert.True(Manipulation.ShouldPark(atEdge, Manipulation.ParkVelocityDip + 1, 0, screen));
-        Assert.False(Manipulation.ShouldPark(atEdge, 200, 0, screen));
+        Assert.True(Manipulation.ShouldPark(atEdge, Manipulation.ParkVelocityDip + 1, 0, travelDip: 0, screen));
+        Assert.False(Manipulation.ShouldPark(atEdge, 200, 0, travelDip: 0, screen));
     }
 
     [Fact]
@@ -357,7 +356,7 @@ public sealed class ManipulationTests
         var screen = Build.Screen();
         var atEdge = Manipulation.HoldAtEdge(Build.Item(centerX: 5), screen);
 
-        Assert.False(Manipulation.ShouldPark(atEdge, -5000, 0, screen));
+        Assert.False(Manipulation.ShouldPark(atEdge, -5000, 0, travelDip: 0, screen));
     }
 
     /// <summary>
@@ -372,93 +371,170 @@ public sealed class ManipulationTests
         var screen = Build.Screen();
         var middle = Build.Item(centerX: 0.5);
 
-        Assert.True(Manipulation.ShouldPark(middle, Manipulation.ParkVelocityDip + 1, 0, screen));
-        Assert.False(Manipulation.ShouldPark(middle, Manipulation.ParkVelocityDip - 1, 0, screen));
+        Assert.True(Manipulation.ShouldPark(middle, Manipulation.ParkVelocityDip + 1, 0, travelDip: 0, screen));
+        Assert.False(Manipulation.ShouldPark(middle, Manipulation.ParkVelocityDip - 1, 0, travelDip: 0, screen));
     }
 
     /// <summary>
-    /// The second way into the bar: pushed out over the park edge rather than flicked at it. It is
-    /// a PRESSURE and not a distance travelled - what is asked for outwards and refused.
+    /// <b>A flick is speed AND a short way.</b> Without the second half a long fast drag towards the
+    /// park edge parked instead of moving the picture - which is how one hands something across the
+    /// table (hand-run of M3, A2).
     /// </summary>
     [Fact]
-    public void Pushing_a_picture_out_over_the_park_edge_parks_it()
+    public void A_long_fast_drag_is_not_a_flick()
     {
         var screen = Build.Screen();
-        var item = Manipulation.HoldAtEdge(Build.Item(centerX: 5), screen);
-        var push = Push.Beginning;
+        var item = Build.Item(centerX: 0.5);
+        var fast = Manipulation.ParkVelocityDip * 2;
 
-        Assert.False(Manipulation.PushedIntoTheBar(push, screen));
-
-        // A tenth of the screen further out, in ten steps, all of them refused by the clamp.
-        for (var i = 0; i < 10; i++)
-        {
-            (item, _, push) = Manipulation.Step(
-                item,
-                Turning.Beginning,
-                push,
-                new GestureStep(0.01, 0, 1, 0, new Point(0.5, 0.5)),
-                screen);
-        }
-
-        Assert.True(push.Dip >= screen.ParkPushOutDip);
-        Assert.True(Manipulation.PushedIntoTheBar(push, screen));
+        Assert.True(Manipulation.ShouldPark(item, fast, 0, Manipulation.ParkFlickDip - 1, screen));
+        Assert.False(Manipulation.ShouldPark(item, fast, 0, Manipulation.ParkFlickDip + 1, screen));
     }
 
     /// <summary>
-    /// Coming back releases the pressure, or a picture resting against the edge would park itself
-    /// after an evening of being nudged about.
+    /// <b>The park edge yields to a hand, and that is what makes pushing out reachable at all.</b>
+    /// Measured after the hand-run of M3 (A3): the first build asked how far the fingers pushed
+    /// BEYOND the clamp, and a finger cannot go past the bezel - a picture 576 DIP wide, held in
+    /// the middle, would have needed the hand 192 DIP off the glass before the clamp so much as
+    /// began to refuse.
     /// </summary>
     [Fact]
-    public void Coming_back_from_the_edge_takes_the_pressure_off_again()
+    public void A_hand_may_push_a_picture_off_the_park_edge_and_a_glide_may_not()
     {
         var screen = Build.Screen();
-        var item = Manipulation.HoldAtEdge(Build.Item(centerX: 5), screen);
-        var push = Push.Beginning;
+        SceneItem item = Build.Item(centerX: 0.5);
+        var turning = Turning.Beginning;
+        SceneItem glided = Build.Item(centerX: 0.5);
 
-        for (var i = 0; i < 10; i++)
+        for (var i = 0; i < 40; i++)
         {
-            (item, _, push) = Manipulation.Step(
-                item, Turning.Beginning, push, new GestureStep(0.01, 0, 1, 0, new Point(0.5, 0.5)), screen);
+            var push = new GestureStep(0.05, 0, 1, 0, new Point(0.5, 0.5));
+
+            (item, turning) = Manipulation.Step(item, turning, push, screen, handOn: true);
+            (glided, _) = Manipulation.Step(glided, Turning.Beginning, push, screen);
         }
 
-        Assert.True(Manipulation.PushedIntoTheBar(push, screen));
-
-        for (var i = 0; i < 10; i++)
-        {
-            (item, _, push) = Manipulation.Step(
-                item, Turning.Beginning, push, new GestureStep(-0.01, 0, 1, 0, new Point(0.5, 0.5)), screen);
-        }
-
-        Assert.Equal(0, push.Dip, 6);
-        Assert.False(Manipulation.PushedIntoTheBar(push, screen));
+        Assert.True(Manipulation.ShowingAtParkEdge(item, screen) <= 0, "the hand was refused");
+        Assert.True(Manipulation.ShowingAtParkEdge(glided, screen) > 0, "a glide was let off the table");
+        Assert.Equal(glided, Manipulation.HoldAtEdge(glided, screen));
     }
 
     /// <summary>
-    /// Only across the park edge. There is one bar per screen, and pushed out on the left to
-    /// reappear on the right would bewilder (Part 6).
+    /// More of it over the edge than on the table, and it goes into the fan. The threshold is a
+    /// fraction of the picture, so it means the same thing whatever size the picture is.
     /// </summary>
     [Fact]
-    public void Pushing_out_over_another_edge_builds_no_pressure()
+    public void More_than_half_over_the_edge_parks_it()
     {
         var screen = Build.Screen();
-        var item = Manipulation.HoldAtEdge(Build.Item(centerY: 5), screen);
-        var push = Push.Beginning;
+        SceneItem item = Build.Item(centerX: 0.5);
+        var turning = Turning.Beginning;
 
-        for (var i = 0; i < 20; i++)
+        Assert.False(Manipulation.PushedIntoTheBar(item, screen));
+
+        var crossed = 0;
+
+        for (var i = 0; i < 40 && crossed == 0; i++)
         {
-            (item, _, push) = Manipulation.Step(
-                item, Turning.Beginning, push, new GestureStep(0, 0.01, 1, 0, new Point(0.5, 0.5)), screen);
+            (item, turning) = Manipulation.Step(
+                item, turning, new GestureStep(0.02, 0, 1, 0, new Point(0.5, 0.5)), screen, handOn: true);
+
+            if (Manipulation.PushedIntoTheBar(item, screen))
+            {
+                crossed = i;
+            }
         }
 
-        Assert.Equal(0, push.Dip, 6);
-        Assert.False(Manipulation.PushedIntoTheBar(push, screen));
+        Assert.True(crossed > 0, "pushing a picture off the park edge never reached the fan");
+        Assert.True(
+            Manipulation.ShowingAtParkEdge(item, screen) < 0.5,
+            "it parked while most of the picture was still on the table");
+    }
+
+    /// <summary>
+    /// Only the park edge yields, and only outwards. The way back is clamped as always, and so are
+    /// the other three edges - nothing can be lost, only put away.
+    /// </summary>
+    [Theory]
+    [InlineData(ParkEdge.Left)]
+    [InlineData(ParkEdge.Top)]
+    [InlineData(ParkEdge.Bottom)]
+    public void Only_the_park_edge_lets_go(ParkEdge edge)
+    {
+        var screen = Build.Screen() with { ParkEdge = edge };
+        SceneItem item = Build.Item(centerX: 0.5, centerY: 0.5);
+        var turning = Turning.Beginning;
+
+        // Pushed hard towards the RIGHT edge, which is not the park edge on any of these screens.
+        for (var i = 0; i < 40; i++)
+        {
+            (item, turning) = Manipulation.Step(
+                item, turning, new GestureStep(0.05, 0, 1, 0, new Point(0.5, 0.5)), screen, handOn: true);
+        }
+
+        Assert.Equal(item, Manipulation.HoldAtEdge(item, screen));
+        Assert.False(Manipulation.PushedIntoTheBar(item, screen));
+    }
+
+    /// <summary>
+    /// Letting go short of the threshold snaps the picture back to the clamp.
+    /// <para>
+    /// Shown on a SMALL picture, and that is not an arbitrary choice: it is the only shape where
+    /// the two rules can disagree. A large picture crosses "more than half over the edge" long
+    /// before the clamp would refuse it anything, so there is no gap to snap back over. One
+    /// narrower than twice the graspable remainder has the gap - the clamp wants more of it on the
+    /// glass than the parking rule does - and that is where letting go must put it back.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Letting_go_short_of_the_threshold_snaps_back()
+    {
+        var screen = Build.Screen();
+        SceneItem item = Build.Item(centerX: 0.5, scale: 0.1);
+        var turning = Turning.Beginning;
+
+        while (Manipulation.ShowingAtParkEdge(item, screen) > 0.62)
+        {
+            (item, turning) = Manipulation.Step(
+                item, turning, new GestureStep(0.005, 0, 1, 0, new Point(0.5, 0.5)), screen, handOn: true);
+        }
+
+        Assert.False(Manipulation.PushedIntoTheBar(item, screen));
+
+        var settled = Manipulation.Settle(item, screen);
+
+        Assert.True(settled.CenterX < item.CenterX, "the picture stayed hanging over the edge");
+        Assert.Equal(settled, Manipulation.HoldAtEdge(settled, screen));
+    }
+
+    /// <summary>
+    /// And a small picture can still be put away at all, which the DIP threshold could not manage:
+    /// the clamp wants two thirds of it on the glass, so no amount of pushing would ever have got
+    /// it past a rule written as "so many DIP beyond the clamp".
+    /// </summary>
+    [Fact]
+    public void A_small_picture_can_be_pushed_into_the_fan_too()
+    {
+        var screen = Build.Screen();
+        SceneItem item = Build.Item(centerX: 0.5, scale: 0.1);
+        var turning = Turning.Beginning;
+
+        for (var i = 0; i < 60 && !Manipulation.PushedIntoTheBar(item, screen); i++)
+        {
+            (item, turning) = Manipulation.Step(
+                item, turning, new GestureStep(0.02, 0, 1, 0, new Point(0.5, 0.5)), screen, handOn: true);
+        }
+
+        Assert.True(Manipulation.PushedIntoTheBar(item, screen));
     }
 
     /// <summary>Nought switches the whole route off, the same shape the other switches use.</summary>
     [Fact]
-    public void A_push_out_distance_of_nought_switches_the_route_off()
+    public void A_push_out_fraction_of_nought_switches_the_route_off()
     {
-        Assert.False(Manipulation.PushedIntoTheBar(new Push(10000), Build.Screen() with { ParkPushOutDip = 0 }));
+        var screen = Build.Screen() with { ParkPushOutFraction = 0 };
+
+        Assert.False(Manipulation.PushedIntoTheBar(Build.Item(centerX: 3), screen));
     }
 
     [Fact]
@@ -467,8 +543,8 @@ public sealed class ManipulationTests
         var screen = Build.Screen() with { ParkEdge = ParkEdge.Bottom };
         var atBottom = Manipulation.HoldAtEdge(Build.Item(centerY: 5), screen);
 
-        Assert.True(Manipulation.ShouldPark(atBottom, 0, 5000, screen));
-        Assert.False(Manipulation.ShouldPark(atBottom, 5000, 0, screen));
+        Assert.True(Manipulation.ShouldPark(atBottom, 0, 5000, travelDip: 0, screen));
+        Assert.False(Manipulation.ShouldPark(atBottom, 5000, 0, travelDip: 0, screen));
     }
 
     /// <summary>

@@ -258,6 +258,9 @@
   <data name="E3031_TouchReporting" xml:space="preserve">
     <value>Touch points from this table are {Reporting}.</value>
   </data>
+  <data name="E3032_ParkGesture" xml:space="preserve">
+    <value>Let go towards the park edge at {TowardsDip} DIP/s after {TravelDip} DIP, {ShowingPercent} % of the picture still on the table: {Outcome}.</value>
+  </data>
   <data name="E3030_GestureCorrected" xml:space="preserve">
     <value>Gesture on {Name} came back {DriftDip} DIP away after {Milliseconds} ms: let go at {MineX},{MineY} scale {MineScale}, hub says {HubX},{HubY} scale {HubScale}.</value>
   </data>

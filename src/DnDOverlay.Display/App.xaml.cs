@@ -690,6 +690,9 @@ public sealed partial class App : Application, IDisposable
         // arrival happens to correct it.
         window.SurfaceChanged += () => Draw(new ScreenRef(_device, screen));
 
+        window.ParkMeasured += (towards, travel, push, outcome) =>
+            DisplayLog.ParkGesture(_logger, towards, travel, push, outcome);
+
         window.Surveyed += (widthDip, heightDip, monitor) =>
         {
             var wide = (int)Math.Round(widthDip);

@@ -404,6 +404,13 @@ internal sealed class OverlayWindow : Window
     internal event Action? Settled;
 
     /// <summary>
+    /// What a release towards the park edge measured: speed, distance, pressure, outcome. Reported
+    /// outwards rather than written here, like every other number this window produces - the window
+    /// draws, the application logs.
+    /// </summary>
+    internal event Action<long, long, long, string>? ParkMeasured;
+
+    /// <summary>
     /// A player swiped a picture into the slot bar, or took one back out by touching it. Where it
     /// then lies is not reported: that follows from the list of parked pictures and this screen's
     /// park edge, and the hub works it out with the same function this window would have used.
@@ -774,7 +781,7 @@ internal sealed class OverlayWindow : Window
         }
 
         _fan = new Fanning(card, at);
-        Peek(card, context);
+        Peek(card, at, context);
 
         return true;
     }
@@ -797,8 +804,12 @@ internal sealed class OverlayWindow : Window
             {
                 Unpeek(fanning.Card, context);
                 fanning.Card = next;
-                Peek(next, context);
             }
+
+            // Placed on every step, not only when the card changes: the peek rides UNDER the hand,
+            // so that a card taken straight out and one found by running along come away in the
+            // same grip (hand-run of M3, A11).
+            Peek(fanning.Card, now, context);
 
             return true;
         }
@@ -807,7 +818,7 @@ internal sealed class OverlayWindow : Window
         // where it already had hold of it and the drag is one movement (Part 6). Everything after
         // this step is an ordinary push.
         if (_scene.Items.FirstOrDefault(one => one.ItemId == fanning.Card) is not { } card
-            || Parking.Peek(_scene, context, fanning.Card) is not { } peek)
+            || Parking.Peek(_scene, context, fanning.Card, fanning.Shown) is not { } peek)
         {
             return false;
         }
@@ -826,14 +837,21 @@ internal sealed class OverlayWindow : Window
         return false;
     }
 
-    /// <summary>Draws one card clear of the fan, whole, so it can be told apart from its neighbours.</summary>
-    private void Peek(ItemId card, ScreenContext context)
+    /// <summary>Draws one card clear of the fan, whole and under the hand.</summary>
+    private void Peek(ItemId card, CorePoint hand, ScreenContext context)
     {
         if (_scene.Items.FirstOrDefault(one => one.ItemId == card) is not { } item
             || !_mounts.TryGetValue(card, out var mount)
-            || Parking.Peek(_scene, context, card) is not { } at)
+            || Parking.Peek(_scene, context, card, hand) is not { } at)
         {
             return;
+        }
+
+        if (_fan is { } fanning)
+        {
+            // Remembered, because the pull-out has to start from exactly where the peek stood -
+            // that is what makes the drag one movement rather than a jump.
+            fanning.Shown = hand;
         }
 
         Place(mount, item with { CenterX = at.X, CenterY = at.Y }, context);
@@ -946,18 +964,14 @@ internal sealed class OverlayWindow : Window
                 width <= 0 ? 0 : e.ManipulationOrigin.X / width,
                 height <= 0 ? 0 : e.ManipulationOrigin.Y / height));
 
-        var (moved, turning, push) = CoreManipulation.Step(hold.Item, hold.Turning, hold.Push, step, context);
+        // The park edge yields to a hand and not to a glide: pushing a picture out is a thing one
+        // DOES, and a flung picture must still be unable to sail off the table.
+        var (moved, turning) = CoreManipulation.Step(
+            hold.Item, hold.Turning, step, context, handOn: !e.IsInertial);
 
         hold.Item = moved;
         hold.Turning = turning;
         hold.Moved += Math.Abs(delta.Translation.X) + Math.Abs(delta.Translation.Y);
-
-        // Only a hand pushes. A glide runs into the clamp and would otherwise pile up pressure the
-        // fingers never applied - which is exactly the objection the idea was written down with.
-        if (!e.IsInertial)
-        {
-            hold.Push = push;
-        }
 
         Place(mount, moved, context);
         Report(item, grabbed: false, binding: false);
@@ -967,6 +981,42 @@ internal sealed class OverlayWindow : Window
             // At the point the clamp would take over there is nothing left to glide into.
             e.Complete();
         }
+    }
+
+    /// <summary>
+    /// Writes down what a release towards the park edge really measured - speed, distance and the
+    /// pressure against the clamp - whether it parked or not.
+    /// <para>
+    /// Both ways into the fan rest on numbers that were proposed rather than measured, and the
+    /// first hand-run could say they were wrong without being able to say by how much. This is
+    /// what turns the next run into arithmetic (Guide G6).
+    /// </para>
+    /// </summary>
+    private void Measured(Hold hold)
+    {
+        if (_context is not { } context)
+        {
+            return;
+        }
+
+        var showing = CoreManipulation.ShowingAtParkEdge(hold.Item, context);
+
+        if (hold.Towards <= 0 && showing >= 1)
+        {
+            return;
+        }
+
+        var outcome = hold.Parked
+            ? "parked by the flick"
+            : CoreManipulation.PushedIntoTheBar(hold.Item, context)
+                ? "parked by the push"
+                : "moved";
+
+        ParkMeasured?.Invoke(
+            (long)Math.Round(hold.Towards),
+            (long)Math.Round(hold.Moved),
+            (long)Math.Round(showing * 100),
+            outcome);
     }
 
     /// <summary>
@@ -1020,7 +1070,9 @@ internal sealed class OverlayWindow : Window
         // WPF measures in DIP per millisecond, the rule is written in DIP per second.
         var velocity = e.InitialVelocities.LinearVelocity;
 
-        if (CoreManipulation.ShouldPark(hold.Item, velocity.X * 1000, velocity.Y * 1000, context))
+        hold.Towards = CoreManipulation.Towards(velocity.X * 1000, velocity.Y * 1000, context);
+
+        if (CoreManipulation.ShouldPark(hold.Item, velocity.X * 1000, velocity.Y * 1000, hold.Moved, context))
         {
             // Marked BEFORE the message goes out: everything this gesture does from here on has to
             // stay silent, or the transform that follows undoes the park (see Hold.Parked).
@@ -1086,6 +1138,8 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
+        Measured(hold);
+
         if (hold.Parked)
         {
             // Where a parked picture lies is the bar's business, and the bar is worked out at both
@@ -1105,7 +1159,7 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        if (CoreManipulation.PushedIntoTheBar(hold.Push, context))
+        if (CoreManipulation.PushedIntoTheBar(hold.Item, context))
         {
             // Pushed out over the park edge rather than flicked at it - the slow way to tidy up,
             // and the only one a mouse has (Part 6, decided at the end of M3). Read HERE and not in
@@ -1276,11 +1330,10 @@ internal sealed class OverlayWindow : Window
                 0,
                 Centre(hold.Item));
 
-        var (moved, turning, push) = CoreManipulation.Step(hold.Item, hold.Turning, hold.Push, step, context);
+        var (moved, turning) = CoreManipulation.Step(hold.Item, hold.Turning, step, context, handOn: true);
 
         hold.Item = moved;
         hold.Turning = turning;
-        hold.Push = push;
         hold.Moved += Math.Abs(now.X - _mouseAt.X) + Math.Abs(now.Y - _mouseAt.Y);
         _mouseAt = now;
 
@@ -1315,7 +1368,7 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        if (CoreManipulation.PushedIntoTheBar(hold.Push, context))
+        if (CoreManipulation.PushedIntoTheBar(hold.Item, context))
         {
             // The one route into the bar a mouse has at all: it cannot flick, so without this a
             // display PC without touch could never park anything (Part 6, end of M3).
@@ -1374,10 +1427,9 @@ internal sealed class OverlayWindow : Window
         var (width, height) = Surface(context);
         var at = e.GetPosition(_stage);
 
-        var (moved, turning, push) = CoreManipulation.Step(
+        var (moved, turning) = CoreManipulation.Step(
             hold.Item,
             hold.Turning,
-            hold.Push,
             new GestureStep(
                 0,
                 0,
@@ -1388,7 +1440,6 @@ internal sealed class OverlayWindow : Window
 
         hold.Item = moved;
         hold.Turning = turning;
-        hold.Push = push;
 
         Place(mount, moved, context);
 
@@ -1957,6 +2008,9 @@ internal sealed class OverlayWindow : Window
         /// <summary>Where the hand landed, in normalised coordinates. The pull is measured from it.</summary>
         internal CorePoint From { get; } = from;
 
+        /// <summary>Where the peek last stood, so the pull-out starts from exactly there.</summary>
+        internal CorePoint Shown { get; set; } = from;
+
         /// <summary>Whether the card has come out; from then on this is an ordinary push.</summary>
         internal bool Taken { get; set; }
     }
@@ -1968,14 +2022,14 @@ internal sealed class OverlayWindow : Window
 
         internal Turning Turning { get; set; } = Turning.Beginning;
 
-        /// <summary>
-        /// How hard this gesture is pushing the picture against the park edge. Fed only by a real
-        /// hand, never by a glide, and read once when the hand leaves.
-        /// </summary>
-        internal Push Push { get; set; } = Push.Beginning;
-
         /// <summary>How far the hand has travelled in DIP - a tap is a gesture that barely moved.</summary>
         internal double Moved { get; set; }
+
+        /// <summary>
+        /// How fast the release was heading for the park edge, in DIP per second. Read once when
+        /// inertia is announced, kept only so the measurement line can report it.
+        /// </summary>
+        internal double Towards { get; set; }
 
         /// <summary>
         /// This gesture ended in the slot bar. From then on it reports NOTHING more.

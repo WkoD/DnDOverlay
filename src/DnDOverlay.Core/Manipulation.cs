@@ -22,23 +22,6 @@ public readonly record struct Turning(double Pending, bool Engaged)
 }
 
 /// <summary>
-/// How hard the fingers are currently pushing a picture against the edge clamp, across the park
-/// edge, in DIP. The second thing a gesture has to remember, and it is here beside
-/// <see cref="Turning"/> for the same reason: the thumbnail in M4 must not need one of its own.
-/// <para>
-/// <b>A pressure, not a distance travelled.</b> It grows only while the fingers ask for outward
-/// movement the clamp refuses, and it shrinks again the moment they come back - so a picture that
-/// merely rests against the edge all evening never reaches the threshold, and one deliberately
-/// shoved out does so in a single push.
-/// </para>
-/// </summary>
-public readonly record struct Push(double Dip)
-{
-    /// <summary>A gesture that has not pushed against anything yet.</summary>
-    public static Push Beginning => default;
-}
-
-/// <summary>
 /// One step of a manipulation, in the terms a touch or a mouse delivers it: how far the fingers
 /// moved, how far they spread, how far they turned, and around which point.
 /// </summary>
@@ -91,6 +74,23 @@ public static class Manipulation
     public const double ParkVelocityDip = 1000;
 
     /// <summary>
+    /// How far a gesture may have travelled and still count as a flick, in DIP.
+    /// <para>
+    /// <b>A flick is speed AND a short way</b>, and the second half was missing (hand-run of M3,
+    /// A2). Without it a long fast drag towards the park edge parked instead of merely moving the
+    /// picture - which is the ordinary way to hand something across the table. Measured over the
+    /// whole gesture, back and forth included: what is being asked is "was this a short jerk",
+    /// and a hand that went out and came back was not.
+    /// </para>
+    /// <para>
+    /// A proposal until the run has had fingers on it (Guide G6). The measured travel and speed of
+    /// every release near the park edge go into the log (<c>3032</c>), so the number can be set
+    /// from what a hand really does rather than from what a hand is imagined to do.
+    /// </para>
+    /// </summary>
+    public const double ParkFlickDip = 400;
+
+    /// <summary>
     /// Whether a hand at the table may take hold of this item at all.
     /// <para>
     /// <b>Three things suppress a gesture, and they are asked in ONE place</b> (Part 6): the
@@ -129,12 +129,18 @@ public static class Manipulation
     /// a picture that never rotates, which is a visible bug rather than a silent one.
     /// </para>
     /// </summary>
-    public static (SceneItem Item, Turning Turning, Push Push) Step(
+    /// <param name="handOn">
+    /// Whether a real hand is on the picture right now, as opposed to a glide. <b>The park edge
+    /// yields to a hand and to nothing else</b>: it is the only way pushing a picture out can be
+    /// reached at all, since a finger cannot travel past the bezel, and it is the reason a flung
+    /// picture still cannot sail off the table.
+    /// </param>
+    public static (SceneItem Item, Turning Turning) Step(
         SceneItem item,
         Turning turning,
-        Push push,
         GestureStep step,
-        ScreenContext screen)
+        ScreenContext screen,
+        bool handOn = false)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
@@ -163,44 +169,7 @@ public static class Manipulation
             RotationDeg = Normalise(item.RotationDeg + rotationDeg),
         };
 
-        var held = HoldAtEdge(moved, screen);
-
-        return (held, next, Pushing(push, item, moved, held, screen));
-    }
-
-    /// <summary>
-    /// Updates the pressure against the park edge by one step: what the fingers asked for outwards,
-    /// minus what they were actually granted.
-    /// <para>
-    /// Written as one subtraction rather than a case analysis, and it holds in all four situations
-    /// worth naming. Free movement outwards asks and is granted the same, so nothing builds up.
-    /// Against the clamp nothing is granted, so the whole request builds up. Moving back inwards
-    /// grants a negative amount, which the <c>Math.Max</c> keeps out of the deduction - so the
-    /// pressure falls by exactly what the fingers came back, not by what the corner rule may have
-    /// pulled on top of it. And it never goes below nought, because a picture in the middle of the
-    /// table is not pushing against anything.
-    /// </para>
-    /// </summary>
-    private static Push Pushing(
-        Push push,
-        SceneItem before,
-        SceneItem wanted,
-        SceneItem held,
-        ScreenContext screen)
-    {
-        var (outX, outY) = screen.ParkEdge switch
-        {
-            ParkEdge.Left => (-1d, 0d),
-            ParkEdge.Right => (1d, 0d),
-            ParkEdge.Top => (0d, -1d),
-            _ => (0d, 1d),
-        };
-
-        double Outwards(SceneItem to) =>
-            ((to.CenterX - before.CenterX) * outX * screen.WidthInDip)
-            + ((to.CenterY - before.CenterY) * outY * screen.HeightInDip);
-
-        return new Push(Math.Max(0, push.Dip + Outwards(wanted) - Math.Max(0, Outwards(held))));
+        return (HoldAtEdge(moved, screen, yieldAtParkEdge: handOn), next);
     }
 
     /// <summary>
@@ -329,44 +298,86 @@ public static class Manipulation
     /// </summary>
     /// <param name="velocityXDip">Speed at the moment of release, in DIP per second.</param>
     /// <param name="velocityYDip">Speed at the moment of release, in DIP per second.</param>
+    /// <param name="travelDip">How far the hand went during the whole gesture, in DIP.</param>
     public static bool ShouldPark(
         SceneItem item,
         double velocityXDip,
         double velocityYDip,
+        double travelDip,
         ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var towards = screen.ParkEdge switch
+        return Towards(velocityXDip, velocityYDip, screen) >= ParkVelocityDip
+            && travelDip <= ParkFlickDip;
+    }
+
+    /// <summary>How fast a release was heading for the park edge, in DIP per second.</summary>
+    public static double Towards(double velocityXDip, double velocityYDip, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        return screen.ParkEdge switch
         {
             ParkEdge.Left => -velocityXDip,
             ParkEdge.Right => velocityXDip,
             ParkEdge.Top => -velocityYDip,
             _ => velocityYDip,
         };
-
-        return towards >= ParkVelocityDip;
     }
 
     /// <summary>
-    /// Whether the fingers have pushed this picture far enough past the edge clamp that letting go
-    /// parks it. <c>ParkPushOutDip</c> of <c>0</c> switches the whole route off.
+    /// How much of a picture is still on the glass across the park edge, as a fraction of its own
+    /// extent. <c>1</c> is all of it, <c>0</c> none.
+    /// </summary>
+    public static double ShowingAtParkEdge(SceneItem item, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var hull = Layout.ItemToHullRect(item, screen);
+        var alongX = screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
+
+        var extent = alongX ? hull.Width : hull.Height;
+        var start = alongX ? hull.X : hull.Y;
+
+        if (extent <= 0)
+        {
+            return 1;
+        }
+
+        var showing = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
+            ? start + extent
+            : 1 - start;
+
+        return Math.Clamp(showing / extent, 0, 1);
+    }
+
+    /// <summary>
+    /// Whether letting go here pushes the picture into the fan: more of it is over the park edge
+    /// than on the table. <c>ParkPushOutFraction</c> of <c>0</c> switches the route off.
     /// <para>
-    /// <b>The second way into the bar, and the only one a mouse has</b> (decided at the end of M3).
+    /// <b>The second way into the fan, and the only one a mouse has</b> (decided at the end of M3).
     /// A flick needs a velocity, and a mouse cannot give one that means anything; pushing a picture
     /// out over the edge is the same intention expressed slowly, and it works with either hand.
     /// </para>
     /// <para>
-    /// <b>Only across the park edge.</b> Pushed out on the left and reappearing on the right would
-    /// be bewildering, and there is exactly one bar per screen (Part 6).
+    /// <b>It is the picture's position and not the hand's effort</b>, and that correction cost a
+    /// hand-run (M3, A3 and A7). The first build measured how far the fingers pushed BEYOND what
+    /// the clamp granted - and a finger cannot go past the bezel. Reckoned out: a picture 576 DIP
+    /// wide, held in the middle, would need the hand 192 DIP off the glass before the clamp even
+    /// began to refuse. The picture stopped because the HAND stopped, no pressure ever built, and
+    /// the route was dead in every case anybody would actually try. The wall was the fault, which
+    /// is what the idea said in the first place: out of the wall, a threshold.
     /// </para>
     /// </summary>
-    public static bool PushedIntoTheBar(Push push, ScreenContext screen)
+    public static bool PushedIntoTheBar(SceneItem item, ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(screen);
 
-        return screen.ParkPushOutDip > 0 && push.Dip >= screen.ParkPushOutDip;
+        return screen.ParkPushOutFraction > 0
+            && ShowingAtParkEdge(item, screen) < 1 - screen.ParkPushOutFraction;
     }
 
     /// <summary>
@@ -379,7 +390,13 @@ public static class Manipulation
     /// minimum has to stay whole - it cannot leave more behind than it has.
     /// </para>
     /// </summary>
-    public static SceneItem HoldAtEdge(SceneItem item, ScreenContext screen)
+    /// <param name="yieldAtParkEdge">
+    /// Whether the park edge lets go, which it does for a hand and for nothing else. A picture may
+    /// then be pushed right off that one edge; on release it either goes into the fan or is snapped
+    /// back by an ordinary call to this method. The other three edges hold as always, and so does
+    /// the way BACK across the park edge - nothing can be lost, only put away.
+    /// </param>
+    public static SceneItem HoldAtEdge(SceneItem item, ScreenContext screen, bool yieldAtParkEdge = false)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
@@ -388,11 +405,39 @@ public static class Manipulation
 
         var held = item with
         {
-            CenterX = Hold(item.CenterX, hull.Width, Visible(screen, horizontal: true)),
-            CenterY = Hold(item.CenterY, hull.Height, Visible(screen, horizontal: false)),
+            CenterX = Hold(
+                item.CenterX,
+                hull.Width,
+                Visible(screen, horizontal: true),
+                Yield(screen, yieldAtParkEdge, horizontal: true)),
+            CenterY = Hold(
+                item.CenterY,
+                hull.Height,
+                Visible(screen, horizontal: false),
+                Yield(screen, yieldAtParkEdge, horizontal: false)),
         };
 
-        return Reachable(held, screen);
+        // The corner rule would pull a picture back that is deliberately being pushed out, so it
+        // stands aside for exactly as long as the park edge does.
+        return yieldAtParkEdge ? held : Reachable(held, screen);
+    }
+
+    /// <summary>Which end of an axis, if either, is letting go this step.</summary>
+    private static int Yield(ScreenContext screen, bool yielding, bool horizontal)
+    {
+        if (!yielding)
+        {
+            return 0;
+        }
+
+        return (screen.ParkEdge, horizontal) switch
+        {
+            (ParkEdge.Left, true) => -1,
+            (ParkEdge.Right, true) => 1,
+            (ParkEdge.Top, false) => -1,
+            (ParkEdge.Bottom, false) => 1,
+            _ => 0,
+        };
     }
 
     /// <summary>
@@ -523,13 +568,19 @@ public static class Manipulation
     internal static double Visible(ScreenContext screen, bool horizontal) =>
         horizontal ? screen.MinVisibleNormalisedX : screen.MinVisibleNormalisedY;
 
-    /// <summary>Holds one coordinate so the required part of the extent stays between 0 and 1.</summary>
-    private static double Hold(double centre, double extent, double minimum)
+    /// <summary>
+    /// Holds one coordinate so the required part of the extent stays between 0 and 1.
+    /// <paramref name="yield"/> of <c>-1</c> or <c>1</c> lets that end go entirely.
+    /// </summary>
+    private static double Hold(double centre, double extent, double minimum, int yield = 0)
     {
         var required = Math.Min(minimum, extent);
         var slack = extent / 2;
 
-        return Math.Clamp(centre, required - slack, 1 - required + slack);
+        var low = yield < 0 ? double.NegativeInfinity : required - slack;
+        var high = yield > 0 ? double.PositiveInfinity : 1 - required + slack;
+
+        return Math.Clamp(centre, low, high);
     }
 
     /// <summary>Any angle as 0° up to but not including 360°, so that 359° and -1° are one value.</summary>

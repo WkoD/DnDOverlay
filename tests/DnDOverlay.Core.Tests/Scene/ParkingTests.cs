@@ -77,14 +77,26 @@ public sealed class ParkingTests
     {
         var screen = Build.Screen();
         var scene = Parked(count, screen);
-        var pitch = Parking.Pitch(count, screen);
+        var fan = Parking.Fan(scene);
+        var pitch = Parking.Pitch(fan, screen);
 
         var picked = Enumerable.Range(0, count)
             .Select(index => Parking.Pick(scene, screen, new Point(0.99, 0.1 + (pitch * (index + 0.5)))))
             .ToList();
 
-        Assert.Equal([.. Parking.Fan(scene).Select(item => (ItemId?)item.ItemId)], picked);
+        Assert.Equal([.. fan.Select(item => (ItemId?)item.ItemId)], picked);
         Assert.All(picked, item => Assert.NotNull(item));
+
+        // And the whole fan lies inside the bar - body included, which is what A12 found: stepping
+        // the leading edges over the bar let the last card hang off the screen, visible and
+        // unreachable at once.
+        foreach (var card in scene.Items.Where(item => item.Parked))
+        {
+            var rect = Layout.ItemToRect(card, screen);
+
+            Assert.InRange(rect.Y, -1e-9, 1);
+            Assert.InRange(rect.Y + rect.Height, 0, 0.9 + 1e-9);
+        }
     }
 
     /// <summary>
@@ -96,11 +108,12 @@ public sealed class ParkingTests
     public void The_fan_grows_with_the_count_and_then_closes_up()
     {
         var screen = Build.Screen();
-        var capacity = Parking.Capacity(screen);
 
-        Assert.Equal(Parking.Pitch(1, screen), Parking.Pitch(capacity, screen));
-        Assert.True(Parking.Pitch(capacity * 4, screen) < Parking.Pitch(capacity, screen));
-        Assert.True(Parking.Pitch(capacity * 4, screen) > 0, "the fan collapsed onto one place");
+        double Step(int count) => Parking.Pitch(Parking.Fan(Parked(count, screen)), screen);
+
+        Assert.Equal(Step(1), Step(2));
+        Assert.True(Step(30) < Step(2));
+        Assert.True(Step(30) > 0, "the fan collapsed onto one place");
     }
 
     /// <summary>
@@ -171,7 +184,7 @@ public sealed class ParkingTests
         var scene = Parked(3, screen);
         var fan = Parking.Fan(scene);
 
-        var at = Parking.Peek(fan[1], 1, fan.Count, screen);
+        var at = Parking.Peek(fan[1], new Point(0.5, 0.5), screen);
         var peeked = fan[1] with { CenterX = at.X, CenterY = at.Y };
         var rect = Layout.ItemToRect(peeked, screen);
 
@@ -194,9 +207,10 @@ public sealed class ParkingTests
         var screen = Build.Screen();
         var scene = Parked(60, screen);
 
+        var pitch = Parking.Pitch(Parking.Fan(scene), screen);
+
         var picked = Parking.Fan(scene)
-            .Select((_, index) => Parking.Pick(
-                scene, screen, new Point(0.99, 0.1 + (Parking.Pitch(60, screen) * (index + 0.5)))))
+            .Select((_, index) => Parking.Pick(scene, screen, new Point(0.99, 0.1 + (pitch * (index + 0.5)))))
             .Distinct()
             .Count();
 
@@ -257,5 +271,44 @@ public sealed class ParkingTests
     public void A_1080p_table_shows_nine_cards_at_a_fingers_width()
     {
         Assert.Equal(9, Parking.Capacity(Build.Screen()));
+    }
+
+    /// <summary>
+    /// <b>The peek sits under the hand</b>, wherever along the fan that hand is - so a card taken
+    /// straight out and one found by running along come away in the same grip (hand-run of M3,
+    /// A11). At its own place in the fan the offset depended on how far the hand had wandered.
+    /// </summary>
+    [Fact]
+    public void The_peek_follows_the_hand_along_the_fan()
+    {
+        var screen = Build.Screen();
+        var card = Parking.Fan(Parked(5, screen))[2];
+
+        var high = Parking.Peek(card, new Point(0.99, 0.3), screen);
+        var low = Parking.Peek(card, new Point(0.99, 0.7), screen);
+
+        Assert.Equal(0.3, high.Y, precision: 9);
+        Assert.Equal(0.7, low.Y, precision: 9);
+        Assert.Equal(high.X, low.X, precision: 9);
+    }
+
+    /// <summary>
+    /// And it is held inside the screen: reaching for the last card must not put half the picture
+    /// past the corner, which is the one place a parked picture may never be.
+    /// </summary>
+    [Fact]
+    public void The_peek_stays_on_the_screen_at_either_end()
+    {
+        var screen = Build.Screen();
+        var card = Parking.Fan(Parked(5, screen))[0];
+
+        foreach (var hand in new[] { 0.0, 0.05, 0.95, 1.0 })
+        {
+            var at = Parking.Peek(card, new Point(0.99, hand), screen);
+            var rect = Layout.ItemToRect(card with { CenterX = at.X, CenterY = at.Y }, screen);
+
+            Assert.InRange(rect.Y, -1e-9, 1);
+            Assert.InRange(rect.Y + rect.Height, 0, 1 + 1e-9);
+        }
     }
 }
