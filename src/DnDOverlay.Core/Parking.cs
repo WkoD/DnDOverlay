@@ -222,6 +222,19 @@ public static class Parking
     /// <summary>
     /// Which parked picture a point on the fan means, or <see langword="null"/> if the point is not
     /// on the fan at all. The same arithmetic serves the table and the thumbnail (Part 1, rule 9).
+    /// <para>
+    /// <b>Every card owns the stretch of the fan it can be SEEN over</b> (hand-run of M3). The
+    /// first reading stepped the strip by the pitch, which is where the cards' leading edges are -
+    /// and a leading edge is the one part of a covered card nobody can see, because the card in
+    /// front of it lies exactly there. Reaching for a picture then meant aiming at a place it was
+    /// not.
+    /// </para>
+    /// <para>
+    /// So the boundary between two cards is the TRAILING edge of the one in front: up to there the
+    /// front card is what the eye has, past it the next one begins to show. The newest card is
+    /// covered by nothing and therefore owns its whole body - it has the most room of all, which is
+    /// right for the one most likely wanted.
+    /// </para>
     /// </summary>
     public static ItemId? Pick(SceneState scene, ScreenContext screen, Point at)
     {
@@ -244,15 +257,27 @@ public static class Parking
         }
 
         var pitch = Pitch(fan, screen);
-        var index = pitch <= 0 ? 0 : (int)Math.Floor((along - BarStart) / pitch);
+        var edge = BarStart;
 
-        return fan[Math.Clamp(index, 0, fan.Count - 1)].ItemId;
+        for (var i = 0; i < fan.Count - 1; i++)
+        {
+            // Running maximum, because cards are not all the same length: a short card behind a
+            // long one shows nothing of itself, and its boundary must not fall BACK behind the one
+            // already reached, or the strip would run backwards.
+            edge = Math.Max(edge, BarStart + (i * pitch) + Extent(Stow(fan[i], screen), screen));
+
+            if (along <= edge)
+            {
+                return fan[i].ItemId;
+            }
+        }
+
+        return fan[^1].ItemId;
     }
 
     /// <summary>
-    /// Where a picture is drawn while it is being looked at: pulled clear of the fan towards the
-    /// middle of the screen until the whole of it is on the glass, and <b>centred under the hand</b>
-    /// along the fan.
+    /// Where a picture is drawn while it is being looked at: <b>at its own place in the fan</b>,
+    /// pulled clear across the park edge until the whole of it is on the glass.
     /// <para>
     /// <b>Whole, not half.</b> The point of the peek is that somebody can tell whether this is the
     /// picture they meant, and half a picture answers that question only sometimes. It stays
@@ -260,45 +285,24 @@ public static class Parking
     /// takes it onto the table, and the hand never has to go back.
     /// </para>
     /// <para>
-    /// <b>Where the hand LANDED, and it stays there while the hand runs on</b> (hand-run of M3).
-    /// Two wrong places came before it: the card's own slot in the fan, which made the offset
-    /// between hand and picture depend on how far somebody had wandered; and under the hand
-    /// itself, which dragged the shown card along the fan and made the eye chase it. It is a
-    /// PREVIEW - the one thing it has to do is hold still long enough to be looked at.
+    /// <b>Its own place, and the hand has no say in it</b> (hand-run of M3). Two wrong places came
+    /// before: under the hand, which dragged the shown card along the fan and made the eye chase
+    /// it; and where the hand LANDED, which held still but showed every card of a long run at the
+    /// one spot the finger first touched, so the fan turned into a slide viewer. A card steps out
+    /// of the fan where it lies in the fan - that is the movement the eye can follow, and running
+    /// on shows the next card further along, where it too actually is.
     /// </para>
     /// </summary>
-    public static Point Peek(SceneItem item, Point at, ScreenContext screen)
-    {
-        ArgumentNullException.ThrowIfNull(item);
-        ArgumentNullException.ThrowIfNull(screen);
-
-        var stowed = Stow(item, screen);
-        var rect = Layout.ItemToRect(stowed, screen);
-        var alongY = screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
-
-        var across = alongY ? rect.Width : rect.Height;
-        var length = alongY ? rect.Height : rect.Width;
-
-        // Held inside the screen along the fan, or reaching for the last card would put half the
-        // picture past the corner - the one place a parked picture may never be.
-        var hand = Math.Clamp(alongY ? at.Y : at.X, length / 2, 1 - (length / 2));
-
-        var out_ = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
-            ? across / 2
-            : 1 - (across / 2);
-
-        return alongY ? new Point(out_, hand) : new Point(hand, out_);
-    }
-
-    /// <summary>Where a picture is peeked at, resolved from the scene.</summary>
-    public static Point? Peek(SceneState scene, ScreenContext screen, ItemId card, Point at)
+    public static Point? Peek(SceneState scene, ScreenContext screen, ItemId card)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(screen);
 
-        return scene.Items.FirstOrDefault(item => item.ItemId == card && item.Parked) is { } found
-            ? Peek(found, at, screen)
-            : null;
+        var fan = Fan(scene);
+
+        return fan.FirstOrDefault(item => item.ItemId == card) is not { } found
+            ? null
+            : Centre(Stow(found, screen), IndexIn(fan, card), Pitch(fan, screen), screen, clear: true);
     }
 
     /// <summary>
@@ -326,9 +330,11 @@ public static class Parking
 
     /// <summary>
     /// The centre of one card. Along the fan it is the card's own leading edge set at its step from
-    /// the near end; across it, the outermost place the edge clamp still permits.
+    /// the near end; across it, the outermost place the edge clamp still permits - or, when the
+    /// card is being looked at, the innermost place that has the whole of it on the glass.
     /// </summary>
-    private static Point Centre(SceneItem stowed, int index, double pitch, ScreenContext screen)
+    private static Point Centre(
+        SceneItem stowed, int index, double pitch, ScreenContext screen, bool clear = false)
     {
         var rect = Layout.ItemToRect(stowed, screen);
 
@@ -338,8 +344,19 @@ public static class Parking
         var alongY = screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
 
         var extent = alongY ? rect.Height : rect.Width;
+        var breadth = alongY ? rect.Width : rect.Height;
         var along = BarStart + (index * pitch) + (extent / 2);
-        var across = Across(alongY ? rect.Width : rect.Height, screen, acrossX: alongY);
+
+        var across = Across(breadth, screen, acrossX: alongY);
+
+        if (clear)
+        {
+            // Clear of the fan is the mirror of lying in it: the same body, the whole of it inside
+            // the screen instead of the least of it.
+            across = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
+                ? breadth / 2
+                : 1 - (breadth / 2);
+        }
 
         return alongY ? new Point(across, along) : new Point(along, across);
     }

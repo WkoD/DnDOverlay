@@ -120,11 +120,11 @@ Five things make the gestures survive an evening rather than merely work:
   sliding underneath it, because what lies under the fan cannot be picked up again.
 - **The fan is a fan, and its length is the count.** Parked pictures lie along the park edge at
   the size a picture arrives at, newest at the near end and on top, and the whole fan lies over
-  the table so the way back is never covered. Put enough away and the cards close up; that costs
-  nothing, because you do not pick a card by looking at it. Run a finger along the fan and each
-  card in turn steps out whole so you can see it; pull away from the edge and that one comes onto
-  the table, in one movement, without changing under your hand. Let go without pulling and
-  nothing has happened.
+  the table so the way back is never covered. Put enough away and the cards close up; every card
+  keeps the stretch of the fan it can be *seen* over, so the newest has the most room and the rest
+  a sliver each. Run a finger along the fan and each card in turn steps out whole where it lies;
+  pull away from the edge and that one comes onto the table, in one movement, without changing
+  under your hand. Let go without pulling and nothing has happened.
 - **A picture you are holding stays under your hand**, whatever else arrives on the screen
   meanwhile.
 

@@ -780,8 +780,8 @@ internal sealed class OverlayWindow : Window
             return false;
         }
 
-        _fan = new Fanning(card, at);
-        Peek(card, at, context);
+        _fan = new Fanning(card);
+        Peek(card, context);
 
         return true;
     }
@@ -805,9 +805,9 @@ internal sealed class OverlayWindow : Window
                 Unpeek(fanning.Card, context);
                 fanning.Card = next;
 
-                // At the place the hand LANDED, and only when the card changes - a preview that
-                // slid along under the finger made the eye chase it (hand-run of M3).
-                Peek(fanning.Card, fanning.From, context);
+                // At the card's OWN place in the fan - the next one steps out further along,
+                // where it lies, rather than at the spot the finger first touched (hand-run of M3).
+                Peek(fanning.Card, context);
             }
 
             return true;
@@ -821,7 +821,7 @@ internal sealed class OverlayWindow : Window
         //
         // The picture keeps the place the peek gave it, so nothing jumps and the hand carries on.
         if (_scene.Items.FirstOrDefault(one => one.ItemId == fanning.Card) is not { } card
-            || Parking.Peek(_scene, context, fanning.Card, fanning.From) is not { } peek)
+            || Parking.Peek(_scene, context, fanning.Card) is not { } peek)
         {
             return false;
         }
@@ -840,12 +840,12 @@ internal sealed class OverlayWindow : Window
         return false;
     }
 
-    /// <summary>Draws one card clear of the fan, whole and under the hand.</summary>
-    private void Peek(ItemId card, CorePoint hand, ScreenContext context)
+    /// <summary>Draws one card clear of the fan, whole, at its own place along it.</summary>
+    private void Peek(ItemId card, ScreenContext context)
     {
         if (_scene.Items.FirstOrDefault(one => one.ItemId == card) is not { } item
             || !_mounts.TryGetValue(card, out var mount)
-            || Parking.Peek(_scene, context, card, hand) is not { } at)
+            || Parking.Peek(_scene, context, card) is not { } at)
         {
             return;
         }
@@ -2002,16 +2002,13 @@ internal sealed class OverlayWindow : Window
     /// </para>
     /// </summary>
     /// <summary>
-    /// A hand on the fan: which card it is showing, and where it landed. Local to the display and
-    /// never sent - until a card comes out, nothing has happened to the scene (Part 6).
+    /// A hand on the fan: which card it is showing. Local to the display and never sent - until a
+    /// card comes out, nothing has happened to the scene (Part 6).
     /// </summary>
-    private sealed class Fanning(ItemId card, CorePoint from)
+    private sealed class Fanning(ItemId card)
     {
         /// <summary>The card being shown, which changes as the hand runs along the fan.</summary>
         internal ItemId Card { get; set; } = card;
-
-        /// <summary>Where the hand landed, in normalised coordinates. The pull is measured from it.</summary>
-        internal CorePoint From { get; } = from;
 
         /// <summary>Whether the card has come out; from then on this is an ordinary push.</summary>
         internal bool Taken { get; set; }

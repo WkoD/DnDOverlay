@@ -27,6 +27,24 @@ public sealed class ParkingTests
         screen.ParkEdge is ParkEdge.Left or ParkEdge.Right ? item.CenterY : item.CenterX;
 
     /// <summary>
+    /// The middle of the stretch of the fan card <paramref name="index"/> can be SEEN over. The
+    /// newest card is covered by nothing and owns its whole body; every one behind it shows from
+    /// the trailing edge of the card in front to its own, which is one pitch.
+    /// </summary>
+    private static Point Probe(int index, SceneState scene, ScreenContext screen)
+    {
+        var fan = Parking.Fan(scene);
+        var body = Layout.ItemToRect(fan[0], screen).Height;
+        var pitch = Parking.Pitch(fan, screen);
+
+        var along = index == 0
+            ? 0.1 + (body / 2)
+            : 0.1 + body + ((index - 0.5) * pitch);
+
+        return new Point(0.99, along);
+    }
+
+    /// <summary>
     /// <b>The near end of the fan is where the newest card is</b>, and the fan is ordered by the
     /// moment of parking rather than by when the picture came onto the table. That difference is
     /// the whole reason the field exists: the hand goes to the same place every time and finds the
@@ -78,10 +96,9 @@ public sealed class ParkingTests
         var screen = Build.Screen();
         var scene = Parked(count, screen);
         var fan = Parking.Fan(scene);
-        var pitch = Parking.Pitch(fan, screen);
 
         var picked = Enumerable.Range(0, count)
-            .Select(index => Parking.Pick(scene, screen, new Point(0.99, 0.1 + (pitch * (index + 0.5)))))
+            .Select(index => Parking.Pick(scene, screen, Probe(index, scene, screen)))
             .ToList();
 
         Assert.Equal([.. fan.Select(item => (ItemId?)item.ItemId)], picked);
@@ -184,8 +201,11 @@ public sealed class ParkingTests
         var scene = Parked(3, screen);
         var fan = Parking.Fan(scene);
 
-        var at = Parking.Peek(fan[1], new Point(0.5, 0.5), screen);
-        var peeked = fan[1] with { CenterX = at.X, CenterY = at.Y };
+        var at = Parking.Peek(scene, screen, fan[1].ItemId);
+
+        Assert.NotNull(at);
+
+        var peeked = fan[1] with { CenterX = at.Value.X, CenterY = at.Value.Y };
         var rect = Layout.ItemToRect(peeked, screen);
 
         Assert.InRange(rect.X, -1e-9, 1);
@@ -207,10 +227,8 @@ public sealed class ParkingTests
         var screen = Build.Screen();
         var scene = Parked(60, screen);
 
-        var pitch = Parking.Pitch(Parking.Fan(scene), screen);
-
         var picked = Parking.Fan(scene)
-            .Select((_, index) => Parking.Pick(scene, screen, new Point(0.99, 0.1 + (pitch * (index + 0.5)))))
+            .Select((_, index) => Parking.Pick(scene, screen, Probe(index, scene, screen)))
             .Distinct()
             .Count();
 
@@ -274,23 +292,30 @@ public sealed class ParkingTests
     }
 
     /// <summary>
-    /// <b>The peek is placed where it is asked for and nowhere else.</b> The display asks with the
-    /// point the hand LANDED on and asks only when the card changes, so the preview holds still
-    /// while the hand runs along the fan - a preview that slides along under the finger makes the
-    /// eye chase it (hand-run of M3).
+    /// <b>A card steps out where it LIES, and the hand has no say in it</b> (hand-run of M3). Two
+    /// wrong places came before: under the hand, which dragged the shown card along the fan and
+    /// made the eye chase it; and where the hand landed, which held still but showed every card of
+    /// a long run at the one spot the finger first touched, so the fan turned into a slide viewer.
+    /// Running on shows the next card further along, because that is where it actually is.
     /// </summary>
-    [Fact]
-    public void The_peek_is_placed_where_it_is_asked_for()
+    [Theory]
+    [InlineData(ParkEdge.Left)]
+    [InlineData(ParkEdge.Right)]
+    [InlineData(ParkEdge.Top)]
+    [InlineData(ParkEdge.Bottom)]
+    public void A_card_is_peeked_at_its_own_place_in_the_fan(ParkEdge edge)
     {
-        var screen = Build.Screen();
-        var card = Parking.Fan(Parked(5, screen))[2];
+        var screen = Build.Screen() with { ParkEdge = edge };
+        var scene = Parked(5, screen);
+        var fan = Parking.Fan(scene);
 
-        var high = Parking.Peek(card, new Point(0.99, 0.3), screen);
-        var low = Parking.Peek(card, new Point(0.99, 0.7), screen);
+        var places = fan
+            .Select(card => Parking.Peek(scene, screen, card.ItemId))
+            .Select(at => screen.ParkEdge is ParkEdge.Left or ParkEdge.Right ? at!.Value.Y : at!.Value.X)
+            .ToList();
 
-        Assert.Equal(0.3, high.Y, precision: 9);
-        Assert.Equal(0.7, low.Y, precision: 9);
-        Assert.Equal(high.X, low.X, precision: 9);
+        // Each card's own step along the fan, unchanged by the peek - only the across moves.
+        Assert.Equal([.. fan.Select(card => Along(card, screen))], places);
     }
 
     /// <summary>
@@ -312,22 +337,37 @@ public sealed class ParkingTests
     }
 
     /// <summary>
-    /// And it is held inside the screen: reaching for the last card must not put half the picture
-    /// past the corner, which is the one place a parked picture may never be.
+    /// And every peek is on the screen. A card lies inside the bar, so stepping it clear across the
+    /// edge cannot put it past a corner - the one place a parked picture may never be.
     /// </summary>
     [Fact]
-    public void The_peek_stays_on_the_screen_at_either_end()
+    public void Every_peek_stays_on_the_screen()
     {
         var screen = Build.Screen();
-        var card = Parking.Fan(Parked(5, screen))[0];
+        var scene = Parked(20, screen);
 
-        foreach (var hand in new[] { 0.0, 0.05, 0.95, 1.0 })
+        foreach (var card in Parking.Fan(scene))
         {
-            var at = Parking.Peek(card, new Point(0.99, hand), screen);
-            var rect = Layout.ItemToRect(card with { CenterX = at.X, CenterY = at.Y }, screen);
+            var at = Parking.Peek(scene, screen, card.ItemId);
 
+            Assert.NotNull(at);
+
+            var rect = Layout.ItemToRect(card with { CenterX = at.Value.X, CenterY = at.Value.Y }, screen);
+
+            Assert.InRange(rect.X, -1e-9, 1);
             Assert.InRange(rect.Y, -1e-9, 1);
+            Assert.InRange(rect.X + rect.Width, 0, 1 + 1e-9);
             Assert.InRange(rect.Y + rect.Height, 0, 1 + 1e-9);
         }
+    }
+
+    /// <summary>A card that is not in the fan has no peek, and asking for one is not a crash.</summary>
+    [Fact]
+    public void A_picture_that_is_not_parked_has_no_peek()
+    {
+        var screen = Build.Screen();
+        var lying = Build.Item();
+
+        Assert.Null(Parking.Peek(Build.SceneWith(lying), screen, lying.ItemId));
     }
 }
