@@ -544,13 +544,15 @@ internal sealed class StagePanel : StackPanel
     /// </summary>
     private async Task<string?> ShowAsync(ScreenRef screen, IntakeReport report, bool background)
     {
-        // The order the run reported: what was newly taken in, then what was already in the stock.
-        // Both go on the screen - a picture that is already known is exactly what a second sending
-        // of the same file is meant to put up.
-        var placeable = report.Taken
-            .Select(taken => taken.Asset)
-            .Concat(report.AlreadyPresent)
-            .ToList();
+        // Everything that is now in the stock, IN THE ORDER THE DM CHOSE IT. A picture that is
+        // already known goes on the screen like any other - a second sending of the same file is
+        // exactly the wish to put it up again.
+        //
+        // It used to be "the new ones, then the known ones", which is how the report grouped them
+        // (hand-run of M3): a picture already in the stock was placed last however early it was
+        // picked, and since the hub hands each arrival the next depth up, it landed ON TOP of the
+        // ones chosen after it. Choosing first has to mean lying underneath.
+        var placeable = report.Placeable;
 
         if (background)
         {

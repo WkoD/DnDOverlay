@@ -235,6 +235,40 @@ public sealed class IntakeTests : IDisposable
         Assert.False(report.Cancelled);
     }
 
+    /// <summary>
+    /// <b>What goes onto a screen keeps the order it was chosen in</b>, whether a picture was newly
+    /// taken in or already in the stock.
+    /// <para>
+    /// Found at the table (hand-run of M3): the report grouped its outcomes, and the control placed
+    /// group by group - all the new ones, then all the known ones. Since the hub hands each arrival
+    /// the next depth up, a picture already in the stock landed ON TOP of the ones chosen after it.
+    /// Choosing first has to mean lying underneath, so the run's own order is what travels.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task WhatGoesOnAScreenKeepsTheOrderItWasChosenIn()
+    {
+        var intake = new Intake(Open(), _time);
+
+        // "Alt" was put up once before, so the second run finds it in the stock rather than taking
+        // it in - which is exactly the case that used to be reordered.
+        await intake.TakeInAsync([Source("Alt")], progress: null, TestContext.Current.CancellationToken);
+
+        var report = await intake.TakeInAsync(
+            [Source("Alt"), Source("Neu"), Broken("Kaputt"), Source("Noch einer")],
+            progress: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(["Alt", "Neu", "Noch einer"], [.. report.Placeable.Select(asset => asset.Name)]);
+
+        // And the three tallies say what they always said - they are views onto that one list, not
+        // lists of their own, so there is nothing left that could disagree with it.
+        Assert.Equal(["Alt"], [.. report.AlreadyPresent.Select(asset => asset.Name)]);
+        Assert.Equal(["Neu", "Noch einer"], [.. report.Taken.Select(taken => taken.Asset.Name)]);
+        Assert.Equal(["Kaputt"], [.. report.Refused.Select(failure => failure.Name)]);
+        Assert.Equal(4, report.Count);
+    }
+
     private async Task<IntakeReport> Run(params IntakeSource[] sources) =>
         await new Intake(Open(), _time).TakeInAsync(sources, progress: null, TestContext.Current.CancellationToken);
 

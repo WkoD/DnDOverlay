@@ -42,6 +42,26 @@ public abstract record IntakeBytes
 public sealed record IntakeProgress(int Done, int Total, string Name);
 
 /// <summary>
+/// What one source came to. <b>The three outcomes are one list in the order the run met them</b>,
+/// and the report's three tallies are views onto it rather than lists of their own.
+/// <para>
+/// It was three lists once, and the order was lost between them: a run of one new picture and one
+/// already in the stock reached the screen as "all the new ones, then all the known ones", so the
+/// picture chosen first ended up ON TOP of the one chosen after it (hand-run of M3). Which pictures
+/// were taken in and which were already there is a question about the RUN; which came before which
+/// is a question about the DM's hand, and only one list can answer both.
+/// </para>
+/// </summary>
+public abstract record IntakeOutcome
+{
+    // Derivable inside this library and nowhere else: the three cases below are what a source can
+    // come to, and a fourth would have to be taught to every reader of the report.
+    private protected IntakeOutcome()
+    {
+    }
+}
+
+/// <summary>
 /// One that did not come in, with the reason kept for the collected message.
 /// <para>
 /// <paramref name="Reason"/> is carried rather than re-derived, and that is the whole repair of the
@@ -50,7 +70,7 @@ public sealed record IntakeProgress(int Done, int Total, string Name);
 /// address and a locked file alike.
 /// </para>
 /// </summary>
-public sealed record IntakeFailure(string Name, IntakeRejection Reason, string Detail);
+public sealed record IntakeFailure(string Name, IntakeRejection Reason, string Detail) : IntakeOutcome;
 
 /// <summary>
 /// One that came in, with what it cost.
@@ -74,42 +94,74 @@ public sealed record IntakeFailure(string Name, IntakeRejection Reason, string D
 /// the finding - a number that is not measured is worse than no number, because it answers.
 /// </para>
 /// </param>
-public sealed record IntakeTaken(AssetRef Asset, FormatStanding Standing, long Milliseconds);
+public sealed record IntakeTaken(AssetRef Asset, FormatStanding Standing, long Milliseconds) : IntakeOutcome;
+
+/// <summary>
+/// One that was already in the stock, so nothing was written and the name it carries is the one it
+/// already had. It carries no duration: nothing was decoded, and a zero here would be a measurement
+/// of nothing.
+/// </summary>
+public sealed record IntakeKnown(AssetRef Asset) : IntakeOutcome;
 
 /// <summary>
 /// What a whole run came to - the material for ONE collected message rather than two hundred
 /// dialogues (Part 7).
+/// <para>
+/// <b>One list, and every tally is a view onto it.</b> The three groups the message needs are read
+/// off <see cref="Results"/> rather than collected beside it, for the same reason
+/// <see cref="Tolerated"/> always was: a second place saying which pictures those were could drift
+/// from the first with nothing noticing - and here it did worse than drift, it lost the order.
+/// </para>
 /// </summary>
-/// <param name="Taken">Newly taken in, each with its standing and what it cost.</param>
-/// <param name="AlreadyPresent">
-/// Already in the stock, so nothing was written and the name they carry is the one they already
-/// had. Counted separately because "2 doppelt" is an answer and "195 aufgenommen" alone is not.
-/// They carry no duration: nothing was decoded, and a zero here would be a measurement of nothing.
-/// </param>
-/// <param name="Refused">Turned away, each with its reason.</param>
+/// <param name="Results">Every source's outcome, in the order the run met them.</param>
 /// <param name="Cancelled">The run was broken off. What was taken in stays - nothing is rolled back.</param>
-public sealed record IntakeReport(
-    IReadOnlyList<IntakeTaken> Taken,
-    IReadOnlyList<AssetRef> AlreadyPresent,
-    IReadOnlyList<IntakeFailure> Refused,
-    bool Cancelled)
+public sealed record IntakeReport(IReadOnlyList<IntakeOutcome> Results, bool Cancelled)
 {
     /// <summary>Nothing was asked of it.</summary>
-    public static IntakeReport Empty { get; } = new([], [], [], Cancelled: false);
+    public static IntakeReport Empty { get; } = new([], Cancelled: false);
+
+    /// <summary>Newly taken in, each with its standing and what it cost.</summary>
+    public IReadOnlyList<IntakeTaken> Taken => [.. Results.OfType<IntakeTaken>()];
+
+    /// <summary>
+    /// Already in the stock. Counted apart because "2 doppelt" is an answer and "195 aufgenommen"
+    /// alone is not.
+    /// </summary>
+    public IReadOnlyList<AssetRef> AlreadyPresent =>
+        [.. Results.OfType<IntakeKnown>().Select(known => known.Asset)];
+
+    /// <summary>Turned away, each with its reason.</summary>
+    public IReadOnlyList<IntakeFailure> Refused => [.. Results.OfType<IntakeFailure>()];
+
+    /// <summary>
+    /// Everything that is now in the stock - newly taken in and already there alike - <b>in the
+    /// order the DM chose them</b>.
+    /// <para>
+    /// That order is not a nicety: what goes onto a screen first lies UNDER what goes on after it,
+    /// because the hub hands each arrival the next depth up. Placed by group instead, a picture
+    /// already in the stock came last however early it was picked, and landed on top of the ones
+    /// chosen after it (hand-run of M3).
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<AssetRef> Placeable => [.. Results.Select(Stocked).OfType<AssetRef>()];
 
     /// <summary>How many were dealt with, one way or another.</summary>
-    public int Count => Taken.Count + AlreadyPresent.Count + Refused.Count;
+    public int Count => Results.Count;
 
     /// <summary>
     /// Names of those whose format worked but is not assured (Part 5). Reported rather than hidden:
     /// it went through, and the DM is told that this format is not one of the six promised.
-    /// <para>
-    /// Read off <see cref="Taken"/> rather than collected beside it. A second list would be a second
-    /// place saying which pictures those were, and the two could drift apart with nothing noticing.
-    /// </para>
     /// </summary>
     public IReadOnlyList<string> Tolerated =>
         [.. Taken.Where(taken => taken.Standing is FormatStanding.Tolerated).Select(taken => taken.Asset.Name)];
+
+    /// <summary>The picture an outcome put in the stock, or nothing when it was turned away.</summary>
+    private static AssetRef? Stocked(IntakeOutcome outcome) => outcome switch
+    {
+        IntakeTaken taken => taken.Asset,
+        IntakeKnown known => known.Asset,
+        _ => null,
+    };
 }
 
 /// <summary>
@@ -160,9 +212,7 @@ public sealed class Intake(IAssetSink stock, TimeProvider time)
             return IntakeReport.Empty;
         }
 
-        var taken = new List<IntakeTaken>();
-        var known = new List<AssetRef>();
-        var refused = new List<IntakeFailure>();
+        var results = new List<IntakeOutcome>();
 
         for (var index = 0; index < sources.Count; index++)
         {
@@ -170,7 +220,7 @@ public sealed class Intake(IAssetSink stock, TimeProvider time)
             {
                 // Broken off, and what is already in stays in - every finished picture is a valid
                 // entry, so there is nothing a rollback would be putting right (Part 7).
-                return new IntakeReport(taken, known, refused, Cancelled: true);
+                return new IntakeReport(results, Cancelled: true);
             }
 
             var source = sources[index];
@@ -195,31 +245,31 @@ public sealed class Intake(IAssetSink stock, TimeProvider time)
                 // token that was fine a line earlier. Letting that out would hand the caller an
                 // exception instead of the report, and the report is the whole promise: it says
                 // what stands. So the break arrives here as what it is, an ending, not a failure.
-                return new IntakeReport(taken, known, refused, Cancelled: true);
+                return new IntakeReport(results, Cancelled: true);
             }
 
             switch (outcome)
             {
                 case IngestResult.Taken { AlreadyPresent: true } present:
-                    known.Add(present.Asset);
+                    results.Add(new IntakeKnown(present.Asset));
                     break;
 
                 case IngestResult.Taken stocked:
-                    taken.Add(new IntakeTaken(
+                    results.Add(new IntakeTaken(
                         stocked.Asset,
                         stocked.Standing,
                         (long)_time.GetElapsedTime(clock).TotalMilliseconds));
                     break;
 
                 case IngestResult.Refused turned:
-                    refused.Add(new IntakeFailure(source.ProposedName, turned.Reason, turned.Detail));
+                    results.Add(new IntakeFailure(source.ProposedName, turned.Reason, turned.Detail));
                     break;
             }
         }
 
         progress?.Report(new IntakeProgress(sources.Count, sources.Count, string.Empty));
 
-        return new IntakeReport(taken, known, refused, Cancelled: false);
+        return new IntakeReport(results, Cancelled: false);
     }
 
     private async Task<IngestResult> One(IntakeSource source, CancellationToken cancellationToken)
