@@ -122,7 +122,8 @@ Five things make the gestures survive an evening rather than merely work:
   the size a picture arrives at, newest at the near end and on top, and the whole fan lies over
   the table so the way back is never covered. Put enough away and the cards close up; every card
   keeps the stretch of the fan it can be *seen* over, so the newest has the most room and the rest
-  a sliver each. Run a finger along the fan and each card in turn steps out whole where it lies;
+  a sliver each — past about five put away, those slivers get thin enough that picking one takes
+  aim. Run a finger along the fan and each card in turn steps out whole where it lies;
   pull away from the edge and that one comes onto the table, in one movement, without changing
   under your hand. Let go without pulling and nothing has happened.
 - **A picture you are holding stays under your hand**, whatever else arrives on the screen

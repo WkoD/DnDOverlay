@@ -285,10 +285,112 @@ public sealed class ParkingTests
     }
 
     /// <summary>Nine at 96 DIP along a 1080-DIP edge - the number the parameter table produces.</summary>
+    /// <summary>
+    /// <b>Five, not nine</b>, and the difference is the newest card's own body. The old number
+    /// divided the bar by a finger and forgot that the card at the near end is covered by nothing
+    /// and lies there at its whole arrival length - half the bar on a 1080 table. Measured: the
+    /// pitch is a finger at five cards and 80 DIP at six.
+    /// </summary>
     [Fact]
-    public void A_1080p_table_shows_nine_cards_at_a_fingers_width()
+    public void A_1080p_table_shows_five_cards_at_a_fingers_width()
     {
-        Assert.Equal(9, Parking.Capacity(Build.Screen()));
+        var screen = Build.Screen();
+
+        Assert.Equal(5, Parking.Capacity(Parking.Fan(Parked(5, screen)), screen));
+
+        // And the number is not a claim of its own - it says where the pitch gives way.
+        Assert.Equal(
+            screen.MinVisibleNormalisedY,
+            Parking.Pitch(Parking.Fan(Parked(5, screen)), screen),
+            precision: 9);
+
+        Assert.True(
+            Parking.Pitch(Parking.Fan(Parked(6, screen)), screen) < screen.MinVisibleNormalisedY,
+            "the sixth card was expected to close the fan up");
+    }
+
+    /// <summary>
+    /// <b>A card too long for the bar is drawn shorter, and that is the one place a parked picture
+    /// is not at its arrival size.</b> With the shipped defaults a picture may be 0.9 of the screen
+    /// long while the bar is 0.8, so on a TOP park edge five 4:1 pictures ran 64 % of a screen
+    /// width off the glass and every touch on the bar picked the same one of them - four parked and
+    /// unreachable at once (hand-run of M3).
+    /// </summary>
+    [Theory]
+    [InlineData(ParkEdge.Top)]
+    [InlineData(ParkEdge.Bottom)]
+    public void Panoramas_wider_than_the_bar_still_make_a_fan(ParkEdge edge)
+    {
+        var screen = Build.Screen() with { ParkEdge = edge };
+        var scene = Parking.Arrange(
+            Build.SceneWith(
+                [.. Enumerable.Range(0, 5).Select(i => Build.Item(parked: true, parkedAt: i + 1, aspectRatio: 4))]),
+            screen);
+
+        var fan = Parking.Fan(scene);
+
+        Assert.Equal(5, Reachable(scene, screen).Count);
+
+        foreach (var card in fan)
+        {
+            var rect = Layout.ItemToRect(card, screen);
+
+            Assert.InRange(rect.X, -1e-9, 1);
+            Assert.InRange(rect.X + rect.Width, 0, 0.9 + 1e-9);
+        }
+    }
+
+    /// <summary>
+    /// <b>A short card behind a long one still shows a step of itself.</b> Without the floor the
+    /// cascade swallowed it whole: an 8:1 panorama between ordinary pictures was invisible AND
+    /// unreachable, which is the one state parking may never produce (Part 11).
+    /// </summary>
+    [Fact]
+    public void A_short_card_between_long_ones_is_not_swallowed()
+    {
+        var screen = Build.Screen();
+        var scene = Parking.Arrange(
+            Build.SceneWith(
+                Build.Item(parked: true, parkedAt: 1),
+                Build.Item(parked: true, parkedAt: 2),
+                Build.Item(parked: true, parkedAt: 3, aspectRatio: 8),
+                Build.Item(parked: true, parkedAt: 4),
+                Build.Item(parked: true, parkedAt: 5)),
+            screen);
+
+        var fan = Parking.Fan(scene);
+        var short_ = fan.Single(card => Layout.ItemToRect(card, screen).Height < 0.3);
+
+        Assert.Contains(short_.ItemId, Reachable(scene, screen));
+
+        // Seen as well as reached: its own trailing edge lies past the card in front of it.
+        var ahead = fan[Array.IndexOf([.. fan], short_) - 1];
+        var tail = Along(short_, screen) + (Layout.ItemToRect(short_, screen).Height / 2);
+        var cover = Along(ahead, screen) + (Layout.ItemToRect(ahead, screen).Height / 2);
+
+        Assert.True(tail > cover, "the short card was completely covered by the one in front");
+    }
+
+    /// <summary>Every card a finger can land on, swept over the whole bar.</summary>
+    private static HashSet<ItemId> Reachable(SceneState scene, ScreenContext screen)
+    {
+        var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
+        var found = new HashSet<ItemId>();
+
+        for (var i = 0; i <= 4000; i++)
+        {
+            var along = 0.1 + (i * 0.8 / 4000);
+            var at = alongX
+                ? new Point(along, screen.ParkEdge is ParkEdge.Top ? 0.005 : 0.995)
+                : new Point(screen.ParkEdge is ParkEdge.Left ? 0.005 : 0.995, along);
+
+            if (Parking.Pick(scene, screen, at) is { } card)
+            {
+                found.Add(card);
+            }
+        }
+
+        return found;
     }
 
     /// <summary>

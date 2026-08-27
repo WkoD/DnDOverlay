@@ -147,7 +147,7 @@ public static class Parking
             return scene;
         }
 
-        var pitch = Pitch(fan, screen);
+        var edges = Trailing(fan, screen);
 
         return scene with
         {
@@ -161,7 +161,7 @@ public static class Parking
                     }
 
                     var stowed = Stow(item, screen);
-                    var centre = Centre(stowed, IndexIn(fan, item.ItemId), pitch, screen);
+                    var centre = Centre(stowed, edges[IndexIn(fan, item.ItemId)], screen);
 
                     return stowed with { CenterX = centre.X, CenterY = centre.Y };
                 }),
@@ -205,10 +205,43 @@ public static class Parking
         var body = fan.Max(item => Extent(Stow(item, screen), screen));
         var left = room - body;
 
-        // A card longer than the whole bar cannot be made to fit, and pretending otherwise would
-        // give a pitch of zero. Then the leading edges take the bar and the overhang is accepted -
-        // it is the picture that is too big, not the fan that is wrong.
+        // Stow holds every card to one step short of the bar, so there is always something left to
+        // cascade in. The guard stays for a screen so small that one step IS the bar - then nothing
+        // can be spread and the leading edges take what there is.
         return left <= 0 ? room / fan.Count : Math.Min(slice, left / (fan.Count - 1));
+    }
+
+    /// <summary>
+    /// The trailing edge of every card along the fan: the place where the card behind it begins to
+    /// show, and therefore both where it is drawn and what it can be touched by.
+    /// <para>
+    /// <b>Drawing and picking read this one list</b>, and that is the whole point of it. They used
+    /// to compute their own: the layout stepped LEADING edges by the pitch while picking read
+    /// TRAILING edges, so on a fan of unequal cards the two disagreed about which card was where -
+    /// and a card can be reached only where it can be seen (hand-run of M3).
+    /// </para>
+    /// <para>
+    /// <b>Every card shows at least one step of itself.</b> The cascade would otherwise swallow a
+    /// short card standing behind a long one whole: measured on a right-hand fan, an 8:1 panorama
+    /// between ordinary pictures was invisible AND unreachable, which is the one state parking may
+    /// never produce (Part 11). The floor costs nothing where the cards are of a size - then it is
+    /// exactly the plain cascade - and it cannot push the fan past the bar, because the pitch is
+    /// measured against the longest card there is.
+    /// </para>
+    /// </summary>
+    private static double[] Trailing(IReadOnlyList<SceneItem> fan, ScreenContext screen)
+    {
+        var pitch = Pitch(fan, screen);
+        var edges = new double[fan.Count];
+
+        for (var i = 0; i < fan.Count; i++)
+        {
+            var own = BarStart + (i * pitch) + Extent(Stow(fan[i], screen), screen);
+
+            edges[i] = i == 0 ? own : Math.Max(own, edges[i - 1] + pitch);
+        }
+
+        return edges;
     }
 
     /// <summary>How long a card is along the fan, in the normalised unit of that axis.</summary>
@@ -256,17 +289,11 @@ public static class Parking
             return null;
         }
 
-        var pitch = Pitch(fan, screen);
-        var edge = BarStart;
+        var edges = Trailing(fan, screen);
 
         for (var i = 0; i < fan.Count - 1; i++)
         {
-            // Running maximum, because cards are not all the same length: a short card behind a
-            // long one shows nothing of itself, and its boundary must not fall BACK behind the one
-            // already reached, or the strip would run backwards.
-            edge = Math.Max(edge, BarStart + (i * pitch) + Extent(Stow(fan[i], screen), screen));
-
-            if (along <= edge)
+            if (along <= edges[i])
             {
                 return fan[i].ItemId;
             }
@@ -302,39 +329,77 @@ public static class Parking
 
         return fan.FirstOrDefault(item => item.ItemId == card) is not { } found
             ? null
-            : Centre(Stow(found, screen), IndexIn(fan, card), Pitch(fan, screen), screen, clear: true);
+            : Centre(Stow(found, screen), Trailing(fan, screen)[IndexIn(fan, card)], screen, clear: true);
     }
 
     /// <summary>
-    /// How many pictures the fan shows at a finger's width each, before the cards start closing up.
-    /// It is not a limit on how many can be parked - nothing is ever refused - only the point past
-    /// which picking one is the fan's job rather than the eye's.
+    /// How many cards of this fan's size still show a finger's width each. Past that the cards
+    /// close up and picking one gets fiddly - it is not a limit on how many can be parked, nothing
+    /// is ever refused.
+    /// <para>
+    /// <b>It reserves the newest card's body, and that correction is worth the parameter.</b> The
+    /// number used to be the bar divided by a finger, which says nine on a 1080 table - but the
+    /// newest card is covered by nothing and lies there at its whole arrival length, half the bar.
+    /// The true count is five, and the fan drops under a finger at SIX cards, not at ten. A number
+    /// that answers is worse than none when it answers wrongly.
+    /// </para>
     /// </summary>
-    public static int Capacity(ScreenContext screen)
+    public static int Capacity(IReadOnlyList<SceneItem> fan, ScreenContext screen)
     {
+        ArgumentNullException.ThrowIfNull(fan);
         ArgumentNullException.ThrowIfNull(screen);
 
         var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
         var slice = Manipulation.Visible(screen, alongX);
 
-        return slice <= 0 ? 1 : Math.Max(1, (int)Math.Floor((BarEnd - BarStart) / slice));
+        if (slice <= 0)
+        {
+            return 1;
+        }
+
+        var body = fan.Count == 0 ? 0 : fan.Max(item => Extent(Stow(item, screen), screen));
+
+        return 1 + Math.Max(0, (int)Math.Floor((BarEnd - BarStart - body) / slice));
     }
 
-    /// <summary>The size and angle a picture has while it is in the fan.</summary>
-    private static SceneItem Stow(SceneItem item, ScreenContext screen) =>
-        item with
+    /// <summary>
+    /// The size and angle a picture has while it is in the fan: its arrival size on this screen,
+    /// standing straight - <b>but at most one step short of the bar</b>.
+    /// <para>
+    /// The cap is the one place a parked picture is not at its arrival size, and it exists because
+    /// a card longer than the bar cannot lie in the bar. Measured with the shipped defaults
+    /// (<c>MaxWidthOnLoad</c> 0.9 against a bar of 0.8): five 4:1 pictures on a TOP park edge ran
+    /// 64 % of a screen width off the glass, and every touch on the bar picked the same one of
+    /// them - four pictures parked and unreachable at once (hand-run of M3).
+    /// </para>
+    /// <para>
+    /// <b>One step short, not exactly the bar</b>, so there is always something left for the others
+    /// to cascade into. It bites only on shapes that could never have been shown in the bar anyway;
+    /// everything that fits keeps the size it arrived at.
+    /// </para>
+    /// </summary>
+    private static SceneItem Stow(SceneItem item, ScreenContext screen)
+    {
+        var stowed = item with
         {
             Scale = Layout.ScaleOnLoad(item.AspectRatio, screen),
             RotationDeg = screen.DefaultRotationDeg,
         };
 
+        var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
+        var cap = BarEnd - BarStart - Manipulation.Visible(screen, alongX);
+        var extent = Extent(stowed, screen);
+
+        return cap <= 0 || extent <= cap ? stowed : stowed with { Scale = stowed.Scale * cap / extent };
+    }
+
     /// <summary>
-    /// The centre of one card. Along the fan it is the card's own leading edge set at its step from
-    /// the near end; across it, the outermost place the edge clamp still permits - or, when the
-    /// card is being looked at, the innermost place that has the whole of it on the glass.
+    /// The centre of one card, hung on its trailing edge. Across the fan it is the outermost place
+    /// the edge clamp still permits - or, when the card is being looked at, the innermost place
+    /// that has the whole of it on the glass.
     /// </summary>
     private static Point Centre(
-        SceneItem stowed, int index, double pitch, ScreenContext screen, bool clear = false)
+        SceneItem stowed, double trailing, ScreenContext screen, bool clear = false)
     {
         var rect = Layout.ItemToRect(stowed, screen);
 
@@ -345,7 +410,7 @@ public static class Parking
 
         var extent = alongY ? rect.Height : rect.Width;
         var breadth = alongY ? rect.Width : rect.Height;
-        var along = BarStart + (index * pitch) + (extent / 2);
+        var along = trailing - (extent / 2);
 
         var across = Across(breadth, screen, acrossX: alongY);
 
