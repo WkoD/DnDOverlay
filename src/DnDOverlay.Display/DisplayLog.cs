@@ -460,8 +460,8 @@ internal static partial class DisplayLog
     [LoggerMessage(
         EventId = 3032,
         Level = LogLevel.Debug,
-        Message = "Let go towards the park edge at {TowardsDip} DIP/s after {TravelDip} DIP, "
-                  + "{ShowingPercent} % of the picture still on the table: {Outcome}.")]
+        Message = "Let go at {TowardsDip} DIP/s after {TravelDip} DIP, hand {EdgeDip} DIP "
+                  + "from the park edge: {Outcome}.")]
     internal static partial void ParkGesture(
-        ILogger logger, long towardsDip, long travelDip, long showingPercent, string outcome);
+        ILogger logger, long towardsDip, long travelDip, long edgeDip, string outcome);
 }

@@ -129,18 +129,16 @@ public static class Manipulation
     /// a picture that never rotates, which is a visible bug rather than a silent one.
     /// </para>
     /// </summary>
-    /// <param name="handOn">
-    /// Whether a real hand is on the picture right now, as opposed to a glide. <b>The park edge
-    /// yields to a hand and to nothing else</b>: it is the only way pushing a picture out can be
-    /// reached at all, since a finger cannot travel past the bezel, and it is the reason a flung
-    /// picture still cannot sail off the table.
+    /// <param name="gliding">
+    /// Whether this step is inertia rather than a hand. <b>A glide stops before the fan</b> and a
+    /// hand may push right up to it - see <see cref="HoldAtEdge"/>.
     /// </param>
     public static (SceneItem Item, Turning Turning) Step(
         SceneItem item,
         Turning turning,
         GestureStep step,
         ScreenContext screen,
-        bool handOn = false)
+        bool gliding = false)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
@@ -169,7 +167,7 @@ public static class Manipulation
             RotationDeg = Normalise(item.RotationDeg + rotationDeg),
         };
 
-        return (HoldAtEdge(moved, screen, yieldAtParkEdge: handOn), next);
+        return (HoldAtEdge(moved, screen, clearOfTheFan: gliding), next);
     }
 
     /// <summary>
@@ -328,56 +326,20 @@ public static class Manipulation
     }
 
     /// <summary>
-    /// How much of a picture is still on the glass across the park edge, as a fraction of its own
-    /// extent. <c>1</c> is all of it, <c>0</c> none.
+    /// How far a point lies from the park edge, in DIP. Negative means past it, which a finger
+    /// cannot be and a computed position can.
     /// </summary>
-    public static double ShowingAtParkEdge(SceneItem item, ScreenContext screen)
+    public static double FromParkEdge(Point at, ScreenContext screen)
     {
-        ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var hull = Layout.ItemToHullRect(item, screen);
-        var alongX = screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
-
-        var extent = alongX ? hull.Width : hull.Height;
-        var start = alongX ? hull.X : hull.Y;
-
-        if (extent <= 0)
+        return screen.ParkEdge switch
         {
-            return 1;
-        }
-
-        var showing = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
-            ? start + extent
-            : 1 - start;
-
-        return Math.Clamp(showing / extent, 0, 1);
-    }
-
-    /// <summary>
-    /// Whether letting go here pushes the picture into the fan: more of it is over the park edge
-    /// than on the table. <c>ParkPushOutFraction</c> of <c>0</c> switches the route off.
-    /// <para>
-    /// <b>The second way into the fan, and the only one a mouse has</b> (decided at the end of M3).
-    /// A flick needs a velocity, and a mouse cannot give one that means anything; pushing a picture
-    /// out over the edge is the same intention expressed slowly, and it works with either hand.
-    /// </para>
-    /// <para>
-    /// <b>It is the picture's position and not the hand's effort</b>, and that correction cost a
-    /// hand-run (M3, A3 and A7). The first build measured how far the fingers pushed BEYOND what
-    /// the clamp granted - and a finger cannot go past the bezel. Reckoned out: a picture 576 DIP
-    /// wide, held in the middle, would need the hand 192 DIP off the glass before the clamp even
-    /// began to refuse. The picture stopped because the HAND stopped, no pressure ever built, and
-    /// the route was dead in every case anybody would actually try. The wall was the fault, which
-    /// is what the idea said in the first place: out of the wall, a threshold.
-    /// </para>
-    /// </summary>
-    public static bool PushedIntoTheBar(SceneItem item, ScreenContext screen)
-    {
-        ArgumentNullException.ThrowIfNull(screen);
-
-        return screen.ParkPushOutFraction > 0
-            && ShowingAtParkEdge(item, screen) < 1 - screen.ParkPushOutFraction;
+            ParkEdge.Left => at.X * screen.WidthInDip,
+            ParkEdge.Right => (1 - at.X) * screen.WidthInDip,
+            ParkEdge.Top => at.Y * screen.HeightInDip,
+            _ => (1 - at.Y) * screen.HeightInDip,
+        };
     }
 
     /// <summary>
@@ -390,53 +352,55 @@ public static class Manipulation
     /// minimum has to stay whole - it cannot leave more behind than it has.
     /// </para>
     /// </summary>
-    /// <param name="yieldAtParkEdge">
-    /// Whether the park edge lets go, which it does for a hand and for nothing else. A picture may
-    /// then be pushed right off that one edge; on release it either goes into the fan or is snapped
-    /// back by an ordinary call to this method. The other three edges hold as always, and so does
-    /// the way BACK across the park edge - nothing can be lost, only put away.
-    /// </param>
-    public static SceneItem HoldAtEdge(SceneItem item, ScreenContext screen, bool yieldAtParkEdge = false)
+    /// <param name="clearOfTheFan">
+    /// Whether the fan counts as the edge of the screen on the park side, so that what is held ends
+    /// up entirely clear of it.
+    /// <para>
+    /// <b>It is set for a glide and not for a hand</b> (hand-run of M3). A picture that slides to a
+    /// stop with its whole remainder under the fan is parked without being parked: the fan is drawn
+    /// over the table, so nothing of it can be reached. A hand is a different matter - somebody
+    /// pushing a picture deliberately up to the fan meant to, and letting go there puts it in.
+    /// </para>
+    /// </summary>
+    public static SceneItem HoldAtEdge(SceneItem item, ScreenContext screen, bool clearOfTheFan = false)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
 
         var hull = Layout.ItemToHullRect(item, screen);
 
+        var (lowX, highX) = Fan(screen, clearOfTheFan, horizontal: true);
+        var (lowY, highY) = Fan(screen, clearOfTheFan, horizontal: false);
+
         var held = item with
         {
-            CenterX = Hold(
-                item.CenterX,
-                hull.Width,
-                Visible(screen, horizontal: true),
-                Yield(screen, yieldAtParkEdge, horizontal: true)),
-            CenterY = Hold(
-                item.CenterY,
-                hull.Height,
-                Visible(screen, horizontal: false),
-                Yield(screen, yieldAtParkEdge, horizontal: false)),
+            CenterX = Hold(item.CenterX, hull.Width, Visible(screen, horizontal: true), lowX, highX),
+            CenterY = Hold(item.CenterY, hull.Height, Visible(screen, horizontal: false), lowY, highY),
         };
 
-        // The corner rule would pull a picture back that is deliberately being pushed out, so it
-        // stands aside for exactly as long as the park edge does.
-        return yieldAtParkEdge ? held : Reachable(held, screen);
+        return Reachable(held, screen);
     }
 
-    /// <summary>Which end of an axis, if either, is letting go this step.</summary>
-    private static int Yield(ScreenContext screen, bool yielding, bool horizontal)
+    /// <summary>
+    /// How much of each end of an axis the fan takes up. Its depth is the graspable remainder
+    /// itself - the cards lie exactly as far onto the glass as the clamp leaves anything else.
+    /// </summary>
+    private static (double Low, double High) Fan(ScreenContext screen, bool counting, bool horizontal)
     {
-        if (!yielding)
+        if (!counting)
         {
-            return 0;
+            return (0, 0);
         }
+
+        var band = Visible(screen, horizontal);
 
         return (screen.ParkEdge, horizontal) switch
         {
-            (ParkEdge.Left, true) => -1,
-            (ParkEdge.Right, true) => 1,
-            (ParkEdge.Top, false) => -1,
-            (ParkEdge.Bottom, false) => 1,
-            _ => 0,
+            (ParkEdge.Left, true) => (band, 0),
+            (ParkEdge.Right, true) => (0, band),
+            (ParkEdge.Top, false) => (band, 0),
+            (ParkEdge.Bottom, false) => (0, band),
+            _ => (0, 0),
         };
     }
 
@@ -523,7 +487,9 @@ public static class Manipulation
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var held = HoldAtEdge(item, screen);
+        // Against the boundary a glide really has, which is the fan and not the screen - otherwise
+        // the friction would still be building where the picture has already stopped.
+        var held = HoldAtEdge(item, screen, clearOfTheFan: true);
         var hull = Layout.ItemToHullRect(item, screen);
 
         // How far past the allowed position it already is, as a fraction of the braking distance.
@@ -569,18 +535,18 @@ public static class Manipulation
         horizontal ? screen.MinVisibleNormalisedX : screen.MinVisibleNormalisedY;
 
     /// <summary>
-    /// Holds one coordinate so the required part of the extent stays between 0 and 1.
-    /// <paramref name="yield"/> of <c>-1</c> or <c>1</c> lets that end go entirely.
+    /// Holds one coordinate so the required part of the extent stays between the two ends, each of
+    /// which may be moved inwards by a margin.
     /// </summary>
-    private static double Hold(double centre, double extent, double minimum, int yield = 0)
+    private static double Hold(double centre, double extent, double minimum, double low, double high)
     {
         var required = Math.Min(minimum, extent);
         var slack = extent / 2;
 
-        var low = yield < 0 ? double.NegativeInfinity : required - slack;
-        var high = yield > 0 ? double.PositiveInfinity : 1 - required + slack;
+        var lower = low + required - slack;
+        var upper = 1 - high - required + slack;
 
-        return Math.Clamp(centre, low, high);
+        return Math.Clamp(centre, Math.Min(lower, upper), Math.Max(lower, upper));
     }
 
     /// <summary>Any angle as 0° up to but not including 360°, so that 359° and -1° are one value.</summary>

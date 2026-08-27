@@ -59,6 +59,36 @@ public static class Parking
     public const int FanAbove = 1 << 18;
 
     /// <summary>
+    /// Whether a point lies on the fan - within its band along the park edge, whether or not
+    /// anything is parked there yet.
+    /// <para>
+    /// <b>This is what decides parking when a hand lets go</b> (hand-run of M3). Not how much of the
+    /// picture is over the edge: a large picture can have half of itself outside and still be
+    /// standing squarely on the table, so that reading parked things nobody meant to put away.
+    /// Where the HAND is answers it without a threshold, and it answers it the way the table looks
+    /// - the fan is drawn over everything, so a picture let go under it could not be picked up
+    /// again anyway.
+    /// </para>
+    /// <para>
+    /// The band is as deep as the graspable remainder the edge clamp leaves anything else, because
+    /// that is exactly how far the cards lie onto the glass.
+    /// </para>
+    /// </summary>
+    public static bool OnTheFan(Point at, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
+        var band = Manipulation.Visible(screen, !alongX);
+
+        var across = alongX ? at.Y : at.X;
+
+        return screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
+            ? across <= band
+            : across >= 1 - band;
+    }
+
+    /// <summary>
     /// The parked pictures in the fan's own order: <b>newest first</b>. The near end of the fan is
     /// the top edge on a side bar and the left edge on a top or bottom one, and that is where the
     /// most recently parked picture lies - the one a hand reaching for the fan most likely wants.
@@ -207,15 +237,8 @@ public static class Parking
 
         var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
         var along = alongX ? at.X : at.Y;
-        var across = alongX ? at.Y : at.X;
 
-        // Across the fan: the strip the cards actually show, which is what the edge clamp leaves.
-        var depth = Manipulation.Visible(screen, !alongX);
-        var outside = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
-            ? across > depth
-            : across < 1 - depth;
-
-        if (outside || along < BarStart || along > BarEnd)
+        if (!OnTheFan(at, screen) || along < BarStart || along > BarEnd)
         {
             return null;
         }

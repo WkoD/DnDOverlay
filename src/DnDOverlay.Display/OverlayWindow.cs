@@ -964,10 +964,11 @@ internal sealed class OverlayWindow : Window
                 width <= 0 ? 0 : e.ManipulationOrigin.X / width,
                 height <= 0 ? 0 : e.ManipulationOrigin.Y / height));
 
-        // The park edge yields to a hand and not to a glide: pushing a picture out is a thing one
-        // DOES, and a flung picture must still be unable to sail off the table.
+        // A glide stops before the fan; a hand may push right up to it. A picture that slid to a
+        // stop under the fan would be parked without being parked - the fan is drawn over the
+        // table, so nothing of it could be picked up again.
         var (moved, turning) = CoreManipulation.Step(
-            hold.Item, hold.Turning, step, context, handOn: !e.IsInertial);
+            hold.Item, hold.Turning, step, context, gliding: e.IsInertial);
 
         hold.Item = moved;
         hold.Turning = turning;
@@ -992,30 +993,30 @@ internal sealed class OverlayWindow : Window
     /// what turns the next run into arithmetic (Guide G6).
     /// </para>
     /// </summary>
-    private void Measured(Hold hold)
+    private void Measured(Hold hold, CorePoint release)
     {
         if (_context is not { } context)
         {
             return;
         }
 
-        var showing = CoreManipulation.ShowingAtParkEdge(hold.Item, context);
+        var edge = CoreManipulation.FromParkEdge(release, context);
 
-        if (hold.Towards <= 0 && showing >= 1)
+        if (hold.Towards <= 0 && edge > 4 * CoreManipulation.ParkFlickDip)
         {
             return;
         }
 
         var outcome = hold.Parked
             ? "parked by the flick"
-            : CoreManipulation.PushedIntoTheBar(hold.Item, context)
-                ? "parked by the push"
+            : Parking.OnTheFan(release, context)
+                ? "parked by the hand on the fan"
                 : "moved";
 
         ParkMeasured?.Invoke(
             (long)Math.Round(hold.Towards),
             (long)Math.Round(hold.Moved),
-            (long)Math.Round(showing * 100),
+            (long)Math.Round(edge),
             outcome);
     }
 
@@ -1138,7 +1139,7 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        Measured(hold);
+        Measured(hold, Normalised(e.ManipulationOrigin, context));
 
         if (hold.Parked)
         {
@@ -1159,11 +1160,11 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        if (CoreManipulation.PushedIntoTheBar(hold.Item, context))
+        if (Parking.OnTheFan(Normalised(e.ManipulationOrigin, context), context))
         {
-            // Pushed out over the park edge rather than flicked at it - the slow way to tidy up,
-            // and the only one a mouse has (Part 6, decided at the end of M3). Read HERE and not in
-            // Fling, because a slow push has no velocity and WPF has no inertia to announce.
+            // Let go with the hand on the fan - the slow way to tidy up, and the only one a mouse
+            // has (Part 6, end of M3). Read HERE and not in Fling, because a push has no velocity
+            // and WPF has no inertia to announce.
             Park(item);
 
             return;
@@ -1330,7 +1331,7 @@ internal sealed class OverlayWindow : Window
                 0,
                 Centre(hold.Item));
 
-        var (moved, turning) = CoreManipulation.Step(hold.Item, hold.Turning, step, context, handOn: true);
+        var (moved, turning) = CoreManipulation.Step(hold.Item, hold.Turning, step, context);
 
         hold.Item = moved;
         hold.Turning = turning;
@@ -1368,9 +1369,9 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        if (CoreManipulation.PushedIntoTheBar(hold.Item, context))
+        if (Parking.OnTheFan(Normalised(e.GetPosition(_stage), context), context))
         {
-            // The one route into the bar a mouse has at all: it cannot flick, so without this a
+            // The one route into the fan a mouse has at all: it cannot flick, so without this a
             // display PC without touch could never park anything (Part 6, end of M3).
             Park(item);
             e.Handled = true;
@@ -1480,6 +1481,14 @@ internal sealed class OverlayWindow : Window
     /// screen's reported size is the fallback for the moment before WPF has laid the window out,
     /// and the two are not the same number (see <see cref="SurfaceChanged"/>).
     /// </summary>
+    /// <summary>A point on the stage in the normalised coordinates the scene is written in.</summary>
+    private CorePoint Normalised(System.Windows.Point at, ScreenContext context)
+    {
+        var (width, height) = Surface(context);
+
+        return new CorePoint(width <= 0 ? 0 : at.X / width, height <= 0 ? 0 : at.Y / height);
+    }
+
     private (double Width, double Height) Surface(ScreenContext context) =>
         (_stage.ActualWidth > 0 ? _stage.ActualWidth : context.WidthInDip,
          _stage.ActualHeight > 0 ? _stage.ActualHeight : context.HeightInDip);

@@ -242,7 +242,6 @@ public sealed class ScreenSettingsTests
             Placement = PlacementMode.Cascade,
             DefaultRotationDeg = 180,
             ParkEdge = ParkEdge.Top,
-            ParkPushOutFraction = 0.11,
             ImageTextSize = 11,
             RotationDeadZoneDeg = 11,
             RotationSnapToleranceDeg = 11,

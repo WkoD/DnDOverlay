@@ -142,7 +142,6 @@ public sealed record ScreenSettings(
     PlacementMode? Placement = null,
     int? DefaultRotationDeg = null,
     ParkEdge? ParkEdge = null,
-    double? ParkPushOutFraction = null,
     double? ImageTextSize = null,
     double? RotationDeadZoneDeg = null,
     double? RotationSnapToleranceDeg = null,
@@ -173,7 +172,6 @@ public sealed record ScreenSettings(
         && Placement is null
         && DefaultRotationDeg is null
         && ParkEdge is null
-        && ParkPushOutFraction is null
         && ImageTextSize is null
         && RotationDeadZoneDeg is null
         && RotationSnapToleranceDeg is null
@@ -200,7 +198,6 @@ public sealed record ScreenSettings(
             Placement: context.Placement,
             DefaultRotationDeg: context.DefaultRotationDeg,
             ParkEdge: context.ParkEdge,
-            ParkPushOutFraction: context.ParkPushOutFraction,
             ImageTextSize: context.ImageTextSize,
             RotationDeadZoneDeg: context.RotationDeadZoneDeg,
             RotationSnapToleranceDeg: context.RotationSnapToleranceDeg,
@@ -252,7 +249,6 @@ public sealed record ScreenSettings(
             Placement = Placement ?? context.Placement,
             DefaultRotationDeg = DefaultRotationDeg ?? context.DefaultRotationDeg,
             ParkEdge = ParkEdge ?? context.ParkEdge,
-            ParkPushOutFraction = ParkPushOutFraction ?? context.ParkPushOutFraction,
             ImageTextSize = ImageTextSize ?? context.ImageTextSize,
             RotationDeadZoneDeg = RotationDeadZoneDeg ?? context.RotationDeadZoneDeg,
             RotationSnapToleranceDeg = RotationSnapToleranceDeg ?? context.RotationSnapToleranceDeg,
@@ -288,7 +284,6 @@ public sealed record ScreenSettings(
             Placement: newer.Placement ?? older.Placement,
             DefaultRotationDeg: newer.DefaultRotationDeg ?? older.DefaultRotationDeg,
             ParkEdge: newer.ParkEdge ?? older.ParkEdge,
-            ParkPushOutFraction: newer.ParkPushOutFraction ?? older.ParkPushOutFraction,
             ImageTextSize: newer.ImageTextSize ?? older.ImageTextSize,
             RotationDeadZoneDeg: newer.RotationDeadZoneDeg ?? older.RotationDeadZoneDeg,
             RotationSnapToleranceDeg: newer.RotationSnapToleranceDeg ?? older.RotationSnapToleranceDeg,
@@ -321,9 +316,6 @@ public sealed record ScreenSettings(
                 ? null
                 : after.DefaultRotationDeg,
             ParkEdge: before.ParkEdge == after.ParkEdge ? null : after.ParkEdge,
-            ParkPushOutFraction: before.ParkPushOutFraction == after.ParkPushOutFraction
-                ? null
-                : after.ParkPushOutFraction,
             ImageTextSize: before.ImageTextSize == after.ImageTextSize ? null : after.ImageTextSize,
             RotationDeadZoneDeg: before.RotationDeadZoneDeg == after.RotationDeadZoneDeg
                 ? null
@@ -516,25 +508,6 @@ public sealed record ScreenContext(
     ParkEdge ParkEdge,
 
     /// <summary>
-    /// How much of a picture has to be over the park edge when the hand lets go for it to go into
-    /// the fan, as a fraction of the picture. <c>0</c> switches this route off.
-    /// <para>
-    /// <b>The second way to park, and the only one a mouse has</b> (decided at the end of M3). A
-    /// flick needs a velocity that means something, and a mouse cannot give one; pushing out is the
-    /// same intention expressed slowly. Only across the park edge - pushed out on the left and
-    /// reappearing on the right would bewilder, and there is one fan per screen (Part 6).
-    /// </para>
-    /// <para>
-    /// <b>A fraction of the picture, because a length in DIP could not be reached</b> (hand-run of
-    /// M3, A3). The first build asked how far the fingers pushed BEYOND the clamp - and a finger
-    /// cannot go past the bezel: a picture 576 DIP wide, held in the middle, would need the hand
-    /// 192 DIP off the glass before the clamp so much as began to refuse. Asking where the picture
-    /// ENDED UP costs nothing to reach, because the park edge yields to a hand.
-    /// </para>
-    /// </summary>
-    double ParkPushOutFraction,
-
-    /// <summary>
     /// How tall the name in a picture is drawn, in DIP on that screen (Part 6).
     /// <para>
     /// Per screen and not once for the program, because the only thing that separates the three
@@ -635,10 +608,6 @@ public sealed record ScreenContext(
             DefaultRotationDeg: 0,
             ParkEdge: ParkEdge.Right,
 
-            // More of it over the edge than on the table - the runner's own words, and the one
-            // reading of "pushed out" nobody has to be taught. A proposal until the closing run of
-            // M3 has had fingers on it (Guide G6).
-            ParkPushOutFraction: 0.5,
 
             // Around one and a half times Windows' standard text: readable at arm's length on the
             // table without a small portrait running straight into the truncation (decided in
