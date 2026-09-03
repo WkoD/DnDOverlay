@@ -1069,7 +1069,16 @@ internal sealed class OverlayWindow : Window
 
         hold.Towards = CoreManipulation.Towards(velocity.X * 1000, velocity.Y * 1000, context);
 
-        if (CoreManipulation.ShouldPark(hold.Item, velocity.X * 1000, velocity.Y * 1000, hold.Moved, context))
+        // <b>Both roads into the fan are read HERE, at the moment the hand left</b> - one by speed,
+        // one by place. The place used to be read only after the glide had run itself out, so a
+        // picture let go on the fan drifted a little further and dropped in afterwards: "it should
+        // land in the fan at once and not run its momentum out there first" (hand-run of M3, N1).
+        // Speed has to be read here anyway, because after the glide there is none left (Part 6),
+        // and reading the two at different moments was what made the one look slower than the other.
+        var onTheFan = Parking.OnTheFan(Normalised(e.ManipulationOrigin, context), context);
+
+        if (onTheFan
+            || CoreManipulation.ShouldPark(hold.Item, velocity.X * 1000, velocity.Y * 1000, hold.Moved, context))
         {
             // Marked BEFORE the message goes out: everything this gesture does from here on has to
             // stay silent, or the transform that follows undoes the park (see Hold.Parked).
