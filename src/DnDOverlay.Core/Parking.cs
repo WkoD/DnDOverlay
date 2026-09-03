@@ -442,14 +442,38 @@ public static class Parking
     /// longer than the bar, <see cref="CutOf"/> takes over and shows less of it rather than
     /// shrinking it.
     /// </para>
+    /// <para>
+    /// <b>And it fills the band across, because a card that does not is a card with a gap beside
+    /// it</b> (hand-run of M3, N11). <c>MinScale</c> means "80 DIP on the shorter edge" and the
+    /// band is 96 DIP deep, so a tower came to lie 80 DIP into a 96 DIP band and the older cards
+    /// showed through the 16 DIP that were left. The fan's measure is the stricter of the two and
+    /// it is the one that counts here: the band is as deep as a FINGER, and a card that does not
+    /// reach across it is a card that cannot be grabbed reliably either. The card is drawn to the
+    /// band and the length that comes with it is cut - pulled out, it is that same size, so
+    /// nothing jumps.
+    /// </para>
     /// </summary>
-    private static SceneItem Stow(SceneItem item, ScreenContext screen) =>
-        item with
+    private static SceneItem Stow(SceneItem item, ScreenContext screen)
+    {
+        var stowed = item with
         {
             Scale = Layout.ClampScale(
                 Layout.ScaleOnLoad(item.AspectRatio, screen), item.AspectRatio, screen),
             RotationDeg = screen.DefaultRotationDeg,
         };
+
+        // A fan on a side hangs its cards off the X axis, one on the top or bottom off Y - the band
+        // is measured ACROSS the fan, which is the axis the cascade does not run along.
+        var alongY = screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
+        var rect = Layout.ItemToRect(stowed, screen);
+
+        var breadth = alongY ? rect.Width : rect.Height;
+        var band = Manipulation.Visible(screen, alongY);
+
+        return breadth <= 0 || breadth >= band
+            ? stowed
+            : stowed with { Scale = stowed.Scale * band / breadth };
+    }
 
     /// <summary>The longest a card may be along the fan, leaving one step for the others.</summary>
     private static double Cap(ScreenContext screen) =>

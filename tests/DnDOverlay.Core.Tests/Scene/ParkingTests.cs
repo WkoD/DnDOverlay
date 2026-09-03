@@ -390,10 +390,10 @@ public sealed class ParkingTests
 
         Assert.False(cut.IsWhole);
 
-        // The length the card really has in the fan - arrival size, held between the gesture's own
-        // bounds, which for a tower is what pushes it past the bar in the first place.
-        var stowed = Layout.ClampScale(Layout.ScaleOnLoad(0.1, screen), 0.1, screen);
-        var extent = Layout.ItemToRect(tall with { Scale = stowed }, screen).Height;
+        // The length the card really has in the fan, read off the fan itself rather than rebuilt
+        // from the formula - a second copy of that arithmetic here is a second thing to keep true.
+        var parked = Parking.Arrange(Build.SceneWith(tall), screen).Items[0];
+        var extent = Layout.ItemToRect(parked, screen).Height;
 
         Assert.True(extent > 0.8 - screen.MinVisibleNormalisedY, "the tower was expected to be too long");
 
@@ -431,6 +431,40 @@ public sealed class ParkingTests
         var cover = Along(ahead, screen) + (Layout.ItemToRect(ahead, screen).Height / 2);
 
         Assert.True(tail > cover, "the short card was completely covered by the one in front");
+    }
+
+    /// <summary>
+    /// <b>Every card fills the band across, so nothing shows through beside it.</b> A tower came to
+    /// lie 80 DIP into a 96 DIP band - <c>MinScale</c> means "80 DIP on the shorter edge", the band
+    /// is a finger deep - and the older cards showed through the 16 DIP that were left (hand-run of
+    /// M3, N11). The fan's measure is the stricter one and the one that counts here.
+    /// </summary>
+    [Theory]
+    [InlineData(ParkEdge.Right, 0.05)]
+    [InlineData(ParkEdge.Right, 0.1)]
+    [InlineData(ParkEdge.Right, 4d / 3d)]
+    [InlineData(ParkEdge.Left, 0.1)]
+    [InlineData(ParkEdge.Top, 0.1)]
+    [InlineData(ParkEdge.Bottom, 20)]
+    public void A_card_reaches_all_the_way_across_the_band(ParkEdge edge, double aspect)
+    {
+        var screen = Build.Screen() with { ParkEdge = edge };
+        var alongY = edge is ParkEdge.Left or ParkEdge.Right;
+
+        var parked = Parking.Arrange(
+            Build.SceneWith(Build.Item(parked: true, parkedAt: 1, aspectRatio: aspect)), screen)
+            .Items[0];
+
+        var rect = Layout.ItemToRect(parked, screen);
+        var breadth = alongY ? rect.Width : rect.Height;
+        var band = alongY ? screen.MinVisibleNormalisedX : screen.MinVisibleNormalisedY;
+
+        Assert.True(
+            breadth >= band - 1e-9,
+            $"the card reaches {breadth:F4} across a band of {band:F4}");
+
+        // And it is still a size the gesture clamp accepts, so coming out changes nothing.
+        Assert.Equal(parked.Scale, Layout.ClampScale(parked.Scale, aspect, screen), precision: 9);
     }
 
     /// <summary>Every card a finger can land on, swept over the whole bar.</summary>
