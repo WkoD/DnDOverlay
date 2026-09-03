@@ -333,7 +333,8 @@ public static class Parking
     }
 
     /// <summary>
-    /// What the fan shows of one card, when the card is longer than the bar can hold.
+    /// The window the fan shows of one card, when the card is longer than the bar can hold - as
+    /// fractions of the card's own length, measured from its head end.
     /// <para>
     /// <b>Cut, not shrunk</b>, and that is a correction from the table (hand-run of M3, N11). The
     /// fan used to hold an over-long card by reducing its SCALE, so a tall picture sat small in the
@@ -342,54 +343,85 @@ public static class Parking
     /// the fan and unfolds when it is looked at. Nothing is ever resized, at any point.
     /// </para>
     /// <para>
-    /// The cut takes the HEAD, the end pointing back towards the near end of the fan, because the
-    /// tail is what the cascade leaves showing and therefore what a hand aims at.
+    /// <b>And it is a window, not a tail</b> - the second correction from the same row. The card
+    /// keeps its own place, so the window is wherever the fan's slot happens to fall ON it, which
+    /// for a long card means it is cut at BOTH ends. That is what lets the picture unfold without
+    /// moving: it grows out of the window in both directions instead of sliding to a place where it
+    /// fits. The peek used to hold an over-long card onto the screen, and holding is moving.
     /// </para>
     /// </summary>
-    /// <param name="Shown">
-    /// How much of the card's own length is drawn, as a fraction of it. One means the whole card.
-    /// </param>
+    /// <param name="From">Where the window starts, as a fraction of the card's length. Nought is the head.</param>
+    /// <param name="To">Where it ends. One is the tail.</param>
     /// <param name="Fade">
-    /// How far the cut fades out, as a fraction of the card's own length - <b>so that a cut edge
+    /// How far each cut edge fades out, as a fraction of the card's length - <b>so that a cut edge
     /// reads as "there is more of this" rather than as the edge of the picture</b>. It is one step
     /// wide, the same finger the whole fan is measured in, and it is the arrival fade turned from
     /// time into space: a picture coming in fades from nothing to itself, a cut card fades from
     /// itself to nothing.
     /// </param>
-    public readonly record struct Cut(double Shown, double Fade)
+    public readonly record struct Cut(double From, double To, double Fade)
     {
         /// <summary>Nothing is cut: the card lies in the fan whole.</summary>
-        public static Cut Whole { get; } = new(1, 0);
+        public static Cut Whole { get; } = new(0, 1, 0);
 
         /// <summary>Whether there is anything to cut at all.</summary>
-        public bool IsWhole => Shown >= 1;
+        public bool IsWhole => From <= 0 && To >= 1;
     }
 
     /// <summary>
     /// What the fan shows of this card. <see cref="Cut.Whole"/> for anything that fits, which is
     /// every ordinary picture - the cut bites on shapes that could never have lain in the bar.
     /// </summary>
-    public static Cut CutOf(SceneItem item, ScreenContext screen)
+    public static Cut CutOf(SceneState scene, ScreenContext screen, ItemId card)
     {
-        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var stowed = Stow(item, screen);
-        var extent = Extent(stowed, screen);
-        var shown = Shown(stowed, screen);
+        var fan = Fan(scene);
 
-        if (extent <= 0 || shown >= extent)
+        if (fan.FirstOrDefault(item => item.ItemId == card) is not { } found)
         {
             return Cut.Whole;
         }
 
+        var stowed = Stow(found, screen);
+        var full = Extent(stowed, screen);
+        var shown = Shown(stowed, screen);
+
+        if (full <= 0 || shown >= full)
+        {
+            return Cut.Whole;
+        }
+
+        var trailing = Trailing(fan, screen)[IndexIn(fan, card)];
+        var along = AlongOf(stowed, trailing, screen);
+
+        // The window is the fan's slot; the card lies where it lies. Both in screen units first,
+        // then read off against the card's own length - which is what a renderer can use without
+        // knowing anything about fans.
+        var head = along - (full / 2);
+        var from = (trailing - shown - head) / full;
+        var to = (trailing - head) / full;
+
         var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
+        var fade = Math.Min(Manipulation.Visible(screen, alongX), shown / 2) / full;
 
-        // Never more than half of what is left, or a card that is cut to almost nothing would be
-        // all fade and no picture.
-        var fade = Math.Min(Manipulation.Visible(screen, alongX), shown / 2);
+        return new Cut(Math.Max(0, from), Math.Min(1, to), fade);
+    }
 
-        return new Cut(shown / extent, fade / extent);
+    /// <summary>
+    /// Where a card's whole body lies along the fan: the place the cascade gives it, <b>held on the
+    /// screen</b> so that unfolding it never has to move it.
+    /// <para>
+    /// A card longer than the screen is centred and runs off both ends, which is the honest answer -
+    /// it cannot be shown whole anywhere, so it is shown where the most of it is.
+    /// </para>
+    /// </summary>
+    private static double AlongOf(SceneItem stowed, double trailing, ScreenContext screen)
+    {
+        var full = Extent(stowed, screen);
+
+        return full >= 1 ? 0.5 : Math.Clamp(trailing - (full / 2), full / 2, 1 - (full / 2));
     }
 
     /// <summary>
@@ -507,10 +539,12 @@ public static class Parking
         // perpendicular, and every mix-up here reads as "parking works but sideways".
         var alongY = screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
 
-        var extent = alongY ? rect.Height : rect.Width;
         var breadth = alongY ? rect.Width : rect.Height;
-        var along = trailing - (extent / 2);
 
+        // The SAME place whether the card is lying in the fan or being looked at. Only the across
+        // moves, and that is the whole of the peek: a card steps out of the bar, it does not travel
+        // along it (hand-run of M3, N11).
+        var along = AlongOf(stowed, trailing, screen);
         var across = Across(breadth, screen, acrossX: alongY);
 
         if (clear)
@@ -520,11 +554,6 @@ public static class Parking
             across = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
                 ? breadth / 2
                 : 1 - (breadth / 2);
-
-            // A card the fan had to CUT is longer than the bar, so its own place cannot hold the
-            // whole of it - the peek is the one moment it unfolds, and it is held on the screen to
-            // do so. For every card that fits, this changes nothing: its place is already inside.
-            along = extent >= 1 ? 0.5 : Math.Clamp(along, extent / 2, 1 - (extent / 2));
         }
 
         return alongY ? new Point(across, along) : new Point(along, across);

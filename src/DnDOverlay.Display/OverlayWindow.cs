@@ -597,7 +597,7 @@ internal sealed class OverlayWindow : Window
                 Trim(
                     mount,
                     item.Parked && !_held.ContainsKey(image.ItemId) && _fan?.Card != image.ItemId
-                        ? Parking.CutOf(item, context)
+                        ? Parking.CutOf(scene, context, image.ItemId)
                         : Parking.Cut.Whole,
                     context);
 
@@ -874,7 +874,7 @@ internal sealed class OverlayWindow : Window
         }
 
         Place(mount, item, context);
-        Trim(mount, Parking.CutOf(item, context), context);
+        Trim(mount, Parking.CutOf(_scene, context, card), context);
         Panel.SetZIndex(mount.Element, Parking.Depth(_scene, item));
     }
 
@@ -1864,17 +1864,22 @@ internal sealed class OverlayWindow : Window
     }
 
     /// <summary>
-    /// Cuts a card down to what the fan shows of it, and <b>fades the cut so it reads as "there is
-    /// more of this"</b> rather than as the edge of the picture.
+    /// Cuts a card down to the window the fan shows of it, and <b>fades each cut edge so it reads as
+    /// "there is more of this"</b> rather than as the edge of the picture.
     /// <para>
     /// It is the arrival fade turned from time into space, and deliberately the same idea: a
     /// picture coming in fades from nothing to itself over a moment, a cut card fades from itself
     /// to nothing over a finger's width. Same principle, one lasting instead of passing.
     /// </para>
     /// <para>
-    /// <b>A mask and no clip.</b> The mask cuts and fades in one stroke - everything before the
-    /// first stop is transparent - where a clip would need a second, separate statement of the same
-    /// edge and would still leave a hard line for the fade to argue with. It also leaves hit
+    /// <b>Both ends, because the card keeps its place.</b> The window is wherever the fan's slot
+    /// falls on the card, so a long one is cut at the head AND the tail - which is what lets it
+    /// unfold without moving when it is touched (hand-run of M3, N11).
+    /// </para>
+    /// <para>
+    /// <b>A mask and no clip.</b> The mask cuts and fades in one stroke - everything outside the
+    /// stops is transparent - where a clip would need a second, separate statement of the same two
+    /// edges and would still leave a hard line for the fade to argue with. It also leaves hit
     /// testing alone, which is right: what a hand on the fan means is worked out from its POSITION
     /// (<see cref="Parking.Pick"/>), never from the element it happened to land on.
     /// </para>
@@ -1888,23 +1893,39 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        // The fan runs down a side bar and across a top or bottom one, and the cut takes the HEAD -
-        // the end pointing back towards the near end of the fan, which is where the card in front
-        // of it lies anyway.
+        // The fan runs down a side bar and across a top or bottom one, so the window is cut along
+        // that same axis - and the element's own box is unrotated here, the turn comes after.
         var alongY = context.ParkEdge is ParkEdge.Left or ParkEdge.Right;
 
-        var start = 1 - cut.Shown;
-        var full = Math.Min(1, start + cut.Fade);
+        // Never let the two fades meet in the middle and cancel the picture out.
+        var middle = (cut.From + cut.To) / 2;
+        var stops = new GradientStopCollection();
+
+        if (cut.From > 0)
+        {
+            stops.Add(new GradientStop(Colors.Transparent, cut.From));
+            stops.Add(new GradientStop(Colors.Black, Math.Min(cut.From + cut.Fade, middle)));
+        }
+        else
+        {
+            stops.Add(new GradientStop(Colors.Black, 0));
+        }
+
+        if (cut.To < 1)
+        {
+            stops.Add(new GradientStop(Colors.Black, Math.Max(cut.To - cut.Fade, middle)));
+            stops.Add(new GradientStop(Colors.Transparent, cut.To));
+        }
+        else
+        {
+            stops.Add(new GradientStop(Colors.Black, 1));
+        }
 
         mount.Element.OpacityMask = new LinearGradientBrush
         {
             StartPoint = new System.Windows.Point(0, 0),
             EndPoint = alongY ? new System.Windows.Point(0, 1) : new System.Windows.Point(1, 0),
-            GradientStops =
-            [
-                new GradientStop(Colors.Transparent, start),
-                new GradientStop(Colors.Black, full),
-            ],
+            GradientStops = stops,
         };
     }
 

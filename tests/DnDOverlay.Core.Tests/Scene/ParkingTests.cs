@@ -333,7 +333,7 @@ public sealed class ParkingTests
 
         foreach (var card in fan)
         {
-            var cut = Parking.CutOf(card, screen);
+            var cut = Parking.CutOf(scene, screen, card.ItemId);
             var rect = Layout.ItemToRect(card, screen);
 
             // Cut, and what is left of it ends inside the bar. The head runs back off the near end
@@ -374,63 +374,66 @@ public sealed class ParkingTests
     }
 
     /// <summary>
-    /// The cut takes the head and fades over one step - the same finger the whole fan is measured
-    /// in. A picture that fits is not cut at all, which is every ordinary shape.
+    /// <b>A card is shown at the same place whether it lies in the fan or is being looked at.</b>
+    /// The peek used to hold an over-long card onto the screen, and holding is moving: the picture
+    /// slid along the bar the moment it was touched (hand-run of M3, N11). It keeps its place now
+    /// and unfolds out of its window in both directions instead.
     /// </summary>
-    [Fact]
-    public void The_cut_takes_one_step_of_fade_and_only_where_it_is_needed()
+    [Theory]
+    [InlineData(ParkEdge.Right, 0.05)]
+    [InlineData(ParkEdge.Right, 0.1)]
+    [InlineData(ParkEdge.Right, 4d / 3d)]
+    [InlineData(ParkEdge.Top, 0.05)]
+    [InlineData(ParkEdge.Bottom, 4)]
+    public void A_card_is_peeked_without_moving_along_the_fan(ParkEdge edge, double aspect)
     {
-        var screen = Build.Screen();
+        var screen = Build.Screen() with { ParkEdge = edge };
+        var scene = Parking.Arrange(
+            Build.SceneWith(
+                Build.Item(parked: true, parkedAt: 1, aspectRatio: aspect),
+                Build.Item(parked: true, parkedAt: 2, aspectRatio: aspect)),
+            screen);
 
-        Assert.True(Parking.CutOf(Build.Item(parked: true), screen).IsWhole);
+        foreach (var card in Parking.Fan(scene))
+        {
+            var peek = Parking.Peek(scene, screen, card.ItemId);
 
-        // 0.1 is a tower: at the arrival scale it is far longer than the bar down a side fan.
-        var tall = Build.Item(parked: true, aspectRatio: 0.1);
-        var cut = Parking.CutOf(tall, screen);
-
-        Assert.False(cut.IsWhole);
-
-        // The length the card really has in the fan, read off the fan itself rather than rebuilt
-        // from the formula - a second copy of that arithmetic here is a second thing to keep true.
-        var parked = Parking.Arrange(Build.SceneWith(tall), screen).Items[0];
-        var extent = Layout.ItemToRect(parked, screen).Height;
-
-        Assert.True(extent > 0.8 - screen.MinVisibleNormalisedY, "the tower was expected to be too long");
-
-        // What is shown is the bar minus one step, and the fade is that one step.
-        Assert.Equal(0.8 - screen.MinVisibleNormalisedY, cut.Shown * extent, precision: 9);
-        Assert.Equal(screen.MinVisibleNormalisedY, cut.Fade * extent, precision: 9);
+            Assert.NotNull(peek);
+            Assert.Equal(
+                Along(card, screen),
+                edge is ParkEdge.Left or ParkEdge.Right ? peek.Value.Y : peek.Value.X,
+                precision: 9);
+        }
     }
 
     /// <summary>
-    /// <b>A short card behind a long one still shows a step of itself.</b> Without the floor the
-    /// cascade swallowed it whole: an 8:1 panorama between ordinary pictures was invisible AND
-    /// unreachable, which is the one state parking may never produce (Part 11).
+    /// The window the fan shows is cut at BOTH ends of a long card, because the card keeps its own
+    /// place and the fan's slot falls wherever it falls on it. Each cut edge fades over one step -
+    /// the same finger the whole fan is measured in. A picture that fits is not cut at all.
     /// </summary>
     [Fact]
-    public void A_short_card_between_long_ones_is_not_swallowed()
+    public void A_long_card_is_cut_at_both_ends_and_each_edge_fades()
     {
         var screen = Build.Screen();
-        var scene = Parking.Arrange(
-            Build.SceneWith(
-                Build.Item(parked: true, parkedAt: 1),
-                Build.Item(parked: true, parkedAt: 2),
-                Build.Item(parked: true, parkedAt: 3, aspectRatio: 8),
-                Build.Item(parked: true, parkedAt: 4),
-                Build.Item(parked: true, parkedAt: 5)),
-            screen);
+        var plain = Build.Item(parked: true, parkedAt: 1);
+        var tower = Build.Item(parked: true, parkedAt: 2, aspectRatio: 0.05);
 
-        var fan = Parking.Fan(scene);
-        var short_ = fan.Single(card => Layout.ItemToRect(card, screen).Height < 0.3);
+        var scene = Parking.Arrange(Build.SceneWith(plain, tower), screen);
 
-        Assert.Contains(short_.ItemId, Reachable(scene, screen));
+        Assert.True(Parking.CutOf(scene, screen, plain.ItemId).IsWhole);
 
-        // Seen as well as reached: its own trailing edge lies past the card in front of it.
-        var ahead = fan[Array.IndexOf([.. fan], short_) - 1];
-        var tail = Along(short_, screen) + (Layout.ItemToRect(short_, screen).Height / 2);
-        var cover = Along(ahead, screen) + (Layout.ItemToRect(ahead, screen).Height / 2);
+        var cut = Parking.CutOf(scene, screen, tower.ItemId);
 
-        Assert.True(tail > cover, "the short card was completely covered by the one in front");
+        Assert.False(cut.IsWhole);
+        Assert.True(cut.From > 0, $"the head was expected to be cut, window starts at {cut.From:F3}");
+        Assert.True(cut.To < 1, $"the tail was expected to be cut, window ends at {cut.To:F3}");
+
+        // The window is exactly what the cascade gives the card, and the fade is one step.
+        var extent = Layout.ItemToRect(
+            Parking.Fan(scene).Single(card => card.ItemId == tower.ItemId), screen).Height;
+
+        Assert.Equal(0.8 - screen.MinVisibleNormalisedY, (cut.To - cut.From) * extent, precision: 9);
+        Assert.Equal(screen.MinVisibleNormalisedY, cut.Fade * extent, precision: 9);
     }
 
     /// <summary>
