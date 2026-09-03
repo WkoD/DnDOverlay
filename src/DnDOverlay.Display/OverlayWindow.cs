@@ -592,6 +592,15 @@ internal sealed class OverlayWindow : Window
 
                 Ask(image, Layout.ItemToRect(item, context), context, source);
 
+                // Only a card lying IN the fan is cut. One that is being looked at or carried is a
+                // picture like any other, and unfolding is the whole point of the peek.
+                Trim(
+                    mount,
+                    item.Parked && !_held.ContainsKey(image.ItemId) && _fan?.Card != image.ItemId
+                        ? Parking.CutOf(item, context)
+                        : Parking.Cut.Whole,
+                    context);
+
                 // A held item keeps the geometry the finger gave it. Writing the scene's over it
                 // would drag the picture back to where the hub last knew it, twenty times a second,
                 // for as long as somebody is pushing it (Part 4, conflict rule 3).
@@ -851,6 +860,7 @@ internal sealed class OverlayWindow : Window
         }
 
         Place(mount, item with { CenterX = at.X, CenterY = at.Y }, context);
+        Trim(mount, Parking.Cut.Whole, context);
         Panel.SetZIndex(mount.Element, HeldAbove);
     }
 
@@ -864,6 +874,7 @@ internal sealed class OverlayWindow : Window
         }
 
         Place(mount, item, context);
+        Trim(mount, Parking.CutOf(item, context), context);
         Panel.SetZIndex(mount.Element, Parking.Depth(_scene, item));
     }
 
@@ -1850,6 +1861,51 @@ internal sealed class OverlayWindow : Window
             mount.Caption = Label(caption, renderedWidth);
             mount.Element.Children.Add(mount.Caption);
         }
+    }
+
+    /// <summary>
+    /// Cuts a card down to what the fan shows of it, and <b>fades the cut so it reads as "there is
+    /// more of this"</b> rather than as the edge of the picture.
+    /// <para>
+    /// It is the arrival fade turned from time into space, and deliberately the same idea: a
+    /// picture coming in fades from nothing to itself over a moment, a cut card fades from itself
+    /// to nothing over a finger's width. Same principle, one lasting instead of passing.
+    /// </para>
+    /// <para>
+    /// <b>A mask and no clip.</b> The mask cuts and fades in one stroke - everything before the
+    /// first stop is transparent - where a clip would need a second, separate statement of the same
+    /// edge and would still leave a hard line for the fade to argue with. It also leaves hit
+    /// testing alone, which is right: what a hand on the fan means is worked out from its POSITION
+    /// (<see cref="Parking.Pick"/>), never from the element it happened to land on.
+    /// </para>
+    /// </summary>
+    private static void Trim(Mount mount, Parking.Cut cut, ScreenContext context)
+    {
+        if (cut.IsWhole)
+        {
+            mount.Element.OpacityMask = null;
+
+            return;
+        }
+
+        // The fan runs down a side bar and across a top or bottom one, and the cut takes the HEAD -
+        // the end pointing back towards the near end of the fan, which is where the card in front
+        // of it lies anyway.
+        var alongY = context.ParkEdge is ParkEdge.Left or ParkEdge.Right;
+
+        var start = 1 - cut.Shown;
+        var full = Math.Min(1, start + cut.Fade);
+
+        mount.Element.OpacityMask = new LinearGradientBrush
+        {
+            StartPoint = new System.Windows.Point(0, 0),
+            EndPoint = alongY ? new System.Windows.Point(0, 1) : new System.Windows.Point(1, 0),
+            GradientStops =
+            [
+                new GradientStop(Colors.Transparent, start),
+                new GradientStop(Colors.Black, full),
+            ],
+        };
     }
 
     /// <summary>

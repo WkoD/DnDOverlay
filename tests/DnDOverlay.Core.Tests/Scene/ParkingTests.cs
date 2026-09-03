@@ -333,11 +333,73 @@ public sealed class ParkingTests
 
         foreach (var card in fan)
         {
+            var cut = Parking.CutOf(card, screen);
             var rect = Layout.ItemToRect(card, screen);
 
-            Assert.InRange(rect.X, -1e-9, 1);
+            // Cut, and what is left of it ends inside the bar. The head runs back off the near end
+            // on purpose - it is faded out there, and the card in front lies over it anyway.
+            Assert.False(cut.IsWhole, "a picture longer than the bar was expected to be cut");
             Assert.InRange(rect.X + rect.Width, 0, 0.9 + 1e-9);
         }
+    }
+
+    /// <summary>
+    /// <b>The size a card has in the fan is a size the gesture clamp accepts</b>, so coming back out
+    /// changes nothing. It did not use to be: a 1:10 tower parked at 0.400 and came out at 0.740,
+    /// nearly double, under the hand (hand-run of M3, N11).
+    /// <para>
+    /// Two rules, each right on its own, disagreeing at their intersection (`G15`).
+    /// <c>ScaleOnLoad</c> has no lower bound because on an extreme shape it explodes; <c>ClampScale</c>
+    /// keeps one because the DM must not be able to zoom a picture away. The fan asked only the
+    /// first and produced sizes the second would not have allowed - and the first transform after
+    /// the card came out was the second's turn to speak.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(ParkEdge.Right, 0.05)]
+    [InlineData(ParkEdge.Right, 0.1)]
+    [InlineData(ParkEdge.Right, 4d / 3d)]
+    [InlineData(ParkEdge.Top, 4)]
+    [InlineData(ParkEdge.Bottom, 20)]
+    public void A_card_comes_out_of_the_fan_at_the_size_it_had_in_it(ParkEdge edge, double aspect)
+    {
+        var screen = Build.Screen() with { ParkEdge = edge };
+        var item = Build.Item(parked: true, parkedAt: 1, aspectRatio: aspect);
+
+        var parked = Parking.Arrange(Build.SceneWith(item), screen).Items[0];
+
+        // What the hub does to the very first transform after the card is pulled out.
+        Assert.Equal(
+            parked.Scale, Layout.ClampScale(parked.Scale, aspect, screen), precision: 9);
+    }
+
+    /// <summary>
+    /// The cut takes the head and fades over one step - the same finger the whole fan is measured
+    /// in. A picture that fits is not cut at all, which is every ordinary shape.
+    /// </summary>
+    [Fact]
+    public void The_cut_takes_one_step_of_fade_and_only_where_it_is_needed()
+    {
+        var screen = Build.Screen();
+
+        Assert.True(Parking.CutOf(Build.Item(parked: true), screen).IsWhole);
+
+        // 0.1 is a tower: at the arrival scale it is far longer than the bar down a side fan.
+        var tall = Build.Item(parked: true, aspectRatio: 0.1);
+        var cut = Parking.CutOf(tall, screen);
+
+        Assert.False(cut.IsWhole);
+
+        // The length the card really has in the fan - arrival size, held between the gesture's own
+        // bounds, which for a tower is what pushes it past the bar in the first place.
+        var stowed = Layout.ClampScale(Layout.ScaleOnLoad(0.1, screen), 0.1, screen);
+        var extent = Layout.ItemToRect(tall with { Scale = stowed }, screen).Height;
+
+        Assert.True(extent > 0.8 - screen.MinVisibleNormalisedY, "the tower was expected to be too long");
+
+        // What is shown is the bar minus one step, and the fade is that one step.
+        Assert.Equal(0.8 - screen.MinVisibleNormalisedY, cut.Shown * extent, precision: 9);
+        Assert.Equal(screen.MinVisibleNormalisedY, cut.Fade * extent, precision: 9);
     }
 
     /// <summary>

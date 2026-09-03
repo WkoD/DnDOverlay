@@ -202,10 +202,10 @@ public static class Parking
             return slice;
         }
 
-        var body = fan.Max(item => Extent(Stow(item, screen), screen));
+        var body = fan.Max(item => Shown(Stow(item, screen), screen));
         var left = room - body;
 
-        // Stow holds every card to one step short of the bar, so there is always something left to
+        // A card shows at most one step short of the bar, so there is always something left to
         // cascade in. The guard stays for a screen so small that one step IS the bar - then nothing
         // can be spread and the leading edges take what there is.
         return left <= 0 ? room / fan.Count : Math.Min(slice, left / (fan.Count - 1));
@@ -236,7 +236,7 @@ public static class Parking
 
         for (var i = 0; i < fan.Count; i++)
         {
-            var own = BarStart + (i * pitch) + Extent(Stow(fan[i], screen), screen);
+            var own = BarStart + (i * pitch) + Shown(Stow(fan[i], screen), screen);
 
             edges[i] = i == 0 ? own : Math.Max(own, edges[i - 1] + pitch);
         }
@@ -333,6 +333,66 @@ public static class Parking
     }
 
     /// <summary>
+    /// What the fan shows of one card, when the card is longer than the bar can hold.
+    /// <para>
+    /// <b>Cut, not shrunk</b>, and that is a correction from the table (hand-run of M3, N11). The
+    /// fan used to hold an over-long card by reducing its SCALE, so a tall picture sat small in the
+    /// bar and then grew back to its arrival size the moment it was pulled out - it jumped under
+    /// the hand. Cutting keeps the scale exactly as it always was: the card shows less of itself in
+    /// the fan and unfolds when it is looked at. Nothing is ever resized, at any point.
+    /// </para>
+    /// <para>
+    /// The cut takes the HEAD, the end pointing back towards the near end of the fan, because the
+    /// tail is what the cascade leaves showing and therefore what a hand aims at.
+    /// </para>
+    /// </summary>
+    /// <param name="Shown">
+    /// How much of the card's own length is drawn, as a fraction of it. One means the whole card.
+    /// </param>
+    /// <param name="Fade">
+    /// How far the cut fades out, as a fraction of the card's own length - <b>so that a cut edge
+    /// reads as "there is more of this" rather than as the edge of the picture</b>. It is one step
+    /// wide, the same finger the whole fan is measured in, and it is the arrival fade turned from
+    /// time into space: a picture coming in fades from nothing to itself, a cut card fades from
+    /// itself to nothing.
+    /// </param>
+    public readonly record struct Cut(double Shown, double Fade)
+    {
+        /// <summary>Nothing is cut: the card lies in the fan whole.</summary>
+        public static Cut Whole { get; } = new(1, 0);
+
+        /// <summary>Whether there is anything to cut at all.</summary>
+        public bool IsWhole => Shown >= 1;
+    }
+
+    /// <summary>
+    /// What the fan shows of this card. <see cref="Cut.Whole"/> for anything that fits, which is
+    /// every ordinary picture - the cut bites on shapes that could never have lain in the bar.
+    /// </summary>
+    public static Cut CutOf(SceneItem item, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var stowed = Stow(item, screen);
+        var extent = Extent(stowed, screen);
+        var shown = Shown(stowed, screen);
+
+        if (extent <= 0 || shown >= extent)
+        {
+            return Cut.Whole;
+        }
+
+        var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
+
+        // Never more than half of what is left, or a card that is cut to almost nothing would be
+        // all fade and no picture.
+        var fade = Math.Min(Manipulation.Visible(screen, alongX), shown / 2);
+
+        return new Cut(shown / extent, fade / extent);
+    }
+
+    /// <summary>
     /// How many cards of this fan's size still show a finger's width each. Past that the cards
     /// close up and picking one gets fiddly - it is not a limit on how many can be parked, nothing
     /// is ever refused.
@@ -357,40 +417,55 @@ public static class Parking
             return 1;
         }
 
-        var body = fan.Count == 0 ? 0 : fan.Max(item => Extent(Stow(item, screen), screen));
+        var body = fan.Count == 0 ? 0 : fan.Max(item => Shown(Stow(item, screen), screen));
 
         return 1 + Math.Max(0, (int)Math.Floor((BarEnd - BarStart - body) / slice));
     }
 
     /// <summary>
     /// The size and angle a picture has while it is in the fan: its arrival size on this screen,
-    /// standing straight - <b>but at most one step short of the bar</b>.
+    /// standing straight - <b>and held between the same bounds every other size is held between</b>.
     /// <para>
-    /// The cap is the one place a parked picture is not at its arrival size, and it exists because
-    /// a card longer than the bar cannot lie in the bar. Measured with the shipped defaults
-    /// (<c>MaxWidthOnLoad</c> 0.9 against a bar of 0.8): five 4:1 pictures on a TOP park edge ran
-    /// 64 % of a screen width off the glass, and every touch on the bar picked the same one of
-    /// them - four pictures parked and unreachable at once (hand-run of M3).
+    /// The clamp is not decoration, it closes a hole the table found (hand-run of M3, N11): a very
+    /// tall picture parked SMALLER and then grew when it was pulled out. Two rules, each right on
+    /// its own, disagreeing at their intersection (`G15`). <see cref="Layout.ScaleOnLoad"/> has no
+    /// lower bound - deliberately, because on an extreme shape that bound explodes and a picture
+    /// that does not FIT is unusable for everyone (M2b). <see cref="Layout.ClampScale"/> keeps its
+    /// lower bound where it belongs, at the gesture, so the DM cannot zoom a picture away. The fan
+    /// used only the first, so a parked card could sit BELOW a size the gesture clamp accepts - and
+    /// the first transform after it came out snapped it up. Measured on a 1080 table: a 1:10 tower
+    /// parked at 0.400 and came out at 0.740, nearly double, under the hand.
     /// </para>
     /// <para>
-    /// <b>One step short, not exactly the bar</b>, so there is always something left for the others
-    /// to cascade into. It bites only on shapes that could never have been shown in the bar anyway;
-    /// everything that fits keeps the size it arrived at.
+    /// So the fan asks for a size the rest of the system already agrees with. It costs nothing for
+    /// any ordinary shape - the lower bound bites only on portraits - and where it makes a card
+    /// longer than the bar, <see cref="CutOf"/> takes over and shows less of it rather than
+    /// shrinking it.
     /// </para>
     /// </summary>
-    private static SceneItem Stow(SceneItem item, ScreenContext screen)
-    {
-        var stowed = item with
+    private static SceneItem Stow(SceneItem item, ScreenContext screen) =>
+        item with
         {
-            Scale = Layout.ScaleOnLoad(item.AspectRatio, screen),
+            Scale = Layout.ClampScale(
+                Layout.ScaleOnLoad(item.AspectRatio, screen), item.AspectRatio, screen),
             RotationDeg = screen.DefaultRotationDeg,
         };
 
-        var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
-        var cap = BarEnd - BarStart - Manipulation.Visible(screen, alongX);
+    /// <summary>The longest a card may be along the fan, leaving one step for the others.</summary>
+    private static double Cap(ScreenContext screen) =>
+        BarEnd - BarStart - Manipulation.Visible(screen, screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom);
+
+    /// <summary>
+    /// How much of a card the fan shows of itself along its length - its whole body, or the cap if
+    /// the body is longer than that. <b>This, not the body, is what the cascade is built from</b>,
+    /// because it is what the eye has.
+    /// </summary>
+    private static double Shown(SceneItem stowed, ScreenContext screen)
+    {
+        var cap = Cap(screen);
         var extent = Extent(stowed, screen);
 
-        return cap <= 0 || extent <= cap ? stowed : stowed with { Scale = stowed.Scale * cap / extent };
+        return cap <= 0 ? extent : Math.Min(extent, cap);
     }
 
     /// <summary>
@@ -421,6 +496,11 @@ public static class Parking
             across = screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
                 ? breadth / 2
                 : 1 - (breadth / 2);
+
+            // A card the fan had to CUT is longer than the bar, so its own place cannot hold the
+            // whole of it - the peek is the one moment it unfolds, and it is held on the screen to
+            // do so. For every card that fits, this changes nothing: its place is already inside.
+            along = extent >= 1 ? 0.5 : Math.Clamp(along, extent / 2, 1 - (extent / 2));
         }
 
         return alongY ? new Point(across, along) : new Point(along, across);
