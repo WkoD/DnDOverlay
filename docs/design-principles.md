@@ -290,8 +290,8 @@ but a reason to stop and either change the decision or change this document:
    table, without a confirmation dialog stopping the flow of play? And does that leave what
    the players arranged at the table untouched?
 8. Can the players undo everything they can cause **with the same gestures**, without calling
-   the DM? And is every restriction that takes this from them **deliberately set, recognisable
-   at the table and removable with one grip**?
+   the DM? And is every restriction that takes this from them **deliberately set and
+   recognisable at the table**?
 9. Do the rules still exist **exactly once** — one reducer, one geometry, one command
    interface? And does every thing still sit with its owner: **the arrangement in the hub, the
    material in the campaign, the view in the Control**?
