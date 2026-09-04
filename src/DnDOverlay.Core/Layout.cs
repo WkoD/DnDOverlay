@@ -232,7 +232,7 @@ public static class Layout
             return screen.ScaleOnLoad;
         }
 
-        var widthCap = screen.MaxWidthOnLoad * screen.AspectRatio / aspectRatio;
+        var widthCap = WidthCap(aspectRatio, screen);
 
         // The LOWER bound has no business here, and that is a correction the table forced.
         //
@@ -250,6 +250,30 @@ public static class Layout
         // picture ARRIVES is a different question, and it has two answers already - the configured
         // size and the width cap.
         return Math.Min(screen.ScaleOnLoad, widthCap);
+    }
+
+    /// <summary>
+    /// The largest scale at which a picture of this shape still fits the screen's width.
+    /// <para>
+    /// It is the cap of <see cref="ScaleOnLoad"/>, pulled out because a second caller needs the
+    /// same number: <b>a picture moved or copied onto a screen with a different aspect ratio is
+    /// capped again</b> (Part 3, Part 11). Arriving is arriving, whether the picture comes from a
+    /// file or from the next screen along - and a panorama that wrecks the flow arithmetic does so
+    /// either way.
+    /// </para>
+    /// <para>
+    /// <b>Only the upper bound, and that is the same decision as in <see cref="ScaleOnLoad"/>:</b>
+    /// the lower one explodes on extreme shapes because it is expressed against the shorter edge,
+    /// and how large a picture ARRIVES is a different question from how small the DM may zoom it.
+    /// </para>
+    /// </summary>
+    public static double WidthCap(double aspectRatio, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        return aspectRatio <= 0
+            ? double.PositiveInfinity
+            : screen.MaxWidthOnLoad * screen.AspectRatio / aspectRatio;
     }
 
     /// <summary>

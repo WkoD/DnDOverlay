@@ -743,6 +743,8 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3030 | `GestureCorrected` | Warning |
 | 3031 | `TouchReporting` | Information |
 | 3032 | `ParkGesture` | Debug |
+| 3033 | `ItemMoved` | Information |
+| 3034 | `ItemCopied` | Information |
 
 **3029 gained two numbers in M3c**, and the second is the one that says anything: touch
 reports sent, and the points inside them. A count of reports cannot tell a working table
@@ -754,7 +756,7 @@ capped at 32; a resting or a swallowed one contributes exactly one. Until the th
 M4 there is nothing to look at, so this ratio is the whole evidence that the trails are
 collected at all.
 
-**Next free: 3033.**
+**Next free: 3035.**
 
 **3032 measures the two ways into the fan rather than describing them.** Both rest on numbers that
 were proposed and not measured - how fast a flick is, how far it may travel, how hard a push has to

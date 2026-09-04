@@ -30,7 +30,7 @@ public static class SceneReducer
 
         return op switch
         {
-            AddItem add => ApplyAddItem(scene, add),
+            AddItem add => ApplyAddItem(scene, add, screen),
             RemoveItem remove => Parking.Arrange(
                 scene with { Items = [.. scene.Items.Where(item => item.ItemId != remove.Item)] },
                 screen),
@@ -173,7 +173,7 @@ public static class SceneReducer
     /// nothing to be idempotent here.
     /// </para>
     /// </summary>
-    private static SceneState ApplyAddItem(SceneState scene, AddItem add)
+    private static SceneState ApplyAddItem(SceneState scene, AddItem add, ScreenContext screen)
     {
         var existing = scene.Items.ToList();
         var index = existing.FindIndex(item => item.ItemId == add.Item.ItemId);
@@ -187,6 +187,15 @@ public static class SceneReducer
             existing.Add(add.Item);
         }
 
-        return scene with { Items = existing };
+        // The fan is laid out again, and that is not housekeeping - it is the only place where an
+        // arriving PARKED item gets the size, the angle and the place of THIS screen. Until M4
+        // nothing could add one: parking happened where the item already lay, and a scene arriving
+        // whole is M5b. MoveItem is the first caller that carries a parked item across, and Part 11
+        // asks for exactly this ("in the fan at the ParkEdge of the target screen, in that screen's
+        // arrival size - also after MoveItem").
+        //
+        // For everything else it costs one pass and changes nothing: Arrange returns the scene
+        // untouched when no item is parked, and it never looks at an unparked one.
+        return Parking.Arrange(scene with { Items = existing }, screen);
     }
 }

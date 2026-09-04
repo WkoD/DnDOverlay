@@ -98,6 +98,64 @@ public interface ISessionApi
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Moves an item from one screen to another: <b>one</b> patch carrying a <c>RemoveItem</c> on
+    /// the source and an <c>AddItem</c> on the target, under the SAME <c>ItemId</c> - the picture
+    /// must never be gone for a frame (Part 4).
+    /// <para>
+    /// <b>Position and size travel, they are not computed anew.</b> Normalised coordinates make a
+    /// move "a plain re-hanging of the ScreenId" (Part 3), so without an aimed drop point the
+    /// picture keeps the place it had. The size is capped again against the target's width, because
+    /// a panorama that wrecks the flow arithmetic does so on any screen (Part 3,
+    /// <see cref="Layout.WidthCap"/>).
+    /// </para>
+    /// <para>
+    /// <b>A parked item stays parked and joins the fan of the target</b> - at its ParkEdge, in that
+    /// screen's arrival size, at the end of its order (Part 11). Nothing here computes that:
+    /// <c>ParkedAt</c> is handed out and the reducer lays out the fan.
+    /// </para>
+    /// <para>
+    /// <b>Moving onto the screen it already lies on does nothing</b>, deliberately. Dragging inside
+    /// one tile is a transform, and it has a command of its own; a move that removed and re-added
+    /// the item would hand out a new ZOrder and let the arrival highlight fire for a picture that
+    /// never went anywhere.
+    /// </para>
+    /// <para>An unknown <c>ItemId</c> is ineffective rather than an error (Part 11).</para>
+    /// </summary>
+    Task MoveItemAsync(
+        ScreenRef source,
+        ScreenRef target,
+        ItemId item,
+        Point? position,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Copies an item: one <c>AddItem</c> with a NEW <c>ItemId</c>, the same asset, the size and
+    /// angle taken over, a new <c>ZOrder</c> - and the template untouched (Part 4, Part 11).
+    /// <para>
+    /// <b>The target may be the source screen</b>, and then the copy lands beside its template
+    /// rather than on it (<see cref="Placement.Beside"/>). That is the case the DM uses to put two
+    /// of the same guard on the table.
+    /// </para>
+    /// <para>
+    /// <b>A parked template yields an unparked copy.</b> Parking is where a picture was put away;
+    /// a copy of it is a picture that is wanted now, and it would otherwise land in the fan where
+    /// nobody looks for it. Its place then comes from the screen's placement mode, because the
+    /// template's own place is a slot in the fan and means nothing outside it.
+    /// </para>
+    /// <para>
+    /// <b>Returns the id of the copy</b>, the same deviation from Part 4's sketch that
+    /// <see cref="AddItemAsync"/> makes and for the same reason: the caller wants to select what it
+    /// just created.
+    /// </para>
+    /// </summary>
+    Task<ItemId?> CopyItemAsync(
+        ScreenRef source,
+        ScreenRef target,
+        ItemId item,
+        Point? position,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Moves an item to where it now lies. Everything the sender may not decide happens here: the
     /// position is held at the edge, the scale between its bounds, and the revision and the
     /// <c>ZOrder</c> are handed out (Part 4).

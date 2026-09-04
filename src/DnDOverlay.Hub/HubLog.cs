@@ -388,6 +388,28 @@ internal static partial class HubLog
     internal static partial void ForeignScreenRefused(ILogger logger, string deviceName, string screenName);
 
     /// <summary>
+    /// A picture went from one screen to another. It is the one operation that changes two screens
+    /// at once, and the evening's question it answers is "where did that go?" - a picture that
+    /// vanished from the table is otherwise indistinguishable from one that was removed.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3033,
+        Level = LogLevel.Information,
+        Message = "An image moved from {FromScreen} to {ToScreen}.")]
+    internal static partial void ItemMoved(ILogger logger, string fromScreen, string toScreen);
+
+    /// <summary>
+    /// A picture was copied onto a screen. Worth a line of its own because nothing is transferred:
+    /// the asset is already on every device that has the template, so the copy appears without a
+    /// single byte on the wire - and that is what the hand-run reads here (Part 11, step 25b).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3034,
+        Level = LogLevel.Information,
+        Message = "An image was copied onto {ScreenName}.")]
+    internal static partial void ItemCopied(ILogger logger, string screenName);
+
+    /// <summary>
     /// A hand at the table took hold of a locked picture. The display refuses the gesture itself
     /// and gives the finger the same short answer it gives on a disabled screen, so this line is
     /// not the player's feedback - it is the DM's, for the evening when somebody says "that one is

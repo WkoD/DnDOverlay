@@ -255,6 +255,12 @@
   <data name="E3023_FrameTimes" xml:space="preserve">
     <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
   </data>
+  <data name="E3033_ItemMoved" xml:space="preserve">
+    <value>An image moved from {FromScreen} to {ToScreen}.</value>
+  </data>
+  <data name="E3034_ItemCopied" xml:space="preserve">
+    <value>An image was copied onto {ScreenName}.</value>
+  </data>
   <data name="E3031_TouchReporting" xml:space="preserve">
     <value>Touch points from this table are {Reporting}.</value>
   </data>

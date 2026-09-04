@@ -387,6 +387,144 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task MoveItemAsync(
+        ScreenRef source,
+        ScreenRef target,
+        ItemId item,
+        Point? position,
+        CancellationToken cancellationToken = default)
+    {
+        if (source == target)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var lying = _scenes.Get(source);
+
+            if (lying.Items.FirstOrDefault(candidate => candidate.ItemId == item) is not { } current)
+            {
+                return;
+            }
+
+            var context = _screens.ContextFor(target);
+            var scene = _scenes.Get(target);
+            var revision = _scenes.NextRevision();
+
+            var removal = new RemoveItem(item);
+            var addition = new AddItem(Arriving(current, scene, context, position, revision));
+
+            _scenes.Set(source, SceneReducer.Apply(lying, removal, _screens.ContextFor(source)));
+            _scenes.Set(target, SceneReducer.Apply(scene, addition, context));
+
+            // ONE patch over two screens. Both halves reach every display: the one losing the
+            // picture and the one gaining it are usually different devices, and the arrival
+            // highlight reads the ops of ITS screen - a plain AddItem on the target, a plain
+            // RemoveItem on the source (Arrival).
+            var patch = new ScenePatch([new ScreenOp(source, removal), new ScreenOp(target, addition)]);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+
+            HubLog.ItemMoved(_logger, source.Screen.Value, target.Screen.Value);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<ItemId?> CopyItemAsync(
+        ScreenRef source,
+        ScreenRef target,
+        ItemId item,
+        Point? position,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var lying = _scenes.Get(source);
+
+            if (lying.Items.FirstOrDefault(candidate => candidate.ItemId == item) is not { } template)
+            {
+                return null;
+            }
+
+            var context = _screens.ContextFor(target);
+            var scene = _scenes.Get(target);
+            var revision = _scenes.NextRevision();
+
+            var copy = Arriving(template, scene, context, position, revision) with
+            {
+                ItemId = new ItemId(Guid.NewGuid()),
+
+                // The copy is a picture that is wanted now, so it never lands in the fan.
+                Parked = false,
+                ParkedAt = 0,
+            };
+
+            // Where it goes, once it is no longer parked. Three cases, and only the first is the
+            // ordinary one: an aimed drop point wins; a copy on the screen it came from steps
+            // beside its template; and a copy of a PARKED template has no place of its own to step
+            // beside, so it is placed like a new picture.
+            if (position is null)
+            {
+                var centre = template.Parked
+                ? Placement.NextPosition(scene, copy.Scale, copy.AspectRatio, context)
+                : Placement.Beside(copy.CenterX, copy.CenterY, copy.Scale, copy.AspectRatio, context);
+
+                copy = copy with { CenterX = centre.X, CenterY = centre.Y };
+            }
+
+            var addition = new AddItem(copy);
+
+            _scenes.Set(target, SceneReducer.Apply(scene, addition, context));
+
+            var patch = new ScenePatch([new ScreenOp(target, addition)]);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+
+            HubLog.ItemCopied(_logger, target.Screen.Value);
+
+            return copy.ItemId;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// What an item looks like when it lands on a screen: its own place unless one was aimed at,
+    /// its size capped against the target's width, the top of the target's stack, and - if it is
+    /// parked - the end of the target's fan. The fan itself is laid out by the reducer.
+    /// </summary>
+    private static SceneItem Arriving(
+        SceneItem current, SceneState scene, ScreenContext context, Point? position, long revision)
+    {
+        var centre = position ?? new Point(current.CenterX, current.CenterY);
+
+        return current with
+        {
+            CenterX = centre.X,
+            CenterY = centre.Y,
+            Scale = Math.Min(current.Scale, Layout.WidthCap(current.AspectRatio, context)),
+
+            // Arriving counts as being touched (Part 3), and the number space is the target's.
+            ZOrder = scene.TopZOrder + 1,
+            Revision = revision,
+            ParkedAt = current.Parked ? revision : 0,
+        };
+    }
+
+    /// <inheritdoc />
     public async Task TransformItemAsync(
         ScreenRef screen,
         ItemTransform transform,

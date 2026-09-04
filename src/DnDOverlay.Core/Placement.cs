@@ -49,6 +49,37 @@ public static class Placement
     }
 
     /// <summary>
+    /// A place beside an existing item, for a copy that lands on the screen it was copied from.
+    /// <para>
+    /// The offset is the step the cascade already uses, and it is asked here rather than chosen
+    /// anew: two numbers for "far enough to see that there are two, close enough to see they belong
+    /// together" would drift apart the first time one of them was tuned (Guide G24).
+    /// </para>
+    /// <para>
+    /// <b>It stays on the screen.</b> A copy of a picture at the right-hand edge steps left instead,
+    /// because the alternative - stepping right and being clamped - would put the copy exactly on
+    /// top of its template, which is the one outcome the offset exists to prevent.
+    /// </para>
+    /// </summary>
+    public static Point Beside(
+        double centreX, double centreY, double scale, double aspectRatio, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var (width, height) = Layout.NormalisedSize(scale, aspectRatio, screen);
+
+        var right = centreX + CascadeStep;
+        var down = centreY + CascadeStep;
+
+        var x = right + (width / 2) > 1 ? centreX - CascadeStep : right;
+        var y = down + (height / 2) > 1 ? centreY - CascadeStep : down;
+
+        return new Point(
+            Math.Clamp(x, Math.Min(width / 2, 0.5), Math.Max(1 - (width / 2), 0.5)),
+            Math.Clamp(y, Math.Min(height / 2, 0.5), Math.Max(1 - (height / 2), 0.5)));
+    }
+
+    /// <summary>
     /// The shape the grid is measured in. Cells are the same size whatever is put in them, and that
     /// size has to come from somewhere - <c>Scale</c> gives the height, and 4:3 is the shape the
     /// parameter table's numbers were reckoned against.
