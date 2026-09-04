@@ -109,8 +109,14 @@ public interface ISessionApi
     /// </param>
     /// <param name="toFront">
     /// Whether this was a GRAB rather than a command - the first report of a gesture, and from M4
-    /// the moment the DM takes hold in the thumbnail. What is touched comes to the front; a locked
-    /// item never does, because it cannot be taken hold of (Part 3).
+    /// the moment the DM takes hold in the thumbnail. What is taken hold of comes to the front.
+    /// <para>
+    /// <b>A locked item never rises, and that holds for the thumbnail too.</b> At the table the
+    /// question does not arise, because the gesture is refused before it gets here; in the
+    /// thumbnail the DM may move a locked picture (the lock guards against the table, Part 3) - and
+    /// it still stays where it lies in the stack. Part 3 states the rule and gives a reason that
+    /// only covers the table, "they cannot be taken hold of"; the rule is the wider of the two.
+    /// </para>
     /// </param>
     Task TransformItemAsync(
         ScreenRef screen,

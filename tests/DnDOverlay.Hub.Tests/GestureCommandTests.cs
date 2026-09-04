@@ -151,6 +151,64 @@ public sealed class GestureCommandTests
             (await session.GetSceneAsync(Target, Cancellation)).Items.Single(item => item.ItemId == lower).ZOrder);
     }
 
+    /// <summary>
+    /// The fourth combination, and the one M4 introduces: a grab that did NOT come from the table.
+    /// The DM may move a locked picture in the thumbnail, and it still does not come to the front
+    /// (Part 3, Part 11 - "a locked item does not change its ZOrder", said without a proviso).
+    /// <para>
+    /// The counter-check belongs in the same test: an unlocked item taken hold of the same way DOES
+    /// rise. Without it the assertion would also pass if <c>toFront</c> had stopped working
+    /// altogether - a green line about a dead path (Guide C16).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_locked_item_moves_from_the_thumbnail_and_stays_where_it_lies_in_the_stack()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var lower = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        var upper = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        await session.SetLockedAsync(Target, lower, locked: true, Cancellation);
+
+        var before = (await session.GetSceneAsync(Target, Cancellation)).Items;
+        var beneath = before.Single(item => item.ItemId == lower).ZOrder;
+
+        Assert.True(beneath < before.Single(item => item.ItemId == upper).ZOrder, "the lower item started on top");
+
+        await session.TransformItemAsync(
+            Target,
+            new ItemTransform(lower, 0.2, 0.8, 0.35, 30),
+            fromTable: false,
+            toFront: true,
+            Cancellation);
+
+        var moved = (await session.GetSceneAsync(Target, Cancellation)).Items.Single(item => item.ItemId == lower);
+
+        // It moved - the lock guards against the table, not against the DM.
+        Assert.Equal(0.2, moved.CenterX, precision: 9);
+        Assert.Equal(0.8, moved.CenterY, precision: 9);
+        Assert.Equal(30, moved.RotationDeg);
+        Assert.True(moved.Locked, "the padlock came off");
+
+        // And it stayed underneath.
+        Assert.Equal(beneath, moved.ZOrder);
+
+        // The counter-check: the same grab on the unlocked item raises it.
+        await session.TransformItemAsync(
+            Target,
+            new ItemTransform(upper, 0.6, 0.4, 0.3, 0),
+            fromTable: false,
+            toFront: true,
+            Cancellation);
+
+        var after = await session.GetSceneAsync(Target, Cancellation);
+        var raised = after.Items.Single(item => item.ItemId == upper);
+
+        Assert.Equal(after.Items.Max(item => item.ZOrder), raised.ZOrder);
+        Assert.True(raised.ZOrder > moved.ZOrder, "the grab in the thumbnail did not raise anything");
+    }
+
     /// <summary>Every transform gets its number from the hub, and they only ever go up (Part 4).</summary>
     [Fact]
     public async Task Revisions_are_handed_out_by_the_hub_and_rise()

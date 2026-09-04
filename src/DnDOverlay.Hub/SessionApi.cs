@@ -443,7 +443,16 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 // What is taken hold of comes to the front (Part 3). Already on top counts as
                 // done: raising it every twentieth of a second through a gesture would run the
                 // number space up and change nothing anybody can see.
-                ZOrder: toFront ? Math.Max(current.ZOrder, scene.TopZOrder + 1) : current.ZOrder,
+                //
+                // A LOCKED item never rises, and the lock is asked HERE rather than being left to
+                // the refusal above. That refusal only ever fires for the table, and until M4 the
+                // table was the only caller that grabbed - so the promise "a locked item does not
+                // change its ZOrder" (Part 11) held by accident. The thumbnail grabs with
+                // fromTable: false, which is precisely the combination that had no test and would
+                // have raised the item (Guide C15).
+                ZOrder: toFront && !current.Locked
+                    ? Math.Max(current.ZOrder, scene.TopZOrder + 1)
+                    : current.ZOrder,
                 Revision: _scenes.NextRevision());
 
             _scenes.Set(screen, SceneReducer.Apply(scene, op, context));
