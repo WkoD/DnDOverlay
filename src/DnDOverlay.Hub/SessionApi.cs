@@ -865,6 +865,22 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public Task SpotlightAsync(ScreenRef screen, Point at, CancellationToken cancellationToken = default)
+    {
+        // No gate and no catalogue, for the reason IdentifyScreens gives: there is nothing here to
+        // read back. The ring is worth something now or not at all, so a device that is switched
+        // off is not asked and nothing is kept for it.
+        if (_connections.TryGet(screen.Device, out var connection))
+        {
+            _ = connection.TrySend(new SpotlightPulseMessage(screen.Screen, at.X, at.Y));
+
+            HubLog.Spotlight(_logger, screen.Screen.Value);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default)
     {
         // No gate and no catalogue: this changes nothing that could be read back. A device that is

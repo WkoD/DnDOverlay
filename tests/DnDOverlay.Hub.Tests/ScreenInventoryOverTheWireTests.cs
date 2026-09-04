@@ -162,6 +162,42 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The ring goes to the screen it names, on the device that owns it - and to nobody else. It is
+    /// a pointing gesture mid-sentence, so a second table lighting up would point at nothing anyone
+    /// is talking about (Part 6).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_spotlight_reaches_the_device_that_owns_the_screen_and_no_other()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var asked = await ConnectAsync(Asked, [Info(First), Info(Second)], cancellationToken);
+        using var bystander = await ConnectAsync(Bystander, [Info(First)], cancellationToken);
+
+        await ReceiveAsync<ConfigUpdateMessage>(asked, cancellationToken);
+        await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
+
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+
+        await session.SpotlightAsync(new ScreenRef(Asked, Second), new Point(0.25, 0.75), cancellationToken);
+
+        var ring = await ReceiveAsync<SpotlightPulseMessage>(asked, cancellationToken);
+
+        // The screen is named in the message, because one device may own several.
+        Assert.Equal(Second, ring.Screen);
+        Assert.Equal(0.25, ring.X, precision: 9);
+        Assert.Equal(0.75, ring.Y, precision: 9);
+
+        // What the bystander must NOT have got is proven without waiting for a silence: give it
+        // something it definitely will get, and assert that this is the next thing to arrive.
+        await session.SetScreenStateAsync(new ScreenRef(Bystander, First), ScreenState.Blackout, cancellationToken);
+
+        var next = await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
+
+        Assert.Equal(ScreenState.Blackout, Assert.Single(next.Update.Screens).Command!.State);
+    }
+
+    /// <summary>
     /// A device that is switched off is simply not asked. Unlike a setting - which is kept and goes
     /// out with the next connection - an identification is only ever worth anything now.
     /// </summary>

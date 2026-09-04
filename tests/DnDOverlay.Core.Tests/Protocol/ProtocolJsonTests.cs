@@ -102,6 +102,10 @@ public sealed class ProtocolJsonTests
         // The empty list is a statement and not an absence: the last finger has lifted (Part 4).
         new TouchPointsMessage(Screen.Screen, []),
 
+        // Off-centre on both axes, because a point at 0.5, 0.5 survives a swapped pair of
+        // coordinates as well (Guide C14).
+        new SpotlightPulseMessage(Screen.Screen, 0.25, 0.75),
+
         // The five that had gone over real sockets in the seam tests and through no round trip of
         // their own - which is how they stayed off this list without anybody noticing.
         new PairingPendingMessage("482 913"),

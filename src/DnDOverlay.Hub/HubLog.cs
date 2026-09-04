@@ -388,6 +388,18 @@ internal static partial class HubLog
     internal static partial void ForeignScreenRefused(ILogger logger, string deviceName, string screenName);
 
     /// <summary>
+    /// A ring was sent to a table. Debug, because at ten a minute it would otherwise crowd out the
+    /// evening - and it earns its place all the same: the ring is drawn at the OTHER end, so
+    /// without this line "the control did not send" and "the table did not draw" are the same
+    /// picture from here (the lesson of M3c).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3035,
+        Level = LogLevel.Debug,
+        Message = "A spotlight was sent to {ScreenName}.")]
+    internal static partial void Spotlight(ILogger logger, string screenName);
+
+    /// <summary>
     /// A picture went from one screen to another. It is the one operation that changes two screens
     /// at once, and the evening's question it answers is "where did that go?" - a picture that
     /// vanished from the table is otherwise indistinguishable from one that was removed.

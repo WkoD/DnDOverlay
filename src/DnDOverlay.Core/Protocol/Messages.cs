@@ -35,6 +35,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(ItemTransformedMessage), "ItemTransformed")]
 [JsonDerivedType(typeof(ItemParkedMessage), "ItemParked")]
 [JsonDerivedType(typeof(TouchPointsMessage), "TouchPoints")]
+[JsonDerivedType(typeof(SpotlightPulseMessage), "SpotlightPulse")]
 public abstract record ProtocolMessage;
 
 /// <summary>
@@ -496,6 +497,22 @@ public sealed record AssetProgressMessage(IReadOnlyList<AssetLoad> Loads) : Prot
 /// afterwards (Part 3), and a flag on the message it is already sending beats a second message
 /// that could arrive in the wrong order.
 /// </param>
+/// <summary>
+/// "Look here" - a ring that runs out at a point on one screen, and nothing else (Part 6).
+/// <para>
+/// <b>It carries no state and is never applied to a scene.</b> There is nothing to reconcile, no
+/// revision, and nothing to see a moment later; a display that misses it has missed a gesture the
+/// DM made while speaking, and repeating it late would point at something nobody is talking about
+/// any more. That is why it rides in rank 4 with the touch points and is the second message that
+/// may be dropped under load (Part 1, Part 4).
+/// </para>
+/// <para>
+/// The point is in the same normalised screen coordinates as everything else, so a control that
+/// draws a thumbnail of the screen can name a place on it without knowing the screen's pixels.
+/// </para>
+/// </summary>
+public sealed record SpotlightPulseMessage(ScreenId Screen, double X, double Y) : ProtocolMessage;
+
 public sealed record ItemTransformedMessage(
     ScreenId Screen,
     ItemTransform Transform,

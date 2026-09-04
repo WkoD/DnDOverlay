@@ -292,6 +292,17 @@ public interface ISessionApi
     Task SetTouchPointsAsync(bool reporting, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Points at a place on one screen: a ring that runs out there and is gone (Part 6).
+    /// <para>
+    /// <b>Nothing is kept.</b> It changes no scene, takes no revision and is never repeated - a
+    /// device that is switched off gets nothing, and one that misses it under load has missed a
+    /// gesture the DM made mid-sentence (rank 4, Part 4). The same reasoning as
+    /// <see cref="IdentifyScreensAsync"/>, one step shorter.
+    /// </para>
+    /// </summary>
+    Task SpotlightAsync(ScreenRef screen, Point at, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Makes every overlay of one device show its own name, large, for a few seconds (Part 6).
     /// <para>
     /// With two devices of two screens each there is otherwise nothing that says which tile is

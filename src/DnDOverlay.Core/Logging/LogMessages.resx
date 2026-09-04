@@ -255,6 +255,9 @@
   <data name="E3023_FrameTimes" xml:space="preserve">
     <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
   </data>
+  <data name="E3035_Spotlight" xml:space="preserve">
+    <value>A spotlight was sent to {ScreenName}.</value>
+  </data>
   <data name="E3033_ItemMoved" xml:space="preserve">
     <value>An image moved from {FromScreen} to {ToScreen}.</value>
   </data>

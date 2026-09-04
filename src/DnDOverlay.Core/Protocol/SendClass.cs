@@ -49,9 +49,13 @@ public static class SendClasses
         AssetProgressMessage => SendClass.Progress,
 
         // The first thing in rank 4, and the reason the rank exists: ten messages a second from
-        // every table, every one of which is worthless the moment the next arrives. Diagnostics,
-        // WindowList and SpotlightPulse join it in M4 and M5.
+        // every table, every one of which is worthless the moment the next arrives. Diagnostics
+        // and WindowList join it in M5.
         TouchPointsMessage => SendClass.Transient,
+
+        // The pointing gesture, and transient for the same reason from the other direction: a ring
+        // that arrives after the sentence it belonged to points at nothing (M4).
+        SpotlightPulseMessage => SendClass.Transient,
         _ => SendClass.State,
     };
 }
