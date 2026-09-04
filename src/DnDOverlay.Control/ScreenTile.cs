@@ -81,6 +81,13 @@ internal sealed class ScreenTile : Border
     internal ScreenRef Screen { get; }
 
     /// <summary>
+    /// The head, and the one place a tile may be dragged by (Part 7). The tile's face is taken -
+    /// items lie on it and the selection frame is drawn from it - while the head is the one strip
+    /// that exists on every tile and is always the same size.
+    /// </summary>
+    internal UIElement Handle => _head;
+
+    /// <summary>
     /// Whether this is the screen the next blind grip lands on - the paste hotkey, the double tap
     /// in the stock, the pre-selected entry in every target list (Part 7).
     /// </summary>

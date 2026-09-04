@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Configuration;
 using DnDOverlay.Hub;
+using ScreenPoint = System.Windows.Point;
 
 namespace DnDOverlay.Control;
 
@@ -27,15 +29,22 @@ namespace DnDOverlay.Control;
 internal sealed class StageBoard : WrapPanel
 {
     private readonly ISessionApi _session;
+    private readonly ControlSettings _settings;
     private readonly Pictures _pictures;
     private readonly Dictionary<ScreenRef, ScreenTile> _tiles = [];
     private readonly Dictionary<ScreenRef, string> _labels = [];
 
     private IReadOnlyList<ScreenView> _screens = [];
+    private ScreenTile? _dragged;
+    private ScreenPoint? _from;
 
-    internal StageBoard(ISessionApi session, Pictures pictures)
+    /// <summary>How far a hand travels before this is a drag rather than a press, in DIP.</summary>
+    private const double Threshold = 8;
+
+    internal StageBoard(ISessionApi session, ControlSettings settings, Pictures pictures)
     {
         _session = session;
+        _settings = settings;
         _pictures = pictures;
 
         Orientation = Orientation.Horizontal;
@@ -59,9 +68,9 @@ internal sealed class StageBoard : WrapPanel
     {
         ArgumentNullException.ThrowIfNull(screens);
 
-        _screens = screens;
+        _screens = InOrder(screens);
 
-        foreach (var view in screens)
+        foreach (var view in _screens)
         {
             _labels[view.Screen] = view.Info.Label;
 
@@ -75,6 +84,17 @@ internal sealed class StageBoard : WrapPanel
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);
             tile.PreviewTouchDown += (_, _) => Activate(view.Screen);
 
+            // Dragged by the head, and by nothing else. Mouse and finger are wired separately
+            // rather than relying on WPF promoting touch to mouse - that promotion stops the
+            // moment manipulation is switched on, which is what the thumbnails get in M4c.
+            tile.Handle.PreviewMouseLeftButtonDown += (_, _) => Take(tile);
+            tile.Handle.PreviewMouseMove += (_, moved) => Over(tile, moved.GetPosition(this), moved.LeftButton is MouseButtonState.Pressed);
+            tile.Handle.PreviewMouseLeftButtonUp += (_, _) => Released();
+
+            tile.Handle.PreviewTouchDown += (_, _) => Take(tile);
+            tile.Handle.PreviewTouchMove += (_, moved) => Over(tile, moved.GetTouchPoint(this).Position, dragging: true);
+            tile.Handle.PreviewTouchUp += (_, _) => Released();
+
             _tiles[view.Screen] = tile;
             Children.Add(tile);
         }
@@ -85,11 +105,52 @@ internal sealed class StageBoard : WrapPanel
             _tiles.Remove(gone);
         }
 
+        // The tiles stand in the DM's order, not in the one the device tree happens to give:
+        // Children is rebuilt from the ordered list rather than appended to, because a screen that
+        // was unplugged and came back would otherwise stand at the end (Part 7).
+        Children.Clear();
+
+        foreach (var view in _screens)
+        {
+            Children.Add(_tiles[view.Screen]);
+        }
+
         if (Active is not { } active || !_tiles.ContainsKey(active))
         {
-            Activate(screens.Count > 0 ? screens[0].Screen : null);
+            Activate(_screens.Count > 0 ? _screens[0].Screen : null);
         }
     }
+
+    /// <summary>
+    /// The screens in the order the DM arranged them, with anything new at the end.
+    /// <para>
+    /// <b>What is not in the saved order is new</b>, and new hangs itself on the end - a screen
+    /// pushing into the middle of an arrangement the DM built would be worse than one he has to
+    /// place himself. A saved entry with no screen behind it is skipped and KEPT: it is the screen
+    /// that is unplugged right now, and it takes its place again when it comes back (Part 7).
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<ScreenView> InOrder(IReadOnlyList<ScreenView> screens)
+    {
+        var saved = _settings.Current.TileOrder;
+
+        if (saved.Count == 0)
+        {
+            return screens;
+        }
+
+        var places = saved
+            .Select((key, index) => (Key: key, Index: index))
+            .ToDictionary(entry => entry.Key, entry => entry.Index);
+
+        return
+        [
+            .. screens.OrderBy(view =>
+                places.TryGetValue(Key(view.Screen), out var place) ? place : int.MaxValue),
+        ];
+    }
+
+    private static ScreenKey Key(ScreenRef screen) => new(screen.Device.Value, screen.Screen.Value);
 
     /// <summary>
     /// Fetches every scene and hands it to its tile. Called on every patch: what a patch changed is
@@ -115,9 +176,107 @@ internal sealed class StageBoard : WrapPanel
                 _labels.GetValueOrDefault(view.Screen, view.Info.Label),
                 scene,
                 ScreenContext.Default(view.Info.Size, view.Info.Dpi),
-                ViewRotation.None);
+                View(view.Screen));
         }
     }
+
+    /// <summary>
+    /// How the DM looks at this screen. Read on every draw rather than kept here: it is written in
+    /// one place (Part 7), and a second copy on the stage would be the one that is stale after the
+    /// menu has set it.
+    /// </summary>
+    private ViewRotation View(ScreenRef screen) =>
+        _settings.Current.KnownScreens
+            .FirstOrDefault(known =>
+                known.DeviceId == screen.Device.Value && known.ScreenId == screen.Screen.Value)
+            ?.View
+        ?? ViewRotation.None;
+
+    /// <summary>
+    /// The tile a hand has taken hold of, and where it started. Nothing moves yet: a press on the
+    /// head is how the DM reaches the screen menu as well (M4c), so the drag begins only once the
+    /// hand has actually travelled.
+    /// </summary>
+    private void Take(ScreenTile tile)
+    {
+        _dragged = tile;
+        _from = null;
+    }
+
+    /// <summary>
+    /// The hand has moved. Once it is past the threshold the tile moves between the others - the
+    /// order changes while the DM is looking at it, which is what "the others make way" means
+    /// (Prüfschritt 24b); the arrangement is written when the hand lets go.
+    /// </summary>
+    private void Over(ScreenTile tile, ScreenPoint at, bool dragging)
+    {
+        if (!dragging || _dragged != tile)
+        {
+            return;
+        }
+
+        _from ??= at;
+
+        if (Math.Abs(at.X - _from.Value.X) + Math.Abs(at.Y - _from.Value.Y) < Threshold)
+        {
+            return;
+        }
+
+        if (Under(at) is not { } target || target == tile)
+        {
+            return;
+        }
+
+        var order = _screens.Select(view => view.Screen).ToList();
+        var taken = order.IndexOf(tile.Screen);
+        var place = order.IndexOf(target.Screen);
+
+        if (taken < 0 || place < 0)
+        {
+            return;
+        }
+
+        order.RemoveAt(taken);
+        order.Insert(place, tile.Screen);
+
+        _screens = [.. order.Select(screen => _screens.First(view => view.Screen == screen))];
+
+        Children.Clear();
+
+        foreach (var screen in order)
+        {
+            Children.Add(_tiles[screen]);
+        }
+    }
+
+    /// <summary>
+    /// The hand let go. The arrangement is written now rather than on every step of the drag: the
+    /// configuration file debounces, and twenty writes on the way to a place the DM has not chosen
+    /// yet would be twenty answers to a question he is still asking.
+    /// </summary>
+    private void Released()
+    {
+        if (_dragged is null)
+        {
+            return;
+        }
+
+        _dragged = null;
+        _from = null;
+
+        var order = _screens.Select(view => Key(view.Screen)).ToList();
+
+        // What is kept is the screens that are here PLUS the saved places of the ones that are
+        // not: a screen that is unplugged during a rearrangement must not lose its place (Part 7).
+        var absent = _settings.Current.TileOrder.Where(key => !order.Contains(key));
+
+        _settings.Update(current => current with { TileOrder = [.. order, .. absent] });
+    }
+
+    private ScreenTile? Under(ScreenPoint at) =>
+        _tiles.Values.FirstOrDefault(tile =>
+            tile.IsVisible
+            && new System.Windows.Rect(tile.TranslatePoint(default, this), tile.RenderSize).Contains(at));
 
     private void Activate(ScreenRef? screen)
     {
