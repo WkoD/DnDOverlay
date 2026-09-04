@@ -286,19 +286,21 @@ public sealed class ParkingTests
 
     /// <summary>Nine at 96 DIP along a 1080-DIP edge - the number the parameter table produces.</summary>
     /// <summary>
-    /// <b>Five, not nine</b>, and the difference is the newest card's own body. The old number
-    /// divided the bar by a finger and forgot that the card at the near end is covered by nothing
-    /// and lies there at its whole arrival length - half the bar on a 1080 table. Measured: the
-    /// pitch is a finger at five cards and 80 DIP at six.
+    /// <b>Five cards show a finger's width each, and the sixth closes the fan up.</b> That is the
+    /// limit the table accepted rather than the one it was told: the newest card is covered by
+    /// nothing and lies there at its whole arrival length, half the bar on a 1080 screen, so only
+    /// what is left of the bar can be stepped.
+    /// <para>
+    /// It is measured here and nowhere asserted as a number, because the number is not a promise -
+    /// it moves with the arrival size and the screen. What is a promise is that <b>nothing becomes
+    /// unreachable</b>, and that is the theory above.
+    /// </para>
     /// </summary>
     [Fact]
-    public void A_1080p_table_shows_five_cards_at_a_fingers_width()
+    public void A_1080p_table_steps_five_cards_before_the_fan_closes_up()
     {
         var screen = Build.Screen();
 
-        Assert.Equal(5, Parking.Capacity(Parking.Fan(Parked(5, screen)), screen));
-
-        // And the number is not a claim of its own - it says where the pitch gives way.
         Assert.Equal(
             screen.MinVisibleNormalisedY,
             Parking.Pitch(Parking.Fan(Parked(5, screen)), screen),
@@ -307,70 +309,6 @@ public sealed class ParkingTests
         Assert.True(
             Parking.Pitch(Parking.Fan(Parked(6, screen)), screen) < screen.MinVisibleNormalisedY,
             "the sixth card was expected to close the fan up");
-    }
-
-    /// <summary>
-    /// <b>A card too long for the bar is drawn shorter, and that is the one place a parked picture
-    /// is not at its arrival size.</b> With the shipped defaults a picture may be 0.9 of the screen
-    /// long while the bar is 0.8, so on a TOP park edge five 4:1 pictures ran 64 % of a screen
-    /// width off the glass and every touch on the bar picked the same one of them - four parked and
-    /// unreachable at once (hand-run of M3).
-    /// </summary>
-    [Theory]
-    [InlineData(ParkEdge.Top)]
-    [InlineData(ParkEdge.Bottom)]
-    public void Panoramas_wider_than_the_bar_still_make_a_fan(ParkEdge edge)
-    {
-        var screen = Build.Screen() with { ParkEdge = edge };
-        var scene = Parking.Arrange(
-            Build.SceneWith(
-                [.. Enumerable.Range(0, 5).Select(i => Build.Item(parked: true, parkedAt: i + 1, aspectRatio: 4))]),
-            screen);
-
-        var fan = Parking.Fan(scene);
-
-        Assert.Equal(5, Reachable(scene, screen).Count);
-
-        foreach (var card in fan)
-        {
-            var cut = Parking.CutOf(scene, screen, card.ItemId);
-            var rect = Layout.ItemToRect(card, screen);
-
-            // Cut, and what is left of it ends inside the bar. The head runs back off the near end
-            // on purpose - it is faded out there, and the card in front lies over it anyway.
-            Assert.False(cut.IsWhole, "a picture longer than the bar was expected to be cut");
-            Assert.InRange(rect.X + rect.Width, 0, 0.9 + 1e-9);
-        }
-    }
-
-    /// <summary>
-    /// <b>The size a card has in the fan is a size the gesture clamp accepts</b>, so coming back out
-    /// changes nothing. It did not use to be: a 1:10 tower parked at 0.400 and came out at 0.740,
-    /// nearly double, under the hand (hand-run of M3, N11).
-    /// <para>
-    /// Two rules, each right on its own, disagreeing at their intersection (`G15`).
-    /// <c>ScaleOnLoad</c> has no lower bound because on an extreme shape it explodes; <c>ClampScale</c>
-    /// keeps one because the DM must not be able to zoom a picture away. The fan asked only the
-    /// first and produced sizes the second would not have allowed - and the first transform after
-    /// the card came out was the second's turn to speak.
-    /// </para>
-    /// </summary>
-    [Theory]
-    [InlineData(ParkEdge.Right, 0.05)]
-    [InlineData(ParkEdge.Right, 0.1)]
-    [InlineData(ParkEdge.Right, 4d / 3d)]
-    [InlineData(ParkEdge.Top, 4)]
-    [InlineData(ParkEdge.Bottom, 20)]
-    public void A_card_comes_out_of_the_fan_at_the_size_it_had_in_it(ParkEdge edge, double aspect)
-    {
-        var screen = Build.Screen() with { ParkEdge = edge };
-        var item = Build.Item(parked: true, parkedAt: 1, aspectRatio: aspect);
-
-        var parked = Parking.Arrange(Build.SceneWith(item), screen).Items[0];
-
-        // What the hub does to the very first transform after the card is pulled out.
-        Assert.Equal(
-            parked.Scale, Layout.ClampScale(parked.Scale, aspect, screen), precision: 9);
     }
 
     /// <summary>

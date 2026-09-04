@@ -48,7 +48,7 @@ does not exist here, and the address is typed into a browser by a person standin
 | `ConfigUpdate` | control **↔** display | changed display parameters as a **delta**; from the control additionally the screen wish and the transient finding |
 | `IdentifyScreens` | control → display | nothing — every overlay of that device shows its own name, large, for a few seconds |
 | `ItemTransformed` | display → control | one item's new place, size and angle as an **intention**, with the revision the display had when the hand took hold, and whether this is the first report of the gesture |
-| `ItemParked` | display → control | a player swiped an item into the slot bar, or took one back out of it |
+| `ItemParked` | display → control | a player put an item into the fan along the park edge, or took one back out of it |
 | `TouchPoints` | display → control | every finger on **one screen**, normalised: per touch an identity and the path it has taken since the last send, each point carrying its own age. An empty list says the last finger has lifted |
 
 `IdentifyScreens` carries no payload on purpose: the device knows its own screens and what each of
@@ -498,7 +498,7 @@ timeline.
 | `addItem` | M1a | puts a finished item on a screen |
 | `transformItem` | M3a | where an item lies now — pushed, zoomed, turned |
 | `setLocked` | M3a | locks one item against gestures at the table, or releases it |
-| `parkItem` | M3a | lays an item into the slot bar along the park edge, or takes it out |
+| `parkItem` | M3a | lays an item into the fan along the park edge, or takes it out |
 
 The remaining operations arrive with the milestones that implement them. An operation that
 serialises but does nothing in the reducer would look implemented while being a trap.

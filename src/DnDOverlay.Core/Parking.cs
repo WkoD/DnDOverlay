@@ -425,36 +425,6 @@ public static class Parking
     }
 
     /// <summary>
-    /// How many cards of this fan's size still show a finger's width each. Past that the cards
-    /// close up and picking one gets fiddly - it is not a limit on how many can be parked, nothing
-    /// is ever refused.
-    /// <para>
-    /// <b>It reserves the newest card's body, and that correction is worth the parameter.</b> The
-    /// number used to be the bar divided by a finger, which says nine on a 1080 table - but the
-    /// newest card is covered by nothing and lies there at its whole arrival length, half the bar.
-    /// The true count is five, and the fan drops under a finger at SIX cards, not at ten. A number
-    /// that answers is worse than none when it answers wrongly.
-    /// </para>
-    /// </summary>
-    public static int Capacity(IReadOnlyList<SceneItem> fan, ScreenContext screen)
-    {
-        ArgumentNullException.ThrowIfNull(fan);
-        ArgumentNullException.ThrowIfNull(screen);
-
-        var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
-        var slice = Manipulation.Visible(screen, alongX);
-
-        if (slice <= 0)
-        {
-            return 1;
-        }
-
-        var body = fan.Count == 0 ? 0 : fan.Max(item => Shown(Stow(item, screen), screen));
-
-        return 1 + Math.Max(0, (int)Math.Floor((BarEnd - BarStart - body) / slice));
-    }
-
-    /// <summary>
     /// The size and angle a picture has while it is in the fan: its arrival size on this screen,
     /// standing straight - <b>and held between the same bounds every other size is held between</b>.
     /// <para>
