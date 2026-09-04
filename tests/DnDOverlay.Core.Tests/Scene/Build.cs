@@ -57,9 +57,22 @@ internal static class Build
         AssetId? asset = null,
         string? name = "Sturmküste",
         bool showName = false,
-        BackgroundFit fit = BackgroundFit.Cover,
+        AssetMeta? meta = null,
+        double centerX = 0.5,
+        double centerY = 0.5,
+        double scale = 1,
+        double rotationDeg = 0,
         bool animationPaused = false) =>
-        new(asset ?? Asset('c'), Meta(), name, showName, fit, OffsetX: 0, OffsetY: 0, animationPaused);
+        new(
+            asset ?? Asset('c'),
+            meta ?? Meta(),
+            name,
+            showName,
+            centerX,
+            centerY,
+            scale,
+            rotationDeg,
+            animationPaused);
 
     internal static SceneState SceneWith(params SceneItem[] items) =>
         SceneState.Empty with { Items = items };

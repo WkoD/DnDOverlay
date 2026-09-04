@@ -251,17 +251,20 @@ public sealed class SessionApi : ISessionApi, IDisposable
         ArgumentNullException.ThrowIfNull(asset);
 
         // The finished layer travels, as the finished item does for AddItem: what the hub has
-        // worked out is not worked out again at the other end (Part 1, rule 2). Fit and offset
-        // start at their resting values - Cover, centred - and are moved from the thumbnail
-        // afterwards (Part 6).
+        // worked out is not worked out again at the other end (Part 1, rule 2). A fresh background
+        // arrives covering the screen, and is moved from the thumbnail afterwards (Part 6).
+        var (centre, scale) = Layout.FitBackground(
+            asset.Meta.AspectRatio, BackgroundFit.Cover, _screens.ContextFor(screen));
+
         var background = new BackgroundItem(
             asset.AssetId,
             asset.Meta,
             asset.Name,
             ShowName: false,
-            Fit: BackgroundFit.Cover,
-            OffsetX: 0,
-            OffsetY: 0,
+            CenterX: centre.X,
+            CenterY: centre.Y,
+            Scale: scale,
+            RotationDeg: 0,
             AnimationPaused: false);
 
         return ApplyAsync(screen, new SetBackground(background), cancellationToken);
@@ -271,8 +274,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
     public async Task SetBackgroundFitAsync(
         ScreenRef screen,
         BackgroundFit fit,
-        double offsetX = 0,
-        double offsetY = 0,
         CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -288,7 +289,10 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return;
             }
 
-            wanted = background with { Fit = fit, OffsetX = offsetX, OffsetY = offsetY };
+            var (centre, scale) = Layout.FitBackground(
+                background.Meta.AspectRatio, fit, _screens.ContextFor(screen));
+
+            wanted = background with { CenterX = centre.X, CenterY = centre.Y, Scale = scale };
         }
         finally
         {

@@ -135,9 +135,14 @@ public sealed class SceneCommandTests
 
         Assert.NotNull(background);
         Assert.Equal(Reference().AssetId, background.AssetId);
-        Assert.Equal(BackgroundFit.Cover, background.Fit);
-        Assert.Equal(0, background.OffsetX);
         Assert.False(background.ShowName);
+
+        // It arrives covering the screen. Since M4 that is a place and a size rather than a mode,
+        // so the assertion is the one thing Cover promises: no edge is left uncovered.
+        var rect = Layout.BackgroundRect(background, screens.ContextFor(Target));
+
+        Assert.True(rect.Width >= 1 - 1e-9 && rect.Height >= 1 - 1e-9, "the fresh background left a gap");
+        Assert.Equal(0, background.RotationDeg);
     }
 
     /// <summary>Strictly separate from the items - which is why "empty the lot" has to send both.</summary>

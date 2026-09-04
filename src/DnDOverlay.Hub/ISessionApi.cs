@@ -43,8 +43,13 @@ public interface ISessionApi
     Task SetBackgroundAsync(ScreenRef screen, AssetRef asset, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Changes how the background sits without touching which picture it is: the fit, and which
-    /// part of the crop is seen.
+    /// Puts the background back into one of the two obvious positions without touching which
+    /// picture it is: <c>Cover</c> fills and crops, <c>Contain</c> shows everything.
+    /// <para>
+    /// <b>It computes a place and a size rather than storing a mode</b> (M4). What the DM does
+    /// afterwards - move it, scale it, turn it - starts from there and is not undone by it; the
+    /// button is the way back to a known position, which is what makes free handling safe.
+    /// </para>
     /// <para>
     /// There is no operation of its own for this - the background travels as a whole layer, so
     /// changing it is a read, a change and a <c>SetBackground</c> under the same lock. A screen
@@ -54,8 +59,6 @@ public interface ISessionApi
     Task SetBackgroundFitAsync(
         ScreenRef screen,
         BackgroundFit fit,
-        double offsetX = 0,
-        double offsetY = 0,
         CancellationToken cancellationToken = default);
 
     /// <summary>Takes the background layer away, leaving the items where they are.</summary>

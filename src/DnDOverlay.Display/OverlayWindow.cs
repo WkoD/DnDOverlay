@@ -1737,17 +1737,12 @@ internal sealed class OverlayWindow : Window
             animate,
             background.AnimationPaused);
 
-        var rect = Layout.BackgroundRect(
-            background.Meta.AspectRatio,
-            background.Fit,
-            background.OffsetX,
-            background.OffsetY,
-            context);
+        var rect = Layout.BackgroundRect(background, context);
 
         Lay(
             _backdrop,
             rect,
-            rotationDeg: 0,
+            background.RotationDeg,
             width,
             height,
             background.ShowName ? background.Name : null,

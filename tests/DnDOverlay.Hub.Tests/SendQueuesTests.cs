@@ -361,7 +361,7 @@ public sealed class SendQueuesTests
         {
             Background = new BackgroundItem(
                 new AssetId(new string('f', 64)), Meta(), "Sturmkueste", ShowName: false,
-                BackgroundFit.Cover, OffsetX: 0, OffsetY: 0, AnimationPaused: false),
+                CenterX: 0.5, CenterY: 0.5, Scale: 1, RotationDeg: 0, AnimationPaused: false),
             Items = [.. assets.Select(Item)],
         };
 

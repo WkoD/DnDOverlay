@@ -214,23 +214,19 @@ public sealed class ProtocolJsonTests
         Assert.Throws<JsonException>(() => ProtocolJson.Parse(hostile));
     }
 
+    /// <summary>
+    /// Names rather than numbers, so that inserting a value into an enum cannot silently change
+    /// what an older counterpart reads. Asked of <c>ParkEdge</c> since M4 - it used to be asked of
+    /// the background's fit, and that is no longer a stored value.
+    /// </summary>
     [Fact]
     public void Enums_travel_as_names_rather_than_numbers()
     {
-        var background = new BackgroundItem(
-            new AssetId(new string('c', 64)),
-            Build.Meta(),
-            "Waterdeep",
-            ShowName: true,
-            BackgroundFit.Contain,
-            OffsetX: 0,
-            OffsetY: 0,
-            AnimationPaused: false);
-
-        var message = new SceneSnapshotMessage(Screen, SceneState.Empty with { Background = background });
+        var message = new ConfigUpdateMessage(
+            new ConfigUpdate([new ScreenConfigUpdate(Screen.Screen, new ScreenSettings(ParkEdge: ParkEdge.Left))]));
 
         var json = Encoding.UTF8.GetString(ProtocolJson.Serialise(message));
 
-        Assert.Contains("\"Contain\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"Left\"", json, StringComparison.Ordinal);
     }
 }

@@ -3,12 +3,20 @@ using DnDOverlay.Core;
 namespace DnDOverlay.Core.Tests.Scene;
 
 /// <summary>
-/// The background layer's geometry. Two fits and no free scaling: <c>Cover</c> fills and crops,
-/// <c>Contain</c> shows everything with a margin - and a panorama is unusable under <c>Cover</c>,
-/// which is why the second one exists at all (Part 6).
+/// The background layer's geometry. Since M4 it is the SAME geometry as an item's - a centre, a
+/// scale, an angle - and the two fits are what put it into one of the two obvious positions:
+/// <c>Cover</c> fills and crops, <c>Contain</c> shows everything with a margin. A panorama is
+/// unusable under <c>Cover</c>, which is why the second one exists at all (Part 6).
 /// <para>
 /// The screen is <c>(0, 0, 1, 1)</c>, so a rectangle reaching past it is the crop rather than a
-/// mistake. What must never happen is the other way round: an offset that leaves a gap at an edge.
+/// mistake.
+/// </para>
+/// <para>
+/// <b>The offset tests are gone with the offset.</b> They asked whether a value could open a gap at
+/// an edge, and the answer was a clamp inside the crop. What the offset expressed - which part of
+/// the crop is seen - is now expressed by moving the picture, which can say more; whether the DM
+/// may then leave a gap is a question about the GRIPS and is decided with them in M4c. What is
+/// tested here is what the buttons produce.
 /// </para>
 /// </summary>
 public sealed class BackgroundLayoutTests
@@ -16,8 +24,9 @@ public sealed class BackgroundLayoutTests
     /// <summary>16:9, the table the plan measures against.</summary>
     private static readonly ScreenContext Screen = Build.Screen();
 
+    /// <summary>32:9 - the shape both fits have to disagree about.</summary>
     private const double Panorama = 32d / 9d;
-    private const double Portrait = 9d / 32d;
+
     private const double Precision = 9;
 
     /// <summary>
@@ -25,16 +34,16 @@ public sealed class BackgroundLayoutTests
     /// never the reverse, or the table would show a strip of nothing.
     /// </summary>
     [Theory]
-    [InlineData(Panorama)]
-    [InlineData(Portrait)]
-    [InlineData(16d / 9d)]
-    public void Cover_leaves_no_edge_uncovered(double aspectRatio)
+    [InlineData(3200, 900)]
+    [InlineData(900, 3200)]
+    [InlineData(1600, 900)]
+    public void Cover_leaves_no_edge_uncovered(int width, int height)
     {
-        var rect = Layout.BackgroundRect(aspectRatio, BackgroundFit.Cover, 0, 0, Screen);
+        var rect = Fitted(width, height, BackgroundFit.Cover);
 
         Assert.True(rect.Width >= 1 - double.Epsilon, $"width {rect.Width} leaves a gap");
         Assert.True(rect.Height >= 1 - double.Epsilon, $"height {rect.Height} leaves a gap");
-        Assert.True(rect.X <= 0 && rect.Y <= 0);
+        Assert.True(rect.X <= 1e-9 && rect.Y <= 1e-9);
         Assert.True(rect.X + rect.Width >= 1 - 1e-9 && rect.Y + rect.Height >= 1 - 1e-9);
     }
 
@@ -43,11 +52,11 @@ public sealed class BackgroundLayoutTests
     /// the whole point for a panorama, which Cover would slice a middle strip out of.
     /// </summary>
     [Theory]
-    [InlineData(Panorama)]
-    [InlineData(Portrait)]
-    public void Contain_shows_the_whole_picture(double aspectRatio)
+    [InlineData(3200, 900)]
+    [InlineData(900, 3200)]
+    public void Contain_shows_the_whole_picture(int width, int height)
     {
-        var rect = Layout.BackgroundRect(aspectRatio, BackgroundFit.Contain, 0, 0, Screen);
+        var rect = Fitted(width, height, BackgroundFit.Contain);
 
         Assert.True(rect.Width <= 1 + 1e-9 && rect.Height <= 1 + 1e-9);
         Assert.True(rect.X >= -1e-9 && rect.Y >= -1e-9);
@@ -62,8 +71,8 @@ public sealed class BackgroundLayoutTests
     [Fact]
     public void A_panorama_on_a_sixteen_by_nine_screen_has_the_expected_size()
     {
-        var cover = Layout.BackgroundRect(Panorama, BackgroundFit.Cover, 0, 0, Screen);
-        var contain = Layout.BackgroundRect(Panorama, BackgroundFit.Contain, 0, 0, Screen);
+        var cover = Fitted(3200, 900, BackgroundFit.Cover);
+        var contain = Fitted(3200, 900, BackgroundFit.Contain);
 
         Assert.Equal(2, cover.Width, Precision);
         Assert.Equal(1, cover.Height, Precision);
@@ -75,61 +84,44 @@ public sealed class BackgroundLayoutTests
     }
 
     /// <summary>
-    /// The offset picks which part of the crop is seen, and it moves ONLY inside it: at the ends
-    /// the picture's edge sits exactly on the screen's, never past it and never short of it
-    /// (Part 11).
+    /// What the whole change is for: the background and an item of the same numbers occupy the same
+    /// rectangle, because one formula computes both (rule 9). Written against a PANORAMA and a
+    /// scale that is nobody's default - on a picture shaped like the screen two different formulas
+    /// would agree as well (Guide C14).
     /// </summary>
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(-0.5)]
-    [InlineData(0)]
-    [InlineData(0.5)]
-    [InlineData(1)]
-    public void The_offset_moves_only_inside_the_crop(double offset)
-    {
-        var rect = Layout.BackgroundRect(Panorama, BackgroundFit.Cover, offset, 0, Screen);
-
-        Assert.True(rect.X <= 1e-9, $"a gap of {-rect.X} opened on the left");
-        Assert.True(rect.X + rect.Width >= 1 - 1e-9, "a gap opened on the right");
-    }
-
-    /// <summary>The ends are the edges, exactly - the assertion the range test above cannot make.</summary>
     [Fact]
-    public void The_ends_of_the_offset_are_the_edges_of_the_picture()
+    public void A_background_and_an_item_of_the_same_numbers_occupy_the_same_rectangle()
     {
-        var left = Layout.BackgroundRect(Panorama, BackgroundFit.Cover, -1, 0, Screen);
-        var right = Layout.BackgroundRect(Panorama, BackgroundFit.Cover, 1, 0, Screen);
+        var background = Build.Background(meta: Build.Meta(3200, 900), centerX: 0.4, centerY: 0.65, scale: 0.7);
 
-        Assert.Equal(0, left.X, Precision);
-        Assert.Equal(1, right.X + right.Width, Precision);
+        var item = Build.Item() with
+        {
+            CenterX = 0.4,
+            CenterY = 0.65,
+            Scale = 0.7,
+            AspectRatio = Panorama,
+        };
+
+        Assert.Equal(Layout.ItemToRect(item, Screen), Layout.BackgroundRect(background, Screen));
     }
 
     /// <summary>
-    /// A value beyond the ends is held at them rather than refused. It arrives over the wire from a
-    /// control that may be newer, and a background sliding off the screen is a worse answer than a
-    /// clamped one (rule 7).
+    /// Moving it moves it - the plainest consequence of the change, and the one that replaces the
+    /// offset. Half a screen to the right is half a screen to the right, on both axes.
     /// </summary>
     [Fact]
-    public void An_offset_past_the_end_is_held_at_the_end()
+    public void Moving_the_background_moves_its_rectangle()
     {
-        var far = Layout.BackgroundRect(Panorama, BackgroundFit.Cover, 5, 0, Screen);
-        var end = Layout.BackgroundRect(Panorama, BackgroundFit.Cover, 1, 0, Screen);
+        var centred = Build.Background(centerX: 0.5, centerY: 0.5, scale: 1);
+        var moved = centred with { CenterX = 1.0, CenterY = 0.25 };
 
-        Assert.Equal(end, far);
-    }
+        var before = Layout.BackgroundRect(centred, Screen);
+        var after = Layout.BackgroundRect(moved, Screen);
 
-    /// <summary>
-    /// Under Contain the offset does nothing, and that is the honest outcome rather than a special
-    /// case: the whole picture is visible, so there is nothing to choose between.
-    /// </summary>
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(1)]
-    public void Under_contain_the_offset_has_nothing_to_move(double offset)
-    {
-        Assert.Equal(
-            Layout.BackgroundRect(Panorama, BackgroundFit.Contain, 0, 0, Screen),
-            Layout.BackgroundRect(Panorama, BackgroundFit.Contain, offset, offset, Screen));
+        Assert.Equal(before.X + 0.5, after.X, Precision);
+        Assert.Equal(before.Y - 0.25, after.Y, Precision);
+        Assert.Equal(before.Width, after.Width, Precision);
+        Assert.Equal(before.Height, after.Height, Precision);
     }
 
     /// <summary>
@@ -139,8 +131,8 @@ public sealed class BackgroundLayoutTests
     [Fact]
     public void A_picture_shaped_like_the_screen_fills_it_under_both_fits()
     {
-        var cover = Layout.BackgroundRect(Screen.AspectRatio, BackgroundFit.Cover, 0, 0, Screen);
-        var contain = Layout.BackgroundRect(Screen.AspectRatio, BackgroundFit.Contain, 0, 0, Screen);
+        var cover = Fitted(1600, 900, BackgroundFit.Cover);
+        var contain = Fitted(1600, 900, BackgroundFit.Contain);
 
         Assert.Equal(new Rect(0, 0, 1, 1), cover);
         Assert.Equal(cover, contain);
@@ -153,8 +145,27 @@ public sealed class BackgroundLayoutTests
     [Fact]
     public void A_picture_without_a_shape_fills_the_screen()
     {
-        Assert.Equal(
-            new Rect(0, 0, 1, 1),
-            Layout.BackgroundRect(0, BackgroundFit.Cover, 0, 0, Screen));
+        var shapeless = Build.Background(meta: Build.Meta(0, 0));
+
+        Assert.Equal(new Rect(0, 0, 1, 1), Layout.BackgroundRect(shapeless, Screen));
+    }
+
+    /// <summary>
+    /// The rectangle the button produces: fit first, then draw what it decided.
+    /// <para>
+    /// It takes pixels rather than a ratio, and that is not decoration. The fit is computed from
+    /// the shape the METADATA gives and drawn from the same source, so a test that passes a ratio
+    /// and builds metadata from it puts a rounding error between the two halves - measured at
+    /// 0.09 % on a 9:32 portrait, which is exactly enough to open a gap that is not there.
+    /// </para>
+    /// </summary>
+    private static Rect Fitted(int width, int height, BackgroundFit fit)
+    {
+        var meta = Build.Meta(width, height);
+        var (centre, scale) = Layout.FitBackground(meta.AspectRatio, fit, Screen);
+
+        return Layout.BackgroundRect(
+            Build.Background(meta: meta, centerX: centre.X, centerY: centre.Y, scale: scale),
+            Screen);
     }
 }

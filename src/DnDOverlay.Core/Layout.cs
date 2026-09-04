@@ -32,9 +32,21 @@ public static class Layout
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var (width, height) = NormalisedSize(item.Scale, item.AspectRatio, screen);
+        return ToRect(item.CenterX, item.CenterY, item.Scale, item.AspectRatio, screen);
+    }
 
-        return new Rect(item.CenterX - (width / 2), item.CenterY - (height / 2), width, height);
+    /// <summary>
+    /// The rectangle a centre, a scale and a shape occupy on this screen. Both layers ask it: an
+    /// item through <see cref="ItemToRect"/>, the background through
+    /// <see cref="BackgroundRect"/>. Since M4 that is one formula rather than two that agree
+    /// (rule 9).
+    /// </summary>
+    private static Rect ToRect(
+        double centreX, double centreY, double scale, double aspectRatio, ScreenContext screen)
+    {
+        var (width, height) = NormalisedSize(scale, aspectRatio, screen);
+
+        return new Rect(centreX - (width / 2), centreY - (height / 2), width, height);
     }
 
     /// <summary>
@@ -297,56 +309,58 @@ public static class Layout
 
     /// <summary>
     /// Where the background picture lies, in the same normalised screen coordinates everything else
-    /// here uses. The screen itself is <c>(0, 0, 1, 1)</c>, so under
-    /// <see cref="BackgroundFit.Cover"/> the rectangle reaches PAST it on one axis - that overhang
-    /// is the crop, and whoever draws it clips to the screen.
+    /// here uses - and by the same formula as <see cref="ItemToRect"/>, because since M4 the
+    /// background carries a centre, a scale and an angle like any picture.
     /// <para>
-    /// Two values and no free scaling, deliberately: <c>Cover</c> fills and crops, <c>Contain</c>
-    /// shows everything with a margin, and a panorama is unusable under <c>Cover</c> without it.
-    /// A freely scalable background would be a gesture this layer deliberately does not have
-    /// (Part 6).
+    /// The screen itself is <c>(0, 0, 1, 1)</c>, so a background that fills it reaches PAST it on
+    /// one axis; that overhang is the crop, and whoever draws it clips to the screen.
     /// </para>
     /// </summary>
-    /// <param name="offsetX">
-    /// Which part of the crop is seen: <c>0</c> is centred, <c>-1</c> the left edge, <c>+1</c> the
-    /// right. <b>It moves only inside the crop</b> and can never run past the edge - the value is
-    /// clamped, and where there is no overhang it has no effect at all. Under <c>Contain</c> that
-    /// means it does nothing, which is the honest outcome rather than a special case: the picture
-    /// is entirely visible, so there is nothing to choose between (Part 6, Part 11).
-    /// </param>
-    public static Rect BackgroundRect(
-        double aspectRatio, BackgroundFit fit, double offsetX, double offsetY, ScreenContext screen)
+    public static Rect BackgroundRect(BackgroundItem background, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(background);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        return background.Meta.AspectRatio <= 0 || screen.AspectRatio <= 0
+
+            // Nothing to fit against. Filling the screen is the answer that shows a picture rather
+            // than an empty layer.
+            ? new Rect(0, 0, 1, 1)
+            : ToRect(background.CenterX, background.CenterY, background.Scale, background.Meta.AspectRatio, screen);
+    }
+
+    /// <summary>
+    /// The centre and the scale one of the two fit buttons produces - <c>Cover</c> fills the screen
+    /// and crops, <c>Contain</c> shows everything with a margin.
+    /// <para>
+    /// <b>They compute a state now instead of being one.</b> Until M4 the fit was a field of the
+    /// background and the renderer asked it on every pass; it is now what the DM presses to put the
+    /// picture back into one of the two obvious positions, and everything after that is a free
+    /// place, size and angle (Part 6).
+    /// </para>
+    /// <para>
+    /// The centre is the middle of the screen in both cases. That is not a simplification: under
+    /// <c>Cover</c> the choice of section is what an offset used to express, and it is now made by
+    /// moving the picture - which can do everything the offset could and more.
+    /// </para>
+    /// </summary>
+    public static (Point Centre, double Scale) FitBackground(
+        double aspectRatio, BackgroundFit fit, ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(screen);
 
+        var centre = new Point(0.5, 0.5);
+
         if (aspectRatio <= 0 || screen.AspectRatio <= 0)
         {
-            // Nothing to fit against. Filling the screen is the answer that shows a picture rather
-            // than an empty layer.
-            return new Rect(0, 0, 1, 1);
+            return (centre, 1);
         }
 
         // Normalised height is a fraction of the screen height and normalised width a fraction of
         // the screen WIDTH, so the picture's shape has to travel through both aspect ratios - the
         // same trap as in ItemToRect, and the reason both live here rather than at two call sites.
-        var relative = aspectRatio / screen.AspectRatio;
+        var upright = screen.AspectRatio / aspectRatio;
 
-        // Wider than the screen, in normalised terms, iff relative > 1.
-        var (width, height) = fit switch
-        {
-            BackgroundFit.Contain when relative >= 1 => (1d, 1d / relative),
-            BackgroundFit.Contain => (relative, 1d),
-            _ when relative >= 1 => (relative, 1d),
-            _ => (1d, 1d / relative),
-        };
-
-        return new Rect(Edge(width, offsetX), Edge(height, offsetY), width, height);
+        return (centre, fit is BackgroundFit.Contain ? Math.Min(1, upright) : Math.Max(1, upright));
     }
-
-    /// <summary>
-    /// Where one edge starts: centred when the offset is zero, and at most as far as the overhang
-    /// allows. <c>Contain</c> needs no case of its own here - it simply has no overhang.
-    /// </summary>
-    private static double Edge(double extent, double offset) =>
-        -(Math.Max(0, extent - 1) / 2) * (1 + Math.Clamp(offset, -1, 1));
 }
