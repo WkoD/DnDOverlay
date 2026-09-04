@@ -9,7 +9,10 @@ Loaded into every session. Keep it short — it is the entry point, not the docu
 - **`plan/`** — the German working plan, in eleven parts, **git-ignored**. It is the
   scaffolding, not the building: what carries moves to `docs/`, README and CONTRIBUTING.md as
   it is built, and the plan shrinks to a reference in its place. `plan/STATUS.md` holds the
-  current state per milestone and the values that have actually been settled.
+  current state per milestone and the values that have actually been settled. **It is not
+  backed up, deliberately** — a snapshot under `.claude/plans/` used to be step 4 of every
+  milestone, was never once made, and would have put the plan into this public repository;
+  decided on 03.09.2026 that there is no backup rather than an instruction nobody follows.
 - **`plan/checks/M<n>.md`** — per milestone, filled **from part 11**, not from part 10. The
   direction is the point: a checklist copied from the milestone inherits its blind spot.
 
@@ -43,8 +46,6 @@ Loaded into every session. Keep it short — it is the entry point, not the docu
 1. Walk the ten check questions from `docs/design-principles.md`.
 2. Tick off `plan/checks/M<n>.md` and note what changed against the plan.
 3. Move what now carries into `docs/` — and replace that part of the plan with a reference.
-4. Overwrite the snapshot under `.claude/plans/` from `plan/`; it is the only backup, because
-   `plan/` is git-ignored.
 
 ## Working directory
 
