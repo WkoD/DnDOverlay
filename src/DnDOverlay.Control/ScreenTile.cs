@@ -32,7 +32,12 @@ internal sealed class ScreenTile : Border
     private readonly CheckBox _background = new() { Content = "Background", Margin = new Thickness(0, 0, 12, 0) };
     private readonly Button _unlock = new() { Content = "Unlock all", Padding = new Thickness(8, 2, 8, 2) };
 
+    private readonly Border _frame;
+
     private bool _setting;
+
+    /// <summary>How tall a thumbnail is in the overview, in DIP. The width follows its shape.</summary>
+    private const double Small = 150;
 
     internal ScreenTile(ScreenRef screen, ISessionApi session, Pictures pictures)
     {
@@ -55,17 +60,20 @@ internal sealed class ScreenTile : Border
 
         grips.Children.Add(_unlock);
 
-        var panel = new StackPanel();
-
-        panel.Children.Add(_head);
-        panel.Children.Add(new Border
+        _frame = new Border
         {
             Child = _thumbnail,
-            Height = 150,
+            Height = Small,
             Margin = new Thickness(0, 4, 0, 0),
             BorderThickness = new Thickness(1),
             BorderBrush = Brushes.Gainsboro,
-        });
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+
+        var panel = new StackPanel();
+
+        panel.Children.Add(_head);
+        panel.Children.Add(_frame);
         panel.Children.Add(grips);
         panel.Children.Add(layers);
 
@@ -86,6 +94,21 @@ internal sealed class ScreenTile : Border
     /// that exists on every tile and is always the same size.
     /// </summary>
     internal UIElement Handle => _head;
+
+    /// <summary>
+    /// Whether this tile is the one open on its own - then the thumbnail takes the room it is
+    /// given instead of its own height, and the head and the buttons stay exactly as they are
+    /// (Part 7: "one tile filling the format, with the same head and the same buttons").
+    /// </summary>
+    internal bool Opened
+    {
+        set
+        {
+            _frame.Height = value ? double.NaN : Small;
+            _frame.VerticalAlignment = value ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+            _frame.HorizontalAlignment = value ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+        }
+    }
 
     /// <summary>
     /// Whether this is the screen the next blind grip lands on - the paste hotkey, the double tap

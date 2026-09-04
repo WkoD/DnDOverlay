@@ -62,6 +62,31 @@ internal sealed class SceneThumbnail : FrameworkElement
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The thumbnail keeps the screen's shape, and it keeps the shape as the DM SEES it: a table
+    /// turned by a quarter is upright in the tile, and a tile that stayed landscape would stretch
+    /// everything drawn in it (<see cref="Viewing.AspectRatioInView"/>).
+    /// </remarks>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var shape = AspectRatio;
+
+        if (shape <= 0)
+        {
+            return new Size(0, 0);
+        }
+
+        // Height leads, because a tile is a row in a wrapping arrangement: the rows have to be of
+        // one height or the arrangement gets holes in it (Part 7).
+        var height = double.IsInfinity(availableSize.Height) ? 0 : availableSize.Height;
+        var width = height * shape;
+
+        return double.IsInfinity(availableSize.Width) || width <= availableSize.Width
+            ? new Size(width, height)
+            : new Size(availableSize.Width, availableSize.Width / shape);
+    }
+
+    /// <inheritdoc />
     protected override void OnRender(DrawingContext drawingContext)
     {
         ArgumentNullException.ThrowIfNull(drawingContext);

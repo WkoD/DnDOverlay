@@ -32,6 +32,7 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Border _firstRun = new() { Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _notices = new() { Margin = new Thickness(0, 0, 0, 12) };
 
+    private readonly PanelHead _panelHead = new();
     private readonly StageBoard _board;
     private readonly StagePanel _stage;
 
@@ -81,6 +82,7 @@ internal sealed class MainWindow : Window, IDisposable
             Margin = new Thickness(0, 12, 0, 4),
         });
         panel.Children.Add(_list);
+        panel.Children.Add(_panelHead);
         panel.Children.Add(_board);
         panel.Children.Add(StateRow());
         panel.Children.Add(TouchRow());
@@ -95,6 +97,24 @@ internal sealed class MainWindow : Window, IDisposable
         _guard = new StageGuard(this, session, Environment.MachineName);
 
         _list.SelectionChanged += async (_, _) => await _stage.RefreshAsync().ConfigureAwait(true);
+
+        _panelHead.Toggled += (_, _) => Switch(!_board.Single);
+        _board.ActiveChanged += (_, _) => Remember();
+
+        // Where the window stood, if that place is still there (Part 7). Done before the window is
+        // shown, so it never appears in one place and jumps to another.
+        StagePlace.Restore(this, settings.Current.Window);
+
+        if (StagePlace.Remembered(settings.Current) is { Opened: not null })
+        {
+            Switch(single: true);
+        }
+
+        Closing += (_, _) =>
+        {
+            _settings.Update(current => current with { Window = StagePlace.Taken(this) });
+            _settings.Flush();
+        };
 
         Closed += (_, _) => Dispose();
 
@@ -161,6 +181,29 @@ internal sealed class MainWindow : Window, IDisposable
     }
 
     /// <summary>Which screen the grips act on, or nothing while the list is empty.</summary>
+    /// <summary>
+    /// Switches the stage between the overview and one screen on its own, and keeps the answer for
+    /// THIS monitor arrangement (Part 7).
+    /// </summary>
+    private void Switch(bool single)
+    {
+        _board.Single = single;
+        _panelHead.Show(single);
+
+        Remember();
+    }
+
+    /// <summary>
+    /// Keeps which view is open where. Called on every change of the active screen as well,
+    /// because in the single view the active screen IS the open one - the two are the same fact
+    /// from two directions (Part 7).
+    /// </summary>
+    private void Remember() =>
+        _settings.Update(current => current with
+        {
+            StageViews = StagePlace.With(current.StageViews, _board.Single ? _board.Active : null),
+        });
+
     private ScreenRef? Selected() =>
         _list.SelectedItem is ScreenEntry entry ? entry.Screen : null;
 

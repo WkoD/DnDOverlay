@@ -26,7 +26,7 @@ namespace DnDOverlay.Control;
 /// changes the same table, and a stage that trusted its own command would drift from it (rule 1).
 /// </para>
 /// </summary>
-internal sealed class StageBoard : WrapPanel
+internal sealed class StageBoard : Panel
 {
     private readonly ISessionApi _session;
     private readonly ControlSettings _settings;
@@ -46,8 +46,26 @@ internal sealed class StageBoard : WrapPanel
         _session = session;
         _settings = settings;
         _pictures = pictures;
+    }
 
-        Orientation = Orientation.Horizontal;
+    /// <summary>
+    /// Whether one screen is open on its own. <b>Switched by a button and never by a swipe</b>: a
+    /// swipe on the stage already means moving or panning, and a third meaning for the same grip
+    /// would go wrong regularly (Part 7).
+    /// </summary>
+    internal bool Single
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            Lay();
+        }
     }
 
     /// <summary>
@@ -105,20 +123,114 @@ internal sealed class StageBoard : WrapPanel
             _tiles.Remove(gone);
         }
 
-        // The tiles stand in the DM's order, not in the one the device tree happens to give:
-        // Children is rebuilt from the ordered list rather than appended to, because a screen that
-        // was unplugged and came back would otherwise stand at the end (Part 7).
-        Children.Clear();
-
-        foreach (var view in _screens)
-        {
-            Children.Add(_tiles[view.Screen]);
-        }
-
         if (Active is not { } active || !_tiles.ContainsKey(active))
         {
             Activate(_screens.Count > 0 ? _screens[0].Screen : null);
         }
+
+        Lay();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Two arrangements and one panel. The overview wraps by width - "tiles wrap instead of being
+    /// cut off" is what a control on half a surface has to do (Prüfschritt 26) - and the single
+    /// view gives the whole room to one tile.
+    /// </remarks>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        if (Single)
+        {
+            foreach (UIElement child in InternalChildren)
+            {
+                child.Measure(availableSize);
+            }
+
+            return new Size(
+                double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width,
+                double.IsInfinity(availableSize.Height) ? 0 : availableSize.Height);
+        }
+
+        double lineWidth = 0, lineHeight = 0, width = 0, height = 0;
+
+        foreach (UIElement child in InternalChildren)
+        {
+            child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+            var wanted = child.DesiredSize;
+
+            if (lineWidth + wanted.Width > availableSize.Width && lineWidth > 0)
+            {
+                width = Math.Max(width, lineWidth);
+                height += lineHeight;
+                lineWidth = 0;
+                lineHeight = 0;
+            }
+
+            lineWidth += wanted.Width;
+            lineHeight = Math.Max(lineHeight, wanted.Height);
+        }
+
+        return new Size(Math.Max(width, lineWidth), height + lineHeight);
+    }
+
+    /// <inheritdoc />
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        if (Single)
+        {
+            foreach (UIElement child in InternalChildren)
+            {
+                child.Arrange(new System.Windows.Rect(default, finalSize));
+            }
+
+            return finalSize;
+        }
+
+        double x = 0, y = 0, lineHeight = 0;
+
+        foreach (UIElement child in InternalChildren)
+        {
+            var wanted = child.DesiredSize;
+
+            if (x + wanted.Width > finalSize.Width && x > 0)
+            {
+                x = 0;
+                y += lineHeight;
+                lineHeight = 0;
+            }
+
+            child.Arrange(new System.Windows.Rect(x, y, wanted.Width, wanted.Height));
+
+            x += wanted.Width;
+            lineHeight = Math.Max(lineHeight, wanted.Height);
+        }
+
+        return finalSize;
+    }
+
+    /// <summary>
+    /// Which tiles are on show and how large they are. In the single view the others are not
+    /// hidden behind the open one - they are not in the tree at all, so nothing of theirs is
+    /// measured, arranged or drawn.
+    /// </summary>
+    private void Lay()
+    {
+        Children.Clear();
+
+        foreach (var view in _screens)
+        {
+            var tile = _tiles[view.Screen];
+
+            tile.Opened = Single;
+
+            if (!Single || view.Screen == Active)
+            {
+                Children.Add(tile);
+            }
+        }
+
+        InvalidateMeasure();
     }
 
     /// <summary>
@@ -290,6 +402,13 @@ internal sealed class StageBoard : WrapPanel
         foreach (var (reference, tile) in _tiles)
         {
             tile.Active = reference == screen;
+        }
+
+        // The open screen IS the active one, in both directions (Part 7): opening one makes it
+        // active, and making another one active while a screen is open shows that one instead.
+        if (Single)
+        {
+            Lay();
         }
 
         ActiveChanged?.Invoke(this, EventArgs.Empty);
