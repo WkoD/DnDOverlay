@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Hub;
@@ -31,6 +32,7 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Border _firstRun = new() { Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _notices = new() { Margin = new Thickness(0, 0, 0, 12) };
 
+    private readonly StageBoard _board;
     private readonly StagePanel _stage;
 
     private DevicesWindow? _devices;
@@ -42,6 +44,7 @@ internal sealed class MainWindow : Window, IDisposable
         ISessionApi session,
         PairingDesk pairing,
         Entrances entrances,
+        AssetStore store,
         ControlSettings settings,
         Uri address,
         ProcessLog log)
@@ -52,6 +55,7 @@ internal sealed class MainWindow : Window, IDisposable
         _address = address;
         _log = new LogList(log, "Control") { Height = 200 };
 
+        _board = new StageBoard(session, new Pictures(store));
         _stage = new StagePanel(session, entrances, Selected, _status, log.CreateLogger("Control"));
 
         Title = "DnDOverlay - M2b";
@@ -77,6 +81,7 @@ internal sealed class MainWindow : Window, IDisposable
             Margin = new Thickness(0, 12, 0, 4),
         });
         panel.Children.Add(_list);
+        panel.Children.Add(_board);
         panel.Children.Add(StateRow());
         panel.Children.Add(TouchRow());
         panel.Children.Add(_stage);
@@ -141,6 +146,7 @@ internal sealed class MainWindow : Window, IDisposable
                     case SessionEvent.ScenePatched:
                     case SessionEvent.SceneReplaced:
                         await _stage.RefreshAsync().ConfigureAwait(true);
+                        await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
                         break;
 
                     default:
@@ -187,6 +193,10 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         _list.SelectedIndex = selected >= 0 && selected < _list.Items.Count ? selected : 0;
+
+        _board.Show([.. devices.SelectMany(device => device.Screens)]);
+
+        _ = _board.RefreshAsync(_listening.Token);
     }
 
     /// <summary>
