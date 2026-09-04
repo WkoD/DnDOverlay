@@ -48,6 +48,9 @@ internal sealed class FrameWatch : IDisposable
     private long _lastCpuAtMs;
     private double _cpuPercent;
 
+    /// <summary>Whether the stretch about to be reported is the first of this run.</summary>
+    private bool _first = true;
+
     /// <summary>
     /// What the garbage collector had stopped the world for when the last window was reported, and
     /// how many times it had swept the oldest generation.
@@ -160,7 +163,21 @@ internal sealed class FrameWatch : IDisposable
 
         DisplayLog.FrameTimes(_logger, seconds, median, p95, max, cadence, cpu, gcMs, sweeps, draw, hand);
 
-        if (!reading.Missed)
+        var starting = _first;
+
+        _first = false;
+
+        // <b>Starting up is allowed to stop once.</b> The first stretch is the one in which the
+        // application is still coming up and the first pictures are decoded and hung up, and a
+        // single stall there is not the table being slow - measured on the SP7, 653.5 ms in the
+        // opening window against 49-85 ms in every window after it (hand-run of M3, B1). The
+        // exception is as narrow as it can be: only the MAXIMUM is forgiven, only while the median
+        // and the 95th are inside their budgets, and only in that one window. Anything that gets
+        // worse later is by definition not in the first window and warns as before.
+        //
+        // It stays observed rather than hidden: the maximum is in every 3023 line whether or not
+        // this one warns, so a startup that grows worse over the months can be read off the log.
+        if (!reading.Missed || (starting && reading.OnlyStopped))
         {
             return;
         }

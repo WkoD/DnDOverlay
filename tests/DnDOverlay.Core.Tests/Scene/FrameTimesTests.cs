@@ -228,4 +228,27 @@ public sealed class FrameTimesTests
 
         Assert.Equal(0, times.Count);
     }
+
+    /// <summary>
+    /// <b>"Something stopped it once" is a different statement from "it is too slow"</b>, and the
+    /// display needs to tell them apart to let the opening stretch off. Measured on the SP7
+    /// (hand-run of M3, B1): 653.5 ms maximum in the first window against 49-85 ms in every window
+    /// after it, median 16.9 ms throughout - the application coming up, not the table being slow.
+    /// </summary>
+    [Theory]
+    // median, 95th, max, only the maximum gave way?
+    [InlineData(16.9, 33.3, 653.5, true)]
+    [InlineData(16.9, 33.3, 84.7, false)]   // nothing gave way at all
+    [InlineData(40.0, 33.3, 653.5, false)]  // the median went too, so the table IS slow
+    [InlineData(16.9, 90.0, 653.5, false)]  // and so did the 95th: it stutters
+    public void The_maximum_can_give_way_on_its_own(double median, double p95, double max, bool only)
+    {
+        var reading = new FrameReading(median, p95, max, CadenceMs: 16.7, Frames: 1800);
+
+        Assert.Equal(only, reading.OnlyStopped);
+
+        // And it never says "only" about a stretch that did not miss at all - the display asks the
+        // two together, so a quiet window must answer no to both.
+        Assert.True(reading.Missed || !reading.OnlyStopped);
+    }
 }

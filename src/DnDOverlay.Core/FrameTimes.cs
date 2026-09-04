@@ -58,6 +58,20 @@ public readonly record struct FrameReading(
     public bool Missed => MedianMs > BudgetMs || P95Ms > StutterMs || MaxMs > 100;
 
     /// <summary>
+    /// Whether the ONLY thing that gave way was the maximum - the stretch was otherwise inside its
+    /// budget, so the machine is keeping up and something stopped it once.
+    /// <para>
+    /// It exists for the one stretch where that is expected rather than wrong: the first, in which
+    /// the application is still coming up and the first pictures are being decoded and hung up.
+    /// Measured on the SP7 (hand-run of M3, B1): 653.5 ms maximum in the opening window against
+    /// 49-85 ms in every window after it, with a median of 16.9 ms throughout and 14 GC sweeps in
+    /// the first thirty seconds alone. A warning that fires while everything else is fine teaches
+    /// the reader to skip the line.
+    /// </para>
+    /// </summary>
+    public bool OnlyStopped => MaxMs > 100 && MedianMs <= BudgetMs && P95Ms <= StutterMs;
+
+    /// <summary>
     /// Which of the three gave way, for the warning to say so in its first words.
     /// <para>
     /// Read at the table (hand-run of M3b): the warning read <i>"is not holding its frame budget:
