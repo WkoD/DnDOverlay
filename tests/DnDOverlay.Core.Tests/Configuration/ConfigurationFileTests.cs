@@ -50,6 +50,55 @@ public sealed class ConfigurationFileTests : IDisposable
     }
 
     /// <summary>
+    /// The four things the stage remembers, through the file and back: how the DM looks at a screen,
+    /// the order of the tiles, which view was open in which monitor arrangement, and where the
+    /// window stood (Part 7). Written in M4a and read by the tiles in M4b - the round trip is what
+    /// can be asked of them today, and it is the half that a UI test would never reach.
+    /// </summary>
+    [Fact]
+    public void What_the_stage_remembers_survives_the_file()
+    {
+        var device = Guid.NewGuid();
+        var table = new ScreenKey(device, @"\\?\DISPLAY#TABLE#1");
+        var beamer = new ScreenKey(device, @"\\?\DISPLAY#WALL#2");
+
+        using (var file = Store(TimeProvider.System))
+        {
+            file.Save(new ControlConfiguration
+            {
+                KnownScreens =
+                [
+                    new KnownScreen(
+                        device,
+                        table.ScreenId,
+                        "TISCH-PC//DISPLAY1",
+                        ScreenState.Enabled,
+                        new PixelSize(1920, 1080),
+                        96,
+                        new ScreenSettings(),
+                        ViewRotation.Half),
+                ],
+
+                // The beamer first, which is not the order the device tree would give - an order
+                // that happens to match the default proves nothing.
+                TileOrder = [beamer, table],
+                StageViews = [new StageView("docked", table), new StageView("surface", null)],
+                Window = new WindowPlacement(120, 60, 1400, 900, Maximised: false),
+            });
+
+            file.Flush();
+        }
+
+        using var reopened = Store(TimeProvider.System);
+        var loaded = reopened.Load(() => new ControlConfiguration()).Value;
+
+        Assert.Equal(ViewRotation.Half, Assert.Single(loaded.KnownScreens).View);
+        Assert.Equal([beamer, table], loaded.TileOrder);
+        Assert.Equal([new StageView("docked", table), new StageView("surface", null)], loaded.StageViews);
+        Assert.Equal(new WindowPlacement(120, 60, 1400, 900, Maximised: false), loaded.Window);
+    }
+
+    /// <summary>
     /// Twenty changes, one file. Without the debounce every keystroke in a settings field would
     /// be its own write - which is why the clock is handed in: this is a test, not a stopwatch.
     /// </summary>

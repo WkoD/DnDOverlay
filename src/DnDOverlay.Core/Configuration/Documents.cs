@@ -128,7 +128,74 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// </para>
     /// </summary>
     public bool ShowTouchPoints { get; set; } = true;
+
+    /// <summary>
+    /// The order the tiles stand in, as the DM arranged them - a list rather than a number on each
+    /// screen (Part 7).
+    /// <para>
+    /// <b>A list, because both promises are about the SET and not about one screen:</b> a new
+    /// screen joins at the end, a screen that disappears keeps its place and stands there again
+    /// when it comes back. A number per screen can be handed out twice; a list cannot.
+    /// </para>
+    /// <para>
+    /// <b>Not per monitor arrangement</b>, unlike <see cref="StageViews"/>, and that is the whole
+    /// point of it: this describes how the ROOM looks - the table in the middle, the beamer on the
+    /// wall - and the room does not change when the surface is docked (Part 1, rule 4).
+    /// </para>
+    /// <para>
+    /// Written in M4a, read by the stage in M4b: what an unknown entry means, where a new screen
+    /// joins and what "reset the arrangement" does are decisions the tiles make.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ScreenKey> TileOrder { get; set; } = [];
+
+    /// <summary>
+    /// Which stage view was last open, PER monitor arrangement - the one view property that is
+    /// kept that way (Part 7).
+    /// <para>
+    /// The reason is the opposite of the one for <see cref="TileOrder"/>: this describes how the DM
+    /// is sitting right now. Docked at the desk he works on the big monitor with one screen open;
+    /// undocked on the surface he wants the overview. Carrying one answer across both would be
+    /// wrong twice a day.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<StageView> StageViews { get; set; } = [];
+
+    /// <summary>
+    /// Where the window stood when it was last closed.
+    /// <para>
+    /// <b>It is checked before it is applied, and that is not a nicety</b> (Part 7): a window
+    /// restored onto a monitor that is no longer there lies outside every visible area - the
+    /// application runs and cannot be found. The check belongs to whoever opens the window, which
+    /// is why this is a plain record of numbers and not a promise about where the window will be.
+    /// </para>
+    /// </summary>
+    public WindowPlacement? Window { get; set; }
 }
+
+/// <summary>
+/// The address of one screen as <c>control.json</c> writes it: a raw <see cref="Guid"/> and a raw
+/// string, the same shape <see cref="KnownScreen"/> uses.
+/// <para>
+/// <c>ScreenRef</c> would be the type this stands for, and it is deliberately not used here. The
+/// file is meant to be legible and to need no converters; the wrapper types would put two of them
+/// between a reader and a name they can already see (Part 6).
+/// </para>
+/// </summary>
+public sealed record ScreenKey(Guid DeviceId, string ScreenId);
+
+/// <summary>
+/// One monitor arrangement and the stage view that was open in it - no screen means the overview.
+/// </summary>
+/// <param name="Monitors">
+/// What identifies the arrangement. It is formed by whoever knows the monitors, so this is a plain
+/// string here: what makes two arrangements "the same" is a question for the platform, not for the
+/// file (Part 2).
+/// </param>
+public sealed record StageView(string Monitors, ScreenKey? Opened);
+
+/// <summary>Where a window stood, in the coordinates the window system uses.</summary>
+public sealed record WindowPlacement(double Left, double Top, double Width, double Height, bool Maximised);
 
 /// <summary>
 /// One screen as it sits in <c>control.json</c>: what the device said about it, what the DM
@@ -151,7 +218,12 @@ public sealed record KnownScreen(
     ScreenState State,
     PixelSize Size,
     double Dpi,
-    ScreenSettings Settings);
+    ScreenSettings Settings,
+
+    // How the DM looks at this screen. It sits beside the settings rather than inside them, and the
+    // distinction is the one that keeps it out of a ConfigUpdate: Settings is what the device is
+    // told, this is how the control draws (Part 7).
+    ViewRotation View = ViewRotation.None);
 
 /// <summary>
 /// One paired device as it sits in <c>control.json</c>.

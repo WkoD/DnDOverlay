@@ -430,6 +430,35 @@ public sealed record ScreenConfigUpdate(
 /// device cannot know it was turned off.
 /// </para>
 /// </param>
+/// <summary>
+/// How the DM looks at one screen from where he is sitting - a quarter turn at a time.
+/// <para>
+/// <b>It is a property of the CONTROL's view and of nothing else.</b> It never travels, no device
+/// is told about it, and the picture on the table does not move by a millimetre when it changes
+/// (Part 7). What it changes is the thumbnail: the DM turns it until it lies the way the table
+/// lies in front of him, and from then on a drag to the right moves a picture to the right as he
+/// sees it - which at 180 degrees means to the left on the table.
+/// </para>
+/// <para>
+/// Stored per screen in <c>control.json</c>, which is where its being a view property has a
+/// consequence: a <c>ConfigUpdate</c> carrying one would be a mistake, not a feature.
+/// </para>
+/// </summary>
+public enum ViewRotation
+{
+    /// <summary>The table lies the way the DM sits - nothing to correct.</summary>
+    None = 0,
+
+    /// <summary>A quarter turn clockwise.</summary>
+    Quarter = 90,
+
+    /// <summary>Upside down - the DM sits across the table from the screen's own top edge.</summary>
+    Half = 180,
+
+    /// <summary>Three quarters clockwise.</summary>
+    ThreeQuarters = 270,
+}
+
 public sealed record ConfigUpdate(
     IReadOnlyList<ScreenConfigUpdate> Screens,
     DeviceSettings? Device = null,

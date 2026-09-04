@@ -46,6 +46,13 @@ public sealed class ConfigurationDefaultsTests
         Assert.NotEqual(Guid.Empty, value.ControlId);
         Assert.Equal(ConfigurationSchema.Version, value.SchemaVersion);
         Assert.Equal(LogLevel.Information, value.LogLevel);
+
+        // What the stage remembers, absent on every file written before M4: empty lists rather
+        // than null, and no window - a placement of zeros would put the window in a corner it was
+        // never in (rule 7).
+        Assert.Empty(value.TileOrder);
+        Assert.Empty(value.StageViews);
+        Assert.Null(value.Window);
     }
 
     /// <summary>
