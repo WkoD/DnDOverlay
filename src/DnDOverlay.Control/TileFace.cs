@@ -6,6 +6,7 @@ using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
 using CoreManipulation = DnDOverlay.Core.Manipulation;
 using CorePoint = DnDOverlay.Core.Point;
+using CoreRect = DnDOverlay.Core.Rect;
 using TilePoint = System.Windows.Point;
 using TileRect = System.Windows.Rect;
 
@@ -67,6 +68,7 @@ internal sealed class TileFace : Panel
 
     private TilePoint? _pressed;
     private TilePoint _mouseAt;
+    private TilePoint? _framing;
     private Hold? _hold;
     private bool _spent;
 
@@ -405,16 +407,32 @@ internal sealed class TileFace : Panel
 
         var now = moved.GetPosition(this);
 
-        if (_hold is null)
+        if (_hold is null && _framing is null)
         {
             // Nothing is taken hold of until the hand has actually travelled: a press that turns
             // into a tap must not have moved a picture on the way (Part 7).
-            if (Math.Abs(now.X - from.X) + Math.Abs(now.Y - from.Y) <= TapTravel || !Grab(from))
+            if (Math.Abs(now.X - from.X) + Math.Abs(now.Y - from.Y) <= TapTravel)
             {
                 _mouseAt = now;
 
                 return;
             }
+
+            if (!Grab(from))
+            {
+                // Free area, so this is a frame. The two never collide: a frame begins strictly
+                // OUTSIDE a picture and taking hold strictly ON one (Part 7).
+                Frame(from);
+            }
+        }
+
+        if (_framing is not null)
+        {
+            _mouseAt = now;
+
+            Framed(now);
+
+            return;
         }
 
         if (_hold is not { } hold)
@@ -449,6 +467,13 @@ internal sealed class TileFace : Panel
         if (_hold is not null)
         {
             LetGo(from is { } start ? Math.Abs(at.X - start.X) + Math.Abs(at.Y - start.Y) : 0, turning: false);
+
+            return;
+        }
+
+        if (_framing is not null)
+        {
+            Framing(at, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
 
             return;
         }
@@ -511,6 +536,20 @@ internal sealed class TileFace : Panel
 
         if (_hold is null)
         {
+            // A finger that took hold of nothing draws a frame - once it has travelled far enough
+            // to have meant one rather than a tap.
+            if (_framing is null && _pressed is { } began)
+            {
+                var travelled = moved.CumulativeManipulation.Translation;
+
+                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > TapTravel)
+                {
+                    Frame(began);
+                }
+            }
+
+            Framed(moved.ManipulationOrigin);
+
             return;
         }
 
@@ -541,6 +580,17 @@ internal sealed class TileFace : Panel
             return;
         }
 
+        if (_framing is not null)
+        {
+            // A finger has no Ctrl: on touch a frame always replaces, and adding is what the
+            // selection circles are for (Part 7).
+            Framing(done.ManipulationOrigin, adding: false);
+
+            _pressed = null;
+
+            return;
+        }
+
         // A manipulation that took hold of nothing was a tap on free area - or on a selection
         // circle, which lies on a picture and is therefore asked first.
         if (_pressed is { } began && Math.Abs(total.X) + Math.Abs(total.Y) <= TapTravel)
@@ -549,6 +599,102 @@ internal sealed class TileFace : Panel
         }
 
         _pressed = null;
+    }
+
+    /// <summary>
+    /// Begins a frame from free tile area. The one-finger drag is free for it because the stage
+    /// itself pans with two fingers and there is nothing on a tile to scroll (Part 7).
+    /// </summary>
+    private void Frame(TilePoint from)
+    {
+        _framing = Clamped(OnFace(from));
+
+        _marks.Frame(new TileRect(_framing.Value, _framing.Value));
+    }
+
+    /// <summary>
+    /// One step of a frame. <b>It stops at the edge of the tile, visibly.</b> The pointer may run
+    /// out and come back - the rectangle is always the part inside - because a frame drawn over the
+    /// neighbouring screen would say it was selecting there, and a selection does not cross screens
+    /// (Part 3, Part 7).
+    /// </summary>
+    private void Framed(TilePoint at)
+    {
+        if (_framing is { } from)
+        {
+            _marks.Frame(Between(from, Clamped(OnFace(at))));
+        }
+    }
+
+    /// <summary>
+    /// The frame closed. <b>Letting go outside the tile finishes it rather than cancelling it</b>,
+    /// and a frame that never grew past a twitch was a tap on free area, which clears (Part 7).
+    /// </summary>
+    private void Framing(TilePoint at, bool adding)
+    {
+        if (_framing is not { } from)
+        {
+            return;
+        }
+
+        var to = Clamped(OnFace(at));
+        var face = Wanted(RenderSize);
+
+        _framing = null;
+        _marks.Frame(null);
+
+        if (Math.Abs(to.X - from.X) + Math.Abs(to.Y - from.Y) <= TapTravel)
+        {
+            _selection.Clear();
+            Touched?.Invoke(this, EventArgs.Empty);
+
+            return;
+        }
+
+        var caught = Picking.Within(
+            _scene,
+            _screen,
+            Spanning(Placing.InScene(from, _view, face), Placing.InScene(to, _view, face)));
+
+        if (adding)
+        {
+            _selection.Add(caught);
+        }
+        else
+        {
+            _selection.Set(caught);
+        }
+
+        Touched?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The rectangle between two corners, whichever way round they were dragged.</summary>
+    private static TileRect Between(TilePoint from, TilePoint to) =>
+        new(
+            Math.Min(from.X, to.X),
+            Math.Min(from.Y, to.Y),
+            Math.Abs(to.X - from.X),
+            Math.Abs(to.Y - from.Y));
+
+    /// <summary>
+    /// The same rectangle in the scene. <b>Two opposite corners rather than a turned rectangle</b>:
+    /// the view turns by quarters, so the frame stays axis-parallel and only its corners change
+    /// places.
+    /// </summary>
+    private static CoreRect Spanning(CorePoint from, CorePoint to) =>
+        new(
+            Math.Min(from.X, to.X),
+            Math.Min(from.Y, to.Y),
+            Math.Abs(to.X - from.X),
+            Math.Abs(to.Y - from.Y));
+
+    private TilePoint Clamped(TilePoint at)
+    {
+        var face = Wanted(RenderSize);
+
+        return new TilePoint(
+            Math.Clamp(at.X, 0, Math.Max(0, face.Width)),
+            Math.Clamp(at.Y, 0, Math.Max(0, face.Height)));
     }
 
     /// <summary>

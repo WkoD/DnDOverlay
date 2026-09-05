@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using DnDOverlay.Core;
 using TilePoint = System.Windows.Point;
+using TileRect = System.Windows.Rect;
 
 namespace DnDOverlay.Control;
 
@@ -30,6 +31,8 @@ namespace DnDOverlay.Control;
 internal sealed class Marks : FrameworkElement
 {
     private readonly Selection _selection;
+
+    private TileRect? _frame;
 
     private SceneState _scene = SceneState.Empty;
     private ScreenContext _screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
@@ -68,6 +71,21 @@ internal sealed class Marks : FrameworkElement
         _scene = scene;
         _screen = screen;
         _view = view;
+
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// The frame being dragged right now, or <see langword="null"/>.
+    /// <para>
+    /// <b>It is drawn only as far as the tile goes</b>, and the clamping happens before it gets
+    /// here (<see cref="TileFace"/>). A rectangle that grew on over the neighbouring screen and
+    /// selected nothing there would promise something it cannot keep (Part 7).
+    /// </para>
+    /// </summary>
+    internal void Frame(TileRect? frame)
+    {
+        _frame = frame;
 
         InvalidateVisual();
     }
@@ -112,6 +130,16 @@ internal sealed class Marks : FrameworkElement
         if (!_scene.ItemsVisible || RenderSize.Width <= 0 || RenderSize.Height <= 0)
         {
             return;
+        }
+
+        if (_frame is { } frame)
+        {
+            // Filled as well as outlined: on a dark table a one-pixel line is hard to follow with a
+            // finger on top of it, and the fill says which side of the line is inside.
+            drawingContext.DrawRectangle(
+                new SolidColorBrush(Color.FromArgb(0x33, 0x00, 0xBF, 0xFF)),
+                new Pen(Brushes.DeepSkyBlue, 1) { DashStyle = DashStyles.Dash },
+                frame);
         }
 
         var outline = new Pen(Brushes.DeepSkyBlue, 2);
