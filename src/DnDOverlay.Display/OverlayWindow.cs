@@ -115,6 +115,12 @@ internal sealed class OverlayWindow : Window
     /// </summary>
     private readonly Tapping _tapping = new();
 
+    /// <summary>
+    /// Where the spotlight is drawn - its own layer, because it belongs to nobody on the table and
+    /// outlives no scene (Part 6).
+    /// </summary>
+    private readonly Canvas _pointing = new() { Background = null, IsHitTestVisible = false };
+
     private readonly TextBlock _name;
     private readonly Border _nameplate;
     private readonly DispatcherTimer _naming;
@@ -180,6 +186,10 @@ internal sealed class OverlayWindow : Window
         var root = new Grid { Background = null };
 
         root.Children.Add(_stage);
+
+        // Above every picture and below the nameplate, and hit-testable by nothing: a ring that
+        // swallowed a touch would take a finger away from the table it is pointing at.
+        root.Children.Add(_pointing);
         root.Children.Add(_nameplate);
 
         Title = monitor.Screen.Label;
@@ -448,6 +458,65 @@ internal sealed class OverlayWindow : Window
 
         _naming.Stop();
         _naming.Start();
+    }
+
+    /// <summary>
+    /// The spotlight: a ring that runs out at a place on this table and is gone (Part 6).
+    /// <para>
+    /// <b>It is the one thing in this milestone that the DM's stage draws HERE.</b> The grip is in
+    /// the control - two-finger tap, middle mouse button, space and a left click - and what it is
+    /// for is at the table: it is a pointing gesture in the middle of a sentence, "and HE is
+    /// standing there".
+    /// </para>
+    /// <para>
+    /// <b>Nothing is kept and nothing is hit-tested.</b> It changes no scene, takes no revision and
+    /// is never repeated - a device that missed it under load has missed a gesture rather than a
+    /// state (rank 4, Part 4). A second pulse while one is running starts afresh: the DM points
+    /// twice because the first one was not seen.
+    /// </para>
+    /// <para>
+    /// <b>It grows outward and fades</b> rather than pulsing in place. A ring that only faded would
+    /// be a mark somebody had to notice at the right moment; one that grows carries the eye to its
+    /// centre, which is the place being pointed at.
+    /// </para>
+    /// </summary>
+    internal void Spotlight(CorePoint at)
+    {
+        var (width, height) = Surface(_context ?? ScreenContext.Default(new PixelSize(1920, 1080), 96));
+
+        // Measured against the shorter edge, so the ring is the same size on a table and on a
+        // projector rather than a stripe on the wide one.
+        var reach = Math.Min(width, height) * 0.18;
+
+        var ring = new System.Windows.Shapes.Ellipse
+        {
+            Stroke = Brushes.Gold,
+            StrokeThickness = 6,
+            Width = reach,
+            Height = reach,
+            IsHitTestVisible = false,
+        };
+
+        Canvas.SetLeft(ring, (at.X * width) - (reach / 2));
+        Canvas.SetTop(ring, (at.Y * height) - (reach / 2));
+
+        var scale = new ScaleTransform(0.2, 0.2);
+
+        ring.RenderTransform = scale;
+        ring.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+
+        _pointing.Children.Clear();
+        _pointing.Children.Add(ring);
+
+        var span = TimeSpan.FromMilliseconds(700);
+        var grow = new DoubleAnimation(0.2, 1, span) { FillBehavior = FillBehavior.Stop };
+        var fade = new DoubleAnimation(1, 0, span) { FillBehavior = FillBehavior.Stop };
+
+        fade.Completed += (_, _) => _pointing.Children.Clear();
+
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+        ring.BeginAnimation(OpacityProperty, fade);
     }
 
     private static void Hide(UIElement plate) => plate.Visibility = Visibility.Collapsed;

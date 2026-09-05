@@ -1152,6 +1152,20 @@ public sealed partial class App : Application, IDisposable
                 await Dispatcher.InvokeAsync(Identify);
                 break;
 
+            case SpotlightPulseMessage pulse:
+                // Onto the UI thread, like every other drawing: this arrives on the connection
+                // task. A pulse for a screen we have no window for is simply dropped - an inactive
+                // screen has been given back to Windows and has nothing to point at (Part 3).
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    if (_windows.TryGetValue(pulse.Screen, out var window))
+                    {
+                        window.Spotlight(new DnDOverlay.Core.Point(pulse.X, pulse.Y));
+                    }
+                });
+
+                break;
+
             default:
                 break;
         }

@@ -72,6 +72,18 @@ internal sealed class TileFace : Panel
     private ScreenContext _screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
     private ViewRotation _view;
 
+    /// <summary>
+    /// Every finger on this face, and how far each has travelled. It is the second reading the
+    /// manipulation cannot give: a two-finger TAP and a two-finger DRAG arrive as the same
+    /// manipulation, and only the count and the travel tell them apart.
+    /// </summary>
+    private readonly Dictionary<int, Finger> _fingers = [];
+
+    private int _most;
+    private long _landed;
+    private double _travelled;
+    private TilePoint _between;
+
     private TilePoint? _pressed;
     private TilePoint _mouseAt;
     private TilePoint? _framing;
@@ -112,9 +124,27 @@ internal sealed class TileFace : Panel
 
         // The clock for the long press runs on the touch events rather than on the manipulation:
         // it has to start the moment the finger lands, before anything has been taken hold of.
-        PreviewTouchDown += (_, down) => Held(down.GetTouchPoint(this).Position);
-        PreviewTouchMove += (_, over) => _press.Moved(over.GetTouchPoint(this).Position);
-        PreviewTouchUp += (_, _) => _press.Up();
+        PreviewTouchDown += (_, down) =>
+        {
+            var at = down.GetTouchPoint(this).Position;
+
+            Landed(down.TouchDevice.Id, at);
+            Held(at);
+        };
+
+        PreviewTouchMove += (_, over) =>
+        {
+            var at = over.GetTouchPoint(this).Position;
+
+            Travelled(over.TouchDevice.Id, at);
+            _press.Moved(at);
+        };
+
+        PreviewTouchUp += (_, up) =>
+        {
+            _ = _fingers.Remove(up.TouchDevice.Id);
+            _press.Up();
+        };
 
         // A mouse asks for a menu with its right button, and never by holding the left one: what
         // "holding" means must not differ between a finger and a mouse (Part 7).
@@ -122,6 +152,19 @@ internal sealed class TileFace : Panel
         {
             Menu(clicked.GetPosition(this));
             clicked.Handled = true;
+        };
+
+        // The middle button is the mouse's spotlight: a button of its own, immediate,
+        // unmistakable, and unused anywhere else in this program. It leaves the held left button
+        // free, which matters because "holding" would otherwise mean one thing to a finger and
+        // another to a mouse (Part 7).
+        PreviewMouseDown += (_, pressed) =>
+        {
+            if (pressed.ChangedButton is MouseButton.Middle)
+            {
+                Point(pressed.GetPosition(this));
+                pressed.Handled = true;
+            }
         };
 
         ManipulationStarted += (_, started) => Started(started.ManipulationOrigin);
@@ -347,8 +390,12 @@ internal sealed class TileFace : Panel
         var now = Environment.TickCount64;
         var travelled = Math.Max(hold.Moved, totalDip);
 
+        // A gesture that was already spent - a double click, or a spotlight - does not also get
+        // to be half of a double tap (Guide C16: the counter-check must not be greened by a path
+        // that never ran).
         var toMe = turning
-            || (Tapping.IsTap(travelled, now - hold.Began)
+            || (!_spent
+                && Tapping.IsTap(travelled, now - hold.Began)
                 && _tapping.Twice(now, hold.TapDip.X, hold.TapDip.Y));
 
         hold.Item = toMe
@@ -392,6 +439,22 @@ internal sealed class TileFace : Panel
     private void Pressed(MouseButtonEventArgs pressed)
     {
         var at = pressed.GetPosition(this);
+
+        if (Pointing())
+        {
+            // Space and a left click, the grip MapTool uses for its own pointer: the DM has it in
+            // his fingers already, and it closes the gap on pointing devices without a middle
+            // button. With the space bar down the click ONLY lights up - it selects nothing, clears
+            // nothing and begins no drag, or the pointing gesture would move a picture in passing
+            // (Part 7).
+            Point(at);
+
+            _spent = true;
+            _pressed = null;
+            pressed.Handled = true;
+
+            return;
+        }
 
         _pressed = at;
         _mouseAt = at;
@@ -569,6 +632,79 @@ internal sealed class TileFace : Panel
         Asked?.Invoke(this, new MenuAsk(on, where, Picking.At(_scene, _screen, where)));
     }
 
+    /// <summary>
+    /// Whether the space bar is asking for a spotlight. <b>Three limits, or the space bar eats
+    /// things that are not its own</b> (Part 7): it is no global hotkey and works only while this
+    /// window is in front, which a WPF key state already says; and it stays out of the way of a
+    /// text field, where space writes a space, and of a focused button, which space presses.
+    /// </summary>
+    private static bool Pointing() =>
+        Keyboard.IsKeyDown(Key.Space)
+        && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase
+        && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.ButtonBase;
+
+    /// <summary>
+    /// Points at a place on this table. <b>Nothing is kept</b> - it changes no scene and takes no
+    /// revision, and a device that misses it under load has missed a gesture the DM made mid
+    /// sentence (Part 4, rank 4).
+    /// </summary>
+    private void Point(TilePoint at) =>
+        _ = _session.SpotlightAsync(_screenRef, Where(at), CancellationToken.None);
+
+    /// <summary>A finger landed. The first one starts the clock the two-finger tap is judged by.</summary>
+    private void Landed(int finger, TilePoint at)
+    {
+        if (_fingers.Count == 0)
+        {
+            _landed = Environment.TickCount64;
+            _most = 0;
+            _travelled = 0;
+        }
+
+        _fingers[finger] = new Finger(at);
+        _most = Math.Max(_most, _fingers.Count);
+
+        if (_fingers.Count == 2)
+        {
+            // The point is the middle of the two fingers, taken when the second one lands: for
+            // "look over HERE" that is close enough, and it does not wander while they lift
+            // (Part 7).
+            var both = _fingers.Values.ToList();
+
+            _between = new TilePoint(
+                (both[0].At.X + both[1].At.X) / 2,
+                (both[0].At.Y + both[1].At.Y) / 2);
+        }
+    }
+
+    private void Travelled(int finger, TilePoint at)
+    {
+        if (_fingers.TryGetValue(finger, out var known))
+        {
+            known.Moved += Math.Abs(at.X - known.At.X) + Math.Abs(at.Y - known.At.Y);
+            known.At = at;
+
+            // Kept beside the finger, not only on it: by the time the manipulation reports itself
+            // finished the fingers are already gone from the table, and a travel read from an empty
+            // one would make every two-finger drag look like a tap.
+            _travelled = Math.Max(_travelled, known.Moved);
+        }
+    }
+
+    /// <summary>
+    /// Whether the gesture that has just ended was a two-finger tap rather than a two-finger drag.
+    /// <para>
+    /// <b>Decided at the end, on the count and the travel.</b> The two arrive as the same
+    /// manipulation, and Part 7 has them mean two different things on purpose: the tap points, the
+    /// drag pans - and the drag is the one that would collide if the tap were decided on the way
+    /// down.
+    /// </para>
+    /// </summary>
+    private bool Pointed()
+    {
+        return _most == 2 && Tapping.IsTap(_travelled, Environment.TickCount64 - _landed);
+    }
+
     private void Started(TilePoint origin)
     {
         _pressed = origin;
@@ -619,6 +755,16 @@ internal sealed class TileFace : Panel
         done.Handled = true;
 
         var total = done.TotalManipulation.Translation;
+
+        if (Pointed())
+        {
+            // A two-finger tap points, wherever it lands - over a picture as well as on bare table
+            // (Part 7). What was taken hold of is put down unchanged, and it must not count as a
+            // tap on the way.
+            Point(_between);
+
+            _spent = true;
+        }
 
         if (_hold is not null)
         {
@@ -811,6 +957,14 @@ internal sealed class TileFace : Panel
     }
 
     private static CorePoint Centre(SceneItem item) => new(item.CenterX, item.CenterY);
+
+    /// <summary>One finger on the face: where it is now, and how far it has come.</summary>
+    private sealed class Finger(TilePoint at)
+    {
+        internal TilePoint At { get; set; } = at;
+
+        internal double Moved { get; set; }
+    }
 
     /// <summary>Where a menu was asked for, and what lies there.</summary>
     /// <param name="At">The place on the face, for putting the menu where the hand is.</param>
