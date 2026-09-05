@@ -183,9 +183,6 @@ internal sealed class TileFace : Panel
         ManipulationCompleted += (_, done) => Completed(done);
     }
 
-    /// <summary>Raised when a grip on this face has changed what is selected on this screen.</summary>
-    internal event EventHandler? Touched;
-
     /// <summary>Raised when the background mode went on or off, so the menu can tick it.</summary>
     internal event EventHandler? Adjusted;
 
@@ -406,7 +403,7 @@ internal sealed class TileFace : Panel
             return false;
         }
 
-        _behind = new Behind(background, Where(at));
+        _behind = new Behind(background);
 
         return true;
     }
@@ -1079,7 +1076,6 @@ internal sealed class TileFace : Panel
         if (Math.Abs(to.X - from.X) + Math.Abs(to.Y - from.Y) <= Press.Tolerance)
         {
             _selection.Clear();
-            Touched?.Invoke(this, EventArgs.Empty);
 
             return;
         }
@@ -1097,8 +1093,6 @@ internal sealed class TileFace : Panel
         {
             _selection.Set(caught);
         }
-
-        Touched?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>The rectangle between two corners, whichever way round they were dragged.</summary>
@@ -1173,8 +1167,6 @@ internal sealed class TileFace : Panel
             // place means would be a rule nobody could see (Part 7).
             _selection.Clear();
         }
-
-        Touched?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>A movement of the hand, in the terms the scene is written in.</summary>
@@ -1242,15 +1234,17 @@ internal sealed class TileFace : Panel
         Dropped,
     }
 
-    /// <summary>The background in the hand, and what its gesture has to remember.</summary>
-    private sealed class Behind(BackgroundItem background, CorePoint tap)
+    /// <summary>
+    /// The background in the hand, and what its gesture has to remember. <b>Less than a picture's
+    /// hold</b>: there is no "turn to me" for a layer nobody sits at the edge of, so it keeps no
+    /// starting point - a field nothing reads is the category the TokenContainer came out of
+    /// (checks/M2.md).
+    /// </summary>
+    private sealed class Behind(BackgroundItem background)
     {
         internal BackgroundItem Background { get; set; } = background;
 
         internal Turning Turning { get; set; } = Turning.Beginning;
-
-        /// <summary>Where the hand started. Kept for symmetry with a picture's hold; nothing reads it yet.</summary>
-        internal CorePoint Tap { get; } = tap;
     }
 
     /// <summary>One finger on the face: where it is now, and how far it has come.</summary>
