@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
@@ -38,6 +39,9 @@ internal sealed class StageBoard : Panel
     private IReadOnlyList<ScreenView> _screens = [];
     private ScreenTile? _dragged;
     private ScreenPoint? _from;
+
+    private Carrying? _ghost;
+    private (ScreenRef Screen, ItemId Item)? _carried;
 
     /// <summary>How far a hand travels before this is a drag rather than a press, in DIP.</summary>
     private const double Threshold = 8;
@@ -136,6 +140,7 @@ internal sealed class StageBoard : Panel
             };
 
             tile.Configuring += (_, _) => Configuring?.Invoke(this, view.Screen);
+            tile.Carried += (_, carried) => Carry(view.Screen, carried);
             tile.Turning += (_, turned) => Turn(view.Screen, turned);
 
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);
@@ -444,6 +449,84 @@ internal sealed class StageBoard : Panel
         var absent = _settings.Current.TileOrder.Where(key => !order.Contains(key));
 
         _settings.Update(current => current with { TileOrder = [.. order, .. absent] });
+    }
+
+    /// <summary>
+    /// A picture on its way from one tile to another. <b>The stage does this rather than either
+    /// tile</b>: the source knows only that the hand has left it, and which tile the hand is over
+    /// is a question only something that sees all of them can answer (Part 7).
+    /// </summary>
+    private void Carry(ScreenRef source, TileFace.Carry carried)
+    {
+        var here = PointFromScreen(carried.At);
+
+        switch (carried.Phase)
+        {
+            case TileFace.Phase.Began:
+                _carried = (source, carried.Item);
+                _ghost = new Carrying(this, carried.Look);
+
+                AdornerLayer.GetAdornerLayer(this)?.Add(_ghost);
+                _ghost.At(here);
+
+                break;
+
+            case TileFace.Phase.Moved:
+                _ghost?.At(here);
+
+                break;
+
+            case TileFace.Phase.Dropped:
+                Land(carried);
+
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Where the picture came down. <b>The tile decides first, then the place within it</b> - and
+    /// the place is read through the TARGET tile's own view rotation, or a picture carried onto a
+    /// table the DM looks at from the side would land where the source tile would have put it
+    /// (Part 7, Part 10).
+    /// <para>
+    /// <b>Copying is the same thing with a modifier held</b> (Part 7). Dropped on the tile it came
+    /// from, or on nothing at all, the carry simply ends: the picture already lies where the hand
+    /// last had it inside its own tile, and a move onto the screen it is already on does nothing by
+    /// design (Part 4).
+    /// </para>
+    /// </summary>
+    private void Land(TileFace.Carry carried)
+    {
+        if (_ghost is { } ghost)
+        {
+            AdornerLayer.GetAdornerLayer(this)?.Remove(ghost);
+        }
+
+        _ghost = null;
+
+        var taken = _carried;
+
+        _carried = null;
+
+        if (taken is not { } from
+            || _tiles.Values.FirstOrDefault(tile => tile.Landing(carried.At) is not null) is not { } target
+            || target.Screen == from.Screen)
+        {
+            return;
+        }
+
+        var place = target.Landing(carried.At);
+
+        _ = carried.Copy
+            ? _session.CopyItemAsync(from.Screen, target.Screen, from.Item, place, CancellationToken.None)
+            : _session.MoveItemAsync(from.Screen, target.Screen, from.Item, place, CancellationToken.None);
+
+        // The DM has just worked on the target, so that is where the next blind grip lands
+        // (Part 7).
+        Activate(target.Screen);
     }
 
     private ScreenTile? Under(ScreenPoint at) =>

@@ -97,6 +97,7 @@ internal sealed class ScreenTile : Border
         Child = panel;
 
         _face.Asked += (_, asked) => Menu(_face, asked.At, asked.Where, asked.Item);
+        _face.Carried += (_, carried) => Carried?.Invoke(this, carried);
 
         // The head is the screen menu's second home, and the reason is a full screen: there is no
         // free tile area left on one, and that is exactly where most is going on (Part 7). A plain
@@ -136,6 +137,9 @@ internal sealed class ScreenTile : Border
     /// scene (Part 3), and the focus button of M5b would not know what it referred to.
     /// </summary>
     internal Selection Selected { get; } = new();
+
+    /// <summary>A picture has left this tile in somebody's hand.</summary>
+    internal event EventHandler<TileFace.Carry>? Carried;
 
     /// <summary>The DM asked for this screen on its own.</summary>
     internal event EventHandler? Opening;
@@ -207,6 +211,12 @@ internal sealed class ScreenTile : Border
     /// nothing is bundled on the way, which is the whole reason that layer exists.
     /// </summary>
     internal void Report(IReadOnlyList<AssetLoad> loads) => _face.Report(loads);
+
+    /// <summary>
+    /// Where a place on the screen lands on this table - the target half of the hit test across
+    /// tile borders, through this tile's own view rotation.
+    /// </summary>
+    internal CorePoint? Landing(TilePoint absolute) => _face.Landing(absolute);
 
     /// <summary>
     /// Which of the two menus this grip asks for: the picture's if one was hit, the screen's

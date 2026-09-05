@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
@@ -51,6 +52,7 @@ internal sealed class TileFace : Panel
     private readonly Loading _loading;
     private readonly Marks _marks;
     private readonly Selection _selection;
+    private readonly Pictures _pictures;
 
     /// <summary>
     /// The same limit the table reports under, for a related reason: every report becomes a patch,
@@ -84,6 +86,8 @@ internal sealed class TileFace : Panel
     private double _travelled;
     private TilePoint _between;
 
+    private bool _carrying;
+
     private TilePoint? _pressed;
     private TilePoint _mouseAt;
     private TilePoint? _framing;
@@ -98,6 +102,7 @@ internal sealed class TileFace : Panel
         _screenRef = screen;
         _session = session;
         _selection = selection;
+        _pictures = pictures;
         _thumbnail = new SceneThumbnail(pictures);
         _loading = new Loading(pictures);
         _marks = new Marks(selection);
@@ -174,6 +179,13 @@ internal sealed class TileFace : Panel
 
     /// <summary>Raised when a grip on this face has changed what is selected on this screen.</summary>
     internal event EventHandler? Touched;
+
+    /// <summary>
+    /// A picture has left this tile in somebody's hand. From here on the stage carries it: the
+    /// tile under the hand decides, and only then the place within it (Part 10 calls the hit test
+    /// across tile borders one of the five biggest items in the plan).
+    /// </summary>
+    internal event EventHandler<Carry>? Carried;
 
     /// <summary>
     /// A menu was asked for: on a picture, or on free tile area. What the two contain is the tile's
@@ -358,6 +370,70 @@ internal sealed class TileFace : Panel
         return true;
     }
 
+    /// <summary>
+    /// Whether the hand has left this tile, and what follows from it: the picture stops here and
+    /// the stage takes over carrying it.
+    /// <para>
+    /// <b>Leaving the tile is what turns a push into a move</b>, and that one rule saves a second
+    /// grip: inside a tile a drag is a transform, past its edge it is <c>MoveItem</c> (Part 7).
+    /// The picture is put down bindingly at the last place it had inside - if the carry comes to
+    /// nothing, it lies where the hand left it rather than where it started.
+    /// </para>
+    /// </summary>
+    private bool Left(TilePoint local)
+    {
+        if (_carrying)
+        {
+            Carried?.Invoke(this, new Carry(default, null, PointToScreen(local), Phase.Moved, Copy: false));
+
+            return true;
+        }
+
+        if (_hold is not { } hold)
+        {
+            return false;
+        }
+
+        var face = Wanted(RenderSize);
+        var on = OnFace(local);
+
+        if (on.X >= 0 && on.Y >= 0 && on.X <= face.Width && on.Y <= face.Height)
+        {
+            return false;
+        }
+
+        var picture = hold.Item is ImageItem image ? _pictures.For(image.AssetId) : null;
+        var item = hold.Item.ItemId;
+
+        _carrying = true;
+
+        LetGo(0, turning: false);
+
+        Carried?.Invoke(this, new Carry(item, picture, PointToScreen(local), Phase.Began, Copy: false));
+
+        return true;
+    }
+
+    /// <summary>The hand let go of what it was carrying, wherever that was.</summary>
+    private void Dropped(TilePoint local)
+    {
+        if (!_carrying)
+        {
+            return;
+        }
+
+        _carrying = false;
+
+        Carried?.Invoke(
+            this,
+            new Carry(
+                default,
+                null,
+                PointToScreen(local),
+                Phase.Dropped,
+                Keyboard.Modifiers.HasFlag(ModifierKeys.Control)));
+    }
+
     /// <summary>One step of a hand on a picture.</summary>
     private void Step(GestureStep step, double travelDip)
     {
@@ -486,6 +562,13 @@ internal sealed class TileFace : Panel
 
         var now = moved.GetPosition(this);
 
+        if (Left(now))
+        {
+            _mouseAt = now;
+
+            return;
+        }
+
         if (_hold is null && _framing is null)
         {
             // Nothing is taken hold of until the hand has actually travelled: a press that turns
@@ -542,6 +625,13 @@ internal sealed class TileFace : Panel
         var from = _pressed;
 
         _pressed = null;
+
+        if (_carrying)
+        {
+            Dropped(at);
+
+            return;
+        }
 
         if (_hold is not null)
         {
@@ -736,6 +826,11 @@ internal sealed class TileFace : Panel
             return;
         }
 
+        if (Left(moved.ManipulationOrigin))
+        {
+            return;
+        }
+
         var face = Wanted(RenderSize);
         var delta = moved.DeltaManipulation;
         var pushed = Placing.DeltaInScene(delta.Translation, _view, face);
@@ -755,6 +850,13 @@ internal sealed class TileFace : Panel
         done.Handled = true;
 
         var total = done.TotalManipulation.Translation;
+
+        if (_carrying)
+        {
+            Dropped(done.ManipulationOrigin);
+
+            return;
+        }
 
         if (Pointed())
         {
@@ -957,6 +1059,41 @@ internal sealed class TileFace : Panel
     }
 
     private static CorePoint Centre(SceneItem item) => new(item.CenterX, item.CenterY);
+
+    /// <summary>
+    /// Where a place on the screen lands on this table, or <see langword="null"/> if it does not
+    /// land on it at all.
+    /// <para>
+    /// <b>This is the target half of the hit test across tile borders</b>, and the order in it is
+    /// the point: first which tile the hand is over, then the place within it - <b>through that
+    /// tile's own view rotation</b>. A picture carried onto a table the DM looks at from the side
+    /// has to land where he let go of it, not where the source tile would have put it (Part 7).
+    /// </para>
+    /// </summary>
+    internal CorePoint? Landing(TilePoint absolute)
+    {
+        var on = OnFace(PointFromScreen(absolute));
+        var face = Wanted(RenderSize);
+
+        return on.X < 0 || on.Y < 0 || on.X > face.Width || on.Y > face.Height
+            ? null
+            : Placing.InScene(on, _view, face);
+    }
+
+    /// <summary>What a hand is carrying, and how far along that is.</summary>
+    /// <param name="Item">The picture - meaningful when the carry begins.</param>
+    /// <param name="Look">Its preview, for the ghost under the hand.</param>
+    /// <param name="At">Where the hand is, in screen coordinates, because it crosses tiles.</param>
+    /// <param name="Copy">Whether the drop was asked to copy rather than move.</param>
+    internal sealed record Carry(ItemId Item, ImageSource? Look, TilePoint At, Phase Phase, bool Copy);
+
+    /// <summary>How far along a carry is.</summary>
+    internal enum Phase
+    {
+        Began,
+        Moved,
+        Dropped,
+    }
 
     /// <summary>One finger on the face: where it is now, and how far it has come.</summary>
     private sealed class Finger(TilePoint at)
