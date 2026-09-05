@@ -212,6 +212,9 @@ internal sealed class ScreenTile : Border
     /// </summary>
     internal void Report(IReadOnlyList<AssetLoad> loads) => _face.Report(loads);
 
+    /// <summary>Where fingers are lying on this screen.</summary>
+    internal void Touching(IReadOnlyList<TouchTrail> touches) => _face.Touching(touches);
+
     /// <summary>
     /// Where a place on the screen lands on this table - the target half of the hit test across
     /// tile borders, through this tile's own view rotation.

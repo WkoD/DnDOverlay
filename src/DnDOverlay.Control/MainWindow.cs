@@ -174,6 +174,13 @@ internal sealed class MainWindow : Window, IDisposable
                         _board.Report(progress.Device, progress.Loads);
                         break;
 
+                    // Rank 4, and it shows: never bundled, never kept, and the first thing
+                    // dropped when a subscriber falls behind. A finger position from a moment ago
+                    // is not inaccurate, it is worthless (Part 4).
+                    case SessionEvent.TouchPoints touching:
+                        _board.Touching(touching.Screen, touching.Touches);
+                        break;
+
                     case SessionEvent.ScenePatched:
                     case SessionEvent.SceneReplaced:
                         await _stage.RefreshAsync().ConfigureAwait(true);

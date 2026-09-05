@@ -110,6 +110,19 @@ internal sealed class StageBoard : Panel
     }
 
     /// <summary>
+    /// Where fingers are lying on one screen. <b>Per screen and not per device</b>: two screens of
+    /// one table have their own sets of fingers, and one tile showing the other's would be worse
+    /// than showing none.
+    /// </summary>
+    internal void Touching(ScreenRef screen, IReadOnlyList<TouchTrail> touches)
+    {
+        if (_tiles.TryGetValue(screen, out var tile))
+        {
+            tile.Touching(touches);
+        }
+    }
+
+    /// <summary>
     /// The screens as the hub knows them. Tiles come and go with them - a screen that is unplugged
     /// keeps its scene in the hub, but there is nothing to show it on until it is back.
     /// </summary>

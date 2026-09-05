@@ -51,6 +51,7 @@ internal sealed class TileFace : Panel
     private readonly SceneThumbnail _thumbnail;
     private readonly Loading _loading;
     private readonly Marks _marks;
+    private readonly Fingers _pointing = new();
     private readonly Selection _selection;
     private readonly Pictures _pictures;
 
@@ -109,7 +110,11 @@ internal sealed class TileFace : Panel
 
         Children.Add(_thumbnail);
         Children.Add(_loading);
+
+        // Above the marks: what somebody is pointing at is the most recent thing on the tile, and
+        // it has to be readable over a selection outline (Part 7's layer order).
         Children.Add(_marks);
+        Children.Add(_pointing);
 
         ClipToBounds = true;
         IsManipulationEnabled = true;
@@ -236,6 +241,12 @@ internal sealed class TileFace : Panel
     /// <summary>What the device of this screen is loading. Straight through, ungoverned by the bundling.</summary>
     internal void Report(IReadOnlyList<AssetLoad> loads) => _loading.Report(loads);
 
+    /// <summary>
+    /// Where fingers are lying on this screen. Straight through as well, and for the opposite
+    /// reason: this is the lowest rank there is (Part 4), so it is never worth holding on to.
+    /// </summary>
+    internal void Touching(IReadOnlyList<TouchTrail> touches) => _pointing.Report(touches);
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -334,6 +345,7 @@ internal sealed class TileFace : Panel
         _thumbnail.Show(scene, _screen, _view);
         _loading.Show(scene, _screen, _view);
         _marks.Show(scene, _screen, _view);
+        _pointing.Show(_screen, _view);
 
         Redraw.Ask(_thumbnail);
     }
