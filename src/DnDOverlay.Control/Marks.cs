@@ -7,19 +7,15 @@ using TileRect = System.Windows.Rect;
 namespace DnDOverlay.Control;
 
 /// <summary>
-/// What the DM has picked out, drawn over the scene: an outline around every selected picture and,
-/// <b>as soon as anything is selected at all</b>, a small circle on every picture (Part 7).
+/// What the DM has picked out, drawn over the scene: an outline around every selected picture, and
+/// the frame while one is being dragged.
 /// <para>
-/// <b>The circles appear with the first selection and not before.</b> That is the Explorer's habit,
-/// taken over deliberately because touch has no platform-wide one for "add to selection": there is
-/// no mode to switch, nothing to remember, and the circles go away with the selection that brought
-/// them. Before the first tap the tile is a picture of the table and nothing else.
-/// </para>
-/// <para>
-/// <b>The circles are drawn and hit here, in one place.</b> A second computation of where they sit
-/// would be the fan's mistake from M3 all over again - laid out by one formula, picked by another,
-/// and the picture that fell between them was invisible and unreachable at once (Guide
-/// <c>G22</c>).
+/// <b>The selection circles are gone</b> (hand-run of M4, 25a). Part 7 took them from the Explorer
+/// because touch has no platform-wide habit for "add to selection" - and at the table they turned
+/// out to be in the way: on a tile the size of a thumbnail a circle on every picture is clutter
+/// over the very thing being judged, and the coloured outline already says what is selected. The
+/// two ways of collecting several that remain - the frame with either hand, and Ctrl+click with the
+/// mouse - cover it.
 /// </para>
 /// <para>
 /// <b>A layer of its own rather than part of the drawing</b>, for the same reason the loading fill
@@ -38,19 +34,6 @@ internal sealed class Marks : FrameworkElement
     private SceneState _scene = SceneState.Empty;
     private ScreenContext _screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
     private ViewRotation _view;
-
-    /// <summary>
-    /// The diameter of a selection circle, in DIP.
-    /// <para>
-    /// <b>Fixed rather than scaled with the picture</b>, because it is aimed at with a finger and a
-    /// finger is the same size on a large item and a small one. It is also the one number here that
-    /// misses a measured minimum knowingly: 96 DIP is what an imprecise grip wants (Guide
-    /// <c>G23</c>), and an overview tile is 150 DIP tall in total, so a circle per picture cannot
-    /// have it. The single view is where this grip has the room it needs, and the frame is the way
-    /// to collect several at once in the overview.
-    /// </para>
-    /// </summary>
-    private const double Circle = 16;
 
     internal Marks(Selection selection)
     {
@@ -103,36 +86,6 @@ internal sealed class Marks : FrameworkElement
         InvalidateVisual();
     }
 
-    /// <summary>
-    /// The picture whose circle lies under this place, or <see langword="null"/>. Asked before the
-    /// scene itself is asked: the circle lies ON a picture, so whoever tests the picture first
-    /// never reaches the circle.
-    /// </summary>
-    internal ItemId? CircleAt(TilePoint at)
-    {
-        if (!_selection.Any || !_scene.ItemsVisible)
-        {
-            return null;
-        }
-
-        var radius = Circle / 2;
-
-        // Topmost first, the same order the point cascade uses: where two circles overlap, the one
-        // the eye sees on top is the one that answers.
-        foreach (var item in _scene.Items.OrderByDescending(item => Parking.Depth(_scene, item)))
-        {
-            var centre = Where(item);
-
-            if (((at.X - centre.X) * (at.X - centre.X)) + ((at.Y - centre.Y) * (at.Y - centre.Y))
-                <= radius * radius)
-            {
-                return item.ItemId;
-            }
-        }
-
-        return null;
-    }
-
     /// <inheritdoc />
     protected override void OnRender(DrawingContext drawingContext)
     {
@@ -147,10 +100,11 @@ internal sealed class Marks : FrameworkElement
 
         if (_dimmed)
         {
-            // A veil over the pictures and a border round the whole face: what is being worked on
-            // is what is NOT dimmed, which is the background showing through.
+            // A border round the whole face and nothing over it. The pictures themselves go
+            // see-through one layer down (SceneThumbnail.Faded) - a film here would have dimmed the
+            // background along with them (hand-run of M4, 38b).
             drawingContext.DrawRectangle(
-                new SolidColorBrush(Color.FromArgb(0x88, 0x10, 0x10, 0x10)),
+                brush: null,
                 new Pen(Brushes.Gold, 2),
                 new TileRect(1, 1, Math.Max(0, RenderSize.Width - 2), Math.Max(0, RenderSize.Height - 2)));
         }
@@ -180,22 +134,6 @@ internal sealed class Marks : FrameworkElement
             }
         }
 
-        if (!_selection.Any)
-        {
-            return;
-        }
-
-        foreach (var item in _scene.Items)
-        {
-            var taken = _selection.Contains(item.ItemId);
-
-            drawingContext.DrawEllipse(
-                taken ? Brushes.DeepSkyBlue : new SolidColorBrush(Color.FromArgb(0xAA, 0x20, 0x20, 0x20)),
-                new Pen(Brushes.White, 1),
-                Where(item),
-                Circle / 2,
-                Circle / 2);
-        }
     }
 
     /// <summary>
@@ -220,28 +158,5 @@ internal sealed class Marks : FrameworkElement
         geometry.Freeze();
 
         return geometry;
-    }
-
-    /// <summary>
-    /// Where a picture's circle sits: at the top left of its hull, as the DM sees it, pulled far
-    /// enough in that the whole circle lies on the picture.
-    /// <para>
-    /// <b>Against the hull and not the corner of the turned picture</b>, so the circles of a row of
-    /// pictures stay in a row whatever angle they lie at - they are a control, and a control that
-    /// wanders with the rotation is one that has to be looked for.
-    /// </para>
-    /// <para>
-    /// Kept inside the tile, because an item may lie half over the edge (Part 6 allows it): a
-    /// circle outside the tile would belong to a picture that is on show and could not be reached.
-    /// </para>
-    /// </summary>
-    private TilePoint Where(SceneItem item)
-    {
-        var hull = Placing.InTile(Layout.ItemToHullRect(item, _screen), _view, RenderSize);
-        var radius = Circle / 2;
-
-        return new TilePoint(
-            Math.Clamp(hull.X + radius, radius, Math.Max(radius, RenderSize.Width - radius)),
-            Math.Clamp(hull.Y + radius, radius, Math.Max(radius, RenderSize.Height - radius)));
     }
 }

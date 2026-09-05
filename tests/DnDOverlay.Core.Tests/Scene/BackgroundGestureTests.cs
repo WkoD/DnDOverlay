@@ -88,15 +88,16 @@ public sealed class BackgroundGestureTests
     }
 
     /// <summary>
-    /// <b>The edge holds it.</b> A background pushed right off the screen would leave a black table
-    /// with an asset behind it and no way back but the two fit buttons - so the same clamp applies
-    /// as to a picture.
+    /// <b>A background large enough to cover leaves no edge bare</b> - and that is a harder rule
+    /// than a picture's (hand-run of M4, 38b). A picture may hang out over the side, because one
+    /// zooms in to bring a detail closer; behind a background there is nothing to see, so a black
+    /// stripe along the table is simply pushed too far.
     /// </summary>
     [Fact]
-    public void The_background_cannot_be_pushed_off_the_screen()
+    public void The_background_cannot_uncover_an_edge_it_could_cover()
     {
         var screen = Build.Screen();
-        var background = Build.Background(meta: Build.Meta(1600, 900), scale: 1);
+        var background = Build.Background(meta: Build.Meta(1600, 900), scale: 1.4);
 
         var (moved, _) = Manipulation.Step(
             background,
@@ -106,8 +107,28 @@ public sealed class BackgroundGestureTests
 
         var rect = Layout.BackgroundRect(moved, screen);
 
-        Assert.True(rect.X < 1, "the background left the screen entirely");
-        Assert.True(rect.Y < 1, "the background left the screen entirely");
+        Assert.True(rect.X <= 1e-9 && rect.Right >= 1 - 1e-9, "a vertical edge was left bare");
+        Assert.True(rect.Y <= 1e-9 && rect.Bottom >= 1 - 1e-9, "a horizontal edge was left bare");
+    }
+
+    /// <summary>
+    /// One that is too small to cover is left where the hand put it - the counter-check, without
+    /// which the rule above would also pass on a clamp that simply centred everything (Guide C16).
+    /// </summary>
+    [Fact]
+    public void A_background_smaller_than_the_screen_keeps_its_place()
+    {
+        var screen = Build.Screen();
+        var background = Build.Background(meta: Build.Meta(1600, 900), scale: 0.4, centerX: 0.5, centerY: 0.5);
+
+        var (moved, _) = Manipulation.Step(
+            background,
+            Turning.Beginning,
+            new GestureStep(0.12, 0.07, 1, 0, new Point(0.5, 0.5)),
+            screen);
+
+        Assert.Equal(0.62, moved.CenterX, 6);
+        Assert.Equal(0.57, moved.CenterY, 6);
     }
 
     /// <summary>

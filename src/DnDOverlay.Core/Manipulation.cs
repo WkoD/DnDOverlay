@@ -195,7 +195,11 @@ public static class Manipulation
 
         var (moved, next) = Step(Standing(background), turning, step, screen);
 
-        return (Taken(background, moved), next);
+        // Held again, and by the BACKGROUND's rule: the step above ran the item clamp, which allows
+        // a picture to hang out over the side. A background may not (hand-run of M4, 38b), and
+        // asking here rather than at the two call sites is what keeps the hub and the hand from
+        // clamping differently.
+        return (HoldAtEdge(Taken(background, moved), screen), next);
     }
 
     /// <summary>What a release does to the background: the same snap onto a quarter turn.</summary>
@@ -207,13 +211,48 @@ public static class Manipulation
         return Taken(background, Settle(Standing(background), screen));
     }
 
-    /// <summary>The background, held on the glass - what the hub applies to whatever a control sends.</summary>
+    /// <summary>
+    /// The background, held on the glass.
+    /// <para>
+    /// <b>It is held harder than a picture, and the rule is its own:</b> a background may not
+    /// uncover an edge it is large enough to cover. A picture is allowed to hang out over the side
+    /// - one zooms in to bring a detail closer - but a background that leaves a black stripe along
+    /// the table is simply pushed too far, and there is nothing behind it to see (hand-run of M4,
+    /// 38b). Whether it may be SMALLER than the screen is a different question and already
+    /// answered: <c>Contain</c> is a button.
+    /// </para>
+    /// </summary>
     public static BackgroundItem HoldAtEdge(BackgroundItem background, ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(background);
         ArgumentNullException.ThrowIfNull(screen);
 
-        return Taken(background, HoldAtEdge(Standing(background), screen));
+        var held = Taken(background, HoldAtEdge(Standing(background), screen));
+        var rect = Layout.BackgroundRect(held, screen);
+
+        return held with
+        {
+            CenterX = Covering(held.CenterX, rect.X, rect.Width),
+            CenterY = Covering(held.CenterY, rect.Y, rect.Height),
+        };
+    }
+
+    /// <summary>
+    /// One axis of the background, moved back just far enough that it still covers the screen -
+    /// and left alone when it is too small to cover it at all.
+    /// </summary>
+    private static double Covering(double centre, double low, double extent)
+    {
+        if (extent < 1)
+        {
+            return centre;
+        }
+
+        var high = low + extent;
+
+        return low > 0 ? centre - low
+            : high < 1 ? centre + (1 - high)
+            : centre;
     }
 
     /// <summary>
@@ -509,7 +548,14 @@ public static class Manipulation
         var patch = screen.MinVisiblePixels * screen.MinVisiblePixels;
         var rect = Layout.ItemToRect(item, screen);
         var whole = rect.Width * screen.WidthInDip * rect.Height * screen.HeightInDip;
-        var required = Math.Min(patch, whole);
+
+        // A hair under the whole, and that hair is the whole fix. For a picture smaller than the
+        // patch the requirement IS its whole area - and the two sides of the comparison are
+        // computed by different routes, a rectangle here and a clipped polygon there, so they
+        // differ in the last bits. The test then failed for a picture lying entirely on the glass,
+        // and the search pulled it to the middle of the screen: a picture zoomed down small could
+        // not be moved at all any more, it sprang back on every step (hand-run of M4, 21).
+        var required = Math.Min(patch, whole * (1 - 1e-9));
 
         if (required <= 0 || Layout.VisibleAreaInDip(item, screen) >= required)
         {

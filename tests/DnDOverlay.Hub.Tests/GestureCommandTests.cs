@@ -162,7 +162,7 @@ public sealed class GestureCommandTests
     /// </para>
     /// </summary>
     [Fact]
-    public async Task A_locked_item_moves_from_the_thumbnail_and_stays_where_it_lies_in_the_stack()
+    public async Task A_locked_item_moves_from_the_thumbnail_and_comes_to_the_front_with_it()
     {
         using var session = Session(out var screens);
         screens.Report(Device, [Info()], reported: null);
@@ -191,8 +191,12 @@ public sealed class GestureCommandTests
         Assert.Equal(30, moved.RotationDeg);
         Assert.True(moved.Locked, "the padlock came off");
 
-        // And it stayed underneath.
-        Assert.Equal(beneath, moved.ZOrder);
+        // And it came to the front WITH the movement. M4a had read Part 3's "not raised for locked
+        // items" as a rule of its own and asked the lock here; the hand-run of M4 turned it round
+        // (step 20), and the reason stands in the same sentence of Part 3: the rule is given the
+        // reason "they cannot be taken hold of", which is true at the table and false in the
+        // thumbnail. A picture the DM has just touched has to be the one he sees.
+        Assert.True(moved.ZOrder > beneath, "the picture the DM took hold of stayed underneath");
 
         // The counter-check: the same grab on the unlocked item raises it.
         await session.TransformItemAsync(

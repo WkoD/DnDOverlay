@@ -588,4 +588,46 @@ public sealed class ManipulationTests
         Assert.Equal(0.5, Manipulation.EdgeResistance(halfway, screen), precision: 6);
         Assert.Equal(0, Manipulation.EdgeResistance(atLimit with { CenterX = 5 }, screen), precision: 9);
     }
+
+    /// <summary>
+    /// <b>A picture zoomed down small can still be moved.</b> Found beside the line that was being
+    /// checked, which is where the heaviest finds in this project come from (hand-run of M4, 21):
+    /// a small picture sprang back to the middle of the screen on every step of a drag and could
+    /// not be placed at all.
+    /// <para>
+    /// The cause was a comparison of two numbers computed by different routes - the requirement as
+    /// a rectangle's area, the answer as a clipped polygon's - so for a picture that has to stay
+    /// WHOLE the test failed on the last bits even when it lay entirely on the glass, and the
+    /// rescue that pulls an unreachable picture towards the middle ran every time.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_small_picture_stays_where_the_hand_puts_it()
+    {
+        var screen = Build.Screen();
+
+        // Smaller than the graspable patch on both axes, so its whole area is what is required.
+        var small = Build.Item(centerX: 0.5, centerY: 0.5, scale: 0.05, aspectRatio: 1.6);
+        var away = new Point(0.30, 0.62);
+
+        var (moved, _) = Manipulation.Step(
+            small,
+            Turning.Beginning,
+            new GestureStep(away.X - 0.5, away.Y - 0.5, 1, 0, new Point(0.5, 0.5)),
+            screen);
+
+        Assert.Equal(away.X, moved.CenterX, 6);
+        Assert.Equal(away.Y, moved.CenterY, 6);
+
+        // And the promise it must not break: it has to stay whole, so pushing it off the edge holds
+        // it - the clamp still bites, it just no longer bites in the middle of the screen.
+        var (pushed, _) = Manipulation.Step(
+            moved,
+            Turning.Beginning,
+            new GestureStep(-1, 0, 1, 0, new Point(0.5, 0.5)),
+            screen);
+
+        Assert.True(pushed.CenterX > 0, "the small picture was pushed off the screen");
+        Assert.True(pushed.CenterX < 0.2, "the small picture was dragged back towards the middle");
+    }
 }

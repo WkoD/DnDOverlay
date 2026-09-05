@@ -84,6 +84,12 @@ internal sealed class StageBoard : Panel
     internal event EventHandler? ActiveChanged;
 
     /// <summary>
+    /// Makes one screen the active one from outside - the list of screens beside the stage, which
+    /// has to say the same thing as the frame on the tile (hand-run of M4, 24a).
+    /// </summary>
+    internal void Aim(ScreenRef? screen) => Activate(screen);
+
+    /// <summary>
     /// Raised when the DM asked to set a screen up. The window <i>Devices</i> belongs to the main
     /// window, which owns it and reopens rather than duplicates it.
     /// </summary>
@@ -162,13 +168,38 @@ internal sealed class StageBoard : Panel
             // Dragged by the head, and by nothing else. Mouse and finger are wired separately
             // rather than relying on WPF promoting touch to mouse - that promotion stops the
             // moment manipulation is switched on, which is what the thumbnails get in M4c.
-            tile.Handle.PreviewMouseLeftButtonDown += (_, _) => Take(tile);
-            tile.Handle.PreviewMouseMove += (_, moved) => Over(tile, moved.GetPosition(this), moved.LeftButton is MouseButtonState.Pressed);
-            tile.Handle.PreviewMouseLeftButtonUp += (_, _) => Released();
+            // Both the mouse and the finger, and the same grip for both. Prüfschritt 24b says
+            // "only with the finger", and that is an instruction to the RUNNER - prove it works
+            // without a context menu - not a limit on the grip (hand-run of M4, 24b).
+            tile.Handle.PreviewMouseLeftButtonDown += (_, _) =>
+            {
+                Take(tile);
+                _ = tile.Handle.CaptureMouse();
+            };
 
-            tile.Handle.PreviewTouchDown += (_, _) => Take(tile);
-            tile.Handle.PreviewTouchMove += (_, moved) => Over(tile, moved.GetTouchPoint(this).Position, dragging: true);
-            tile.Handle.PreviewTouchUp += (_, _) => Released();
+            tile.Handle.PreviewMouseMove += (_, moved) =>
+                Over(tile, moved.GetPosition(this), moved.LeftButton is MouseButtonState.Pressed);
+
+            tile.Handle.PreviewMouseLeftButtonUp += (_, _) =>
+            {
+                tile.Handle.ReleaseMouseCapture();
+                Released();
+            };
+
+            tile.Handle.PreviewTouchDown += (_, down) =>
+            {
+                Take(tile);
+                _ = tile.Handle.CaptureTouch(down.TouchDevice);
+            };
+
+            tile.Handle.PreviewTouchMove += (_, moved) =>
+                Over(tile, moved.GetTouchPoint(this).Position, dragging: true);
+
+            tile.Handle.PreviewTouchUp += (_, up) =>
+            {
+                _ = tile.Handle.ReleaseTouchCapture(up.TouchDevice);
+                Released();
+            };
 
             _tiles[view.Screen] = tile;
             Children.Add(tile);
@@ -198,14 +229,24 @@ internal sealed class StageBoard : Panel
     {
         if (Single)
         {
+            var wanted = new Size(0, 0);
+
             foreach (UIElement child in InternalChildren)
             {
                 child.Measure(availableSize);
+
+                wanted = new Size(
+                    Math.Max(wanted.Width, child.DesiredSize.Width),
+                    Math.Max(wanted.Height, child.DesiredSize.Height));
             }
 
+            // What is offered, and the child's own wish wherever nothing is offered. The stage
+            // hangs in a vertical stack, which offers infinite height - and an infinity read as
+            // zero made the open tile nought pixels tall, so the single view showed nothing at all
+            // and looked as if every tile had been hidden (hand-run of M4, 24a).
             return new Size(
-                double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width,
-                double.IsInfinity(availableSize.Height) ? 0 : availableSize.Height);
+                double.IsInfinity(availableSize.Width) ? wanted.Width : availableSize.Width,
+                double.IsInfinity(availableSize.Height) ? wanted.Height : availableSize.Height);
         }
 
         double lineWidth = 0, lineHeight = 0, width = 0, height = 0;
@@ -228,7 +269,14 @@ internal sealed class StageBoard : Panel
             lineHeight = Math.Max(lineHeight, wanted.Height);
         }
 
-        return new Size(Math.Max(width, lineWidth), height + lineHeight);
+        var widest = Math.Max(width, lineWidth);
+
+        // Never wider than what was offered. A tile is of fixed size, so a window narrower than one
+        // tile made the stage ask for more room than the window had, and the window kept answering
+        // - a layout loop that reads as stuttering while nothing is computing (hand-run of M4, 26).
+        return new Size(
+            double.IsInfinity(availableSize.Width) ? widest : Math.Min(widest, availableSize.Width),
+            height + lineHeight);
     }
 
     /// <inheritdoc />
@@ -357,15 +405,44 @@ internal sealed class StageBoard : Panel
     /// </summary>
     private void Turn(ScreenRef screen, ViewRotation view)
     {
-        _settings.Update(current => current with
+        var info = _screens.FirstOrDefault(known => known.Screen == screen);
+
+        _settings.Update(current =>
         {
-            KnownScreens =
-            [
-                .. current.KnownScreens.Select(known =>
-                    known.DeviceId == screen.Device.Value && known.ScreenId == screen.Screen.Value
-                        ? known with { View = view }
-                        : known),
-            ],
+            var written = false;
+
+            var screens = current.KnownScreens
+                .Select(known =>
+                {
+                    if (known.DeviceId != screen.Device.Value || known.ScreenId != screen.Screen.Value)
+                    {
+                        return known;
+                    }
+
+                    written = true;
+
+                    return known with { View = view };
+                })
+                .ToList();
+
+            // A screen the file has never heard of gets its entry here rather than losing the
+            // value. Until the hand-run the rotation was written only into an EXISTING row, so on
+            // a screen that had not been named or configured yet it vanished without a word and
+            // came back at 0 after every restart (hand-run of M4, 25).
+            if (!written && info is { } view0)
+            {
+                screens.Add(new KnownScreen(
+                    screen.Device.Value,
+                    screen.Screen.Value,
+                    view0.Info.Label,
+                    view0.State,
+                    view0.Info.Size,
+                    view0.Info.Dpi,
+                    new ScreenSettings(),
+                    view));
+            }
+
+            return current with { KnownScreens = screens };
         });
 
         _ = RefreshAsync();

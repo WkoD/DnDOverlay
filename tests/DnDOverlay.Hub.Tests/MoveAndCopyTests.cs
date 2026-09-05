@@ -139,13 +139,22 @@ public sealed class MoveAndCopyTests
     }
 
     /// <summary>
-    /// A parked picture stays parked and joins the fan of the TARGET - at its edge, in its arrival
-    /// size, straight (Part 11). The assertion is an invariant rather than a coordinate: after the
-    /// move the target's fan is already laid out, so laying it out again changes nothing. Written
-    /// against a number it would say the same thing today and break with the next change to the fan.
+    /// <b>A parked picture arrives lying free</b>, like a copy - and the target's fan is left as it
+    /// was.
+    /// <para>
+    /// Part 11 said the opposite until the hand-run of M4 (step 25b): parked and into the target's
+    /// fan. At the table that turned out to be the wrong answer to a plain question - a picture
+    /// dragged onto another screen is one that is WANTED there, and it arrived where nobody was
+    /// looking. The plan is corrected with this test rather than beside it.
+    /// </para>
+    /// <para>
+    /// The fan of the target is asserted as an INVARIANT rather than a coordinate: laying it out
+    /// again must change nothing. Written against a number it would say the same thing today and
+    /// break with the next change to the fan.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task A_parked_item_joins_the_fan_of_the_target()
+    public async Task A_parked_item_arrives_lying_free()
     {
         var session = Session(out var screens);
         screens.Report(Device, [Landscape(), Portrait()], reported: null);
@@ -164,8 +173,11 @@ public sealed class MoveAndCopyTests
         var scene = await session.GetSceneAsync(Beamer, Cancellation);
         var arrived = scene.Items.Single(candidate => candidate.ItemId == item);
 
-        Assert.True(arrived.Parked, "it came out of the fan on the way");
-        Assert.Equal([item, resident], Parking.Fan(scene).Select(card => card.ItemId));
+        Assert.False(arrived.Parked, "it went into the target's fan instead of onto the table");
+        Assert.Equal(0, arrived.ParkedAt);
+
+        // The one card that was already put away is still put away, and alone in the fan.
+        Assert.Equal([resident], Parking.Fan(scene).Select(card => card.ItemId));
         Assert.Equal(scene, Parking.Arrange(scene, screens.ContextFor(Beamer)));
     }
 

@@ -228,7 +228,12 @@ internal sealed class TileFace : Panel
             field = value;
             _behind = null;
 
+            // Transparent rather than veiled: a dark film over the pictures made the background
+            // harder to judge, not easier, and judging it is the whole point of the mode
+            // (hand-run of M4, 38b).
+            _thumbnail.Faded(value);
             _marks.Dimmed(value);
+            Redraw.Ask(_thumbnail);
             InvalidateVisual();
 
             Adjusted?.Invoke(this, EventArgs.Empty);
@@ -372,10 +377,19 @@ internal sealed class TileFace : Panel
     /// </summary>
     private void Draw()
     {
+        // What is in the hand is drawn on top for as long as the hand is on it. The hub has
+        // already been told and its answer will say the same, but it arrives a round trip later -
+        // and until the hand-run the picture stayed under its neighbours until the moment it was
+        // let go (hand-run of M4, 20).
         var scene = _hold is { } hold
             ? _scene with
             {
-                Items = [.. _scene.Items.Select(item => item.ItemId == hold.Item.ItemId ? hold.Item : item)],
+                Items =
+                [
+                    .. _scene.Items.Select(item => item.ItemId == hold.Item.ItemId
+                        ? hold.Item with { ZOrder = _scene.TopZOrder + 1 }
+                        : item),
+                ],
             }
             : _behind is { } behind
                 ? _scene with { Background = behind.Background }
@@ -462,10 +476,19 @@ internal sealed class TileFace : Panel
         var place = Where(at);
 
         if (Picking.At(_scene, _screen, place) is not { } id
-            || _scene.Items.FirstOrDefault(item => item.ItemId == id) is not { } picture
-            || picture.Parked)
+            || _scene.Items.FirstOrDefault(item => item.ItemId == id) is not { } picture)
         {
             return false;
+        }
+
+        if (picture.Parked)
+        {
+            // Pulled out of the fan, exactly as at the table: taking hold of a card IS the way back
+            // (Part 6). The hub is told at once and lays the picture out; the hand goes on carrying
+            // it from where it lay, and the release says where it came to rest.
+            _ = _session.ParkItemAsync(_screenRef, id, parked: false, CancellationToken.None);
+
+            picture = picture with { Parked = false };
         }
 
         _hold = new Hold(picture, place, OnFace(at));
@@ -597,6 +620,22 @@ internal sealed class TileFace : Panel
         // A gesture that was already spent - a double click, or a spotlight - does not also get
         // to be half of a double tap (Guide C16: the counter-check must not be greened by a path
         // that never ran).
+        // Let go on the fan: put away, and nothing else. It is the same rule the mouse follows at
+        // the table - a pointer cannot flick, so lying on the fan when the hand opens IS the
+        // statement (Part 6) - and it gives the thumbnail the way INTO the fan that the hand-run
+        // asked for.
+        if (Parking.OnTheFan(new CorePoint(hold.Item.CenterX, hold.Item.CenterY), _screen))
+        {
+            _ = _session.ParkItemAsync(_screenRef, hold.Item.ItemId, parked: true, CancellationToken.None);
+
+            _throttle.Forget(hold.Item.ItemId);
+            _hold = null;
+
+            Draw();
+
+            return;
+        }
+
         var toMe = turning
             || (!_spent
                 && Tapping.IsTap(travelled, now - hold.Began)
@@ -729,6 +768,26 @@ internal sealed class TileFace : Panel
             return;
         }
 
+        if (_behind is not null)
+        {
+            // The background takes the same two grips as a picture. Until the hand-run the branch
+            // below returned here because there was no HOLD, so with a mouse the background could
+            // only be zoomed (hand-run of M4, 38b).
+            var behind = Wanted(RenderSize);
+            var turning = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+            var centre = BehindCentre;
+
+            Step(
+                turning
+                    ? new GestureStep(0, 0, 1, Swept(centre, OnFace(_mouseAt), OnFace(now), behind), centre)
+                    : Pushed(new Vector(now.X - _mouseAt.X, now.Y - _mouseAt.Y), behind, centre),
+                travelDip: 0);
+
+            _mouseAt = now;
+
+            return;
+        }
+
         if (_hold is not { } hold)
         {
             return;
@@ -814,6 +873,11 @@ internal sealed class TileFace : Panel
 
         if (!standing)
         {
+            // Spent, so the release below cannot also count as a tap. Two notches of the wheel
+            // within the double-tap window landed on the same spot and turned the picture to the
+            // nearest edge - a grip nobody had asked for, in the middle of zooming (hand-run of
+            // M4, 22).
+            _spent = true;
             // A notch is not a hold: it has no beginning and no end, so it reports bindingly at
             // once. Kept as a hold, every click of the wheel would be a grab and a release, and the
             // picture would climb to the front on each one.
@@ -927,15 +991,19 @@ internal sealed class TileFace : Panel
         return _most == 2 && Tapping.IsTap(_travelled, Environment.TickCount64 - _landed);
     }
 
+    /// <summary>
+    /// A finger has begun a manipulation. <b>Nothing is taken hold of here</b>, and that is the
+    /// correction from the table: taking hold at once meant every touch ended as a release and
+    /// never as a tap, so with a finger nothing could be selected at all while the mouse - which
+    /// grabs only after travelling - worked (hand-run of M4, 25a). The background is the exception,
+    /// because in its mode there is nothing else a finger could mean.
+    /// </summary>
     private void Started(TilePoint origin)
     {
         _pressed = origin;
         _spent = false;
 
-        if (!Beneath(origin))
-        {
-            Grab(origin);
-        }
+        Beneath(origin);
     }
 
     private void Delta(ManipulationDeltaEventArgs moved)
@@ -944,21 +1012,24 @@ internal sealed class TileFace : Panel
 
         if (_hold is null && _behind is null)
         {
-            // A finger that took hold of nothing draws a frame - once it has travelled far enough
-            // to have meant one rather than a tap.
+            // Past the tolerance a finger has meant something other than a tap: the picture
+            // under where it landed, or a frame from free area.
             if (_framing is null && _pressed is { } began)
             {
                 var travelled = moved.CumulativeManipulation.Translation;
 
-                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > Press.Tolerance)
+                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > Press.Tolerance && !Grab(began))
                 {
                     Frame(began);
                 }
             }
 
-            Framed(moved.ManipulationOrigin);
+            if (_hold is null)
+            {
+                Framed(moved.ManipulationOrigin);
 
-            return;
+                return;
+            }
         }
 
         if (Left(moved.ManipulationOrigin))
@@ -1125,12 +1196,10 @@ internal sealed class TileFace : Panel
     }
 
     /// <summary>
-    /// One tap, and the cascade it runs through: the selection circle first, then the scene, then
-    /// free area.
+    /// One tap: the picture under it, or free area.
     /// <para>
-    /// <b>The circle comes first because it lies ON a picture.</b> Asked the other way round it
-    /// could never be reached - the picture under it would always answer - and the touch way of
-    /// building a selection would silently be the mouse's Ctrl+click only (Part 7).
+    /// <b>A tap on a picture also brings it to the front</b> - touching it in the thumbnail is the
+    /// same statement as touching it at the table (hand-run of M4, 20).
     /// </para>
     /// </summary>
     private void Tap(TilePoint at, bool adding)
@@ -1146,11 +1215,7 @@ internal sealed class TileFace : Panel
 
         var face = Wanted(RenderSize);
 
-        if (_marks.CircleAt(at) is { } circled)
-        {
-            _selection.Toggle(circled);
-        }
-        else if (Picking.At(_scene, _screen, Placing.InScene(at, _view, face)) is { } item)
+        if (Picking.At(_scene, _screen, Placing.InScene(at, _view, face)) is { } item)
         {
             if (adding)
             {
@@ -1160,6 +1225,8 @@ internal sealed class TileFace : Panel
             {
                 _selection.Only(item);
             }
+
+            Front(item);
         }
         else
         {
@@ -1167,6 +1234,30 @@ internal sealed class TileFace : Panel
             // place means would be a rule nobody could see (Part 7).
             _selection.Clear();
         }
+    }
+
+    /// <summary>
+    /// Brings a picture to the front because it was touched. <b>A tap counts as taking hold</b>,
+    /// not only a drag: tapping a picture in the thumbnail is the same statement as touching it at
+    /// the table, and it made the menu entry "bring to front" unnecessary (hand-run of M4, 20).
+    /// <para>
+    /// It reports where the picture already lies; the hub hands out the depth, as it does for every
+    /// other grab (rule 2).
+    /// </para>
+    /// </summary>
+    private void Front(ItemId item)
+    {
+        if (_scene.Items.FirstOrDefault(one => one.ItemId == item) is not { Parked: false } picture)
+        {
+            return;
+        }
+
+        _ = _session.TransformItemAsync(
+            _screenRef,
+            new ItemTransform(item, picture.CenterX, picture.CenterY, picture.Scale, picture.RotationDeg),
+            fromTable: false,
+            toFront: true,
+            CancellationToken.None);
     }
 
     /// <summary>A movement of the hand, in the terms the scene is written in.</summary>
@@ -1187,9 +1278,13 @@ internal sealed class TileFace : Panel
     /// normalised coordinates leave out.
     /// </para>
     /// </summary>
-    private double Swept(SceneItem item, TilePoint from, TilePoint to, Size face)
+    private double Swept(SceneItem item, TilePoint from, TilePoint to, Size face) =>
+        Swept(new CorePoint(item.CenterX, item.CenterY), from, to, face);
+
+    /// <inheritdoc cref="Swept(SceneItem, TilePoint, TilePoint, Size)" />
+    private double Swept(CorePoint about, TilePoint from, TilePoint to, Size face)
     {
-        var centre = Placing.InTile(new CorePoint(item.CenterX, item.CenterY), _view, face);
+        var centre = Placing.InTile(about, _view, face);
 
         var before = Math.Atan2(from.Y - centre.Y, from.X - centre.X);
         var after = Math.Atan2(to.Y - centre.Y, to.X - centre.X);
@@ -1198,6 +1293,12 @@ internal sealed class TileFace : Panel
     }
 
     private static CorePoint Centre(SceneItem item) => new(item.CenterX, item.CenterY);
+
+    /// <summary>Where the background lies right now - the pivot a mouse turns it about.</summary>
+    private CorePoint BehindCentre =>
+        _behind is { } behind
+            ? new CorePoint(behind.Background.CenterX, behind.Background.CenterY)
+            : new CorePoint(0.5, 0.5);
 
     /// <summary>
     /// Where a place on the screen lands on this table, or <see langword="null"/> if it does not

@@ -57,7 +57,11 @@ internal sealed class MainWindow : Window, IDisposable
         _log = new LogList(log, "Control") { Height = 200 };
 
         _board = new StageBoard(session, settings, new Pictures(store));
-        _stage = new StagePanel(session, entrances, Selected, _status, log.CreateLogger("Control"));
+
+        // The grips below the stage act on the ACTIVE TILE, not on whatever the list happens to
+        // have selected. Two answers to "which screen?" on one surface is one too many, and at the
+        // table it was the first thing to trip over (hand-run of M4, 24a).
+        _stage = new StagePanel(session, entrances, () => _board.Active, _status, log.CreateLogger("Control"));
 
         Title = "DnDOverlay - M2b";
         Width = 620;
@@ -96,14 +100,26 @@ internal sealed class MainWindow : Window, IDisposable
         // events away from this one, and the device list is half its input (Part 4).
         _guard = new StageGuard(this, session, Environment.MachineName);
 
-        _list.SelectionChanged += async (_, _) => await _stage.RefreshAsync().ConfigureAwait(true);
+        // The two selections are one fact seen from two sides, so each follows the other. Both
+        // ends refuse a change that is already made, which is what keeps this from ringing back and
+        // forth (StageBoard.Activate).
+        _list.SelectionChanged += async (_, _) =>
+        {
+            _board.Aim(Selected());
+
+            await _stage.RefreshAsync().ConfigureAwait(true);
+        };
 
         _panelHead.Toggled += (_, _) => Switch(!_board.Single);
 
         // "Set up screen ..." from a tile menu lands in the window that exists, on the screen it
         // was asked for (Part 7).
         _board.Configuring += (_, screen) => Devices().Reveal(screen);
-        _board.ActiveChanged += (_, _) => Remember();
+        _board.ActiveChanged += (_, _) =>
+        {
+            Follow();
+            Remember();
+        };
 
         // Where the window stood, if that place is still there (Part 7). Done before the window is
         // shown, so it never appears in one place and jumps to another.
@@ -224,6 +240,19 @@ internal sealed class MainWindow : Window, IDisposable
 
     private ScreenRef? Selected() =>
         _list.SelectedItem is ScreenEntry entry ? entry.Screen : null;
+
+    /// <summary>Points the list at whichever tile is active, without sending it back again.</summary>
+    private void Follow()
+    {
+        if (_board.Active is not { } active || Selected() == active)
+        {
+            return;
+        }
+
+        _list.SelectedItem = _list.Items
+            .OfType<ScreenEntry>()
+            .FirstOrDefault(entry => entry.Screen == active);
+    }
 
     /// <summary>
     /// Flattened to a list here, because a grip that sends one image needs a target rather than a

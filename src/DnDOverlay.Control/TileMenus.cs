@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using DnDOverlay.Core;
 using DnDOverlay.Hub;
 using CoreManipulation = DnDOverlay.Core.Manipulation;
@@ -133,12 +134,19 @@ internal sealed class TileMenus(
 
         var menu = new ContextMenu();
 
-        menu.Items.Add(Entry("Bring to front", () => Each(many, item => Front(item))));
         menu.Items.Add(Entry("Turn to me", () => Each(many, item => ToMe(item, context, where))));
-        menu.Items.Add(Entry(
-            picture.Parked ? "Unpark" : "Park",
-            () => Each(many, item => session.ParkItemAsync(
-                screen, item.ItemId, !picture.Parked, CancellationToken.None))));
+
+        // "Park" only, and only for what is lying out. Taking hold of a card in the thumbnail is
+        // the way back out of the fan, exactly as at the table - and the entry that did it from
+        // here dropped the picture under the topmost slot, where nothing could reach it (hand-run
+        // of M4, Fächer). What the entry is still worth is a whole selection put away at once.
+        if (!picture.Parked)
+        {
+            menu.Items.Add(Entry(
+                "Park",
+                () => Each(many, item => session.ParkItemAsync(
+                    screen, item.ItemId, parked: true, CancellationToken.None))));
+        }
 
         menu.Items.Add(new Separator());
 
@@ -253,20 +261,6 @@ internal sealed class TileMenus(
     }
 
     /// <summary>
-    /// Brings a picture to the front by reporting where it already lies as a GRAB. There is no
-    /// operation of its own for it, and there must not be: what is taken hold of comes to the
-    /// front is one rule, and the hub is where it is applied - together with the exception that a
-    /// locked picture never rises (Part 3).
-    /// </summary>
-    private Task Front(SceneItem item) =>
-        session.TransformItemAsync(
-            screen,
-            new ItemTransform(item.ItemId, item.CenterX, item.CenterY, item.Scale, item.RotationDeg),
-            fromTable: false,
-            toFront: true,
-            CancellationToken.None);
-
-    /// <summary>
     /// The same thing the double tap does, and the same arithmetic: the edge nearest the place the
     /// menu was opened on (Part 6).
     /// </summary>
@@ -316,6 +310,20 @@ internal sealed class TileMenus(
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Relative;
         menu.HorizontalOffset = at.X;
         menu.VerticalOffset = at.Y;
+
+        // A finger tapping beside the menu did not close it, while a mouse click did (hand-run of
+        // M4, 25e): a menu opened from code takes the keyboard focus but not the touch capture, so
+        // the touch outside never reaches it. Listening for the next touch anywhere in the window
+        // closes it - and the handler takes itself off again, or every menu ever opened would stay
+        // subscribed for the life of the process.
+        void Beside(object? sender, TouchEventArgs touch) => menu.IsOpen = false;
+
+        if (Window.GetWindow(over) is { } window)
+        {
+            window.PreviewTouchDown += Beside;
+            menu.Closed += (_, _) => window.PreviewTouchDown -= Beside;
+        }
+
         menu.IsOpen = true;
     }
 }

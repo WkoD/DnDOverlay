@@ -38,6 +38,7 @@ internal sealed class SceneThumbnail : FrameworkElement
     private SceneState _scene = SceneState.Empty;
     private ScreenContext _screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
     private ViewRotation _view;
+    private bool _faded;
 
     internal SceneThumbnail(Pictures pictures)
     {
@@ -59,6 +60,17 @@ internal sealed class SceneThumbnail : FrameworkElement
     /// </para>
     /// </summary>
     internal double AspectRatio => Viewing.AspectRatioInView(_screen.AspectRatio, _view);
+
+    /// <summary>
+    /// Whether the pictures stand back so the layer beneath them can be judged - the background
+    /// mode (Part 6).
+    /// <para>
+    /// <b>Transparent rather than veiled.</b> A dark film over the pictures dims the background
+    /// along with them, and the background is the one thing being looked at; letting them go
+    /// see-through leaves it at its own brightness (hand-run of M4, 38b).
+    /// </para>
+    /// </summary>
+    internal void Faded(bool faded) => _faded = faded;
 
     /// <summary>
     /// What to draw from now on. It does not draw - the redraw does, once per render pass, so that
@@ -110,6 +122,11 @@ internal sealed class SceneThumbnail : FrameworkElement
             return;
         }
 
+        if (_faded)
+        {
+            drawingContext.PushOpacity(0.35);
+        }
+
         // The fan lies above the whole table, and the depth says so. Ordering by it here means the
         // thumbnail and the table cover the same things - one calculation, two surfaces (rule 9).
         foreach (var item in _scene.Items.OrderBy(item => Parking.Depth(_scene, item)))
@@ -122,6 +139,11 @@ internal sealed class SceneThumbnail : FrameworkElement
                 size,
                 item is ImageItem { ShowName: true } named ? named.Name : null,
                 item.Locked);
+        }
+
+        if (_faded)
+        {
+            drawingContext.Pop();
         }
     }
 

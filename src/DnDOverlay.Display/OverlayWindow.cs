@@ -505,14 +505,16 @@ internal sealed class OverlayWindow : Window
         ring.RenderTransform = scale;
         ring.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
 
-        _pointing.Children.Clear();
+        // Each ring runs out on its own. A second pulse used to cut the first one off, and the DM
+        // asked for the opposite: several rings left standing are a TRAIL, which is what pointing
+        // along a route needs (hand-run of M4, 25e).
         _pointing.Children.Add(ring);
 
         var span = TimeSpan.FromMilliseconds(700);
         var grow = new DoubleAnimation(0.2, 1, span) { FillBehavior = FillBehavior.Stop };
         var fade = new DoubleAnimation(1, 0, span) { FillBehavior = FillBehavior.Stop };
 
-        fade.Completed += (_, _) => _pointing.Children.Clear();
+        fade.Completed += (_, _) => _pointing.Children.Remove(ring);
 
         scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);

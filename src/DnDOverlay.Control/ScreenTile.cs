@@ -67,6 +67,8 @@ internal sealed class ScreenTile : Border
         BorderBrush = Brushes.Transparent;
         Padding = new Thickness(6);
         Margin = new Thickness(0, 0, 8, 8);
+        // The whole tile answers a grip, not only what is drawn on it: the padding round the
+        // face and the strip beside the buttons carry the screen menu too (hand-run of M4, 25v).
         Background = Brushes.Transparent;
 
         var layers = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };

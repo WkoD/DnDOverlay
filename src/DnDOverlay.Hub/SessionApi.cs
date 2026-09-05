@@ -332,7 +332,16 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var (centre, scale) = Layout.FitBackground(
                 background.Meta.AspectRatio, fit, _screens.ContextFor(screen));
 
-            wanted = background with { CenterX = centre.X, CenterY = centre.Y, Scale = scale };
+            // The angle goes back to nothing with them. Both buttons put the picture into one of
+            // the two obvious positions, and a background left standing at 15 degrees was in
+            // neither of them (hand-run of M4, 38b).
+            wanted = background with
+            {
+                CenterX = centre.X,
+                CenterY = centre.Y,
+                Scale = scale,
+                RotationDeg = 0,
+            };
         }
         finally
         {
@@ -459,7 +468,17 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var revision = _scenes.NextRevision();
 
             var removal = new RemoveItem(item);
-            var addition = new AddItem(Arriving(current, scene, context, position, revision));
+            // Out of the fan and onto the table, like a copy. Part 11 has it staying parked and
+            // joining the target's fan, and the table said otherwise (hand-run of M4, 25b): a
+            // picture dragged to another screen is one that is WANTED there, and it arrived where
+            // nobody was looking. The plan and its test are corrected with this.
+            var arriving = Arriving(current, scene, context, position, revision) with
+            {
+                Parked = false,
+                ParkedAt = 0,
+            };
+
+            var addition = new AddItem(arriving);
 
             _scenes.Set(source, SceneReducer.Apply(lying, removal, _screens.ContextFor(source)));
             _scenes.Set(target, SceneReducer.Apply(scene, addition, context));
@@ -626,13 +645,14 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 // done: raising it every twentieth of a second through a gesture would run the
                 // number space up and change nothing anybody can see.
                 //
-                // A LOCKED item never rises, and the lock is asked HERE rather than being left to
-                // the refusal above. That refusal only ever fires for the table, and until M4 the
-                // table was the only caller that grabbed - so the promise "a locked item does not
-                // change its ZOrder" (Part 11) held by accident. The thumbnail grabs with
-                // fromTable: false, which is precisely the combination that had no test and would
-                // have raised the item (Guide C15).
-                ZOrder: toFront && !current.Locked
+                // What is taken hold of comes to the front, LOCKED OR NOT, and that is a
+                // correction from the table (hand-run of M4, 20). M4a had read Part 3's "not raised
+                // for locked items" as a rule and asked the lock here; the DM asked for the
+                // opposite, and the reason is in the same sentence: Part 3 gives its rule the
+                // reason "they cannot be taken hold of", which is true at the TABLE and false in
+                // the thumbnail. A picture the DM has just touched has to be the one he sees.
+                // At the table the question does not arise - a locked item is refused above.
+                ZOrder: toFront
                     ? Math.Max(current.ZOrder, scene.TopZOrder + 1)
                     : current.ZOrder,
                 Revision: _scenes.NextRevision());

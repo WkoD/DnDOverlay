@@ -164,14 +164,32 @@ public sealed class SceneCommandTests
         Assert.NotNull(moved);
         Assert.Equal(1.4, moved.Scale, 6);
         Assert.Equal(15, moved.RotationDeg, 6);
-        Assert.Equal(0.62, moved.CenterX, 6);
+
+        // It moved towards where it was sent, and stopped where it would have uncovered an edge.
+        // The coordinate itself is not asserted: the rule is "no gap", and a number here would say
+        // the same thing today and break with the next change to the clamp.
+        Assert.True(moved.CenterX > 0.5, "the background did not move towards the place it was sent");
+        Covers(moved, screens.ContextFor(Target));
 
         await session.TransformBackgroundAsync(Target, new Point(12, 12), 1.4, 0, Cancellation);
 
         var pushed = (await session.GetSceneAsync(Target, Cancellation)).Background;
 
         Assert.NotNull(pushed);
-        Assert.True(pushed.CenterX < 12, "the hub let the background be pushed off the screen");
+        Covers(pushed, screens.ContextFor(Target));
+    }
+
+    /// <summary>
+    /// A background large enough to cover the screen leaves no edge free (hand-run of M4, 38b). A
+    /// picture may hang out over the side - one zooms in to bring a detail closer - but behind a
+    /// background there is nothing to see.
+    /// </summary>
+    private static void Covers(BackgroundItem background, ScreenContext context)
+    {
+        var rect = Layout.BackgroundRect(background, context);
+
+        Assert.True(rect.Width < 1 || (rect.X <= 1e-9 && rect.Right >= 1 - 1e-9), "a vertical edge was left bare");
+        Assert.True(rect.Height < 1 || (rect.Y <= 1e-9 && rect.Bottom >= 1 - 1e-9), "a horizontal edge was left bare");
     }
 
     /// <summary>

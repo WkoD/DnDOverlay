@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace DnDOverlay.Control;
 
@@ -44,6 +45,11 @@ internal sealed class TileHead : Panel
 
     internal TileHead()
     {
+        // The whole strip answers, not only the words on it. A panel without a background is
+        // invisible to the hit test between its children, so the screen menu and the drag could
+        // only be started where there happened to be text (hand-run of M4, 25v).
+        Background = Brushes.Transparent;
+
         Children.Add(_name);
         Children.Add(_resolution);
     }
