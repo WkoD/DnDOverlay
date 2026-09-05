@@ -72,6 +72,13 @@ internal sealed class TileMenus(
         named.IsEnabled = scene.Background is not null;
         menu.Items.Add(named);
 
+        // The two starting values, as the two buttons they became when the background took on the
+        // place and size of a picture (Ortsfrage 6): each of them works the centre and the scale
+        // out once, and from then on they are ordinary values that a grip can change. Flat rather
+        // than in a submenu - "turn view" is the one place in this surface that nests (Part 7).
+        menu.Items.Add(Fitted("Fill screen with background", BackgroundFit.Cover, scene));
+        menu.Items.Add(Fitted("Fit whole background on screen", BackgroundFit.Contain, scene));
+
         menu.Items.Add(Turned(view));
 
         menu.Items.Add(new Separator());
@@ -154,6 +161,22 @@ internal sealed class TileMenus(
             () => Each(many, item => session.RemoveItemAsync(screen, item.ItemId, CancellationToken.None))));
 
         Open(menu, over, at);
+    }
+
+    /// <summary>
+    /// One of the two fit buttons. <b>Not a stored mode any more</b>: it computes a place and a
+    /// size, writes them, and is finished - which is what lets a background be moved and zoomed at
+    /// all (Part 6, decided at the start of M4).
+    /// </summary>
+    private MenuItem Fitted(string header, BackgroundFit fit, SceneState scene)
+    {
+        var entry = Entry(
+            header,
+            () => _ = session.SetBackgroundFitAsync(screen, fit, CancellationToken.None));
+
+        entry.IsEnabled = scene.Background is not null;
+
+        return entry;
     }
 
     /// <summary>

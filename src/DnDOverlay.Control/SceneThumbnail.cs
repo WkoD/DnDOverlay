@@ -1,7 +1,10 @@
 using System.Windows;
 using System.Windows.Media;
 using DnDOverlay.Core;
+using DnDOverlay.Rendering.Windows;
 using CoreRect = DnDOverlay.Core.Rect;
+using TilePoint = System.Windows.Point;
+using TileRect = System.Windows.Rect;
 
 namespace DnDOverlay.Control;
 
@@ -88,7 +91,7 @@ internal sealed class SceneThumbnail : FrameworkElement
         // The ground is drawn whatever else happens: an empty screen is a screen, and a tile that
         // showed nothing at all would look like a tile that is broken.
         drawingContext.DrawRectangle(
-            Brushes.Black, pen: null, new System.Windows.Rect(0, 0, size.Width, size.Height));
+            Brushes.Black, pen: null, new TileRect(0, 0, size.Width, size.Height));
 
         if (_scene.BackgroundVisible && _scene.Background is { } background)
         {
@@ -97,7 +100,9 @@ internal sealed class SceneThumbnail : FrameworkElement
                 Layout.BackgroundRect(background, _screen),
                 background.RotationDeg,
                 _pictures.For(background.AssetId),
-                size);
+                size,
+                background.ShowName ? background.Name : null,
+                locked: false);
         }
 
         if (!_scene.ItemsVisible)
@@ -114,7 +119,9 @@ internal sealed class SceneThumbnail : FrameworkElement
                 Layout.ItemToRect(item, _screen),
                 item.RotationDeg,
                 item is ImageItem image ? _pictures.For(image.AssetId) : null,
-                size);
+                size,
+                item is ImageItem { ShowName: true } named ? named.Name : null,
+                item.Locked);
         }
     }
 
@@ -125,11 +132,17 @@ internal sealed class SceneThumbnail : FrameworkElement
     /// (<see cref="Viewing"/>).
     /// </summary>
     private void Draw(
-        DrawingContext drawingContext, CoreRect normalised, double angleDeg, ImageSource? picture, Size size)
+        DrawingContext drawingContext,
+        CoreRect normalised,
+        double angleDeg,
+        ImageSource? picture,
+        Size size,
+        string? name,
+        bool locked)
     {
         var rect = Placing.InTile(normalised, _view, size);
 
-        var centre = new System.Windows.Point(rect.X + (rect.Width / 2), rect.Y + (rect.Height / 2));
+        var centre = new TilePoint(rect.X + (rect.Width / 2), rect.Y + (rect.Height / 2));
 
         // The angle turns with the view as well: a picture standing straight on a table seen from
         // the other side is upside down, and drawing it otherwise would make the thumbnail a
@@ -148,6 +161,104 @@ internal sealed class SceneThumbnail : FrameworkElement
             drawingContext.DrawImage(picture, rect);
         }
 
+        // Inside the turn, like the table: the caption lies IN the picture and the padlock ON it,
+        // so both lie the way the picture lies. Drawn after it, so neither is under it.
+        Caption(drawingContext, rect, name);
+        Padlock(drawingContext, rect, locked);
+
         drawingContext.Pop();
+    }
+
+    /// <summary>
+    /// The name plate, through <b>the same cascade the table uses</b> - wrap, shorten, drop
+    /// (<see cref="CaptionLayout"/>). That is why this project depends on the rendering library at
+    /// all: a second name plate would be the fourth time a size was decided here that already
+    /// existed elsewhere (Guide <c>G24</c>).
+    /// <para>
+    /// <b>The size is the control's, not the screen's</b>, and that is the one parameter that
+    /// differs. The screen's setting answers "how far away are the players from THAT screen" - a
+    /// projector three metres off, a table at arm's length; the tile is always at the DM's own
+    /// arm's length. The consequence is deliberate and worth naming: on a small overview tile the
+    /// cascade drops the caption altogether, because a third of a thumb-sized picture has no room
+    /// for a line of text. The tile then says a picture lies there, and the single view says what
+    /// it is called.
+    /// </para>
+    /// </summary>
+    private static void Caption(DrawingContext drawingContext, TileRect rect, string? name)
+    {
+        if (name is null || rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var caption = CaptionLayout.Fit(name, rect.Width, rect.Height);
+
+        if (!caption.IsVisible)
+        {
+            return;
+        }
+
+        var written = CaptionLayout.Written(caption, rect.Width);
+        var top = rect.Bottom - written.Height - 2;
+
+        // On a dark strip, for the reason the table has one: white on a light picture is not a
+        // caption, it is a guess.
+        drawingContext.DrawRectangle(
+            new SolidColorBrush(Color.FromArgb(0xC0, 0, 0, 0)),
+            pen: null,
+            new TileRect(rect.X, top - 2, rect.Width, written.Height + 4));
+
+        drawingContext.DrawText(written, new TilePoint(rect.X, top));
+    }
+
+    /// <summary>
+    /// The padlock, which Prüfschritt 21 wants to see on all five locked pictures <b>in the
+    /// thumbnail</b> as well as at the table.
+    /// <para>
+    /// <b>It does not scale with the picture</b>, and that is the difference from the table's. There
+    /// it is measured against the picture, because there a picture is hand-sized; here five locked
+    /// pictures may be thumbnails, and a mark that shrank with them would be exactly the promise
+    /// 21 makes and cannot keep. A sign that is only sometimes readable is not a sign.
+    /// </para>
+    /// </summary>
+    private static void Padlock(DrawingContext drawingContext, TileRect rect, bool locked)
+    {
+        if (!locked || rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        const double Size = 12;
+
+        var right = rect.Right - 2;
+        var top = rect.Y + 2;
+
+        drawingContext.DrawRoundedRectangle(
+            new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0)),
+            pen: null,
+            new TileRect(right - Size - 4, top, Size + 4, Size + 4),
+            3,
+            3);
+
+        var body = new TileRect(right - Size - 2, top + 2 + (Size * 0.42), Size, Size * 0.58);
+
+        drawingContext.DrawRoundedRectangle(Brushes.White, pen: null, body, 1, 1);
+
+        // The shackle as an arc over the body - drawn rather than written as a glyph, so a locked
+        // picture never depends on a font being present (the table's reason, kept).
+        var shackle = new StreamGeometry();
+
+        using (var arc = shackle.Open())
+        {
+            var left = new TilePoint(body.X + (Size * 0.22), body.Y);
+            var over = new TilePoint(body.Right - (Size * 0.22), body.Y);
+
+            arc.BeginFigure(left, isFilled: false, isClosed: false);
+            arc.ArcTo(over, new Size(Size * 0.28, Size * 0.28), 0, false, SweepDirection.Clockwise, true, false);
+        }
+
+        shackle.Freeze();
+
+        drawingContext.DrawGeometry(brush: null, new Pen(Brushes.White, 1.6), shackle);
     }
 }

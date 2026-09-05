@@ -1908,7 +1908,7 @@ internal sealed class OverlayWindow : Window
 
         if (caption.IsVisible)
         {
-            mount.Caption = Label(caption, renderedWidth);
+            mount.Caption = Label(caption, renderedWidth, textSize);
             mount.Element.Children.Add(mount.Caption);
         }
     }
@@ -2253,7 +2253,7 @@ internal sealed class OverlayWindow : Window
     /// decision (<c>checks/M1.md</c>).
     /// </para>
     /// </summary>
-    private static Border Label(Caption caption, double width)
+    private static Border Label(Caption caption, double width, double textSize)
     {
         var gradient = new LinearGradientBrush
         {
@@ -2274,7 +2274,12 @@ internal sealed class OverlayWindow : Window
             Child = new TextBlock
             {
                 Text = caption.Text,
-                FontSize = CaptionLayout.DefaultTextSize,
+                // The size the cascade MEASURED with. It used to be the default here while the
+                // measurement used the screen's own value, so a table set to larger text had its
+                // captions fitted at one size and drawn at another - invisible until somebody
+                // changed the parameter (rule 9, found while giving the thumbnail the same
+                // cascade).
+                FontSize = textSize,
                 Foreground = Brushes.White,
                 TextAlignment = TextAlignment.Center,
                 TextWrapping = TextWrapping.Wrap,

@@ -104,22 +104,43 @@ public static class CaptionLayout
         return Caption.None;
     }
 
+    /// <summary>
+    /// The caption ready to be drawn, for a surface that draws rather than builds elements - the
+    /// thumbnail of M4 (Part 7).
+    /// <para>
+    /// <b>It exists so that the same typeface and the same wrapping produce the drawing that the
+    /// cascade measured.</b> A second <c>FormattedText</c> built beside this one is the shape of
+    /// fault where a caption fits on one surface and is cut off on the other (rule 9).
+    /// </para>
+    /// </summary>
+    public static FormattedText Written(Caption caption, double widthInDip, double textSize = DefaultTextSize)
+    {
+        ArgumentNullException.ThrowIfNull(caption);
+
+        return Written(caption.Text, widthInDip, textSize, Brushes.White);
+    }
+
     private static (double Width, double Height) Measure(string text, double widthInDip, double textSize)
     {
-        var formatted = new FormattedText(
+        var formatted = Written(text, widthInDip, textSize, Brushes.White);
+
+        return (formatted.Width, formatted.Height);
+    }
+
+    private static FormattedText Written(string text, double widthInDip, double textSize, Brush brush)
+    {
+        return new FormattedText(
             text,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
             Face,
             textSize,
-            Brushes.White,
+            brush,
             pixelsPerDip: 1)
         {
-            MaxTextWidth = widthInDip,
+            MaxTextWidth = Math.Max(0, widthInDip),
             TextAlignment = TextAlignment.Center,
             Trimming = TextTrimming.None,
         };
-
-        return (formatted.Width, formatted.Height);
     }
 }
