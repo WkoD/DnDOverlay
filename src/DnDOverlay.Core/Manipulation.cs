@@ -171,6 +171,84 @@ public static class Manipulation
     }
 
     /// <summary>
+    /// One step of a hand on the BACKGROUND layer - the same arithmetic as on a picture, because it
+    /// carries a place and a size like one since M4 (Part 6).
+    /// <para>
+    /// <b>The stand-in is here rather than at the call site, and once.</b> Everything this needs -
+    /// the dead zone, the pivot, the scale bounds, the edge - is written for a
+    /// <see cref="SceneItem"/>, and a background is not one: it has no id, no ZOrder, no lock and
+    /// no place in the fan, deliberately (Guide <c>C5</c>). Building the stand-in in the control
+    /// would be a second gesture arithmetic in a surface, which is the thing rule 9 exists against.
+    /// </para>
+    /// <para>
+    /// <b>The edge holds for it too</b>, and that is a decision rather than an oversight: a
+    /// background pushed entirely off the screen would be a black table with an asset behind it
+    /// and no way back except the two fit buttons. Whether it may be SMALLER than filling is a
+    /// different question and already answered - <c>Contain</c> is a button (Part 6).
+    /// </para>
+    /// </summary>
+    public static (BackgroundItem Background, Turning Turning) Step(
+        BackgroundItem background, Turning turning, GestureStep step, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(background);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var (moved, next) = Step(Standing(background), turning, step, screen);
+
+        return (Taken(background, moved), next);
+    }
+
+    /// <summary>What a release does to the background: the same snap onto a quarter turn.</summary>
+    public static BackgroundItem Settle(BackgroundItem background, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(background);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        return Taken(background, Settle(Standing(background), screen));
+    }
+
+    /// <summary>The background, held on the glass - what the hub applies to whatever a control sends.</summary>
+    public static BackgroundItem HoldAtEdge(BackgroundItem background, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(background);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        return Taken(background, HoldAtEdge(Standing(background), screen));
+    }
+
+    /// <summary>
+    /// The background as an item, for the length of one computation. Its shape comes from the asset
+    /// rather than from a field of its own, which is the one place a background parts company with
+    /// a picture (Part 3).
+    /// </summary>
+    private static ImageItem Standing(BackgroundItem background) =>
+        new ImageItem(
+            ItemId: default,
+            CenterX: background.CenterX,
+            CenterY: background.CenterY,
+            Scale: background.Scale,
+            AspectRatio: background.Meta.AspectRatio,
+            RotationDeg: background.RotationDeg,
+            ZOrder: 0,
+            Locked: false,
+            Parked: false,
+            Revision: 0,
+            AssetId: background.AssetId,
+            Meta: background.Meta,
+            Name: background.Name ?? string.Empty,
+            ShowName: background.ShowName,
+            AnimationPaused: background.AnimationPaused);
+
+    private static BackgroundItem Taken(BackgroundItem background, SceneItem moved) =>
+        background with
+        {
+            CenterX = moved.CenterX,
+            CenterY = moved.CenterY,
+            Scale = moved.Scale,
+            RotationDeg = moved.RotationDeg,
+        };
+
+    /// <summary>
     /// What the fingers are allowed to turn in this step, and what the gesture has to remember.
     /// <para>
     /// Two fingers turn a picture a little every single time. Without a dead zone an evening of

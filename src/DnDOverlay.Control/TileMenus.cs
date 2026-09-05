@@ -45,12 +45,16 @@ internal sealed class TileMenus(
     /// <summary>The DM turned the view of this screen.</summary>
     internal event EventHandler<ViewRotation>? Turning;
 
+    /// <summary>The DM switched the background mode on or off.</summary>
+    internal event EventHandler<bool>? Adjusting;
+
     /// <summary>
     /// The screen's own menu. Reached on free tile area <b>and on the head</b> - the second place
     /// is not convenience: on a full screen there is no free area left, and the menu would be out
     /// of reach exactly where most is going on (Part 7).
     /// </summary>
-    internal void ForScreen(UIElement over, TilePoint at, SceneState scene, ViewRotation view)
+    internal void ForScreen(
+        UIElement over, TilePoint at, SceneState scene, ViewRotation view, bool adjusting)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
@@ -78,6 +82,21 @@ internal sealed class TileMenus(
         // than in a submenu - "turn view" is the one place in this surface that nests (Part 7).
         menu.Items.Add(Fitted("Fill screen with background", BackgroundFit.Cover, scene));
         menu.Items.Add(Fitted("Fit whole background on screen", BackgroundFit.Contain, scene));
+
+        // The one mode on the stage, and it is here because every grip on a tile is already spoken
+        // for and the background has no item to take hold of (Part 6). Ticked while it lasts, like
+        // the view rotation and the diagnostic view - the two other things one sets up once.
+        var adjust = new MenuItem
+        {
+            Header = "Adjust background",
+            IsCheckable = true,
+            IsChecked = adjusting,
+            IsEnabled = scene.Background is not null,
+        };
+
+        adjust.Click += (_, _) => Adjusting?.Invoke(this, !adjusting);
+
+        menu.Items.Add(adjust);
 
         menu.Items.Add(Turned(view));
 

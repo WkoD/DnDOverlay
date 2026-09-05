@@ -271,6 +271,46 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public async Task TransformBackgroundAsync(
+        ScreenRef screen,
+        Point centre,
+        double scale,
+        double rotationDeg,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        BackgroundItem wanted;
+
+        try
+        {
+            if (_scenes.Get(screen).Background is not { } background)
+            {
+                return;
+            }
+
+            var context = _screens.ContextFor(screen);
+
+            wanted = Manipulation.HoldAtEdge(
+                background with
+                {
+                    CenterX = centre.X,
+                    CenterY = centre.Y,
+                    Scale = Layout.ClampScale(scale, background.Meta.AspectRatio, context),
+                    RotationDeg = rotationDeg,
+                },
+                context);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await ApplyAsync(screen, new SetBackground(wanted), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task SetBackgroundFitAsync(
         ScreenRef screen,
         BackgroundFit fit,

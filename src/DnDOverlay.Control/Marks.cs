@@ -33,6 +33,7 @@ internal sealed class Marks : FrameworkElement
     private readonly Selection _selection;
 
     private TileRect? _frame;
+    private bool _dimmed;
 
     private SceneState _scene = SceneState.Empty;
     private ScreenContext _screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
@@ -71,6 +72,18 @@ internal sealed class Marks : FrameworkElement
         _scene = scene;
         _screen = screen;
         _view = view;
+
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Whether the pictures are to stand back, because the hand is working the layer beneath them.
+    /// <b>The mode has to be visible or it is a trap</b>: a drag that moves everything at once and
+    /// nothing the DM aimed at is the hardest kind of surprise to explain (Part 7).
+    /// </summary>
+    internal void Dimmed(bool dimmed)
+    {
+        _dimmed = dimmed;
 
         InvalidateVisual();
     }
@@ -127,7 +140,22 @@ internal sealed class Marks : FrameworkElement
 
         base.OnRender(drawingContext);
 
-        if (!_scene.ItemsVisible || RenderSize.Width <= 0 || RenderSize.Height <= 0)
+        if (RenderSize.Width <= 0 || RenderSize.Height <= 0)
+        {
+            return;
+        }
+
+        if (_dimmed)
+        {
+            // A veil over the pictures and a border round the whole face: what is being worked on
+            // is what is NOT dimmed, which is the background showing through.
+            drawingContext.DrawRectangle(
+                new SolidColorBrush(Color.FromArgb(0x88, 0x10, 0x10, 0x10)),
+                new Pen(Brushes.Gold, 2),
+                new TileRect(1, 1, Math.Max(0, RenderSize.Width - 2), Math.Max(0, RenderSize.Height - 2)));
+        }
+
+        if (!_scene.ItemsVisible)
         {
             return;
         }

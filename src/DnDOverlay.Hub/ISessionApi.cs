@@ -65,6 +65,30 @@ public interface ISessionApi
     Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Moves, scales and turns the background layer - the grip the thumbnail got in M4c, and the
+    /// only one there is: the background takes no touches at the table (Part 6).
+    /// <para>
+    /// <b>Everything the sender may not decide happens here</b>, as it does for an item (Part 4,
+    /// rule 2): the scale is held between its bounds and the layer at the edge of the glass. A
+    /// control that computed the last word on either would be a second authority over the same
+    /// screen.
+    /// </para>
+    /// <para>
+    /// <b>It travels as a <c>SetBackground</c></b> rather than as an operation of its own. There is
+    /// exactly one background on a screen and it carries no administrative fields, so the whole of
+    /// it IS the change - and the display keeps its decoded picture, because the asset has not
+    /// moved (Part 5, <c>PictureTransition</c>).
+    /// </para>
+    /// <para>Ineffective while no background is set, rather than an error.</para>
+    /// </summary>
+    Task TransformBackgroundAsync(
+        ScreenRef screen,
+        Point centre,
+        double scale,
+        double rotationDeg,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Renames an ASSET wherever it shows on this screen - every item carrying it and the
     /// background too. "One picture, one name" (Part 3): the control sends one of these per
     /// affected screen, otherwise the same picture would briefly be called two different things.

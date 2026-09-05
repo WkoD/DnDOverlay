@@ -88,6 +88,7 @@ internal sealed class TileFace : Panel
     private TilePoint _between;
 
     private bool _carrying;
+    private Behind? _behind;
 
     private TilePoint? _pressed;
     private TilePoint _mouseAt;
@@ -185,6 +186,9 @@ internal sealed class TileFace : Panel
     /// <summary>Raised when a grip on this face has changed what is selected on this screen.</summary>
     internal event EventHandler? Touched;
 
+    /// <summary>Raised when the background mode went on or off, so the menu can tick it.</summary>
+    internal event EventHandler? Adjusted;
+
     /// <summary>
     /// A picture has left this tile in somebody's hand. From here on the stage carries it: the
     /// tile under the hand decides, and only then the place within it (Part 10 calls the hit test
@@ -197,6 +201,42 @@ internal sealed class TileFace : Panel
     /// business, not the face's - the face knows where the hand was and what lies there.
     /// </summary>
     internal event EventHandler<MenuAsk>? Asked;
+
+    /// <summary>
+    /// Whether the hand on this tile is working the background rather than the pictures.
+    /// <para>
+    /// <b>A mode, and the only one on the stage.</b> Part 7 keeps modes out of the surface on
+    /// purpose - selection is ordinary selection - and this is the exception it forces: the
+    /// background is a layer without an item, it takes no touches at the table (Part 6), and every
+    /// grip a tile has is already spoken for. A one-finger drag draws a frame, two fingers pan the
+    /// stage, a long press opens a menu.
+    /// </para>
+    /// <para>
+    /// <b>What makes it bearable is that it is visible and that it is asked for.</b> It is switched
+    /// on from the screen menu and ticked there while it lasts, the pictures dim, the tile carries
+    /// a border, and a tap that grips nothing ends it. A hidden modifier - Alt, a third finger -
+    /// would be cheaper to build and impossible to find (decided at the end of M4c).
+    /// </para>
+    /// </summary>
+    internal bool Adjusting
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            _behind = null;
+
+            _marks.Dimmed(value);
+            InvalidateVisual();
+
+            Adjusted?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>
     /// Whether this face has the whole room of an open tile rather than its own small height.
@@ -340,7 +380,9 @@ internal sealed class TileFace : Panel
             {
                 Items = [.. _scene.Items.Select(item => item.ItemId == hold.Item.ItemId ? hold.Item : item)],
             }
-            : _scene;
+            : _behind is { } behind
+                ? _scene with { Background = behind.Background }
+                : _scene;
 
         _thumbnail.Show(scene, _screen, _view);
         _loading.Show(scene, _screen, _view);
@@ -352,6 +394,62 @@ internal sealed class TileFace : Panel
 
     /// <summary>Which place on the table a point on this panel means.</summary>
     private CorePoint Where(TilePoint at) => Placing.InScene(OnFace(at), _view, Wanted(RenderSize));
+
+    /// <summary>
+    /// Takes hold of the background instead of a picture, while the mode is on. It answers
+    /// everywhere on the tile - a layer that fills the screen has no free area beside it.
+    /// </summary>
+    private bool Beneath(TilePoint at)
+    {
+        if (!Adjusting || _scene.Background is not { } background)
+        {
+            return false;
+        }
+
+        _behind = new Behind(background, Where(at));
+
+        return true;
+    }
+
+    /// <summary>One step of a hand on the background - the same arithmetic, one layer down.</summary>
+    private void Under(GestureStep step)
+    {
+        if (_behind is not { } behind)
+        {
+            return;
+        }
+
+        var (moved, turning) = CoreManipulation.Step(behind.Background, behind.Turning, step, _screen);
+
+        behind.Background = moved;
+        behind.Turning = turning;
+
+        Draw();
+        Send(behind, binding: false);
+    }
+
+    /// <summary>
+    /// Hands the background's local values to the hub. <b>Throttled through the same table as an
+    /// item</b>, under a key of its own: a screen has one background, so one entry is all it needs,
+    /// and sharing an item's would let a picture and the layer under it throttle each other.
+    /// </summary>
+    private void Send(Behind behind, bool binding)
+    {
+        // Under the empty id, which no item can have: a screen carries exactly one background, so
+        // one entry is all it needs - and sharing an item's key would let a picture and the layer
+        // under it throttle each other.
+        if (!_throttle.Allows(default, Environment.TickCount64, binding))
+        {
+            return;
+        }
+
+        _ = _session.TransformBackgroundAsync(
+            _screenRef,
+            new CorePoint(behind.Background.CenterX, behind.Background.CenterY),
+            behind.Background.Scale,
+            behind.Background.RotationDeg,
+            CancellationToken.None);
+    }
 
     /// <summary>
     /// Takes hold of whatever lies under this place.
@@ -446,9 +544,16 @@ internal sealed class TileFace : Panel
                 Keyboard.Modifiers.HasFlag(ModifierKeys.Control)));
     }
 
-    /// <summary>One step of a hand on a picture.</summary>
+    /// <summary>One step of a hand on a picture, or on the background while the mode is on.</summary>
     private void Step(GestureStep step, double travelDip)
     {
+        if (_behind is not null)
+        {
+            Under(step);
+
+            return;
+        }
+
         if (_hold is not { } hold)
         {
             return;
@@ -470,6 +575,20 @@ internal sealed class TileFace : Panel
     /// </summary>
     private void LetGo(double totalDip, bool turning)
     {
+        if (_behind is { } behind)
+        {
+            // The same snap onto a quarter turn a picture gets, and the last report goes out
+            // whatever the throttle says.
+            behind.Background = CoreManipulation.Settle(behind.Background, _screen);
+
+            Draw();
+            Send(behind, binding: true);
+
+            _behind = null;
+
+            return;
+        }
+
         if (_hold is not { } hold)
         {
             return;
@@ -592,7 +711,11 @@ internal sealed class TileFace : Panel
                 return;
             }
 
-            if (!Grab(from))
+            if (Beneath(from))
+            {
+                _mouseAt = now;
+            }
+            else if (!Grab(from))
             {
                 // Free area, so this is a frame. The two never collide: a frame begins strictly
                 // OUTSIDE a picture and taking hold strictly ON one (Part 7).
@@ -679,9 +802,9 @@ internal sealed class TileFace : Panel
     private void Wheel(MouseWheelEventArgs turned)
     {
         var at = turned.GetPosition(this);
-        var standing = _hold is not null;
+        var standing = _hold is not null || _behind is not null;
 
-        if (!standing && !Grab(at))
+        if (!standing && !Beneath(at) && !Grab(at))
         {
             return;
         }
@@ -812,14 +935,17 @@ internal sealed class TileFace : Panel
         _pressed = origin;
         _spent = false;
 
-        Grab(origin);
+        if (!Beneath(origin))
+        {
+            Grab(origin);
+        }
     }
 
     private void Delta(ManipulationDeltaEventArgs moved)
     {
         moved.Handled = true;
 
-        if (_hold is null)
+        if (_hold is null && _behind is null)
         {
             // A finger that took hold of nothing draws a frame - once it has travelled far enough
             // to have meant one rather than a tap.
@@ -880,7 +1006,7 @@ internal sealed class TileFace : Panel
             _spent = true;
         }
 
-        if (_hold is not null)
+        if (_hold is not null || _behind is not null)
         {
             LetGo(Math.Abs(total.X) + Math.Abs(total.Y), turning: false);
 
@@ -1015,6 +1141,15 @@ internal sealed class TileFace : Panel
     /// </summary>
     private void Tap(TilePoint at, bool adding)
     {
+        if (Adjusting)
+        {
+            // A tap that grips nothing ends the mode - the way out that needs no second control
+            // and no memory (Part 7's habit for anything opened by a tap).
+            Adjusting = false;
+
+            return;
+        }
+
         var face = Wanted(RenderSize);
 
         if (_marks.CircleAt(at) is { } circled)
@@ -1105,6 +1240,17 @@ internal sealed class TileFace : Panel
         Began,
         Moved,
         Dropped,
+    }
+
+    /// <summary>The background in the hand, and what its gesture has to remember.</summary>
+    private sealed class Behind(BackgroundItem background, CorePoint tap)
+    {
+        internal BackgroundItem Background { get; set; } = background;
+
+        internal Turning Turning { get; set; } = Turning.Beginning;
+
+        /// <summary>Where the hand started. Kept for symmetry with a picture's hold; nothing reads it yet.</summary>
+        internal CorePoint Tap { get; } = tap;
     }
 
     /// <summary>One finger on the face: where it is now, and how far it has come.</summary>

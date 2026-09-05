@@ -121,6 +121,7 @@ internal sealed class ScreenTile : Border
         _menus.Opening += (_, _) => Opening?.Invoke(this, EventArgs.Empty);
         _menus.Configuring += (_, _) => Configuring?.Invoke(this, EventArgs.Empty);
         _menus.Turning += (_, view) => Turning?.Invoke(this, view);
+        _menus.Adjusting += (_, adjusting) => _face.Adjusting = adjusting;
 
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
@@ -237,7 +238,7 @@ internal sealed class ScreenTile : Border
             return;
         }
 
-        _menus.ForScreen(over, at, _scene, _view);
+        _menus.ForScreen(over, at, _scene, _view, _face.Adjusting);
     }
 
     private async Task ToggleAsync(bool images)

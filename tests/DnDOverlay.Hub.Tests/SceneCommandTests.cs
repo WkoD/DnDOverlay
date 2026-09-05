@@ -145,6 +145,50 @@ public sealed class SceneCommandTests
         Assert.Equal(0, background.RotationDeg);
     }
 
+    /// <summary>
+    /// The grip the thumbnail got in M4c reaches the authoritative scene - and <b>the hub has the
+    /// last word</b>, as it does for an item (rule 2): the scale is held between its bounds and the
+    /// layer at the edge of the glass, whatever a control sends.
+    /// </summary>
+    [Fact]
+    public async Task Moving_the_background_reaches_the_scene_and_is_held_at_the_edge()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+        await session.TransformBackgroundAsync(Target, new Point(0.62, 0.44), 1.4, 15, Cancellation);
+
+        var moved = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(moved);
+        Assert.Equal(1.4, moved.Scale, 6);
+        Assert.Equal(15, moved.RotationDeg, 6);
+        Assert.Equal(0.62, moved.CenterX, 6);
+
+        await session.TransformBackgroundAsync(Target, new Point(12, 12), 1.4, 0, Cancellation);
+
+        var pushed = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(pushed);
+        Assert.True(pushed.CenterX < 12, "the hub let the background be pushed off the screen");
+    }
+
+    /// <summary>
+    /// Without a background it does nothing rather than failing - the same rule an unknown ItemId
+    /// follows (Part 11). The menu entry is disabled, and a second control need not know that.
+    /// </summary>
+    [Fact]
+    public async Task Moving_a_background_that_is_not_there_does_nothing()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.TransformBackgroundAsync(Target, new Point(0.3, 0.3), 1, 0, Cancellation);
+
+        Assert.Null((await session.GetSceneAsync(Target, Cancellation)).Background);
+    }
+
     /// <summary>Strictly separate from the items - which is why "empty the lot" has to send both.</summary>
     [Fact]
     public async Task Clearing_the_background_leaves_the_items_standing()
