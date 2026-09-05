@@ -163,6 +163,13 @@ internal sealed class MainWindow : Window, IDisposable
                     // Redrawn from the authoritative scene rather than from what this window just
                     // sent: a second control changes the same table, and a panel that trusted its
                     // own command would drift from it (rule 1).
+                    // Not bundled and not delayed: it is the answer to "is anything happening at
+                    // all", and it has to keep moving while the drawing of a busy stage does not
+                    // (Part 7, rank 3 before 4).
+                    case SessionEvent.AssetProgress progress:
+                        _board.Report(progress.Device, progress.Loads);
+                        break;
+
                     case SessionEvent.ScenePatched:
                     case SessionEvent.SceneReplaced:
                         await _stage.RefreshAsync().ConfigureAwait(true);

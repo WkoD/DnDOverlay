@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
+using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
 using ScreenPoint = System.Windows.Point;
 
@@ -77,6 +78,26 @@ internal sealed class StageBoard : Panel
 
     /// <summary>Raised when the DM has made another tile the active one.</summary>
     internal event EventHandler? ActiveChanged;
+
+    /// <summary>
+    /// What one device is loading, handed to every tile that shows one of its screens.
+    /// <para>
+    /// Per DEVICE, because that is what the report is about: the same picture may be on its way to
+    /// one table and long since standing on another, and two tiles then show two different fills -
+    /// which is what Part 7 asks for when it says the weakest wireless must be visible rather than
+    /// averaged away.
+    /// </para>
+    /// </summary>
+    internal void Report(DeviceId device, IReadOnlyList<AssetLoad> loads)
+    {
+        foreach (var (screen, tile) in _tiles)
+        {
+            if (screen.Device == device)
+            {
+                tile.Report(loads);
+            }
+        }
+    }
 
     /// <summary>
     /// The screens as the hub knows them. Tiles come and go with them - a screen that is unplugged

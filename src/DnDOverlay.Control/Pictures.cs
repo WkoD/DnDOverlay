@@ -24,6 +24,7 @@ namespace DnDOverlay.Control;
 internal sealed class Pictures(AssetStore store)
 {
     private readonly Dictionary<AssetId, BitmapSource?> _loaded = [];
+    private readonly Dictionary<AssetId, BitmapSource?> _grey = [];
 
     /// <summary>
     /// The preview of one asset, or <see langword="null"/> when there is none to be had - a
@@ -47,8 +48,41 @@ internal sealed class Pictures(AssetStore store)
         return picture;
     }
 
+    /// <summary>
+    /// The same picture in grey, for the part of an item that has not reached the table yet
+    /// (<see cref="Loading"/>). Converted once and kept beside the colour version: the conversion
+    /// is cheap, doing it on every frame of a load is not.
+    /// </summary>
+    internal BitmapSource? Grey(AssetId asset)
+    {
+        if (_grey.TryGetValue(asset, out var known))
+        {
+            return known;
+        }
+
+        var colour = For(asset);
+        var grey = colour is null ? null : Desaturated(colour);
+
+        _grey[asset] = grey;
+
+        return grey;
+    }
+
     /// <summary>Forgets one asset, so the next draw reads it again.</summary>
-    internal void Forget(AssetId asset) => _loaded.Remove(asset);
+    internal void Forget(AssetId asset)
+    {
+        _loaded.Remove(asset);
+        _grey.Remove(asset);
+    }
+
+    private static FormatConvertedBitmap Desaturated(BitmapSource colour)
+    {
+        var grey = new FormatConvertedBitmap(colour, PixelFormats.Gray8, destinationPalette: null, alphaThreshold: 0);
+
+        grey.Freeze();
+
+        return grey;
+    }
 
     private static BitmapImage? Load(string path)
     {

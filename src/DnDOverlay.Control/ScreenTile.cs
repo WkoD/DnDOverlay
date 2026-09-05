@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
 
 namespace DnDOverlay.Control;
@@ -28,6 +29,7 @@ internal sealed class ScreenTile : Border
     private readonly ISessionApi _session;
     private readonly TileHead _head = new();
     private readonly SceneThumbnail _thumbnail;
+    private readonly Loading _loading;
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 12, 0) };
     private readonly CheckBox _background = new() { Content = "Background", Margin = new Thickness(0, 0, 12, 0) };
     private readonly Button _unlock = new() { Content = "Unlock all", Padding = new Thickness(8, 2, 8, 2) };
@@ -44,6 +46,7 @@ internal sealed class ScreenTile : Border
         Screen = screen;
         _session = session;
         _thumbnail = new SceneThumbnail(pictures);
+        _loading = new Loading(pictures);
 
         BorderThickness = new Thickness(2);
         BorderBrush = Brushes.Transparent;
@@ -60,9 +63,17 @@ internal sealed class ScreenTile : Border
 
         grips.Children.Add(_unlock);
 
+        // The scene and what has not arrived yet, one over the other. Two layers rather than one
+        // drawing, because they run at different speeds: the scene is bundled to one pass, the
+        // fill may never be (Part 7, rank 3 before 4).
+        var layered = new Grid();
+
+        layered.Children.Add(_thumbnail);
+        layered.Children.Add(_loading);
+
         _frame = new Border
         {
-            Child = _thumbnail,
+            Child = layered,
             Height = Small,
             Margin = new Thickness(0, 4, 0, 0),
             BorderThickness = new Thickness(1),
@@ -130,6 +141,7 @@ internal sealed class ScreenTile : Border
 
         _head.Show(label, screen.Size.Width, screen.Size.Height);
         _thumbnail.Show(scene, screen, view);
+        _loading.Show(scene, screen, view);
 
         // Set without sending: these are switches that carry their own state (Part 7), and a
         // checkbox that fires its own click handler on being told the truth would send the DM's
@@ -141,6 +153,12 @@ internal sealed class ScreenTile : Border
 
         Redraw.Ask(_thumbnail);
     }
+
+    /// <summary>
+    /// What the device of this screen is loading. Straight through to the layer that draws it -
+    /// nothing is bundled on the way, which is the whole reason that layer exists.
+    /// </summary>
+    internal void Report(IReadOnlyList<AssetLoad> loads) => _loading.Report(loads);
 
     private async Task ToggleAsync(bool images)
     {
