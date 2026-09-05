@@ -58,9 +58,21 @@ public sealed class DiscoveryListenerTests
     /// The other half, and the one the case above gave up when it was bound: an UNPAIRED display
     /// takes whatever it hears first (Part 4).
     /// <para>
-    /// It deliberately asserts nothing about WHICH control answered. Any beacon is a correct
-    /// answer here, so a stranger on this machine cannot make it wrong - which is exactly what the
-    /// bound case could not say of itself.
+    /// It asserts nothing about WHICH control answered, and <b>nothing about where it answered
+    /// from</b>. Any beacon is a correct answer here - that is the whole statement - so everything
+    /// this test says has to hold for a beacon it did not send.
+    /// </para>
+    /// <para>
+    /// <b>It used to assert the address as well, and that assertion was the one thing here a
+    /// stranger could break.</b> The comment even claimed immunity from strangers while the line
+    /// below it broke that immunity. Measured rather than argued: run with the whole solution, the
+    /// suite failed about every other time with <c>Expected: "127.0.0.1", Actual:
+    /// "192.168.178.23"</c> - the listener had heard the REAL beacon started by
+    /// <c>DiscoveryBeaconTests</c>, which runs at the same moment in another process, binds the same
+    /// fixed discovery port and announces itself on every interface including the LAN one. The
+    /// listener behaved exactly as this test says it should; the test asserted something it had no
+    /// right to know. The address rule is not lost - it is asserted in the BOUND case above, where
+    /// the control id guarantees whose datagram arrived.
     /// </para>
     /// </summary>
     [Fact(Timeout = 30_000)]
@@ -77,7 +89,7 @@ public sealed class DiscoveryListenerTests
             cancellationToken);
 
         Assert.NotNull(sighting);
-        Assert.Equal("127.0.0.1", sighting.Host);
+        Assert.False(string.IsNullOrWhiteSpace(sighting.Beacon.Name));
     }
 
     /// <summary>
