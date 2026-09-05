@@ -28,8 +28,7 @@ internal sealed class ScreenTile : Border
 {
     private readonly ISessionApi _session;
     private readonly TileHead _head = new();
-    private readonly SceneThumbnail _thumbnail;
-    private readonly Loading _loading;
+    private readonly TileFace _face;
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 12, 0) };
     private readonly CheckBox _background = new() { Content = "Background", Margin = new Thickness(0, 0, 12, 0) };
     private readonly Button _unlock = new() { Content = "Unlock all", Padding = new Thickness(8, 2, 8, 2) };
@@ -38,15 +37,11 @@ internal sealed class ScreenTile : Border
 
     private bool _setting;
 
-    /// <summary>How tall a thumbnail is in the overview, in DIP. The width follows its shape.</summary>
-    private const double Small = 150;
-
     internal ScreenTile(ScreenRef screen, ISessionApi session, Pictures pictures)
     {
         Screen = screen;
         _session = session;
-        _thumbnail = new SceneThumbnail(pictures);
-        _loading = new Loading(pictures);
+        _face = new TileFace(pictures, Selected);
 
         BorderThickness = new Thickness(2);
         BorderBrush = Brushes.Transparent;
@@ -63,18 +58,9 @@ internal sealed class ScreenTile : Border
 
         grips.Children.Add(_unlock);
 
-        // The scene and what has not arrived yet, one over the other. Two layers rather than one
-        // drawing, because they run at different speeds: the scene is bundled to one pass, the
-        // fill may never be (Part 7, rank 3 before 4).
-        var layered = new Grid();
-
-        layered.Children.Add(_thumbnail);
-        layered.Children.Add(_loading);
-
         _frame = new Border
         {
-            Child = layered,
-            Height = Small,
+            Child = _face,
             Margin = new Thickness(0, 4, 0, 0),
             BorderThickness = new Thickness(1),
             BorderBrush = Brushes.Gainsboro,
@@ -100,6 +86,13 @@ internal sealed class ScreenTile : Border
     internal ScreenRef Screen { get; }
 
     /// <summary>
+    /// What is picked out on this screen. <b>One per screen and not one for the stage</b>: a
+    /// selection across screens does not exist in the model, because <c>FocusItems</c> belongs to a
+    /// scene (Part 3), and the focus button of M5b would not know what it referred to.
+    /// </summary>
+    internal Selection Selected { get; } = new();
+
+    /// <summary>
     /// The head, and the one place a tile may be dragged by (Part 7). The tile's face is taken -
     /// items lie on it and the selection frame is drawn from it - while the head is the one strip
     /// that exists on every tile and is always the same size.
@@ -115,7 +108,7 @@ internal sealed class ScreenTile : Border
     {
         set
         {
-            _frame.Height = value ? double.NaN : Small;
+            _face.Opened = value;
             _frame.VerticalAlignment = value ? VerticalAlignment.Stretch : VerticalAlignment.Top;
             _frame.HorizontalAlignment = value ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
         }
@@ -140,8 +133,7 @@ internal sealed class ScreenTile : Border
         ArgumentNullException.ThrowIfNull(screen);
 
         _head.Show(label, screen.Size.Width, screen.Size.Height);
-        _thumbnail.Show(scene, screen, view);
-        _loading.Show(scene, screen, view);
+        _face.Show(scene, screen, view);
 
         // Set without sending: these are switches that carry their own state (Part 7), and a
         // checkbox that fires its own click handler on being told the truth would send the DM's
@@ -150,15 +142,13 @@ internal sealed class ScreenTile : Border
         _images.IsChecked = scene.ItemsVisible;
         _background.IsChecked = scene.BackgroundVisible;
         _setting = false;
-
-        Redraw.Ask(_thumbnail);
     }
 
     /// <summary>
     /// What the device of this screen is loading. Straight through to the layer that draws it -
     /// nothing is bundled on the way, which is the whole reason that layer exists.
     /// </summary>
-    internal void Report(IReadOnlyList<AssetLoad> loads) => _loading.Report(loads);
+    internal void Report(IReadOnlyList<AssetLoad> loads) => _face.Report(loads);
 
     private async Task ToggleAsync(bool images)
     {

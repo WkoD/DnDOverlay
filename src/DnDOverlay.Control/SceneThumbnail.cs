@@ -44,7 +44,17 @@ internal sealed class SceneThumbnail : FrameworkElement
         ClipToBounds = true;
     }
 
-    /// <summary>The shape the drawing wants, so the tile can give it the room a turned table needs.</summary>
+    /// <summary>
+    /// The shape the drawing wants, and <b>the one place it is worked out</b>: a table turned by a
+    /// quarter is upright in the tile, and whoever lays this element out has to give it that shape
+    /// or everything drawn in it is stretched (<see cref="Viewing.AspectRatioInView"/>).
+    /// <para>
+    /// <b>Asked rather than measured.</b> The element does not size itself, because it is laid out
+    /// beside two others that must end up on exactly the same rectangle (<see cref="TileFace"/>) -
+    /// a second computation of the shape there and here would be two answers to one question
+    /// (rule 9).
+    /// </para>
+    /// </summary>
     internal double AspectRatio => Viewing.AspectRatioInView(_screen.AspectRatio, _view);
 
     /// <summary>
@@ -59,31 +69,6 @@ internal sealed class SceneThumbnail : FrameworkElement
         _scene = scene;
         _screen = screen;
         _view = view;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// The thumbnail keeps the screen's shape, and it keeps the shape as the DM SEES it: a table
-    /// turned by a quarter is upright in the tile, and a tile that stayed landscape would stretch
-    /// everything drawn in it (<see cref="Viewing.AspectRatioInView"/>).
-    /// </remarks>
-    protected override Size MeasureOverride(Size availableSize)
-    {
-        var shape = AspectRatio;
-
-        if (shape <= 0)
-        {
-            return new Size(0, 0);
-        }
-
-        // Height leads, because a tile is a row in a wrapping arrangement: the rows have to be of
-        // one height or the arrangement gets holes in it (Part 7).
-        var height = double.IsInfinity(availableSize.Height) ? 0 : availableSize.Height;
-        var width = height * shape;
-
-        return double.IsInfinity(availableSize.Width) || width <= availableSize.Width
-            ? new Size(width, height)
-            : new Size(availableSize.Width, availableSize.Width / shape);
     }
 
     /// <inheritdoc />
@@ -142,13 +127,7 @@ internal sealed class SceneThumbnail : FrameworkElement
     private void Draw(
         DrawingContext drawingContext, CoreRect normalised, double angleDeg, ImageSource? picture, Size size)
     {
-        var seen = Viewing.ToView(normalised, _view);
-
-        var rect = new System.Windows.Rect(
-            seen.X * size.Width,
-            seen.Y * size.Height,
-            Math.Max(0, seen.Width * size.Width),
-            Math.Max(0, seen.Height * size.Height));
+        var rect = Placing.InTile(normalised, _view, size);
 
         var centre = new System.Windows.Point(rect.X + (rect.Width / 2), rect.Y + (rect.Height / 2));
 

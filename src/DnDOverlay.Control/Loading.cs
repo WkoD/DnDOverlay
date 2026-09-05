@@ -147,13 +147,7 @@ internal sealed class Loading : FrameworkElement
             return;
         }
 
-        var seen = Viewing.ToView(normalised, _view);
-
-        var rect = new TileRect(
-            seen.X * RenderSize.Width,
-            seen.Y * RenderSize.Height,
-            Math.Max(0, seen.Width * RenderSize.Width),
-            Math.Max(0, seen.Height * RenderSize.Height));
+        var rect = Placing.InTile(normalised, _view, RenderSize);
 
         // What is still missing is the part ABOVE the fill line, measured over the whole item -
         // including what a rotation pushes past its own rectangle, or a turned picture would keep
