@@ -165,31 +165,26 @@ public sealed class SceneCommandTests
         Assert.Equal(1.4, moved.Scale, 6);
         Assert.Equal(15, moved.RotationDeg, 6);
 
-        // It moved towards where it was sent, and stopped where it would have uncovered an edge.
-        // The coordinate itself is not asserted: the rule is "no gap", and a number here would say
-        // the same thing today and break with the next change to the clamp.
-        Assert.True(moved.CenterX > 0.5, "the background did not move towards the place it was sent");
-        Covers(moved, screens.ContextFor(Target));
+        // Where it was sent, unchanged. The layer goes where the DM puts it, exactly as a picture
+        // does - the clamp that used to pull a covering background back to the edge is gone, on the
+        // DM's own reason: what is not covered is transparent, and that is fine.
+        Assert.Equal(0.62, moved.CenterX, 6);
+        Assert.Equal(0.44, moved.CenterY, 6);
 
         await session.TransformBackgroundAsync(Target, new Point(12, 12), 1.4, 0, Cancellation);
 
         var pushed = (await session.GetSceneAsync(Target, Cancellation)).Background;
 
         Assert.NotNull(pushed);
-        Covers(pushed, screens.ContextFor(Target));
-    }
 
-    /// <summary>
-    /// A background large enough to cover the screen leaves no edge free (hand-run of M4, 38b). A
-    /// picture may hang out over the side - one zooms in to bring a detail closer - but behind a
-    /// background there is nothing to see.
-    /// </summary>
-    private static void Covers(BackgroundItem background, ScreenContext context)
-    {
-        var rect = Layout.BackgroundRect(background, context);
+        // And the hub still has the last word (rule 2): the same clamp a picture gets keeps the
+        // layer on the glass, so a control sending nonsense cannot lose it. The rule is asserted
+        // rather than a coordinate - a number would say this today and break with the next change.
+        var rect = Layout.BackgroundRect(pushed, screens.ContextFor(Target));
 
-        Assert.True(rect.Width < 1 || (rect.X <= 1e-9 && rect.Right >= 1 - 1e-9), "a vertical edge was left bare");
-        Assert.True(rect.Height < 1 || (rect.Y <= 1e-9 && rect.Bottom >= 1 - 1e-9), "a horizontal edge was left bare");
+        Assert.True(
+            rect.Right > 0 && rect.X < 1 && rect.Bottom > 0 && rect.Y < 1,
+            "the background was pushed clean off the glass and cannot be got back");
     }
 
     /// <summary>

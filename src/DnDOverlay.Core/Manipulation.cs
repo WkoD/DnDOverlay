@@ -193,13 +193,13 @@ public static class Manipulation
         ArgumentNullException.ThrowIfNull(background);
         ArgumentNullException.ThrowIfNull(screen);
 
+        // One clamp, the picture's, applied where the step is taken - the stand-in is what makes
+        // that true rather than a promise. The background briefly had a second one of its own; the
+        // DM took it out, because a layer that refuses to go where he puts it is felt as a fault
+        // however well it is meant (see HoldAtEdge).
         var (moved, next) = Step(Standing(background), turning, step, screen);
 
-        // Held again, and by the BACKGROUND's rule: the step above ran the item clamp, which allows
-        // a picture to hang out over the side. A background may not (hand-run of M4, 38b), and
-        // asking here rather than at the two call sites is what keeps the hub and the hand from
-        // clamping differently.
-        return (HoldAtEdge(Taken(background, moved), screen), next);
+        return (Taken(background, moved), next);
     }
 
     /// <summary>What a release does to the background: the same snap onto a quarter turn.</summary>
@@ -212,14 +212,15 @@ public static class Manipulation
     }
 
     /// <summary>
-    /// The background, held on the glass.
+    /// The background, held on the glass - <b>by exactly the rule a picture is held by</b>.
     /// <para>
-    /// <b>It is held harder than a picture, and the rule is its own:</b> a background may not
-    /// uncover an edge it is large enough to cover. A picture is allowed to hang out over the side
-    /// - one zooms in to bring a detail closer - but a background that leaves a black stripe along
-    /// the table is simply pushed too far, and there is nothing behind it to see (hand-run of M4,
-    /// 38b). Whether it may be SMALLER than the screen is a different question and already
-    /// answered: <c>Contain</c> is a button.
+    /// It briefly had a harder one of its own: a background large enough to cover the screen was
+    /// pulled back so that it never left an edge bare, on the argument that there is nothing behind
+    /// it to see. The DM asked for the opposite and gave the reason: <i>a background has to behave
+    /// like an ordinary picture - pushed, turned and zoomed as he likes - and whatever it does not
+    /// cover is simply transparent, which is fine.</i> That is the whole of it. A second clamp
+    /// would have made one layer answer to a rule none of the others does, and the DM would have
+    /// felt it as the layer refusing to go where he put it.
     /// </para>
     /// </summary>
     public static BackgroundItem HoldAtEdge(BackgroundItem background, ScreenContext screen)
@@ -227,32 +228,7 @@ public static class Manipulation
         ArgumentNullException.ThrowIfNull(background);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var held = Taken(background, HoldAtEdge(Standing(background), screen));
-        var rect = Layout.BackgroundRect(held, screen);
-
-        return held with
-        {
-            CenterX = Covering(held.CenterX, rect.X, rect.Width),
-            CenterY = Covering(held.CenterY, rect.Y, rect.Height),
-        };
-    }
-
-    /// <summary>
-    /// One axis of the background, moved back just far enough that it still covers the screen -
-    /// and left alone when it is too small to cover it at all.
-    /// </summary>
-    private static double Covering(double centre, double low, double extent)
-    {
-        if (extent < 1)
-        {
-            return centre;
-        }
-
-        var high = low + extent;
-
-        return low > 0 ? centre - low
-            : high < 1 ? centre + (1 - high)
-            : centre;
+        return Taken(background, HoldAtEdge(Standing(background), screen));
     }
 
     /// <summary>

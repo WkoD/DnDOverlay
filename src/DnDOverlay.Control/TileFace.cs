@@ -94,6 +94,9 @@ internal sealed class TileFace : Panel
     private TilePoint _mouseAt;
     private TilePoint? _framing;
     private Hold? _hold;
+
+    /// <summary>The hand that is on the fan, while it is - see <see cref="Grip"/>.</summary>
+    private Fanning? _fan;
     private bool _spent;
 
     /// <summary>How tall a face is in the overview, in DIP. The width follows the table's shape.</summary>
@@ -422,6 +425,112 @@ internal sealed class TileFace : Panel
         return true;
     }
 
+    /// <summary>
+    /// A hand has landed on the fan: picks the card that place means and steps it out for a look.
+    /// <para>
+    /// <b>On the press, and that is the half the thumbnail was missing.</b> The table shows the card
+    /// the moment a finger lands on the bar, and from there the gesture is either a run along the
+    /// fan or a pull away from it (<c>OverlayWindow.Grip</c>). In the tile a card used to come out
+    /// the instant it was touched, so there was neither a look nor a way to leaf along the row -
+    /// reported at the table in the second hand-run of M4.
+    /// </para>
+    /// <para>
+    /// Every number in it comes from <see cref="Parking"/>, the same one the table asks: which card
+    /// a place means, where that card steps out to, and where the bar ends. A tile is a fifth of
+    /// the size, and that changes what the hand can hit - it does not change what the fan IS
+    /// (rule 9).
+    /// </para>
+    /// </summary>
+    private bool Grip(TilePoint at)
+    {
+        if (Adjusting)
+        {
+            return false;
+        }
+
+        var place = Where(at);
+
+        if (!Parking.OnTheFan(place, _screen)
+            || Parking.Pick(_scene, _screen, place) is not { } card)
+        {
+            return false;
+        }
+
+        _fan = new Fanning(card);
+
+        _thumbnail.Peeking(card);
+        Redraw.Ask(_thumbnail);
+
+        return true;
+    }
+
+    /// <summary>
+    /// One step of a hand that is on the fan: run along it and the card shown changes, leave it and
+    /// that card comes out onto the table.
+    /// </summary>
+    /// <returns>Whether the gesture is still the fan's - <see langword="false"/> once it is not.</returns>
+    private bool Fanned(TilePoint at)
+    {
+        if (_fan is not { } fanning)
+        {
+            return false;
+        }
+
+        var now = Where(at);
+
+        if (Parking.OnTheFan(now, _screen))
+        {
+            if (Parking.Pick(_scene, _screen, now) is { } next && next != fanning.Card)
+            {
+                fanning.Card = next;
+
+                // At the card's OWN place along the fan. The table learnt this the hard way: shown
+                // under the hand it makes the eye chase it, shown where the hand landed the fan
+                // turns into a slide viewer (Parking.Peek).
+                _thumbnail.Peeking(next);
+                Redraw.Ask(_thumbnail);
+            }
+
+            return true;
+        }
+
+        // The hand has left the band, so the card comes out - and <b>that boundary and no other</b>,
+        // because it is the same line that decides parking. The fan owns exactly the band and the
+        // table owns the rest.
+        //
+        // It keeps the place the look gave it, so nothing jumps and the hand simply carries on.
+        if (_scene.Items.FirstOrDefault(one => one.ItemId == fanning.Card) is not { } card
+            || Parking.Peek(_scene, _screen, fanning.Card) is not { } peek)
+        {
+            Unfan();
+
+            return false;
+        }
+
+        _ = _session.ParkItemAsync(_screenRef, fanning.Card, parked: false, CancellationToken.None);
+
+        _hold = new Hold(card with { CenterX = peek.X, CenterY = peek.Y, Parked = false }, now, at);
+
+        Unfan();
+        Send(binding: false, grabbing: true);
+
+        return false;
+    }
+
+    /// <summary>The end of a fan gesture: the card that was being looked at lies back down.</summary>
+    private void Unfan()
+    {
+        if (_fan is null)
+        {
+            return;
+        }
+
+        _fan = null;
+
+        _thumbnail.Peeking(null);
+        Redraw.Ask(_thumbnail);
+    }
+
     /// <summary>One step of a hand on the background - the same arithmetic, one layer down.</summary>
     private void Under(GestureStep step)
     {
@@ -465,10 +574,11 @@ internal sealed class TileFace : Panel
     /// <summary>
     /// Takes hold of whatever lies under this place.
     /// <para>
-    /// <b>A parked card is not taken.</b> At the table the fan is a gesture in two halves - run
-    /// along it to choose, pull away to take - and neither half has been given a form in a tile this
-    /// size. Until it has, the way back out of the fan in the thumbnail is the item menu, which is a
-    /// grip that exists rather than one that half works.
+    /// <b>A parked card is not taken here.</b> The fan is a gesture in two halves - run along it to
+    /// choose, pull away to take - and it is entered on the press, before anything is taken hold of
+    /// at all (<see cref="Grip"/>). Taking a card here as well would be a second way into the fan,
+    /// and it was the one the table complained about: a card came out the instant it was touched,
+    /// so there was nothing to look at and nothing to leaf through.
     /// </para>
     /// </summary>
     private bool Grab(TilePoint at)
@@ -483,12 +593,7 @@ internal sealed class TileFace : Panel
 
         if (picture.Parked)
         {
-            // Pulled out of the fan, exactly as at the table: taking hold of a card IS the way back
-            // (Part 6). The hub is told at once and lays the picture out; the hand goes on carrying
-            // it from where it lay, and the release says where it came to rest.
-            _ = _session.ParkItemAsync(_screenRef, id, parked: false, CancellationToken.None);
-
-            picture = picture with { Parked = false };
+            return false;
         }
 
         _hold = new Hold(picture, place, OnFace(at));
@@ -705,6 +810,13 @@ internal sealed class TileFace : Panel
 
         CaptureMouse();
 
+        // The fan is entered on the press, before anything else is considered: a hand on the bar
+        // is looking, not yet taking.
+        if (Grip(at))
+        {
+            return;
+        }
+
         if (pressed.ClickCount != 2)
         {
             return;
@@ -728,6 +840,19 @@ internal sealed class TileFace : Panel
         }
 
         var now = moved.GetPosition(this);
+
+        if (_fan is not null)
+        {
+            if (Fanned(now))
+            {
+                _mouseAt = now;
+
+                return;
+            }
+
+            // The card is out and the hand carries on with it from here.
+            _mouseAt = now;
+        }
 
         if (Left(now))
         {
@@ -822,6 +947,15 @@ internal sealed class TileFace : Panel
         var from = _pressed;
 
         _pressed = null;
+
+        if (_fan is not null)
+        {
+            // Let go while still on the bar: the card lies back down and nothing happened. That is
+            // the point of the two halves - looking is allowed to come to nothing.
+            Unfan();
+
+            return;
+        }
 
         if (_carrying)
         {
@@ -1018,12 +1152,22 @@ internal sealed class TileFace : Panel
         _pressed = origin;
         _spent = false;
 
+        if (Grip(origin))
+        {
+            return;
+        }
+
         Beneath(origin);
     }
 
     private void Delta(ManipulationDeltaEventArgs moved)
     {
         moved.Handled = true;
+
+        if (_fan is not null && Fanned(moved.ManipulationOrigin))
+        {
+            return;
+        }
 
         if (_hold is null && _behind is null)
         {
@@ -1069,6 +1213,13 @@ internal sealed class TileFace : Panel
     private void Completed(ManipulationCompletedEventArgs done)
     {
         done.Handled = true;
+
+        if (_fan is not null)
+        {
+            Unfan();
+
+            return;
+        }
 
         var total = done.TotalManipulation.Translation;
 
@@ -1401,6 +1552,16 @@ internal sealed class TileFace : Panel
     /// The picture in the hand, and what the gesture has to remember about it. The same shape the
     /// table keeps: the local values are the truth for as long as the hand is on it.
     /// </summary>
+    /// <summary>
+    /// A hand resting on the fan. It holds only which card is being looked at - the place that card
+    /// steps out to is asked of <see cref="Parking.Peek"/> on every draw, so it follows the fan
+    /// rather than being a second copy of it.
+    /// </summary>
+    private sealed class Fanning(ItemId card)
+    {
+        internal ItemId Card { get; set; } = card;
+    }
+
     private sealed class Hold(SceneItem item, CorePoint tap, TilePoint tapDip)
     {
         internal SceneItem Item { get; set; } = item;

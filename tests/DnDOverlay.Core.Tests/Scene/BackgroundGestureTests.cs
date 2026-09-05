@@ -88,13 +88,17 @@ public sealed class BackgroundGestureTests
     }
 
     /// <summary>
-    /// <b>A background large enough to cover leaves no edge bare</b> - and that is a harder rule
-    /// than a picture's (hand-run of M4, 38b). A picture may hang out over the side, because one
-    /// zooms in to bring a detail closer; behind a background there is nothing to see, so a black
-    /// stripe along the table is simply pushed too far.
+    /// <b>A background goes where it is pushed, edge or no edge.</b>
+    /// <para>
+    /// It briefly had a clamp of its own - a background large enough to cover the screen was pulled
+    /// back so that it never left a bare stripe, because there is nothing behind it to see. The DM
+    /// asked for the opposite and gave the reason: the background is an ordinary picture as far as
+    /// the hand is concerned, and whatever it does not cover is transparent, which is fine. This
+    /// test is the decision, so that the clamp cannot come back by accident.
+    /// </para>
     /// </summary>
     [Fact]
-    public void The_background_cannot_uncover_an_edge_it_could_cover()
+    public void A_large_background_may_be_pushed_until_an_edge_shows()
     {
         var screen = Build.Screen();
         var background = Build.Background(meta: Build.Meta(1600, 900), scale: 1.4);
@@ -102,13 +106,14 @@ public sealed class BackgroundGestureTests
         var (moved, _) = Manipulation.Step(
             background,
             Turning.Beginning,
-            new GestureStep(9, 9, 1, 0, new Point(0.5, 0.5)),
+            new GestureStep(0.3, 0.2, 1, 0, new Point(0.5, 0.5)),
             screen);
 
         var rect = Layout.BackgroundRect(moved, screen);
 
-        Assert.True(rect.X <= 1e-9 && rect.Right >= 1 - 1e-9, "a vertical edge was left bare");
-        Assert.True(rect.Y <= 1e-9 && rect.Bottom >= 1 - 1e-9, "a horizontal edge was left bare");
+        Assert.Equal(0.8, moved.CenterX, 6);
+        Assert.Equal(0.7, moved.CenterY, 6);
+        Assert.True(rect.X > 0, "the background was pulled back to the edge it was pushed away from");
     }
 
     /// <summary>

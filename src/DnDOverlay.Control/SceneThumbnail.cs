@@ -40,6 +40,14 @@ internal sealed class SceneThumbnail : FrameworkElement
     private ViewRotation _view;
     private bool _faded;
 
+    /// <summary>
+    /// The card the hand is currently resting on in the fan, drawn clear of the bar and whole. It
+    /// is a property of the HAND rather than of the scene, which is why it lives here and not in
+    /// the scene state: nobody else's table shows it, and it disappears the moment the hand
+    /// finishes (Part 6).
+    /// </summary>
+    private ItemId? _peek;
+
     internal SceneThumbnail(Pictures pictures)
     {
         _pictures = pictures;
@@ -71,6 +79,9 @@ internal sealed class SceneThumbnail : FrameworkElement
     /// </para>
     /// </summary>
     internal void Faded(bool faded) => _faded = faded;
+
+    /// <summary>Which card is stepped out of the fan for a look, or <see langword="null"/>.</summary>
+    internal void Peeking(ItemId? card) => _peek = card;
 
     /// <summary>
     /// What to draw from now on. It does not draw - the redraw does, once per render pass, so that
@@ -129,11 +140,26 @@ internal sealed class SceneThumbnail : FrameworkElement
 
         // The fan lies above the whole table, and the depth says so. Ordering by it here means the
         // thumbnail and the table cover the same things - one calculation, two surfaces (rule 9).
-        foreach (var item in _scene.Items.OrderBy(item => Parking.Depth(_scene, item)))
+        // The card being looked at goes on top of everything, which is what "stepped out" means.
+        var peeked = _peek is { } looking
+            && _scene.Items.Any(item => item.ItemId == looking && item.Parked)
+                ? _peek
+                : null;
+
+        foreach (var item in _scene.Items
+            .OrderBy(item => item.ItemId == peeked ? 1 : 0)
+            .ThenBy(item => Parking.Depth(_scene, item)))
         {
+            // A card under the hand is drawn where it would STEP OUT to, and that place comes from
+            // the same arithmetic the table uses - out along the fan at its own slot, not under the
+            // finger and not where the hand first landed (Parking.Peek).
+            var shown = item.ItemId == peeked && Parking.Peek(_scene, _screen, item.ItemId) is { } clear
+                ? item with { CenterX = clear.X, CenterY = clear.Y }
+                : item;
+
             Draw(
                 drawingContext,
-                Layout.ItemToRect(item, _screen),
+                Layout.ItemToRect(shown, _screen),
                 item.RotationDeg,
                 item is ImageItem image ? _pictures.For(image.AssetId) : null,
                 size,
