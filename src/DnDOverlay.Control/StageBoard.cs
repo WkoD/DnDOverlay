@@ -70,8 +70,17 @@ internal sealed class StageBoard : Panel
 
             field = value;
             Lay();
+
+            // Said out loud, because the view can be switched from TWO places - the button above
+            // the stage and the tile's own menu - and only one of them used to tell the button
+            // what had happened. The menu route left it reading "Single view" while the single
+            // view was open (hand-run of M4, second run).
+            ViewChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>Raised when the stage has switched between the overview and one screen.</summary>
+    internal event EventHandler? ViewChanged;
 
     /// <summary>
     /// Which screen the next grip lands on. <see langword="null"/> only before the first screen is
@@ -152,10 +161,12 @@ internal sealed class StageBoard : Panel
             // The menu's three ways out of a tile. Opening one makes it the active screen and
             // opens it, in that order: the open screen IS the active one, in both directions
             // (Part 7).
+            // One entry, both directions. It used to open only, so in the single view the menu
+            // offered the thing that was already true (hand-run of M4, second run).
             tile.Opening += (_, _) =>
             {
                 Activate(view.Screen);
-                Single = true;
+                Single = !Single;
             };
 
             tile.Configuring += (_, _) => Configuring?.Invoke(this, view.Screen);

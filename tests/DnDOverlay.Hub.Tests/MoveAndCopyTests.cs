@@ -179,6 +179,18 @@ public sealed class MoveAndCopyTests
         // The one card that was already put away is still put away, and alone in the fan.
         Assert.Equal([resident], Parking.Fan(scene).Select(card => card.ItemId));
         Assert.Equal(scene, Parking.Arrange(scene, screens.ContextFor(Beamer)));
+
+        // <b>And it does not land ON the fan either.</b> Unparking alone was not enough: a parked
+        // card's own coordinates ARE its slot in the source's fan, hard against the park edge, so
+        // an arrival that kept them lay unparked in exactly the place a fan lies - which at the
+        // table cannot be told apart from having been put into the target's fan, and was reported
+        // as precisely that (hand-run of M4, second run, 25b). The flag was right and the place
+        // was wrong, and only this half of the assertion could tell.
+        Assert.False(
+            Parking.OnTheFan(
+                new Point(arrived.CenterX, arrived.CenterY),
+                screens.ContextFor(Beamer)),
+            "it arrived lying on the park edge, which at the table looks like the fan");
     }
 
     /// <summary>

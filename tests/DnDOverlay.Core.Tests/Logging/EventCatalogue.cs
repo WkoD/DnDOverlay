@@ -27,6 +27,20 @@ internal static class EventCatalogue
     /// </summary>
     internal static readonly int[] HandBuilt = [4008];
 
+    /// <summary>
+    /// Identifiers that were issued and then withdrawn. <b>They count as used for ever</b>, because
+    /// the register's first rule is that a number is never reused: were one to come back with a new
+    /// meaning, an older counterpart would render a plausible but wrong line from its old catalogue
+    /// entry - worse than an unknown identifier, which at least looks unknown (Part 8).
+    /// <para>
+    /// Until the first entry here that rule had no teeth: a withdrawn number simply disappeared from
+    /// the declarations, and "next free" then pointed straight back at it. 4014 was the control's
+    /// own frame-budget warning; the second hand-run of M4 showed every line it wrote to be false,
+    /// so it went, and it must not come back as something else.
+    /// </para>
+    /// </summary>
+    internal static readonly int[] Retired = [4014];
+
     private static readonly Regex Declaration = new(
         """
         \[LoggerMessage\(\s*

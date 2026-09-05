@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
@@ -70,34 +71,24 @@ internal sealed class MainWindow : Window, IDisposable
         // a battery machine rendering at sixty frames a second all evening. What it therefore
         // measures is the stretch that matters: the stage under a moving hand.
         //
-        // One name for the brake, because there is one stage. The display hands its playing screens
-        // in here and has to name the one that gave way; the control's warning names nothing, so
-        // the surface is only ever the key the once-per-session brake hangs on.
+        // It reports and does not judge: a budget needs a cadence, and a stream this sparse cannot
+        // estimate one - measured in the second hand-run of M4, where a stage holding 16.7 ms was
+        // warned against a budget of 2.8 ms (FrameWatch.WhileDrawing).
         var frames = log.CreateLogger("Control");
 
-        _frames = FrameWatch.WhileDrawing(
-            () => ["stage"],
-            window => ControlLog.FrameTimes(
-                frames,
-                window.Seconds,
-                window.MedianMs,
-                window.P95Ms,
-                window.MaxMs,
-                window.CadenceMs,
-                window.CpuPercent,
-                window.GcMs,
-                window.Sweeps,
-                window.DrawMs,
-                window.HandMs),
-            (_, window) => ControlLog.FrameBudgetMissed(
-                frames,
-                window.Missing,
-                window.MedianMs,
-                window.BudgetMs,
-                window.P95Ms,
-                window.StutterMs,
-                window.MaxMs,
-                window.CpuPercent));
+        _frames = FrameWatch.WhileDrawing(window => ControlLog.FrameTimes(
+            frames,
+            window.Seconds,
+            window.Frames,
+            window.MedianMs,
+            window.P95Ms,
+            window.MaxMs,
+            window.CadenceMs,
+            window.CpuPercent,
+            window.GcMs,
+            window.Sweeps,
+            window.DrawMs,
+            window.HandMs));
 
         Redraw.Measure(_frames);
 
@@ -105,32 +96,51 @@ internal sealed class MainWindow : Window, IDisposable
         Width = 620;
         Height = 760;
 
-        var panel = new StackPanel { Margin = new Thickness(16) };
+        // <b>A Grid rather than a StackPanel, for one row's sake.</b> A stack offers every child
+        // infinite height, so the stage could never be told how much room it had - and an open tile
+        // asks exactly that question: it grows to the height it is given, and given infinity it
+        // fell back to its small one. The single view therefore "opened" a tile that stayed the
+        // size of a thumbnail and merely moved to the middle (hand-run of M4, second run, 24a).
+        //
+        // Every row is Auto but the stage's, which takes what is left. That is also what makes the
+        // window's own size mean something: pulled taller, the room goes to the tiles.
+        var panel = new Grid { Margin = new Thickness(16) };
 
-        panel.Children.Add(new TextBlock
+        void Row(UIElement child, bool fills = false)
+        {
+            panel.RowDefinitions.Add(new RowDefinition
+            {
+                Height = fills ? new GridLength(1, GridUnitType.Star) : GridLength.Auto,
+            });
+
+            Grid.SetRow(child, panel.RowDefinitions.Count - 1);
+            panel.Children.Add(child);
+        }
+
+        Row(new TextBlock
         {
             Text = $"Listening on {address}. Start a display with --host {address.Host}.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 12),
         });
 
-        panel.Children.Add(Windows());
-        panel.Children.Add(_notices);
-        panel.Children.Add(_firstRun);
-        panel.Children.Add(new TextBlock
+        Row(Windows());
+        Row(_notices);
+        Row(_firstRun);
+        Row(new TextBlock
         {
             Text = "Screens",
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 12, 0, 4),
         });
-        panel.Children.Add(_list);
-        panel.Children.Add(_panelHead);
-        panel.Children.Add(_board);
-        panel.Children.Add(StateRow());
-        panel.Children.Add(TouchRow());
-        panel.Children.Add(_stage);
-        panel.Children.Add(_status);
-        panel.Children.Add(_log);
+        Row(_list);
+        Row(_panelHead);
+        Row(_board, fills: true);
+        Row(StateRow());
+        Row(TouchRow());
+        Row(_stage);
+        Row(_status);
+        Row(_log);
 
         Content = panel;
 
@@ -157,6 +167,27 @@ internal sealed class MainWindow : Window, IDisposable
         {
             Follow();
             Remember();
+        };
+
+        // Whichever of the two ways switched the view - the button here or the tile's own menu -
+        // the answer is written down and the button relabelled in one place.
+        _board.ViewChanged += (_, _) =>
+        {
+            _panelHead.Show(_board.Single);
+            Remember();
+        };
+
+        // <b>While the hand is over the stage, the space bar belongs to the stage.</b> Handled
+        // here rather than asked about at the tile: the key goes to whatever has keyboard FOCUS,
+        // which after any click on a grip is a button - and a button presses on space. Swallowing
+        // it stops that without the tile having to guess from focus what the pointer is doing, and
+        // the key state the spotlight reads is untouched by the routing (TileFace.Pointing).
+        PreviewKeyDown += (_, key) =>
+        {
+            if (key.Key is Key.Space && _board.IsMouseOver)
+            {
+                key.Handled = true;
+            }
         };
 
         // Where the window stood, if that place is still there (Part 7). Done before the window is
@@ -263,13 +294,7 @@ internal sealed class MainWindow : Window, IDisposable
     /// Switches the stage between the overview and one screen on its own, and keeps the answer for
     /// THIS monitor arrangement (Part 7).
     /// </summary>
-    private void Switch(bool single)
-    {
-        _board.Single = single;
-        _panelHead.Show(single);
-
-        Remember();
-    }
+    private void Switch(bool single) => _board.Single = single;
 
     /// <summary>
     /// Keeps which view is open where. Called on every change of the active screen as well,

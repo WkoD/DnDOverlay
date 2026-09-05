@@ -16,9 +16,17 @@ namespace DnDOverlay.Rendering.Windows;
 /// </para>
 /// </summary>
 /// <param name="Seconds">The length of the window these numbers cover.</param>
+/// <param name="Frames">
+/// How many frames the window is made of. <b>It says how much the rest of the line is worth</b>,
+/// and it earned its place in the second hand-run of M4: a control that draws in bursts can report
+/// a window built from a few dozen samples, where one stray interval moves a percentile that a
+/// dense window would not have noticed. Without this number there is no way to tell such a line
+/// from one measured over eighteen hundred frames.
+/// </param>
 /// <param name="Missing">Which of the three thresholds gave way, empty when none did.</param>
 public sealed record FrameWindow(
     int Seconds,
+    int Frames,
     double MedianMs,
     double P95Ms,
     double MaxMs,
@@ -72,9 +80,9 @@ public sealed class FrameWatch : IDisposable
     private static readonly TimeSpan ReportEvery = TimeSpan.FromSeconds(30);
 
     private readonly FrameTimes _frames = new();
-    private readonly Func<IReadOnlyCollection<string>> _surfaces;
+    private readonly Func<IReadOnlyCollection<string>>? _surfaces;
     private readonly Action<FrameWindow> _report;
-    private readonly Action<string, FrameWindow> _warn;
+    private readonly Action<string, FrameWindow>? _warn;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
 
     /// <summary>Whether this watch holds the render hook itself - see <see cref="Always"/>.</summary>
@@ -121,9 +129,9 @@ public sealed class FrameWatch : IDisposable
     /// Called per surface whose budget was missed, and only when the brake lets it through.
     /// </param>
     private FrameWatch(
-        Func<IReadOnlyCollection<string>> surfaces,
+        Func<IReadOnlyCollection<string>>? surfaces,
         Action<FrameWindow> report,
-        Action<string, FrameWindow> warn,
+        Action<string, FrameWindow>? warn,
         bool hooked)
     {
         _surfaces = surfaces;
@@ -176,6 +184,26 @@ public sealed class FrameWatch : IDisposable
         Action<FrameWindow> report,
         Action<string, FrameWindow> warn) =>
         new(surfaces, report, warn, hooked: false);
+
+    /// <summary>
+    /// The same watch, <b>reporting without judging</b> - what the control needs.
+    /// <para>
+    /// <b>A budget needs a cadence, and a sparse stream has none.</b> The cadence is estimated as
+    /// the 5th percentile of the intervals, which is only the refresh interval while the stream is
+    /// dense and paced by vsync. A process that draws in bursts contributes far fewer samples, so
+    /// a handful of short intervals - a start-up catching up, a window resizing - are 5 % of the
+    /// set instead of a rounding error, and the estimate collapses.
+    /// </para>
+    /// <para>
+    /// Read out of the second hand-run of M4: the control's stage held 16.7 ms medians all evening
+    /// and was warned twice for missing a budget of <b>2.8 ms</b>, computed from a cadence of 1.8.
+    /// Every one of those warnings was false. A line that fires while everything is fine teaches
+    /// the reader to skip it, which is the same argument the start-up exemption is built on - so
+    /// the reading stays and the judgement goes.
+    /// </para>
+    /// </summary>
+    public static FrameWatch WhileDrawing(Action<FrameWindow> report) =>
+        new(surfaces: null, report, warn: null, hooked: false);
 
     /// <summary>
     /// How long the longest drawing of a surface took in this window, in milliseconds. Handed in
@@ -263,6 +291,7 @@ public sealed class FrameWatch : IDisposable
 
         var window = new FrameWindow(
             Seconds: (int)FrameTimes.DefaultWindow.TotalSeconds,
+            Frames: reading.Frames,
             MedianMs: Round(reading.MedianMs),
             P95Ms: Round(reading.P95Ms),
             MaxMs: Round(reading.MaxMs),
@@ -297,7 +326,7 @@ public sealed class FrameWatch : IDisposable
         //
         // It stays observed rather than hidden: the maximum is in every reading whether or not this
         // one warns, so a startup that grows worse over the months can be read off the log.
-        if (!reading.Missed || (starting && reading.OnlyStopped))
+        if (_warn is null || _surfaces is null || !reading.Missed || (starting && reading.OnlyStopped))
         {
             return;
         }

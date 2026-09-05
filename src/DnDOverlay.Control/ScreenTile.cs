@@ -167,8 +167,10 @@ internal sealed class ScreenTile : Border
     /// </summary>
     internal bool Opened
     {
+        get;
         set
         {
+            field = value;
             _face.Opened = value;
             _frame.VerticalAlignment = value ? VerticalAlignment.Stretch : VerticalAlignment.Top;
             _frame.HorizontalAlignment = value ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
@@ -240,7 +242,7 @@ internal sealed class ScreenTile : Border
             return;
         }
 
-        _menus.ForScreen(over, at, _scene, _view, _face.Adjusting);
+        _menus.ForScreen(over, at, _scene, _view, _face.Adjusting, Opened);
     }
 
     private async Task ToggleAsync(bool images)

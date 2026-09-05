@@ -55,13 +55,18 @@ internal sealed class TileMenus(
     /// of reach exactly where most is going on (Part 7).
     /// </summary>
     internal void ForScreen(
-        UIElement over, TilePoint at, SceneState scene, ViewRotation view, bool adjusting)
+        UIElement over, TilePoint at, SceneState scene, ViewRotation view, bool adjusting, bool single)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
         var menu = new ContextMenu();
 
-        menu.Items.Add(Entry("Open single view", () => Opening?.Invoke(this, EventArgs.Empty)));
+        // What it will DO, not where it is. The entry read "Open single view" while the single view
+        // was already open, which is the one moment a reader needs it to say the opposite
+        // (hand-run of M4, second run).
+        menu.Items.Add(Entry(
+            single ? "Back to the overview" : "Open single view",
+            () => Opening?.Invoke(this, EventArgs.Empty)));
         menu.Items.Add(Entry("Set up screen ...", () => Configuring?.Invoke(this, EventArgs.Empty)));
         menu.Items.Add(Entry(
             "Identify screens",

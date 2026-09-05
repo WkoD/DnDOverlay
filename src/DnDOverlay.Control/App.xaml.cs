@@ -303,7 +303,30 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        _settings.Update(configuration => configuration with { KnownScreens = _screens.Snapshot() });
+        // <b>What the catalogue does not own is carried over rather than dropped.</b> The
+        // snapshot is the INVENTORY - label, state, size, dpi, the settings a device is told - and
+        // the catalogue has no business knowing how the DM looks at a screen on his own stage. It
+        // built its rows without a View, the record has a default for that parameter, so nothing
+        // complained and every write of the inventory silently reset the rotation to zero. That is
+        // what the table saw twice: the tile order survived a restart and the rotation did not
+        // (hand-run of M4, 25, both runs).
+        _settings.Update(configuration =>
+        {
+            var seen = configuration.KnownScreens.ToDictionary(
+                known => (known.DeviceId, known.ScreenId),
+                known => known.View);
+
+            return configuration with
+            {
+                KnownScreens =
+                [
+                    .. _screens.Snapshot().Select(known =>
+                        seen.TryGetValue((known.DeviceId, known.ScreenId), out var view)
+                            ? known with { View = view }
+                            : known),
+                ],
+            };
+        });
     }
 
     public void Dispose()

@@ -67,6 +67,18 @@ public static class SceneReducer
                         // different shape and arrive as a fan rather than a heap (Part 6, rebuilt
                         // at the end of M3).
                         ParkedAt = park.Parked ? park.ParkedAt : 0,
+
+                        // <b>Putting a picture away takes the padlock off it.</b> The lock holds a
+                        // picture WHERE IT LIES on the table, so that a hand at the table cannot
+                        // push it; in the fan there is no place of its own to hold - the fan owns
+                        // every card's size, angle and position - and a padlock there would only
+                        // refuse the one gesture that matters, pulling it back out. Read at the
+                        // table in the second hand-run of M4.
+                        //
+                        // It is a rule of the scene rather than of the hub, so the table applies
+                        // exactly the same one: a lock that survived on one side and not the other
+                        // would be a picture that is locked in one place and not in the other.
+                        Locked = !park.Parked && item.Locked,
                     }),
                 screen),
             _ => scene,

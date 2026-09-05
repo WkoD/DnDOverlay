@@ -173,18 +173,29 @@ internal static partial class ControlLog
     /// <b>The window covers only the stretches the stage actually drew in</b> (see <c>Redraw</c>).
     /// An idle window has no frame time, it has no frames - so a quiet evening writes no line here
     /// rather than a line full of nothing, and the seconds in the line are the length of the window
-    /// and not of the drawing.
+    /// and not of the drawing. The FRAME COUNT is in the line for that reason: it says how dense
+    /// the window was, and a sparse one is read more carefully.
+    /// </para>
+    /// <para>
+    /// <b>There is no companion warning, and that is a decision rather than an omission.</b> The
+    /// budget is derived from the cadence, the cadence is estimated as the 5th percentile of the
+    /// intervals, and that estimate needs a dense vsync-paced stream. The second hand-run of M4
+    /// measured what happens without one: the stage held a median of 16.7 ms all evening and was
+    /// warned for missing a budget of 2.8 ms. Every such warning was false, so the reading stays
+    /// and the judgement goes - see <c>FrameWatch.WhileDrawing</c>.
     /// </para>
     /// </summary>
     [LoggerMessage(
         EventId = 4013,
         Level = LogLevel.Information,
-        Message = "Stage frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, "
-                  + "max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in "
-                  + "{Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.")]
+        Message = "Stage frames over {Seconds} s, {Frames} of them: median {MedianMs} ms, "
+                  + "95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, "
+                  + "GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, "
+                  + "hand {HandMs} ms late.")]
     internal static partial void FrameTimes(
         ILogger logger,
         int seconds,
+        int frames,
         double medianMs,
         double p95Ms,
         double maxMs,
@@ -195,32 +206,4 @@ internal static partial class ControlLog
         double drawMs,
         double handMs);
 
-    /// <summary>
-    /// The control says of its own accord that its stage is not keeping up.
-    /// <para>
-    /// <b>Once per session</b>, and again only on a marked deterioration - the same brake 3024 has,
-    /// and it is worth knowing which way that brake leans: it hangs on the MEDIAN, so a machine that
-    /// holds its cadence and stalls badly warns once and then stays quiet. The warning is a
-    /// doorbell; the reading in 4013 is what a hand-run reads.
-    /// </para>
-    /// <para>
-    /// It names no surface, unlike 3024. The display plays several screens and has to say which one
-    /// gave way; the control has one stage.
-    /// </para>
-    /// </summary>
-    [LoggerMessage(
-        EventId = 4014,
-        Level = LogLevel.Warning,
-        Message = "The stage is not holding its frame budget, {Missing} over: median {MedianMs} ms "
-                  + "against {BudgetMs} ms, 95th {P95Ms} ms against {StutterMs} ms, max {MaxMs} ms "
-                  + "against 100 ms, CPU {CpuPercent} %.")]
-    internal static partial void FrameBudgetMissed(
-        ILogger logger,
-        string missing,
-        double medianMs,
-        double budgetMs,
-        double p95Ms,
-        double stutterMs,
-        double maxMs,
-        double cpuPercent);
 }

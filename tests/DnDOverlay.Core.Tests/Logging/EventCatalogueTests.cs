@@ -249,6 +249,7 @@ public sealed class EventCatalogueTests
         var used = EventCatalogue.Declared
             .Select(declared => declared.Id)
             .Concat(EventCatalogue.HandBuilt)
+            .Concat(EventCatalogue.Retired)
             .ToList();
 
         var wrong = new List<string>();

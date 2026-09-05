@@ -86,5 +86,46 @@ public sealed class SceneReducerTests
         Assert.Equal(Build.SceneWith(item).GetHashCode(), Build.SceneWith(item).GetHashCode());
     }
 
+    /// <summary>
+    /// <b>Putting a picture away takes the padlock off it.</b> The lock holds a picture where it
+    /// LIES, so that a hand at the table cannot push it; in the fan there is no such place - the fan
+    /// owns every card's size, angle and position - and a padlock there refuses only the one gesture
+    /// that matters, pulling the card back out. Read at the table in the second hand-run of M4.
+    /// </summary>
+    [Fact]
+    public void Parking_a_locked_picture_takes_the_padlock_off()
+    {
+        var screen = Build.Screen();
+        var locked = Build.Item() with { Locked = true };
+        var scene = Build.SceneWith(locked);
+
+        var parked = SceneReducer.Apply(
+            scene,
+            new ParkItem(locked.ItemId, Parked: true, ZOrder: locked.ZOrder, Revision: 2, ParkedAt: 2),
+            screen);
+
+        Assert.False(parked.Items.Single().Locked, "the padlock came into the fan with it");
+    }
+
+    /// <summary>
+    /// The counter-check: it is PARKING that unlocks, not the reducer helping itself to the flag.
+    /// A picture that is locked while it lies out stays locked, and one coming back out of the fan
+    /// comes back unlocked rather than picking its old padlock up again (Guide <c>C16</c>).
+    /// </summary>
+    [Fact]
+    public void A_picture_lying_out_keeps_its_padlock()
+    {
+        var screen = Build.Screen();
+        var locked = Build.Item() with { Locked = true, Parked = true };
+        var scene = Build.SceneWith(locked);
+
+        var freed = SceneReducer.Apply(
+            scene,
+            new ParkItem(locked.ItemId, Parked: false, ZOrder: 9, Revision: 3, ParkedAt: 0),
+            screen);
+
+        Assert.True(freed.Items.Single().Locked, "coming out of the fan lost a lock it should keep");
+    }
+
     private sealed record UnknownToThisBuild : PatchOp;
 }

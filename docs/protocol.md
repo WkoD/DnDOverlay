@@ -745,7 +745,7 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3032 | `ParkGesture` | Debug |
 | 3033 | `ItemMoved` | Information |
 | 3034 | `ItemCopied` | Information |
-| 3035 | `Spotlight` | Debug |
+| 3035 | `Spotlight` | Information |
 
 **3029 gained two numbers in M3c**, and the second is the one that says anything: touch
 reports sent, and the points inside them. A count of reports cannot tell a working table
@@ -803,16 +803,19 @@ into one of them would have made the range names stop meaning anything.
 | 4011 | `UnhandledFault` | Critical | control |
 | 4012 | `UnhandledFault` | Critical | display |
 | 4013 | `FrameTimes` | Information | control |
-| 4014 | `FrameBudgetMissed` | Warning | control |
 
-**Next free: 4015.**
+**Next free: 4015. 4014 is retired**, never issued in a release and never to be reused: it was the
+control's own frame-budget warning, and the second hand-run of M4 showed every one of its lines to
+be false - a stage holding 16.7 ms warned against a budget of 2.8 ms, because the budget follows a
+cadence that a sparse stream cannot estimate. The reading stays, the judgement went.
 
-**4013 and 4014 are the same measurement as 3023 and 3024 and deliberately not the same numbers.**
+**4013 is the same measurement as 3023 and deliberately not the same number.**
 The range follows the subject of the sentence: 3023 is about a screen at the table, 4013 is about
 the process drawing its own window - the same subject as a data root or a taken port. Giving them
 one identifier would have been worse than a duplicate, because the two say different things about
 different surfaces and an older counterpart would render a plausible but wrong line from whichever
-entry it had.
+entry it had. Both lines carry the FRAME COUNT of their window, so a reader can tell a reading over
+eighteen hundred frames from one over thirty.
 
 **The control's window is not the display's.** The display counts every frame of the run; the
 control counts only the stretches in which its stage was actually drawing, because holding the

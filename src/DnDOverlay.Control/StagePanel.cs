@@ -41,21 +41,9 @@ internal sealed class StagePanel : StackPanel
     private readonly ILogger _logger;
     private readonly TextBox _address = new() { Width = 260, Margin = new Thickness(0, 0, 8, 0) };
 
-    private readonly ListBox _items = new() { MinHeight = 90, Margin = new Thickness(0, 0, 0, 8) };
 
-    /// <summary>
-    /// How many entries the list shows before it starts to scroll.
-    /// <para>
-    /// It grows inside a <see cref="StackPanel"/>, which offers its children all the height they
-    /// ask for - so a screen carrying seven hundred pictures made a list seven hundred rows tall and
-    /// pushed everything below it, the grips for the very items it was listing, out of the window.
-    /// Found at the table (hand-run of M3b, step 0.5).
-    /// </para>
-    /// </summary>
-    private const int VisibleItems = 10;
 
     /// <summary>At most one measurement waiting for the layout, so a hidden panel cannot spin.</summary>
-    private bool _capping;
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 16, 0), IsChecked = true };
     private readonly CheckBox _background = new() { Content = "Background", IsChecked = true };
 
@@ -152,25 +140,14 @@ internal sealed class StagePanel : StackPanel
 
         Children.Add(Row(new TextBlock { Text = "Placement", Margin = new Thickness(0, 5, 8, 0) }, _placement));
 
-        Children.Add(Heading("Items on this screen"));
-        Children.Add(_items);
-        Children.Add(Row(
-            Button("Remove", (_, _) => WithItem(item => _session.RemoveItemAsync(Screen()!.Value, item.ItemId))),
-            Button("Name on/off", (_, _) => WithItem(item =>
-                _session.SetShowNameAsync(Screen()!.Value, item.ItemId, !item.ShowName))),
-            Button("Hold/run animation", (_, _) => WithItem(item =>
-                _session.SetAnimationPausedAsync(Screen()!.Value, item.ItemId, !item.AnimationPaused)))));
-
-        // The three commands M3a built. They had no caller outside the hub's own inbound path, and a
-        // step counts as closed when a CALLER is named rather than a test (Guide C12) - besides
-        // which the hand-run has to be able to lock something in order to find out that the table
-        // will not move it (Part 11, step 21).
-        Children.Add(Row(
-            Button("Lock/unlock", (_, _) => WithItem(item =>
-                _session.SetLockedAsync(Screen()!.Value, item.ItemId, !item.Locked))),
-            Button("Unlock all", (_, _) => Run(screen => _session.UnlockAllAsync(screen))),
-            Button("Park/unpark", (_, _) => WithItem(item =>
-                _session.ParkItemAsync(Screen()!.Value, item.ItemId, !item.Parked)))));
+        // <b>"Items on this screen" is gone, list and buttons together.</b> It was the scaffolding
+        // that gave M3a's commands a caller before there was a stage to press them from (Guide
+        // C12), and every one of them now has a better place: the tile SHOWS what lies on the
+        // screen, the item menu carries remove, name, lock, park, animation, copy and move, and
+        // "Unlock all" is a button on the tile itself, where Part 7 puts it. Two rows of buttons
+        // acting on a list-box selection, beside a picture the DM can simply touch, were the older
+        // way of saying the same thing - and they were taking the room the single view needs
+        // (hand-run of M4, second run, 24a).
     }
 
     /// <summary>
@@ -213,7 +190,6 @@ internal sealed class StagePanel : StackPanel
     {
         if (Screen() is not { } screen)
         {
-            _items.Items.Clear();
             return;
         }
 
@@ -226,70 +202,7 @@ internal sealed class StagePanel : StackPanel
         _background.IsChecked = scene.BackgroundVisible;
         _settingSwitches = false;
 
-        var selected = _items.SelectedIndex;
-
-        _items.Items.Clear();
-
-        foreach (var item in scene.Items.OfType<ImageItem>())
-        {
-            _items.Items.Add(new ItemEntry(item));
-        }
-
-        _items.SelectedIndex = selected >= 0 && selected < _items.Items.Count ? selected : 0;
-
-        CapToVisibleItems();
     }
-
-    /// <summary>
-    /// Holds the list to <see cref="VisibleItems"/> rows and lets its own scrollbar take the rest.
-    /// <para>
-    /// The height is MEASURED off the first row rather than written down in device-independent
-    /// pixels: the row follows the font and the font follows the system's text size, so a number
-    /// here would be ten rows on this machine and six on the next one.
-    /// </para>
-    /// </summary>
-    private void CapToVisibleItems() => CapToVisibleItems(mayWaitForLayout: true);
-
-    private void CapToVisibleItems(bool mayWaitForLayout)
-    {
-        if (_items.Items.Count <= VisibleItems)
-        {
-            // Short enough to stand whole. Left uncapped so it shrinks back with its content.
-            _items.MaxHeight = double.PositiveInfinity;
-            return;
-        }
-
-        if (_items.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement { ActualHeight: > 0 } row)
-        {
-            _items.MaxHeight = (row.ActualHeight * VisibleItems) + Chrome();
-            return;
-        }
-
-        if (mayWaitForLayout && !_capping)
-        {
-            // The rows are made during layout, so there is nothing to measure yet. Once.
-            _capping = true;
-
-            _ = Dispatcher.BeginInvoke(
-                System.Windows.Threading.DispatcherPriority.Loaded,
-                () =>
-                {
-                    _capping = false;
-                    CapToVisibleItems(mayWaitForLayout: false);
-                });
-
-            return;
-        }
-
-        // The layout has been asked and produced nothing to measure - the panel is not on the
-        // screen. An estimate from the font caps it anyway, because a list that is only capped when
-        // it happens to be visible is not capped at all.
-        _items.MaxHeight = (_items.FontFamily.LineSpacing * _items.FontSize * VisibleItems) + Chrome();
-    }
-
-    private double Chrome() =>
-        _items.Padding.Top + _items.Padding.Bottom
-        + _items.BorderThickness.Top + _items.BorderThickness.Bottom;
 
     private bool _redrawing;
     private bool _again;
@@ -640,17 +553,6 @@ internal sealed class StagePanel : StackPanel
         Run(_ => command(box.IsChecked is true));
     }
 
-    private void WithItem(Func<ImageItem, Task> command)
-    {
-        if (_items.SelectedItem is not ItemEntry entry)
-        {
-            _status.Text = "Pick an item first.";
-            return;
-        }
-
-        Run(_ => command(entry.Item));
-    }
-
     private async void Run(Func<ScreenRef, Task> command)
     {
         if (Screen() is not { } screen)
@@ -697,34 +599,4 @@ internal sealed class StagePanel : StackPanel
         return row;
     }
 
-    /// <summary>
-    /// One line per item, and from M3 on it carries the VALUES.
-    /// <para>
-    /// <b>This line is what "done when" is measured against</b> (Part 10): every manipulation at the
-    /// table has to be visible in the control at once, and until M4 there is no thumbnail to see it
-    /// in - so position, angle, scale, <c>ZOrder</c>, locked and parked stand at the entry and change
-    /// with every release. Without them the sentence would be checking a display that does not exist
-    /// yet.
-    /// </para>
-    /// </summary>
-    private sealed record ItemEntry(ImageItem Item)
-    {
-        internal ItemId ItemId => Item.ItemId;
-
-        public override string ToString()
-        {
-            var marks = string.Concat(
-                Item.ShowName ? " [name]" : string.Empty,
-                Item.Locked ? " [locked]" : string.Empty,
-                Item.Parked ? " [parked]" : string.Empty,
-                Item.Meta.IsAnimated ? Item.AnimationPaused ? " [held]" : " [moving]" : string.Empty);
-
-            // Two decimals on the normalised values: at 1920 pixels a hundredth is 19 of them, which
-            // is what a hand-run needs to see move. More digits would turn a list into a wall.
-            return string.Create(
-                CultureInfo.InvariantCulture,
-                $"{Item.Name} - {Item.CenterX:F2},{Item.CenterY:F2} "
-                + $"x{Item.Scale:F2} {Item.RotationDeg:F0}° z{Item.ZOrder} r{Item.Revision}{marks}");
-        }
-    }
 }

@@ -226,12 +226,14 @@ internal static partial class DisplayLog
     [LoggerMessage(
         EventId = 3023,
         Level = LogLevel.Information,
-        Message = "Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, "
-            + "cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), "
-            + "longest draw {DrawMs} ms, hand {HandMs} ms late.")]
+        Message = "Frames over {Seconds} s, {Frames} of them: median {MedianMs} ms, "
+            + "95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, "
+            + "GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, "
+            + "hand {HandMs} ms late.")]
     internal static partial void FrameTimes(
         ILogger logger,
         int seconds,
+        int frames,
         double medianMs,
         double p95Ms,
         double maxMs,

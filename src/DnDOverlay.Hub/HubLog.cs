@@ -395,9 +395,9 @@ internal static partial class HubLog
     /// </summary>
     [LoggerMessage(
         EventId = 3035,
-        Level = LogLevel.Debug,
-        Message = "A spotlight was sent to {ScreenName}.")]
-    internal static partial void Spotlight(ILogger logger, string screenName);
+        Level = LogLevel.Information,
+        Message = "A spotlight was sent to {ScreenName}; a display was reached: {Reached}.")]
+    internal static partial void Spotlight(ILogger logger, string screenName, bool reached);
 
     /// <summary>
     /// A picture went from one screen to another. It is the one operation that changes two screens

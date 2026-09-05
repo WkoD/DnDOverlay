@@ -736,7 +736,13 @@ internal sealed class TileFace : Panel
             return;
         }
 
-        if (_hold is null && _framing is null)
+        // <c>_behind is null</c> belongs in this condition, and its absence was the whole of the
+        // mouse's background trouble: once the background had been taken hold of, every further
+        // move ran through here again, took a FRESH hold and set the last position to the current
+        // one - so the step below was computed from a distance of nothing, every time. The mouse
+        // could zoom, because the wheel is a path of its own, and could do nothing else
+        // (hand-run of M4, second run, 38b).
+        if (_hold is null && _framing is null && _behind is null)
         {
             // Nothing is taken hold of until the hand has actually travelled: a press that turns
             // into a tap must not have moved a picture on the way (Part 7).
@@ -919,15 +925,24 @@ internal sealed class TileFace : Panel
     }
 
     /// <summary>
-    /// Whether the space bar is asking for a spotlight. <b>Three limits, or the space bar eats
-    /// things that are not its own</b> (Part 7): it is no global hotkey and works only while this
-    /// window is in front, which a WPF key state already says; and it stays out of the way of a
-    /// text field, where space writes a space, and of a focused button, which space presses.
+    /// Whether the space bar is asking for a spotlight. It is no global hotkey and works only while
+    /// this window is in front, which a WPF key state already says.
+    /// <para>
+    /// <b>It used to ask what had keyboard focus, and that took the grip away.</b> The two limits
+    /// were meant to keep the space bar out of a text field, where it writes a space, and off a
+    /// focused button, which it presses - but they read the wrong thing. Focus is wherever the DM
+    /// last clicked, and the stage is surrounded by buttons, so after any click on a grip the
+    /// spotlight was simply gone, with nothing to see and nothing in the log. Reported in the
+    /// second hand-run of M4 as "no spotlight at all".
+    /// </para>
+    /// <para>
+    /// The rule the limits were reaching for is about the POINTER, not about focus: while the hand
+    /// is over the stage, the space bar belongs to the stage. That is decided once, at the window,
+    /// which also stops the key reaching the text field or the button in the first place -
+    /// see <c>MainWindow</c>. Here nothing is left to ask but whether the key is down.
+    /// </para>
     /// </summary>
-    private static bool Pointing() =>
-        Keyboard.IsKeyDown(Key.Space)
-        && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase
-        && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.ButtonBase;
+    private static bool Pointing() => Keyboard.IsKeyDown(Key.Space);
 
     /// <summary>
     /// Points at a place on this table. <b>Nothing is kept</b> - it changes no scene and takes no
@@ -1226,7 +1241,17 @@ internal sealed class TileFace : Panel
                 _selection.Only(item);
             }
 
-            Front(item);
+            // The second tap on the same spot turns the picture to the DM, exactly as the mouse's
+            // double click does. <b>It is asked here, and it has to be:</b> since the finger stopped
+            // taking hold on touch-down (25a, first run), a plain tap makes no HOLD at all - and the
+            // double tap was judged where a hold is released, which a tap never reaches. One fix
+            // took the other out, which is the shape Guide C15 describes; the table found it in the
+            // next run, as "double tap does not turn, double click does".
+            Front(
+                item,
+                _tapping.Twice(Environment.TickCount64, at.X, at.Y)
+                    ? Placing.InScene(at, _view, face)
+                    : null);
         }
         else
         {
@@ -1245,16 +1270,26 @@ internal sealed class TileFace : Panel
     /// other grab (rule 2).
     /// </para>
     /// </summary>
-    private void Front(ItemId item)
+    /// <param name="turnTo">
+    /// Where the tap landed, when it was the second of a double tap - the picture then turns to the
+    /// edge nearest THAT point, which is the same arithmetic a released hold uses.
+    /// </param>
+    private void Front(ItemId item, CorePoint? turnTo = null)
     {
         if (_scene.Items.FirstOrDefault(one => one.ItemId == item) is not { Parked: false } picture)
         {
             return;
         }
 
+        var placed = turnTo is { } tap
+            ? CoreManipulation.HoldAtEdge(
+                picture with { RotationDeg = CoreManipulation.TurnToMe(tap, _screen) },
+                _screen)
+            : picture;
+
         _ = _session.TransformItemAsync(
             _screenRef,
-            new ItemTransform(item, picture.CenterX, picture.CenterY, picture.Scale, picture.RotationDeg),
+            new ItemTransform(item, placed.CenterX, placed.CenterY, placed.Scale, placed.RotationDeg),
             fromTable: false,
             toFront: true,
             CancellationToken.None);

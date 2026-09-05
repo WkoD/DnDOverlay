@@ -343,6 +343,7 @@ public sealed partial class App : Application, IDisposable
             frames => DisplayLog.FrameTimes(
                 _logger,
                 frames.Seconds,
+                frames.Frames,
                 frames.MedianMs,
                 frames.P95Ms,
                 frames.MaxMs,

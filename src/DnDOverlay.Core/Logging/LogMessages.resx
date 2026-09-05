@@ -253,10 +253,10 @@
     <value>{DeviceName} reported a gesture for {ScreenName}, which is not one of its screens.</value>
   </data>
   <data name="E3023_FrameTimes" xml:space="preserve">
-    <value>Frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
+    <value>Frames over {Seconds} s, {Frames} of them: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
   </data>
   <data name="E3035_Spotlight" xml:space="preserve">
-    <value>A spotlight was sent to {ScreenName}.</value>
+    <value>A spotlight was sent to {ScreenName}; a display was reached: {Reached}.</value>
   </data>
   <data name="E3033_ItemMoved" xml:space="preserve">
     <value>An image moved from {FromScreen} to {ToScreen}.</value>
@@ -331,9 +331,6 @@
     <value>Unhandled fault on {Where} - this display is going down.</value>
   </data>
   <data name="E4013_FrameTimes" xml:space="preserve">
-    <value>Stage frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
-  </data>
-  <data name="E4014_FrameBudgetMissed" xml:space="preserve">
-    <value>The stage is not holding its frame budget, {Missing} over: median {MedianMs} ms against {BudgetMs} ms, 95th {P95Ms} ms against {StutterMs} ms, max {MaxMs} ms against 100 ms, CPU {CpuPercent} %.</value>
+    <value>Stage frames over {Seconds} s, {Frames} of them: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
   </data>
 </root>

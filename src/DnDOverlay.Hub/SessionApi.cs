@@ -478,6 +478,20 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 ParkedAt = 0,
             };
 
+            // <b>And it needs a place of its own.</b> A parked card's own coordinates are its slot
+            // in the source's fan, hard against the park edge - so an item moved out of the fan
+            // without an aimed drop point arrived unparked and yet lying exactly where a fan lies,
+            // which at the table is indistinguishable from having been put into the target's fan.
+            // That is what the second hand-run reported (25b), and the rule was already written
+            // one method down: CopyItemAsync places a copy of a parked template "like a new
+            // picture". Copy had it, move did not - the shape Guide C15 describes.
+            if (position is null && current.Parked)
+            {
+                var centre = Placement.NextPosition(scene, arriving.Scale, arriving.AspectRatio, context);
+
+                arriving = arriving with { CenterX = centre.X, CenterY = centre.Y };
+            }
+
             var addition = new AddItem(arriving);
 
             _scenes.Set(source, SceneReducer.Apply(lying, removal, _screens.ContextFor(source)));
@@ -930,12 +944,20 @@ public sealed class SessionApi : ISessionApi, IDisposable
         // No gate and no catalogue, for the reason IdentifyScreens gives: there is nothing here to
         // read back. The ring is worth something now or not at all, so a device that is switched
         // off is not asked and nothing is kept for it.
-        if (_connections.TryGet(screen.Device, out var connection))
-        {
-            _ = connection.TrySend(new SpotlightPulseMessage(screen.Screen, at.X, at.Y));
+        var reached = _connections.TryGet(screen.Device, out var connection);
 
-            HubLog.Spotlight(_logger, screen.Screen.Value);
+        if (reached)
+        {
+            _ = connection!.TrySend(new SpotlightPulseMessage(screen.Screen, at.X, at.Y));
         }
+
+        // Outside the branch, and on Information rather than Debug. Both came from the second
+        // hand-run of M4: the runner reported "no spotlight at all", and neither log could say
+        // whether the gesture had fired, whether it had been sent, or whether it had arrived and
+        // not been drawn - the only line about it was Debug, which no log file carries. This is
+        // the one grip whose whole result is something a person has to SEE, which is the same
+        // argument the screen-name line makes for itself (3018). A silent drop now says so.
+        HubLog.Spotlight(_logger, screen.Screen.Value, reached);
 
         return Task.CompletedTask;
     }
