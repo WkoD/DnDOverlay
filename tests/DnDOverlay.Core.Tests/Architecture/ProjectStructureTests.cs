@@ -239,9 +239,10 @@ public sealed class ProjectStructureTests
 
     /// <summary>
     /// A Windows-bound library may know Core and nothing else. The platform project produces Core
-    /// types; the rendering project takes bytes and gives back a bitmap and today knows nobody at
-    /// all. What neither may reach is Imaging - the display's slim MSI is a costed promise, and
-    /// Magick.NET would be thirty megabytes of it (Part 2, Part 9).
+    /// types; the rendering project takes bytes and gives back a bitmap, and since M4 it also holds
+    /// the frame counter, whose arithmetic stays in Core. What neither may reach is Imaging - the
+    /// display's slim MSI is a costed promise, and Magick.NET would be thirty megabytes of it
+    /// (Part 2, Part 9).
     /// </summary>
     [Fact]
     public void A_Windows_bound_library_references_only_Core()

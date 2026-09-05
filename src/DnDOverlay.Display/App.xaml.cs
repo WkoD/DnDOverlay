@@ -333,7 +333,35 @@ public sealed partial class App : Application, IDisposable
         // The frame counter starts with the process, not with the first overlay: a device that
         // renders badly while nothing is on it yet is worth knowing about too, and the window is
         // thirty seconds either way (Part 10).
-        _frames = new FrameWatch(_logger, PlayingScreens);
+        // The lines are written HERE rather than inside the watch, because the number is the
+        // contract (Part 8): the display's reading is 3023 and the control's is 4013, and they say
+        // different things about different surfaces. A shared class that logged for both would have
+        // to pick one identifier, and an older counterpart would then render a plausible but wrong
+        // line from it.
+        _frames = FrameWatch.Always(
+            PlayingScreens,
+            frames => DisplayLog.FrameTimes(
+                _logger,
+                frames.Seconds,
+                frames.MedianMs,
+                frames.P95Ms,
+                frames.MaxMs,
+                frames.CadenceMs,
+                frames.CpuPercent,
+                frames.GcMs,
+                frames.Sweeps,
+                frames.DrawMs,
+                frames.HandMs),
+            (screen, frames) => DisplayLog.FrameBudgetMissed(
+                _logger,
+                screen,
+                frames.Missing,
+                frames.MedianMs,
+                frames.BudgetMs,
+                frames.P95Ms,
+                frames.StutterMs,
+                frames.MaxMs,
+                frames.CpuPercent));
 
         _ = Task.Run(() => PulseAsync(_shutdown.Token), _shutdown.Token);
 

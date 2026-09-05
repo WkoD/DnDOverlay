@@ -802,8 +802,23 @@ into one of them would have made the range names stop meaning anything.
 | 4010 | `IdentityRecovered` | Warning | control |
 | 4011 | `UnhandledFault` | Critical | control |
 | 4012 | `UnhandledFault` | Critical | display |
+| 4013 | `FrameTimes` | Information | control |
+| 4014 | `FrameBudgetMissed` | Warning | control |
 
-**Next free: 4013.**
+**Next free: 4015.**
+
+**4013 and 4014 are the same measurement as 3023 and 3024 and deliberately not the same numbers.**
+The range follows the subject of the sentence: 3023 is about a screen at the table, 4013 is about
+the process drawing its own window - the same subject as a data root or a taken port. Giving them
+one identifier would have been worse than a duplicate, because the two say different things about
+different surfaces and an older counterpart would render a plausible but wrong line from whichever
+entry it had.
+
+**The control's window is not the display's.** The display counts every frame of the run; the
+control counts only the stretches in which its stage was actually drawing, because holding the
+render hook through an idle evening would cost a battery machine sixty frames a second to measure
+nothing. So a quiet evening writes no 4013 line at all - which is a reading in itself, and not the
+same as a line of zeroes.
 
 **4011 and 4012 catch nothing** — the fault still ends the run. What they prevent is a run that ends
 *mutely*: measured, a control went away with exit code -1 while its log stopped mid-sentence, and a

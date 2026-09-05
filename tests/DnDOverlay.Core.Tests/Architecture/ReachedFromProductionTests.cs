@@ -275,7 +275,9 @@ public sealed class ReachedFromProductionTests
     {
         var modules = new List<ModuleDefinition>();
 
-        foreach (var name in RepositoryLayout.Libraries.Concat(RepositoryLayout.WindowsBoundLibraries))
+        // The five platform-neutral libraries are referenced by this test project, so they are in
+        // its own output and are rebuilt with it.
+        foreach (var name in RepositoryLayout.Libraries)
         {
             var path = Path.Combine(AppContext.BaseDirectory, name + ".dll");
 
@@ -285,7 +287,14 @@ public sealed class ReachedFromProductionTests
             }
         }
 
-        foreach (var name in RepositoryLayout.Applications)
+        // The Windows-bound libraries are found the same way the applications are, and that is a
+        // correction rather than a tidy-up: they were looked for in this project's output directory,
+        // where they have never been and can never be - this project is net10.0 and they are
+        // net10.0-windows, so nothing copies them here. The branch existed, ran on every build and
+        // found nothing (Guide C16), and it went unnoticed for as long as no library type was
+        // reached ONLY through one of them. The frame counter moving into Rendering.Windows in M4
+        // was the first, and it failed this rule while being used by both applications.
+        foreach (var name in RepositoryLayout.WindowsBoundLibraries.Concat(RepositoryLayout.Applications))
         {
             if (Built(name) is not { } path)
             {

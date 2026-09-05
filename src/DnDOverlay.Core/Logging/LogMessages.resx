@@ -330,4 +330,10 @@
   <data name="E4012_UnhandledFault" xml:space="preserve">
     <value>Unhandled fault on {Where} - this display is going down.</value>
   </data>
+  <data name="E4013_FrameTimes" xml:space="preserve">
+    <value>Stage frames over {Seconds} s: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
+  </data>
+  <data name="E4014_FrameBudgetMissed" xml:space="preserve">
+    <value>The stage is not holding its frame budget, {Missing} over: median {MedianMs} ms against {BudgetMs} ms, 95th {P95Ms} ms against {StutterMs} ms, max {MaxMs} ms against 100 ms, CPU {CpuPercent} %.</value>
+  </data>
 </root>

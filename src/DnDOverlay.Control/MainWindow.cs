@@ -5,6 +5,7 @@ using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Hub;
+using DnDOverlay.Rendering.Windows;
 
 namespace DnDOverlay.Control;
 
@@ -35,6 +36,7 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly PanelHead _panelHead = new();
     private readonly StageBoard _board;
     private readonly StagePanel _stage;
+    private readonly FrameWatch _frames;
 
     private DevicesWindow? _devices;
     private NetworkWindow? _network;
@@ -62,6 +64,42 @@ internal sealed class MainWindow : Window, IDisposable
         // have selected. Two answers to "which screen?" on one surface is one too many, and at the
         // table it was the first thing to trip over (hand-run of M4, 24a).
         _stage = new StagePanel(session, entrances, () => _board.Active, _status, log.CreateLogger("Control"));
+
+        // The counter the control never had. It does NOT hold the render hook - Redraw drives it,
+        // and only while the stage is actually drawing, because a permanent subscription would keep
+        // a battery machine rendering at sixty frames a second all evening. What it therefore
+        // measures is the stretch that matters: the stage under a moving hand.
+        //
+        // One name for the brake, because there is one stage. The display hands its playing screens
+        // in here and has to name the one that gave way; the control's warning names nothing, so
+        // the surface is only ever the key the once-per-session brake hangs on.
+        var frames = log.CreateLogger("Control");
+
+        _frames = FrameWatch.WhileDrawing(
+            () => ["stage"],
+            window => ControlLog.FrameTimes(
+                frames,
+                window.Seconds,
+                window.MedianMs,
+                window.P95Ms,
+                window.MaxMs,
+                window.CadenceMs,
+                window.CpuPercent,
+                window.GcMs,
+                window.Sweeps,
+                window.DrawMs,
+                window.HandMs),
+            (_, window) => ControlLog.FrameBudgetMissed(
+                frames,
+                window.Missing,
+                window.MedianMs,
+                window.BudgetMs,
+                window.P95Ms,
+                window.StutterMs,
+                window.MaxMs,
+                window.CpuPercent));
+
+        Redraw.Measure(_frames);
 
         Title = "DnDOverlay - M2b";
         Width = 620;
@@ -148,6 +186,12 @@ internal sealed class MainWindow : Window, IDisposable
         _listening.Dispose();
         _welcome?.Dispose();
         _guard?.Dispose();
+
+        // Off the collector first, then away: a tick arriving at a disposed watch would be the one
+        // fault this line exists to keep out of a shutdown.
+        Redraw.Measure(null);
+        _frames.Dispose();
+
         _log.Dispose();
     }
 
