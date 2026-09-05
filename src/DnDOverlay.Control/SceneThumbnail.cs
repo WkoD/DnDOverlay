@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using DnDOverlay.Core;
 using DnDOverlay.Rendering.Windows;
+using CorePoint = DnDOverlay.Core.Point;
 using CoreRect = DnDOverlay.Core.Rect;
 using TilePoint = System.Windows.Point;
 using TileRect = System.Windows.Rect;
@@ -125,7 +126,8 @@ internal sealed class SceneThumbnail : FrameworkElement
                 _pictures.For(background.AssetId),
                 size,
                 background.ShowName ? background.Name : null,
-                locked: false);
+                locked: false,
+                Parking.Cut.Whole);
         }
 
         if (!_scene.ItemsVisible)
@@ -157,6 +159,15 @@ internal sealed class SceneThumbnail : FrameworkElement
                 ? item with { CenterX = clear.X, CenterY = clear.Y }
                 : item;
 
+            // <b>The tile cuts a fan card exactly as the table does.</b> The window a long card
+            // shows of itself is arithmetic in Core, and until now the thumbnail simply did not ask
+            // for it - so a card too long to lie in the bar was drawn whole here and trimmed there,
+            // which is two different fans (rule 9). A card stepped out for a look is whole, because
+            // that is what stepping out means.
+            var cut = item.Parked && item.ItemId != peeked
+                ? Parking.CutOf(_scene, _screen, item.ItemId)
+                : Parking.Cut.Whole;
+
             Draw(
                 drawingContext,
                 Layout.ItemToRect(shown, _screen),
@@ -164,7 +175,8 @@ internal sealed class SceneThumbnail : FrameworkElement
                 item is ImageItem image ? _pictures.For(image.AssetId) : null,
                 size,
                 item is ImageItem { ShowName: true } named ? named.Name : null,
-                item.Locked);
+                item.Locked,
+                cut);
         }
 
         if (_faded)
@@ -186,7 +198,8 @@ internal sealed class SceneThumbnail : FrameworkElement
         ImageSource? picture,
         Size size,
         string? name,
-        bool locked)
+        bool locked,
+        Parking.Cut cut)
     {
         var rect = Placing.InTile(normalised, _view, size);
 
@@ -197,6 +210,13 @@ internal sealed class SceneThumbnail : FrameworkElement
         // different table rather than the same one from another side.
         drawingContext.PushTransform(
             new RotateTransform(Viewing.AngleInView(angleDeg, _view), centre.X, centre.Y));
+
+        var trimmed = !cut.IsWhole;
+
+        if (trimmed)
+        {
+            drawingContext.PushOpacityMask(Trim(normalised, cut, size));
+        }
 
         if (picture is null)
         {
@@ -214,7 +234,57 @@ internal sealed class SceneThumbnail : FrameworkElement
         Caption(drawingContext, rect, name);
         Padlock(drawingContext, rect, locked);
 
+        if (trimmed)
+        {
+            drawingContext.Pop();
+        }
+
         drawingContext.Pop();
+    }
+
+    /// <summary>
+    /// The gradient that cuts one fan card, in this tile's own coordinates.
+    /// <para>
+    /// <b>The axis travels through the view, and that is the whole of the difference to the
+    /// table.</b> There the fan's axis is the screen's: a bar down the left or right side runs in
+    /// Y, one along the top or bottom runs in X, and the element's box is stated in the same
+    /// system. Here the card is drawn into a tile that has been turned by the DM's view, so the
+    /// scene's Y may well be the tile's X - and a mask laid along the wrong one would cut the card
+    /// across instead of along it. Both ends of the axis are therefore MAPPED rather than a
+    /// direction being guessed, which also carries the sign: at 90 degrees the head end of the fan
+    /// can end up at the far side of the tile, and a fade put on the wrong end would fade away
+    /// exactly the part the fan is showing.
+    /// </para>
+    /// <para>
+    /// <b>180 degrees proves nothing about this</b> (Guide <c>C14</c>): the symmetric turn swaps
+    /// both ends together and looks right however the axis was chosen. It wants a quarter turn and
+    /// a card too long for the bar.
+    /// </para>
+    /// <para>
+    /// Absolute mapping rather than the table's fractions of a bounding box: a drawing context has
+    /// no box of its own, so the two ends are named outright. The STOPS are shared, because where
+    /// the fades sit is one decision about the fan (<see cref="FanCut"/>).
+    /// </para>
+    /// </summary>
+    private LinearGradientBrush Trim(CoreRect normalised, Parking.Cut cut, Size size)
+    {
+        var alongY = _screen.ParkEdge is ParkEdge.Left or ParkEdge.Right;
+
+        var head = alongY
+            ? new CorePoint(normalised.X + (normalised.Width / 2), normalised.Y)
+            : new CorePoint(normalised.X, normalised.Y + (normalised.Height / 2));
+
+        var tail = alongY
+            ? new CorePoint(normalised.X + (normalised.Width / 2), normalised.Bottom)
+            : new CorePoint(normalised.Right, normalised.Y + (normalised.Height / 2));
+
+        return new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            StartPoint = Placing.InTile(head, _view, size),
+            EndPoint = Placing.InTile(tail, _view, size),
+            GradientStops = FanCut.Stops(cut),
+        };
     }
 
     /// <summary>

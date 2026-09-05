@@ -1949,35 +1949,14 @@ internal sealed class OverlayWindow : Window
         // that same axis - and the element's own box is unrotated here, the turn comes after.
         var alongY = context.ParkEdge is ParkEdge.Left or ParkEdge.Right;
 
-        // Never let the two fades meet in the middle and cancel the picture out.
-        var middle = (cut.From + cut.To) / 2;
-        var stops = new GradientStopCollection();
-
-        if (cut.From > 0)
-        {
-            stops.Add(new GradientStop(Colors.Transparent, cut.From));
-            stops.Add(new GradientStop(Colors.Black, Math.Min(cut.From + cut.Fade, middle)));
-        }
-        else
-        {
-            stops.Add(new GradientStop(Colors.Black, 0));
-        }
-
-        if (cut.To < 1)
-        {
-            stops.Add(new GradientStop(Colors.Black, Math.Max(cut.To - cut.Fade, middle)));
-            stops.Add(new GradientStop(Colors.Transparent, cut.To));
-        }
-        else
-        {
-            stops.Add(new GradientStop(Colors.Black, 1));
-        }
-
+        // The stops are shared with the thumbnail, which trims the same card into a drawing context
+        // rather than onto an element (FanCut). Only the mapping is this surface's own: an element
+        // has a bounding box, so the gradient can be stated in fractions of it.
         mount.Element.OpacityMask = new LinearGradientBrush
         {
             StartPoint = new System.Windows.Point(0, 0),
             EndPoint = alongY ? new System.Windows.Point(0, 1) : new System.Windows.Point(1, 0),
-            GradientStops = stops,
+            GradientStops = FanCut.Stops(cut),
         };
     }
 
