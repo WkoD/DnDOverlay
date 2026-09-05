@@ -318,24 +318,26 @@ public sealed class SceneCommandTests
     [Fact(Timeout = 30_000)]
     public async Task Every_command_puts_exactly_one_addressed_patch_on_the_stream()
     {
+        var cancellation = TestContext.Current.CancellationToken;
+
         using var session = Session(out var screens);
         screens.Report(Device, [Info()], reported: null);
 
-        var item = await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+        var item = await session.AddItemAsync(Target, Reference(), position: null, cancellation);
 
-        await using var stream = session.Subscribe(Cancellation).GetAsyncEnumerator(Cancellation);
+        await using var stream = session.Subscribe(cancellation).GetAsyncEnumerator(cancellation);
         Assert.True(await stream.MoveNextAsync());
 
         var commands = new (string Name, Func<Task> Run)[]
         {
-            ("RemoveItem", () => session.RemoveItemAsync(Target, item, Cancellation)),
-            ("SetBackground", () => session.SetBackgroundAsync(Target, Reference(), Cancellation)),
-            ("SetName", () => session.SetAssetNameAsync(Target, Reference().AssetId, "Vellin", Cancellation)),
-            ("SetShowName", () => session.SetShowNameAsync(Target, null, true, Cancellation)),
-            ("SetAnimationPaused", () => session.SetAnimationPausedAsync(Target, null, true, Cancellation)),
-            ("ToggleItems", () => session.ToggleItemsAsync(Target, false, Cancellation)),
-            ("ToggleBackground", () => session.ToggleBackgroundAsync(Target, false, Cancellation)),
-            ("ClearBackground", () => session.ClearBackgroundAsync(Target, Cancellation)),
+            ("RemoveItem", () => session.RemoveItemAsync(Target, item, cancellation)),
+            ("SetBackground", () => session.SetBackgroundAsync(Target, Reference(), cancellation)),
+            ("SetName", () => session.SetAssetNameAsync(Target, Reference().AssetId, "Vellin", cancellation)),
+            ("SetShowName", () => session.SetShowNameAsync(Target, null, true, cancellation)),
+            ("SetAnimationPaused", () => session.SetAnimationPausedAsync(Target, null, true, cancellation)),
+            ("ToggleItems", () => session.ToggleItemsAsync(Target, false, cancellation)),
+            ("ToggleBackground", () => session.ToggleBackgroundAsync(Target, false, cancellation)),
+            ("ClearBackground", () => session.ClearBackgroundAsync(Target, cancellation)),
         };
 
         foreach (var (name, run) in commands)

@@ -39,6 +39,13 @@ consequence is easy to trip over: **a change inside either application is not co
 `dotnet test`**, so that one rule keeps answering out of the previous build until you run
 `dotnet build`. It fails loudly rather than answering wrongly, and its message says what to do.
 
+**The `test` entry in `global.json` is what makes `dotnet test` work at all.** It has nothing
+to do with the SDK version above it: since xunit.v3 4.0 every test project is its own executable
+on Microsoft.Testing.Platform, and MTP v2 removed the VSTest bridge that `dotnet test` used to
+drive them through. The opt-in is read from `global.json`, so it holds for every project at once.
+Without it the run fails before a single test starts, with "Testing with VSTest target is no
+longer supported".
+
 A fourth command checks that the platform-neutral half really is platform-neutral:
 
 ```
