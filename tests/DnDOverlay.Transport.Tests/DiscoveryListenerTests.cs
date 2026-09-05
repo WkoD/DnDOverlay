@@ -197,7 +197,7 @@ public sealed class DiscoveryListenerTests
     [Fact(Timeout = 30_000)]
     public async Task Giving_up_the_search_answers_with_nothing()
     {
-        using var stop = new CancellationTokenSource();
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var listener = new DiscoveryListener(NullLogger<DiscoveryListener>.Instance);
 
         var listening = listener.ListenAsync(boundTo: null, stop.Token);
