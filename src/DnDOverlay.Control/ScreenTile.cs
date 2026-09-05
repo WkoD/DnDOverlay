@@ -4,6 +4,8 @@ using System.Windows.Media;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
+using CorePoint = DnDOverlay.Core.Point;
+using TilePoint = System.Windows.Point;
 
 namespace DnDOverlay.Control;
 
@@ -29,6 +31,19 @@ internal sealed class ScreenTile : Border
     private readonly ISessionApi _session;
     private readonly TileHead _head = new();
     private readonly TileFace _face;
+    private readonly TileMenus _menus;
+
+    /// <summary>
+    /// The long press on the head. <b>Its own clock beside the face's</b>, because a head and a
+    /// face are two surfaces a finger can be on - but the rule they run is the one rule
+    /// (<see cref="Press"/>), and movement cancels it on both, which is what lets the head carry
+    /// the arrangement drag and the screen menu at once (Prüfschritt 24b).
+    /// </summary>
+    private readonly Press _pressed = new();
+
+    private SceneState _scene = SceneState.Empty;
+    private ScreenContext _context = ScreenContext.Default(new PixelSize(1920, 1080), 96);
+    private ViewRotation _view;
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 12, 0) };
     private readonly CheckBox _background = new() { Content = "Background", Margin = new Thickness(0, 0, 12, 0) };
     private readonly Button _unlock = new() { Content = "Unlock all", Padding = new Thickness(8, 2, 8, 2) };
@@ -37,11 +52,16 @@ internal sealed class ScreenTile : Border
 
     private bool _setting;
 
-    internal ScreenTile(ScreenRef screen, ISessionApi session, Pictures pictures)
+    internal ScreenTile(
+        ScreenRef screen,
+        ISessionApi session,
+        Pictures pictures,
+        Func<IReadOnlyList<ScreenView>> targets)
     {
         Screen = screen;
         _session = session;
         _face = new TileFace(screen, session, pictures, Selected);
+        _menus = new TileMenus(screen, session, targets);
 
         BorderThickness = new Thickness(2);
         BorderBrush = Brushes.Transparent;
@@ -76,6 +96,31 @@ internal sealed class ScreenTile : Border
 
         Child = panel;
 
+        _face.Asked += (_, asked) => Menu(_face, asked.At, asked.Where, asked.Item);
+
+        // The head is the screen menu's second home, and the reason is a full screen: there is no
+        // free tile area left on one, and that is exactly where most is going on (Part 7). A plain
+        // tap on the head opens the reasons list instead, which is M5a.
+        _head.PreviewTouchDown += (_, down) =>
+        {
+            var at = down.GetTouchPoint(_head).Position;
+
+            _pressed.Down(at, () => Menu(_head, at, where: null, item: null));
+        };
+
+        _head.PreviewTouchMove += (_, over) => _pressed.Moved(over.GetTouchPoint(_head).Position);
+        _head.PreviewTouchUp += (_, _) => _pressed.Up();
+
+        _head.PreviewMouseRightButtonUp += (_, clicked) =>
+        {
+            Menu(_head, clicked.GetPosition(_head), where: null, item: null);
+            clicked.Handled = true;
+        };
+
+        _menus.Opening += (_, _) => Opening?.Invoke(this, EventArgs.Empty);
+        _menus.Configuring += (_, _) => Configuring?.Invoke(this, EventArgs.Empty);
+        _menus.Turning += (_, view) => Turning?.Invoke(this, view);
+
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
         _unlock.Click += async (_, _) =>
@@ -91,6 +136,15 @@ internal sealed class ScreenTile : Border
     /// scene (Part 3), and the focus button of M5b would not know what it referred to.
     /// </summary>
     internal Selection Selected { get; } = new();
+
+    /// <summary>The DM asked for this screen on its own.</summary>
+    internal event EventHandler? Opening;
+
+    /// <summary>The DM asked for the window <i>Devices</i> with this screen to hand.</summary>
+    internal event EventHandler? Configuring;
+
+    /// <summary>The DM turned the view of this screen.</summary>
+    internal event EventHandler<ViewRotation>? Turning;
 
     /// <summary>
     /// The head, and the one place a tile may be dragged by (Part 7). The tile's face is taken -
@@ -132,6 +186,10 @@ internal sealed class ScreenTile : Border
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(screen);
 
+        _scene = scene;
+        _context = screen;
+        _view = view;
+
         _head.Show(label, screen.Size.Width, screen.Size.Height);
         _face.Show(scene, screen, view);
 
@@ -149,6 +207,25 @@ internal sealed class ScreenTile : Border
     /// nothing is bundled on the way, which is the whole reason that layer exists.
     /// </summary>
     internal void Report(IReadOnlyList<AssetLoad> loads) => _face.Report(loads);
+
+    /// <summary>
+    /// Which of the two menus this grip asks for: the picture's if one was hit, the screen's
+    /// otherwise. <b>That is not a grip with two meanings but the nature of a context menu</b> - the
+    /// action is always the same one (Part 7).
+    /// </summary>
+    private void Menu(UIElement over, TilePoint at, CorePoint? where, ItemId? item)
+    {
+        if (item is { } hit
+            && where is { } place
+            && _scene.Items.FirstOrDefault(one => one.ItemId == hit) is { } picture)
+        {
+            _menus.ForItem(over, at, _scene, picture, _context, Selected, place);
+
+            return;
+        }
+
+        _menus.ForScreen(over, at, _scene, _view);
+    }
 
     private async Task ToggleAsync(bool images)
     {

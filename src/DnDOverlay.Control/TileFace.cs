@@ -62,6 +62,12 @@ internal sealed class TileFace : Panel
 
     private readonly Tapping _tapping = new();
 
+    /// <summary>
+    /// The long press, and the rule that keeps it from strangling a drag. <b>One instance per
+    /// surface, one rule for all of them</b> (Part 7) - the head has its own beside this.
+    /// </summary>
+    private readonly Press _press = new();
+
     private SceneState _scene = SceneState.Empty;
     private ScreenContext _screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
     private ViewRotation _view;
@@ -71,16 +77,6 @@ internal sealed class TileFace : Panel
     private TilePoint? _framing;
     private Hold? _hold;
     private bool _spent;
-
-    /// <summary>
-    /// How far a hand may travel and still have meant a tap, in DIP.
-    /// <para>
-    /// Part 7 asks for it by name - "a short twitch counts as a tap and clears the selection"
-    /// (Prüfschritt 25a) - because without it every touch would draw a one-pixel frame and throw
-    /// the selection away.
-    /// </para>
-    /// </summary>
-    internal const double TapTravel = 6;
 
     /// <summary>How tall a face is in the overview, in DIP. The width follows the table's shape.</summary>
     internal const double Small = 150;
@@ -114,6 +110,20 @@ internal sealed class TileFace : Panel
             starting.Mode = ManipulationModes.All;
         };
 
+        // The clock for the long press runs on the touch events rather than on the manipulation:
+        // it has to start the moment the finger lands, before anything has been taken hold of.
+        PreviewTouchDown += (_, down) => Held(down.GetTouchPoint(this).Position);
+        PreviewTouchMove += (_, over) => _press.Moved(over.GetTouchPoint(this).Position);
+        PreviewTouchUp += (_, _) => _press.Up();
+
+        // A mouse asks for a menu with its right button, and never by holding the left one: what
+        // "holding" means must not differ between a finger and a mouse (Part 7).
+        PreviewMouseRightButtonUp += (_, clicked) =>
+        {
+            Menu(clicked.GetPosition(this));
+            clicked.Handled = true;
+        };
+
         ManipulationStarted += (_, started) => Started(started.ManipulationOrigin);
         ManipulationDelta += (_, moved) => Delta(moved);
         ManipulationCompleted += (_, done) => Completed(done);
@@ -121,6 +131,12 @@ internal sealed class TileFace : Panel
 
     /// <summary>Raised when a grip on this face has changed what is selected on this screen.</summary>
     internal event EventHandler? Touched;
+
+    /// <summary>
+    /// A menu was asked for: on a picture, or on free tile area. What the two contain is the tile's
+    /// business, not the face's - the face knows where the hand was and what lies there.
+    /// </summary>
+    internal event EventHandler<MenuAsk>? Asked;
 
     /// <summary>
     /// Whether this face has the whole room of an open tile rather than its own small height.
@@ -411,7 +427,7 @@ internal sealed class TileFace : Panel
         {
             // Nothing is taken hold of until the hand has actually travelled: a press that turns
             // into a tap must not have moved a picture on the way (Part 7).
-            if (Math.Abs(now.X - from.X) + Math.Abs(now.Y - from.Y) <= TapTravel)
+            if (Math.Abs(now.X - from.X) + Math.Abs(now.Y - from.Y) <= Press.Tolerance)
             {
                 _mouseAt = now;
 
@@ -483,7 +499,7 @@ internal sealed class TileFace : Panel
             return;
         }
 
-        if (Math.Abs(at.X - began.X) + Math.Abs(at.Y - began.Y) <= TapTravel)
+        if (Math.Abs(at.X - began.X) + Math.Abs(at.Y - began.Y) <= Press.Tolerance)
         {
             Tap(OnFace(at), Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
         }
@@ -522,6 +538,37 @@ internal sealed class TileFace : Panel
         turned.Handled = true;
     }
 
+    /// <summary>
+    /// A finger went down: the clock for the menu starts, and it starts here rather than when a
+    /// picture has been taken hold of - free area has a menu too.
+    /// </summary>
+    private void Held(TilePoint at) => _press.Down(at, () => Menu(at));
+
+    /// <summary>
+    /// A menu was asked for at this place. <b>The gesture is closed first</b>: the picture has
+    /// already come to the front, which is right - a long press is a grip - but nothing more must
+    /// happen to it while a menu stands open over it.
+    /// </summary>
+    private void Menu(TilePoint at)
+    {
+        var on = OnFace(at);
+        var face = Wanted(RenderSize);
+        var where = Placing.InScene(on, _view, face);
+
+        if (_hold is not null)
+        {
+            LetGo(0, turning: false);
+        }
+
+        if (_framing is not null)
+        {
+            _framing = null;
+            _marks.Frame(null);
+        }
+
+        Asked?.Invoke(this, new MenuAsk(on, where, Picking.At(_scene, _screen, where)));
+    }
+
     private void Started(TilePoint origin)
     {
         _pressed = origin;
@@ -542,7 +589,7 @@ internal sealed class TileFace : Panel
             {
                 var travelled = moved.CumulativeManipulation.Translation;
 
-                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > TapTravel)
+                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > Press.Tolerance)
                 {
                     Frame(began);
                 }
@@ -593,7 +640,7 @@ internal sealed class TileFace : Panel
 
         // A manipulation that took hold of nothing was a tap on free area - or on a selection
         // circle, which lies on a picture and is therefore asked first.
-        if (_pressed is { } began && Math.Abs(total.X) + Math.Abs(total.Y) <= TapTravel)
+        if (_pressed is { } began && Math.Abs(total.X) + Math.Abs(total.Y) <= Press.Tolerance)
         {
             Tap(OnFace(began), adding: false);
         }
@@ -643,7 +690,7 @@ internal sealed class TileFace : Panel
         _framing = null;
         _marks.Frame(null);
 
-        if (Math.Abs(to.X - from.X) + Math.Abs(to.Y - from.Y) <= TapTravel)
+        if (Math.Abs(to.X - from.X) + Math.Abs(to.Y - from.Y) <= Press.Tolerance)
         {
             _selection.Clear();
             Touched?.Invoke(this, EventArgs.Empty);
@@ -764,6 +811,12 @@ internal sealed class TileFace : Panel
     }
 
     private static CorePoint Centre(SceneItem item) => new(item.CenterX, item.CenterY);
+
+    /// <summary>Where a menu was asked for, and what lies there.</summary>
+    /// <param name="At">The place on the face, for putting the menu where the hand is.</param>
+    /// <param name="Where">The same place on the table - what "turn to me" measures against.</param>
+    /// <param name="Item">The picture under it, or <see langword="null"/> for free area.</param>
+    internal sealed record MenuAsk(TilePoint At, CorePoint Where, ItemId? Item);
 
     /// <summary>
     /// The picture in the hand, and what the gesture has to remember about it. The same shape the

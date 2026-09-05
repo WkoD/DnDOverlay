@@ -80,6 +80,12 @@ internal sealed class StageBoard : Panel
     internal event EventHandler? ActiveChanged;
 
     /// <summary>
+    /// Raised when the DM asked to set a screen up. The window <i>Devices</i> belongs to the main
+    /// window, which owns it and reopens rather than duplicates it.
+    /// </summary>
+    internal event EventHandler<ScreenRef>? Configuring;
+
+    /// <summary>
     /// What one device is loading, handed to every tile that shows one of its screens.
     /// <para>
     /// Per DEVICE, because that is what the report is about: the same picture may be on its way to
@@ -118,7 +124,19 @@ internal sealed class StageBoard : Panel
                 continue;
             }
 
-            var tile = new ScreenTile(view.Screen, _session, _pictures);
+            var tile = new ScreenTile(view.Screen, _session, _pictures, () => _screens);
+
+            // The menu's three ways out of a tile. Opening one makes it the active screen and
+            // opens it, in that order: the open screen IS the active one, in both directions
+            // (Part 7).
+            tile.Opening += (_, _) =>
+            {
+                Activate(view.Screen);
+                Single = true;
+            };
+
+            tile.Configuring += (_, _) => Configuring?.Invoke(this, view.Screen);
+            tile.Turning += (_, turned) => Turn(view.Screen, turned);
 
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);
             tile.PreviewTouchDown += (_, _) => Activate(view.Screen);
@@ -311,6 +329,28 @@ internal sealed class StageBoard : Panel
                 ScreenContext.Default(view.Info.Size, view.Info.Dpi),
                 View(view.Screen));
         }
+    }
+
+    /// <summary>
+    /// Turns the view of one screen. <b>It is written where it is read from</b> - in
+    /// <c>control.json</c>, per screen - and nothing is sent anywhere: the view rotation is the
+    /// control's own property and changes nothing at the table (Part 7). Nor does it take a place
+    /// in the undo timeline, for the same reason (Part 4).
+    /// </summary>
+    private void Turn(ScreenRef screen, ViewRotation view)
+    {
+        _settings.Update(current => current with
+        {
+            KnownScreens =
+            [
+                .. current.KnownScreens.Select(known =>
+                    known.DeviceId == screen.Device.Value && known.ScreenId == screen.Screen.Value
+                        ? known with { View = view }
+                        : known),
+            ],
+        });
+
+        _ = RefreshAsync();
     }
 
     /// <summary>

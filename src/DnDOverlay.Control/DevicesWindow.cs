@@ -29,6 +29,19 @@ internal sealed class DevicesWindow : Window, IDisposable
     private readonly ListBox _refused = new() { MinHeight = 60, Margin = new Thickness(0, 0, 0, 8) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
 
+    /// <summary>
+    /// Where each screen sits in the tree, so that "set up screen ..." can arrive at one. The tree
+    /// is rebuilt on every device event, so this is refilled with it rather than kept.
+    /// </summary>
+    private readonly Dictionary<ScreenRef, TreeViewItem> _rows = [];
+
+    /// <summary>
+    /// The screen the window was opened for, kept until it can be shown. It arrives from a menu
+    /// before the first device list has come in, and selecting nothing then would be the whole
+    /// point of the entry lost.
+    /// </summary>
+    private ScreenRef? _wanted;
+
     internal DevicesWindow(ISessionApi session, PairingDesk pairing, Uri address)
     {
         ArgumentNullException.ThrowIfNull(address);
@@ -157,6 +170,7 @@ internal sealed class DevicesWindow : Window, IDisposable
     private void Show(IReadOnlyList<DeviceView> devices)
     {
         _tree.Items.Clear();
+        _rows.Clear();
 
         foreach (var device in devices)
         {
@@ -171,7 +185,10 @@ internal sealed class DevicesWindow : Window, IDisposable
 
             foreach (var screen in device.Screens)
             {
-                node.Items.Add(new TreeViewItem { Header = Describe(screen), Tag = device });
+                var row = new TreeViewItem { Header = Describe(screen), Tag = device };
+
+                _rows[screen.Screen] = row;
+                node.Items.Add(row);
             }
 
             _tree.Items.Add(node);
@@ -180,6 +197,35 @@ internal sealed class DevicesWindow : Window, IDisposable
         if (devices.Count == 0)
         {
             _tree.Items.Add(new TreeViewItem { Header = "No device paired yet." });
+        }
+
+        Reach();
+    }
+
+    /// <summary>
+    /// Opens this window on one screen - what the tile menu's "set up screen ..." promises
+    /// (Part 7). <b>The window is the one that exists</b>; its two bands of parameters are M5b, and
+    /// pointing an entry at half a window is still pointing it somewhere.
+    /// </summary>
+    internal void Reveal(ScreenRef screen)
+    {
+        _wanted = screen;
+
+        Reach();
+    }
+
+    /// <summary>
+    /// Selects the screen the window was opened for, once there is a row for it. Tried again after
+    /// every rebuild, because the first device list may arrive after the menu did.
+    /// </summary>
+    private void Reach()
+    {
+        if (_wanted is { } wanted && _rows.TryGetValue(wanted, out var row))
+        {
+            row.IsSelected = true;
+            row.BringIntoView();
+
+            _wanted = null;
         }
     }
 

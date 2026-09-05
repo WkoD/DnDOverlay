@@ -99,6 +99,10 @@ internal sealed class MainWindow : Window, IDisposable
         _list.SelectionChanged += async (_, _) => await _stage.RefreshAsync().ConfigureAwait(true);
 
         _panelHead.Toggled += (_, _) => Switch(!_board.Single);
+
+        // "Set up screen ..." from a tile menu lands in the window that exists, on the screen it
+        // was asked for (Part 7).
+        _board.Configuring += (_, screen) => Devices().Reveal(screen);
         _board.ActiveChanged += (_, _) => Remember();
 
         // Where the window stood, if that place is still there (Part 7). Done before the window is
@@ -330,6 +334,25 @@ internal sealed class MainWindow : Window, IDisposable
     }
 
     /// <summary>
+    /// The window <i>Devices</i>, brought forward rather than duplicated - it has two ways in, the
+    /// button here and the tile menu, and two of it would be two answers about one machine.
+    /// </summary>
+    private DevicesWindow Devices()
+    {
+        if (_devices is { IsLoaded: true } standing)
+        {
+            _ = standing.Activate();
+
+            return standing;
+        }
+
+        _devices = new DevicesWindow(_session, _pairing, _address) { Owner = this };
+        _devices.Show();
+
+        return _devices;
+    }
+
+    /// <summary>
     /// One instance each, reopened rather than duplicated. In M5b both move into the menu in the
     /// panel head, together with the log panel - the one place everything that is not a grip during
     /// play is reached from (Part 7).
@@ -339,17 +362,7 @@ internal sealed class MainWindow : Window, IDisposable
         var devices = new Button { Content = "Devices ...", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
         var network = new Button { Content = "Network ...", Padding = new Thickness(12, 6, 12, 6) };
 
-        devices.Click += (_, _) =>
-        {
-            if (_devices is { IsLoaded: true })
-            {
-                _ = _devices.Activate();
-                return;
-            }
-
-            _devices = new DevicesWindow(_session, _pairing, _address) { Owner = this };
-            _devices.Show();
-        };
+        devices.Click += (_, _) => Devices();
 
         network.Click += (_, _) =>
         {
