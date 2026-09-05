@@ -14,10 +14,10 @@
     <!-- Logging goes through ILogger, never through a sink directly - that is what keeps the
          sink exchangeable (Part 1, rule 8; Part 8). The hub gets these abstractions through the
          ASP.NET Core framework reference; Transport, Campaign and Imaging need the package. -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
     <!-- The generic host with DI for the display. The control gets the same thing through the
          ASP.NET Core framework reference it needs for Kestrel anyway (Part 2). -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup Label="Platform">
@@ -44,9 +44,9 @@
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.3" />
-    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.3" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.4" />
+    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.4" />
     <!-- ArchUnitNET reads assemblies with Cecil anyway. We use it directly for the rules it
          cannot phrase: DateTime.Now is a CALL, not a dependency - forbidding the type
          System.DateTime would also forbid every legitimate use of it (Part 11). -->
