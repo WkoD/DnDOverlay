@@ -41,7 +41,7 @@ internal sealed class ScreenTile : Border
     {
         Screen = screen;
         _session = session;
-        _face = new TileFace(pictures, Selected);
+        _face = new TileFace(screen, session, pictures, Selected);
 
         BorderThickness = new Thickness(2);
         BorderBrush = Brushes.Transparent;

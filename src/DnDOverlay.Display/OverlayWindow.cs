@@ -109,11 +109,11 @@ internal sealed class OverlayWindow : Window
     private System.Windows.Point _mouseAt;
 
     /// <summary>
-    /// When and where the last tap ended, for the double tap that turns a picture to whoever
-    /// tapped. <c>0</c> means "no tap is waiting for a second one".
+    /// The double tap that turns a picture to whoever tapped. <b>The rule lives in Core</b>: it is
+    /// the same grip in the thumbnail from M4 on, and Prüfschritt 22 signs off on the two feeling
+    /// identical.
     /// </summary>
-    private long _lastTap;
-    private System.Windows.Point _lastTapDip;
+    private readonly Tapping _tapping = new();
 
     private readonly TextBlock _name;
     private readonly Border _nameplate;
@@ -1241,28 +1241,14 @@ internal sealed class OverlayWindow : Window
     /// </summary>
     private bool Tapped(Hold hold, Vector total)
     {
-        const double TapDip = 12;
-        const long TapMs = 300;
-        const double NearDip = 40;
-        const long TwiceMs = 400;
-
         var now = Environment.TickCount64;
 
-        if (hold.Moved > TapDip || Math.Abs(total.X) + Math.Abs(total.Y) > TapDip || now - hold.Began > TapMs)
-        {
-            return false;
-        }
+        // The greater of the two readings: how far the hand actually travelled, and how far it
+        // ended up from where it started. A hand that went out and came back was not a tap.
+        var travelled = Math.Max(hold.Moved, Math.Abs(total.X) + Math.Abs(total.Y));
 
-        var twice = now - _lastTap <= TwiceMs
-            && Math.Abs(hold.TapDip.X - _lastTapDip.X) <= NearDip
-            && Math.Abs(hold.TapDip.Y - _lastTapDip.Y) <= NearDip;
-
-        // A third tap does not turn it again: the pair is spent, or holding a finger down and
-        // tapping would spin the picture.
-        _lastTap = twice ? 0 : now;
-        _lastTapDip = hold.TapDip;
-
-        return twice;
+        return Tapping.IsTap(travelled, now - hold.Began)
+            && _tapping.Twice(now, hold.TapDip.X, hold.TapDip.Y);
     }
 
     /// <summary>
