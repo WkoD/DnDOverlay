@@ -348,6 +348,14 @@ public sealed class ParkingTests
     /// The window the fan shows is cut at BOTH ends of a long card, because the card keeps its own
     /// place and the fan's slot falls wherever it falls on it. Each cut edge fades over one step -
     /// the same finger the whole fan is measured in. A picture that fits is not cut at all.
+    /// <para>
+    /// <b>And the window is as much of the card as the picture would have on the table</b>, which
+    /// is the loading rule rather than a number of its own (<c>Parking.Cap</c>, 07.09.2026). It was
+    /// the bar minus one step, and that is a rule about leaving room for ONE more card - it said
+    /// nothing about how much of the fan a single one may own. Measured here on a 1:20 tower: the
+    /// window went from 0.711 of the edge to 0.4, and an ordinary picture is untouched, which is
+    /// the assertion above.
+    /// </para>
     /// </summary>
     [Fact]
     public void A_long_card_is_cut_at_both_ends_and_each_edge_fades()
@@ -366,11 +374,16 @@ public sealed class ParkingTests
         Assert.True(cut.From > 0, $"the head was expected to be cut, window starts at {cut.From:F3}");
         Assert.True(cut.To < 1, $"the tail was expected to be cut, window ends at {cut.To:F3}");
 
-        // The window is exactly what the cascade gives the card, and the fade is one step.
+        // The window is the height this picture has when it is loaded onto this screen, and the
+        // fade is one step. Written as the rule rather than as the number it comes to, so that a
+        // changed ScaleOnLoad moves the test with the behaviour instead of against it.
         var extent = Layout.ItemToRect(
             Parking.Fan(scene).Single(card => card.ItemId == tower.ItemId), screen).Height;
 
-        Assert.Equal(0.8 - screen.MinVisibleNormalisedY, (cut.To - cut.From) * extent, precision: 9);
+        var arriving = Layout.ItemToRect(
+            tower with { Scale = Layout.ScaleOnLoad(tower.AspectRatio, screen) }, screen).Height;
+
+        Assert.Equal(arriving, (cut.To - cut.From) * extent, precision: 9);
         Assert.Equal(screen.MinVisibleNormalisedY, cut.Fade * extent, precision: 9);
     }
 

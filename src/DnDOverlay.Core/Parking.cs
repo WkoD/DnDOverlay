@@ -477,9 +477,43 @@ public static class Parking
             : stowed with { Scale = stowed.Scale * band / breadth };
     }
 
-    /// <summary>The longest a card may be along the fan, leaving one step for the others.</summary>
-    private static double Cap(ScreenContext screen) =>
-        BarEnd - BarStart - Manipulation.Visible(screen, screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom);
+    /// <summary>
+    /// The longest a card may SHOW of itself along the fan: <b>no more than the picture would be
+    /// if it had just been loaded onto this screen</b>, and never so much that nothing else fits.
+    /// <para>
+    /// <b>Why a card can grow at all:</b> a picture narrower than the band is scaled up until it
+    /// lies flush against the park edge (<see cref="Stow"/>) - a card that did not reach the edge
+    /// would not read as put away. For an ordinary picture that never happens; for a tower it is a
+    /// large factor, and the same factor lengthens it. Measured on a 16:9 table: a 1:10 picture
+    /// arrives 0.0225 of the width across, is grown by nearly four to reach the band, and is then
+    /// 1.58 long - twice the whole bar. At the table it read as one card and a row of slivers
+    /// (Handlauf M4, dritter Lauf).
+    /// </para>
+    /// <para>
+    /// <b>The number is not chosen, it is the loading rule</b> (Guide <c>G24</c>).
+    /// <see cref="Layout.ScaleOnLoad"/> IS a height - a fraction of the screen's - so "as much as
+    /// the picture normally has" is exactly that scale measured along this fan's axis. On the
+    /// default of 0.4 it comes to half the bar, and the two cases fall apart cleanly: an ordinary
+    /// 4:3 card is 0.4 long and is not touched, while the tower is cut to a quarter of itself.
+    /// <b>Nothing is resized</b> - what a card gives up is how much of itself the bar displays, and
+    /// the window follows its place in the fan, so it still unfolds without moving
+    /// (<see cref="CutOf"/>).
+    /// </para>
+    /// <para>
+    /// The old bound stays as the second half, because <see cref="ScreenContext.ScaleOnLoad"/> is a
+    /// per-screen setting: turned up far enough, "as much as it normally has" would be the whole
+    /// bar. One rule says <i>no more than on the table</i>, the other <i>always room for one more
+    /// card</i>, and a fan needs both.
+    /// </para>
+    /// </summary>
+    private static double Cap(SceneItem card, ScreenContext screen)
+    {
+        var arriving = Extent(card with { Scale = Layout.ScaleOnLoad(card.AspectRatio, screen) }, screen);
+        var room = BarEnd - BarStart
+            - Manipulation.Visible(screen, screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom);
+
+        return Math.Min(arriving, room);
+    }
 
     /// <summary>
     /// How much of a card the fan shows of itself along its length - its whole body, or the cap if
@@ -488,7 +522,7 @@ public static class Parking
     /// </summary>
     private static double Shown(SceneItem stowed, ScreenContext screen)
     {
-        var cap = Cap(screen);
+        var cap = Cap(stowed, screen);
         var extent = Extent(stowed, screen);
 
         return cap <= 0 ? extent : Math.Min(extent, cap);
