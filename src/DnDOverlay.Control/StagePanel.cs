@@ -454,12 +454,6 @@ internal sealed class StagePanel : StackPanel
     /// stock and are simply not on a screen. Returning quietly used to leave the collected message
     /// saying "5 taken in" beside a table showing one, with nothing accounting for the other four.
     /// </para>
-    /// <para>
-    /// <b>The item path now answers the same way, and for the same reason</b> (<see cref="Filling"/>):
-    /// a run larger than a screenful puts a screenful on the table and leaves the rest in the stock.
-    /// Both branches therefore end in one sentence naming what did not go up - which is the only
-    /// thing that stops "714 taken in" standing beside a table that shows six.
-    /// </para>
     /// </summary>
     private async Task<string?> ShowAsync(ScreenRef screen, IntakeReport report, bool background)
     {
@@ -494,26 +488,12 @@ internal sealed class StagePanel : StackPanel
                 $"{placeable[0].Name} is the background; the other {others} went into the stock only.");
         }
 
-        // A run never puts more than a screenful on the table, and the rest stay in the stock
-        // (Filling). Everything about that decision - what it cost to find out, why the bound sits
-        // on the run rather than on the screen - is written there.
-        var onto = Filling.OntoTheScreen(placeable.Count);
-
-        foreach (var asset in placeable.Take(onto))
+        foreach (var asset in placeable)
         {
             await _session.AddItemAsync(screen, asset, position: null).ConfigureAwait(true);
         }
 
-        if (placeable.Count == onto)
-        {
-            return null;
-        }
-
-        var held = placeable.Count - onto;
-
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"{onto} went onto the screen; the other {held} went into the stock only.");
+        return null;
     }
 
     private static string Progressing(IntakeProgress step) =>
