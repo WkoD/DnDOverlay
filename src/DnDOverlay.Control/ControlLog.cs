@@ -206,4 +206,29 @@ internal static partial class ControlLog
         double drawMs,
         double handMs);
 
+    /// <summary>
+    /// The window fell behind its own event stream and the hub ended it, as it ends any stream
+    /// whose reader cannot be served a state event (<c>SessionEvents</c>). This is the line saying
+    /// the stream was taken up again.
+    /// <para>
+    /// <b>It exists because its absence made the fault unfindable.</b> An intake of 723 files put
+    /// 714 patches into a queue of 256, the stream was cut, and this window went deaf without a
+    /// word - no patch, so no redraw, so no render hook, so not even a frame line for the seven
+    /// minutes that followed. Two logs and a code reading were spent on a failure whose only
+    /// visible trace was silence. Ending a stream is ordinary hub operation and stays unlogged
+    /// there; coming back from one is news about THIS side, and belongs here.
+    /// </para>
+    /// <para>
+    /// <b>Warning rather than Information</b>, and the count is the reason: the events between the
+    /// cut and the fresh opening picture are gone. What they carried is put right by the redraw
+    /// that follows, so nothing is left wrong - but a number that climbs through an evening says
+    /// this window cannot keep up with what the table sends it, which is worth reading.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4015,
+        Level = LogLevel.Warning,
+        Message = "Fell behind the session stream and the hub ended it - taken up again "
+                  + "and redrawn from the hub. {Restarts} so far this run.")]
+    internal static partial void SessionStreamRestarted(ILogger logger, int restarts);
 }

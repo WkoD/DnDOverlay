@@ -7,6 +7,7 @@ using DnDOverlay.Core;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Hub;
 using DnDOverlay.Rendering.Windows;
+using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Control;
 
@@ -39,6 +40,9 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly StagePanel _stage;
     private readonly FrameWatch _frames;
 
+    /// <summary>This window's own line into the trail - shared, so the log carries one category.</summary>
+    private readonly ILogger _logger;
+
     private DevicesWindow? _devices;
     private NetworkWindow? _network;
     private NetworkPanel? _welcome;
@@ -61,10 +65,12 @@ internal sealed class MainWindow : Window, IDisposable
 
         _board = new StageBoard(session, settings, new Pictures(store));
 
+        _logger = log.CreateLogger("Control");
+
         // The grips below the stage act on the ACTIVE TILE, not on whatever the list happens to
         // have selected. Two answers to "which screen?" on one surface is one too many, and at the
         // table it was the first thing to trip over (hand-run of M4, 24a).
-        _stage = new StagePanel(session, entrances, () => _board.Active, _status, log.CreateLogger("Control"));
+        _stage = new StagePanel(session, entrances, () => _board.Active, _status, _logger);
 
         // The counter the control never had. It does NOT hold the render hook - Redraw drives it,
         // and only while the stage is actually drawing, because a permanent subscription would keep
@@ -74,10 +80,8 @@ internal sealed class MainWindow : Window, IDisposable
         // It reports and does not judge: a budget needs a cadence, and a stream this sparse cannot
         // estimate one - measured in the second hand-run of M4, where a stage holding 16.7 ms was
         // warned against a budget of 2.8 ms (FrameWatch.WhileDrawing).
-        var frames = log.CreateLogger("Control");
-
         _frames = FrameWatch.WhileDrawing(window => ControlLog.FrameTimes(
-            frames,
+            _logger,
             window.Seconds,
             window.Frames,
             window.MedianMs,
@@ -240,52 +244,93 @@ internal sealed class MainWindow : Window, IDisposable
     {
         try
         {
-            await foreach (var change in _session
-                .Subscribe(_listening.Token)
-                .WithCancellation(_listening.Token)
-                .ConfigureAwait(true))
+            // <b>A stream that ends is subscribed to again, and that is the whole of this loop.</b>
+            // The hub never drops a state event: where one cannot be queued it ENDS that reader's
+            // stream rather than serving it something stale, and names the way back in the same
+            // breath - "subscribing again yields a fresh opening picture" (SessionEvents).
+            //
+            // This window never went back. The await foreach simply ran to its end, ListenAsync
+            // returned into a discarded task, and from that moment the control was DEAF: no patch,
+            // so no Draw, so no Redraw.Ask, so no render hook and not one frame line for the rest of
+            // the run. The stage kept the last picture it had been given and answered nothing,
+            // while the display next door carried on perfectly - it has a socket of its own.
+            //
+            // Measured at the table, 07.09.2026: an intake of 723 files published 714 AddItem
+            // patches into a queue that holds 256, one per picture, from the very thread that had
+            // to read them. The stream was cut about a third of the way in. Nothing was logged,
+            // because ending a stream is ordinary hub operation - the fault was only ever on this
+            // side, in not noticing.
+            while (true)
             {
-                switch (change)
-                {
-                    case SessionEvent.Opening opening:
-                        Show(opening.Devices);
-                        break;
+                await ListenOnceAsync().ConfigureAwait(true);
 
-                    case SessionEvent.DevicesChanged devices:
-                        Show(devices.Devices);
-                        break;
+                _listening.Token.ThrowIfCancellationRequested();
 
-                    // Redrawn from the authoritative scene rather than from what this window just
-                    // sent: a second control changes the same table, and a panel that trusted its
-                    // own command would drift from it (rule 1).
-                    // Not bundled and not delayed: it is the answer to "is anything happening at
-                    // all", and it has to keep moving while the drawing of a busy stage does not
-                    // (Part 7, rank 3 before 4).
-                    case SessionEvent.AssetProgress progress:
-                        _board.Report(progress.Device, progress.Loads);
-                        break;
+                ControlLog.SessionStreamRestarted(_logger, ++_restarts);
 
-                    // Rank 4, and it shows: never bundled, never kept, and the first thing
-                    // dropped when a subscriber falls behind. A finger position from a moment ago
-                    // is not inaccurate, it is worthless (Part 4).
-                    case SessionEvent.TouchPoints touching:
-                        _board.Touching(touching.Screen, touching.Touches);
-                        break;
-
-                    case SessionEvent.ScenePatched:
-                    case SessionEvent.SceneReplaced:
-                        await _stage.RefreshAsync().ConfigureAwait(true);
-                        await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
-                        break;
-
-                    default:
-                        break;
-                }
+                // The opening picture is NOT enough on its own. Show() returns early when the
+                // screens are unchanged - which is precisely this case - so the board would keep
+                // the stale scene it froze on. Asking the hub outright is what puts the tiles right.
+                await _stage.RefreshAsync().ConfigureAwait(true);
+                await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
             }
         }
         catch (OperationCanceledException)
         {
             // The window was closed.
+        }
+    }
+
+    /// <summary>How often the stream had to be taken up again. Read by the line that reports it.</summary>
+    private int _restarts;
+
+    /// <summary>
+    /// One subscription's life. It returns when the hub ends the stream - which is a thing that
+    /// happens, not a thing that has gone wrong here (see <see cref="ListenAsync"/>).
+    /// </summary>
+    private async Task ListenOnceAsync()
+    {
+        await foreach (var change in _session
+                .Subscribe(_listening.Token)
+                .WithCancellation(_listening.Token)
+                .ConfigureAwait(true))
+        {
+            switch (change)
+            {
+                case SessionEvent.Opening opening:
+                    Show(opening.Devices);
+                    break;
+
+                case SessionEvent.DevicesChanged devices:
+                    Show(devices.Devices);
+                    break;
+
+                // Redrawn from the authoritative scene rather than from what this window just
+                // sent: a second control changes the same table, and a panel that trusted its
+                // own command would drift from it (rule 1).
+                // Not bundled and not delayed: it is the answer to "is anything happening at
+                // all", and it has to keep moving while the drawing of a busy stage does not
+                // (Part 7, rank 3 before 4).
+                case SessionEvent.AssetProgress progress:
+                    _board.Report(progress.Device, progress.Loads);
+                    break;
+
+                // Rank 4, and it shows: never bundled, never kept, and the first thing
+                // dropped when a subscriber falls behind. A finger position from a moment ago
+                // is not inaccurate, it is worthless (Part 4).
+                case SessionEvent.TouchPoints touching:
+                    _board.Touching(touching.Screen, touching.Touches);
+                    break;
+
+                case SessionEvent.ScenePatched:
+                case SessionEvent.SceneReplaced:
+                    await _stage.RefreshAsync().ConfigureAwait(true);
+                    await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
+                    break;
+
+                default:
+                    break;
+            }
         }
     }
 

@@ -403,6 +403,65 @@ public sealed class SceneCommandTests
         }
     }
 
+    /// <summary>
+    /// <b>The seam the control fell through.</b> A run of commands larger than a subscriber's queue
+    /// ends that subscriber's stream - proved in <c>SessionStreamTests</c> against the raw fan-out,
+    /// and here against the real command path, because that is where it actually happened: an
+    /// intake of 723 files sent 714 <c>AddItem</c>s into a queue of 256, from the very thread that
+    /// had to read them (07.09.2026).
+    /// <para>
+    /// The half that had never been crossed is the way back. The rule says a cut subscriber
+    /// subscribes again for a fresh opening picture - and this pins what that picture is and is
+    /// NOT: a new stream, yes, but <b>the scene is not in it</b>. Everything the cut swallowed is
+    /// in the authoritative scene and has to be fetched. A control that only re-subscribed would
+    /// come back to a live stream and a stale table, which looks like recovery and is not.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_run_larger_than_the_queue_ends_the_stream_and_leaves_the_scene_whole()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var stream = session.Subscribe(Cancellation).GetAsyncEnumerator(Cancellation);
+
+        await using (stream.ConfigureAwait(false))
+        {
+            Assert.True(await stream.MoveNextAsync());
+            Assert.IsType<SessionEvent.Opening>(stream.Current);
+
+            const int Run = SessionEvents.Capacity + 44;
+
+            for (var i = 0; i < Run; i++)
+            {
+                await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
+            }
+
+            var seen = 0;
+
+            while (await stream.MoveNextAsync())
+            {
+                seen++;
+            }
+
+            // What fitted, and then the stream is over - not the run.
+            Assert.Equal(SessionEvents.Capacity, seen);
+
+            // Nothing was lost where it counts: the hub holds every one of them.
+            Assert.Equal(Run, (await session.GetSceneAsync(Target, Cancellation)).Items.Count);
+        }
+
+        var again = session.Subscribe(Cancellation).GetAsyncEnumerator(Cancellation);
+
+        await using (again.ConfigureAwait(false))
+        {
+            Assert.True(await again.MoveNextAsync());
+
+            // A fresh stream, and an opening picture about DEVICES. The table is not in it.
+            _ = Assert.IsType<SessionEvent.Opening>(again.Current);
+        }
+    }
+
     private static SessionApi Session(out ScreenCatalog screens)
     {
         var options = new HubOptions
