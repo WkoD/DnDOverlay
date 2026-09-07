@@ -93,6 +93,60 @@ public static class Viewing
     }
 
     /// <summary>
+    /// A rectangle of the view, <b>before the view's own turn is applied to it</b> - the box a
+    /// renderer that turns by <see cref="AngleInView"/> has to draw into.
+    /// <para>
+    /// <b>Two turns, and only one of them may be in the rectangle.</b> A picture drawn from a view
+    /// gets both: <see cref="ToView(Rect,ViewRotation)"/> puts its box where the view shows it, and
+    /// the renderer then turns it by <see cref="AngleInView"/>, which carries the view's angle as
+    /// well. Drawing into the mapped box and turning it again applies the view twice - the picture
+    /// lands in the right place, turned, and squeezed into the box belonging to the other axis.
+    /// Read at the table in a 90-degree view (Handlauf M4, dritter Lauf).
+    /// </para>
+    /// <para>
+    /// It is the exact inverse of the swap in <see cref="ToView(Rect,ViewRotation)"/>: same centre,
+    /// extents put back. <b>Whatever a renderer does NOT turn keeps the mapped box</b> - an
+    /// axis-aligned outline over the scene must appear as the mapped box, which is why an outline
+    /// stayed right while the pictures under it did not.
+    /// </para>
+    /// </summary>
+    public static Rect BeforeTurn(Rect turned, ViewRotation view) =>
+        view is ViewRotation.Quarter or ViewRotation.ThreeQuarters
+            ? new Rect(
+                turned.X + ((turned.Width - turned.Height) / 2),
+                turned.Y + ((turned.Height - turned.Width) / 2),
+                turned.Height,
+                turned.Width)
+            : turned;
+
+    /// <summary>
+    /// A point of the view, taken back out of the view's own turn about <paramref name="centre"/> -
+    /// the companion to <see cref="BeforeTurn(Rect,ViewRotation)"/> for anything that has to line up
+    /// with a box drawn that way.
+    /// <para>
+    /// Written as the four exact quarter turns rather than through a sine: these are the only four
+    /// there are, and an exact swap cannot leave a mark half a pixel off the picture it belongs to.
+    /// <b>The direction is fixed by the renderer</b>, which turns by <c>+view</c>; this undoes it.
+    /// A half turn is the symmetric case and says nothing about that direction (Guide
+    /// <c>C14</c>) - the quarter turns are where it is decided.
+    /// </para>
+    /// </summary>
+    public static Point BeforeTurn(Point at, Point centre, ViewRotation view)
+    {
+        var (dx, dy) = (at.X - centre.X, at.Y - centre.Y);
+
+        var (x, y) = view switch
+        {
+            ViewRotation.Quarter => (dy, -dx),
+            ViewRotation.Half => (-dx, -dy),
+            ViewRotation.ThreeQuarters => (-dy, dx),
+            _ => (dx, dy),
+        };
+
+        return new Point(centre.X + x, centre.Y + y);
+    }
+
+    /// <summary>
     /// The shape the view has: the screen's own, or its reciprocal on a quarter turn. A 16:9 table
     /// seen from its short side is 9:16, and the tile has to be that shape or everything drawn in
     /// it is stretched.

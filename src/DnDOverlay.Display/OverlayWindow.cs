@@ -1358,6 +1358,31 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
+        // <b>A double click turns the picture to whoever clicked</b>, exactly as a double tap does -
+        // the platform's own count rather than a second stopwatch beside the touch one. The
+        // thumbnail has had it since M4c and the table had not, and Prüfschritt 22 signs this
+        // milestone off on the same three grips behaving alike on both surfaces (hand-run of M4,
+        // dritter Lauf, 25a). A card in the fan never gets here: Take hands that gesture to the fan
+        // and leaves nothing held.
+        if (e.ClickCount == 2 && _context is { } context && _held.TryGetValue(item, out var turning))
+        {
+            turning.Item = CoreManipulation.HoldAtEdge(
+                turning.Item with { RotationDeg = CoreManipulation.TurnToMe(turning.Tap, context) },
+                context);
+
+            if (_mounts.TryGetValue(item, out var turned))
+            {
+                Place(turned, turning.Item, context);
+            }
+
+            Report(item, grabbed: false, binding: true);
+
+            _held.Remove(item);
+            e.Handled = true;
+
+            return;
+        }
+
         _mouseAt = e.GetPosition(_stage);
         element.CaptureMouse();
         e.Handled = true;

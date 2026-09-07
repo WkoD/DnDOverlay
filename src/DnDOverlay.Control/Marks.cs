@@ -29,6 +29,9 @@ internal sealed class Marks : FrameworkElement
     private readonly Selection _selection;
 
     private TileRect? _frame;
+
+    /// <summary>The card stepped out of the fan for a look, or <see langword="null"/>.</summary>
+    private ItemId? _peek;
     private bool _dimmed;
 
     private SceneState _scene = SceneState.Empty;
@@ -79,6 +82,14 @@ internal sealed class Marks : FrameworkElement
     /// selected nothing there would promise something it cannot keep (Part 7).
     /// </para>
     /// </summary>
+    /// <summary>Which card is out for a look - the same one the thumbnail draws clear of the bar.</summary>
+    internal void Peeking(ItemId? card)
+    {
+        _peek = card;
+
+        InvalidateVisual();
+    }
+
     internal void Frame(TileRect? frame)
     {
         _frame = frame;
@@ -128,10 +139,23 @@ internal sealed class Marks : FrameworkElement
 
         foreach (var item in _scene.Items)
         {
-            if (_selection.Contains(item.ItemId))
+            // The card being looked at wears the outline while it is out, wherever it has stepped
+            // to - it is what the hand is on, and that is what an outline says. Let go on the bar
+            // and it lies back down without one; pulled out, it is selected and keeps it by the
+            // ordinary rule (Handlauf M4, dritter Lauf).
+            var marked = _selection.Contains(item.ItemId) || item.ItemId == _peek;
+
+            if (!marked)
             {
-                drawingContext.DrawGeometry(brush: null, outline, Around(item));
+                continue;
             }
+
+            drawingContext.DrawGeometry(
+                brush: null,
+                outline,
+                item.ItemId == _peek && Parking.Peek(_scene, _screen, item.ItemId) is { } clear
+                    ? Around(item with { CenterX = clear.X, CenterY = clear.Y })
+                    : Around(item));
         }
 
     }

@@ -96,6 +96,24 @@ internal sealed class Selection
     /// second control would otherwise stay selected invisibly, and the next menu command would go
     /// to an item that is not there - ineffective at the hub, and a promise broken in the surface.
     /// </summary>
+    /// <summary>
+    /// Takes one picture out, if it is in. <b>Used where a picture is PUT AWAY</b>: an outline
+    /// round a card in the fan marks something the DM is no longer working on, and it stays there
+    /// through everything the fan does afterwards (Handlauf M4, dritter Lauf).
+    /// <para>
+    /// Putting away drops it; being parked does not forbid it. Those are different rules, and the
+    /// difference is the point: the menu can select the whole fan at once, which is a selection the
+    /// DM asked for.
+    /// </para>
+    /// </summary>
+    internal void Drop(ItemId item)
+    {
+        if (_items.Remove(item))
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     internal void Keep(SceneState scene)
     {
         ArgumentNullException.ThrowIfNull(scene);

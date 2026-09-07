@@ -89,7 +89,25 @@ internal sealed class ScreenTile : Border
             HorizontalAlignment = HorizontalAlignment.Left,
         };
 
-        var panel = new StackPanel();
+        // <b>Ein Raster, und die Miniatur bekommt die Sternzeile.</b> Ein Stapel bietet jedem
+        // Kind unendliche Höhe an, und die offene Kachel fällt dann auf ihre kleine zurück - genau
+        // das, was am Tisch zweimal gemeldet wurde: erst blieb sie null Pixel hoch, dann blieb sie
+        // so hoch wie in der Übersicht, egal wie groß das Fenster wurde. Derselbe Fehler eine Ebene
+        // tiefer als beim Fenster (Handlauf M4, dritter Lauf, 24a).
+        //
+        // In der Übersicht ändert es nichts: Dort bekommt die Kachel ihre Wunschgröße, und eine
+        // Sternzeile in einem Behälter, der sich nach dem Inhalt richtet, ist so groß wie ihr Inhalt.
+        var panel = new Grid();
+
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        Grid.SetRow(_head, 0);
+        Grid.SetRow(_frame, 1);
+        Grid.SetRow(grips, 2);
+        Grid.SetRow(layers, 3);
 
         panel.Children.Add(_head);
         panel.Children.Add(_frame);

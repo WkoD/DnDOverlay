@@ -5,28 +5,33 @@ using System.Windows.Media;
 namespace DnDOverlay.Control;
 
 /// <summary>
-/// The head of a tile: <b>always exactly one line</b>, in three fixed fields - name and resolution
-/// on the left, the reserved field on the right (Part 7).
+/// The head of a tile: <b>always exactly one line</b> - the screen's name, and the resolution
+/// beside it (Part 7).
 /// <para>
-/// <b>The order of shortening is laid down rather than left to the layout</b>, because a tile that
-/// rearranged itself under pressure would be a different tile every time the window is dragged
-/// (Prüfschritt 32f): the reserved field never gives way, then the RESOLUTION goes entirely, and
-/// only then does the name shorten with an ellipsis. <b>The name never disappears</b> - without it
-/// nobody knows which tile they are looking at.
+/// <b>Name and resolution, and no rule about which of them gives way.</b> There was one: the
+/// resolution went entirely first, then the name shortened, and a field on the right was kept free.
+/// At the table it produced the opposite of what it promised (Handlauf M4, dritter Lauf, 32f) - the
+/// resolution slid over the name, the name blanked out, and all of it happened while there was
+/// still white space to the right. Decided by the DM on the spot: <i>„Generell sollte immer die
+/// ganze Breite ausgenutzt werden … keine Vorrangregel oder sonstiges, das wäre erst mit Buttons
+/// oder ähnlichem nötig."</i>
 /// </para>
 /// <para>
-/// <b>The right-hand field is reserved and empty in M4.</b> It carries two things from M5 on: the
-/// reasons mark and the battery of a device running on one - Part 7 says twice that the battery
-/// stands "on the tile" and its own tile diagram has no place for it, which is a contradiction this
-/// milestone found and left standing (checks/M4.md). Reserving the room here is what keeps the
-/// order of shortening from being built a second time when they arrive.
+/// So both stand where they stand, the strip uses its whole width, and what does not fit is simply
+/// <b>cut off at the right edge</b> - the head is clipped rather than negotiated. It is the same
+/// reasoning the tile itself follows when the window gets narrow: the tile keeps its size and
+/// leaves the window. A cascade is worth building when something has to be CHOSEN between; two
+/// pieces of text in reading order have nothing to choose.
+/// </para>
+/// <para>
+/// <b>The reserved field on the right is gone with it.</b> It was held free for the reasons mark
+/// and the battery from M5a, and holding it was what made the strip run out of room early. When
+/// those arrive they are things one presses or reads at a glance, and then the head needs a real
+/// layout decision rather than a number kept warm for a year (Teil 7 nachzuziehen).
 /// </para>
 /// </summary>
 internal sealed class TileHead : Panel
 {
-    /// <summary>Room for a mark and a battery, in DIP. Nothing is drawn in it until M5a.</summary>
-    private const double Reserved = 84;
-
     private const double Gap = 8;
 
     private readonly TextBlock _name = new()
@@ -49,6 +54,9 @@ internal sealed class TileHead : Panel
         // invisible to the hit test between its children, so the screen menu and the drag could
         // only be started where there happened to be text (hand-run of M4, 25v).
         Background = Brushes.Transparent;
+
+        // What does not fit is cut off here rather than argued about above.
+        ClipToBounds = true;
 
         Children.Add(_name);
         Children.Add(_resolution);
@@ -87,35 +95,19 @@ internal sealed class TileHead : Panel
     /// <inheritdoc />
     protected override Size ArrangeOverride(Size finalSize)
     {
-        var left = Math.Max(0, finalSize.Width - Reserved);
+        // Both at their own width, in reading order, from the left edge. Neither is trimmed and
+        // neither is dropped: the panel clips, so a strip too narrow for both simply shows as much
+        // as it has room for - which is what the DM asked for and what a reader expects of a line
+        // of text in a box that got smaller.
+        var name = _name.DesiredSize.Width;
 
-        // The resolution goes first, and it goes ENTIRELY: half a resolution is a wrong number,
-        // while half a name is still a name (Part 7).
-        var resolution = _resolution.DesiredSize.Width;
-        var room = left - resolution - Gap;
-
-        if (room < _name.DesiredSize.Width && room < MinimumName)
-        {
-            _resolution.Arrange(new Rect(0, 0, 0, 0));
-            _name.Arrange(new Rect(0, 0, Math.Max(0, left), finalSize.Height));
-
-            return finalSize;
-        }
-
-        var forName = Math.Max(0, Math.Min(_name.DesiredSize.Width, left - resolution - Gap));
-
-        _name.Arrange(new Rect(0, 0, forName, finalSize.Height));
-        _resolution.Arrange(new Rect(forName + Gap, 0, Math.Max(0, resolution), finalSize.Height));
+        _name.Arrange(new Rect(0, 0, name, finalSize.Height));
+        _resolution.Arrange(new Rect(
+            name + Gap, 0, Math.Max(0, _resolution.DesiredSize.Width), finalSize.Height));
 
         return finalSize;
     }
 
-    /// <summary>
-    /// How little of the name is still worth showing beside the resolution. Below it the
-    /// resolution goes instead - "TISCH-PC//D…" tells nobody which screen this is, and the
-    /// resolution can be read in the devices window.
-    /// </summary>
-    private static double MinimumName => 90;
-
-    private double Wanted() => _name.DesiredSize.Width + Gap + _resolution.DesiredSize.Width + Reserved;
+    /// <summary>What the head would like if nobody says how much room there is: both, side by side.</summary>
+    private double Wanted() => _name.DesiredSize.Width + Gap + _resolution.DesiredSize.Width;
 }

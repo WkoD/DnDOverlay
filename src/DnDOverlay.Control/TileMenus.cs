@@ -72,6 +72,10 @@ internal sealed class TileMenus(
             "Identify screens",
             () => _ = session.IdentifyScreensAsync(screen.Device, CancellationToken.None)));
 
+        menu.Items.Add(Turned(view));
+
+        menu.Items.Add(new Separator());
+
         // Switched here rather than on the picture, because the background layer takes no hits at
         // all and has no item to take hold of (Part 6).
         var named = Entry(
@@ -82,32 +86,31 @@ internal sealed class TileMenus(
         named.IsEnabled = scene.Background is not null;
         menu.Items.Add(named);
 
-        // The two starting values, as the two buttons they became when the background took on the
-        // place and size of a picture (Ortsfrage 6): each of them works the centre and the scale
-        // out once, and from then on they are ordinary values that a grip can change. Flat rather
-        // than in a submenu - "turn view" is the one place in this surface that nests (Part 7).
-        menu.Items.Add(Fitted("Fill screen with background", BackgroundFit.Cover, scene));
-        menu.Items.Add(Fitted("Fit whole background on screen", BackgroundFit.Contain, scene));
-
-        // The one mode on the stage, and it is here because every grip on a tile is already spoken
-        // for and the background has no item to take hold of (Part 6). Ticked while it lasts, like
-        // the view rotation and the diagnostic view - the two other things one sets up once.
-        var adjust = new MenuItem
+        // <b>The three ways to adjust the background, under one head.</b> They used to stand flat
+        // and apart - two buttons here, the mode three entries further down - which read as three
+        // unrelated things when they are one question with three answers: by hand, or one of the
+        // two obvious positions. Ordered as the DM asked for them (Handlauf M4, dritter Lauf).
+        //
+        // "By hand" rather than "free": what it turns on is a MODE in which the hand works the
+        // layer directly, and the two beside it are what the machine does instead.
+        var adjusting0 = new MenuItem
         {
-            Header = "Adjust background",
+            Header = "By hand",
             IsCheckable = true,
             IsChecked = adjusting,
-            IsEnabled = scene.Background is not null,
         };
 
-        adjust.Click += (_, _) => Adjusting?.Invoke(this, !adjusting);
+        adjusting0.Click += (_, _) => Adjusting?.Invoke(this, !adjusting);
 
-        menu.Items.Add(adjust);
+        var background = new MenuItem { Header = "Adjust background", IsEnabled = scene.Background is not null };
 
-        menu.Items.Add(Turned(view));
+        background.Items.Add(adjusting0);
+        background.Items.Add(Fitted("Fill screen", BackgroundFit.Cover, scene));
+        background.Items.Add(Fitted("Fit whole on screen", BackgroundFit.Contain, scene));
 
-        menu.Items.Add(new Separator());
+        menu.Items.Add(background);
 
+        // Last, and on its own: it is the one entry here that throws something away.
         var cleared = Entry(
             "Remove background",
             () => _ = session.ClearBackgroundAsync(screen, CancellationToken.None));
@@ -179,6 +182,24 @@ internal sealed class TileMenus(
                 CancellationToken.None))));
 
         menu.Items.Add(new Separator());
+
+        // <b>Auswählen als Griff, nicht als Fleißarbeit.</b> Die drei Antworten sind die drei
+        // Mengen, die es auf einem Screen gibt - alles, was offen liegt, und was weggelegt ist -,
+        // und sie stehen hier, weil das, was danach kommt, sie braucht: kopieren und verschieben
+        // arbeiten auf der ganzen Auswahl (Handlauf M4, dritter Lauf).
+        var choosing = new MenuItem { Header = "Select" };
+
+        choosing.Items.Add(Entry(
+            "All",
+            () => selection.Set(scene.Items.Select(item => item.ItemId))));
+        choosing.Items.Add(Entry(
+            "On the table",
+            () => selection.Set(scene.Items.Where(item => !item.Parked).Select(item => item.ItemId))));
+        choosing.Items.Add(Entry(
+            "In the fan",
+            () => selection.Set(scene.Items.Where(item => item.Parked).Select(item => item.ItemId))));
+
+        menu.Items.Add(choosing);
 
         menu.Items.Add(Onto("Copy to", (target, item) =>
             session.CopyItemAsync(screen, target, item.ItemId, position: null, CancellationToken.None), many));

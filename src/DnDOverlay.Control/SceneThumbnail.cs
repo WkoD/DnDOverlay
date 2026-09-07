@@ -127,7 +127,8 @@ internal sealed class SceneThumbnail : FrameworkElement
                 size,
                 background.ShowName ? background.Name : null,
                 locked: false,
-                Parking.Cut.Whole);
+                Parking.Cut.Whole,
+                picture0: null);
         }
 
         if (!_scene.ItemsVisible)
@@ -176,7 +177,8 @@ internal sealed class SceneThumbnail : FrameworkElement
                 size,
                 item is ImageItem { ShowName: true } named ? named.Name : null,
                 item.Locked,
-                cut);
+                cut,
+                item as ImageItem);
         }
 
         if (_faded)
@@ -199,11 +201,15 @@ internal sealed class SceneThumbnail : FrameworkElement
         Size size,
         string? name,
         bool locked,
-        Parking.Cut cut)
+        Parking.Cut cut,
+        ImageItem? picture0)
     {
-        var rect = Placing.InTile(normalised, _view, size);
+        // The mapped box is where the picture ENDS UP; what it is drawn into is that box before
+        // the view's own turn, because the turn below carries the view as well (Placing.BeforeTurn).
+        var mapped = Placing.InTile(normalised, _view, size);
+        var rect = Placing.BeforeTurn(mapped, _view);
 
-        var centre = new TilePoint(rect.X + (rect.Width / 2), rect.Y + (rect.Height / 2));
+        var centre = new TilePoint(mapped.X + (mapped.Width / 2), mapped.Y + (mapped.Height / 2));
 
         // The angle turns with the view as well: a picture standing straight on a table seen from
         // the other side is upside down, and drawing it otherwise would make the thumbnail a
@@ -233,6 +239,7 @@ internal sealed class SceneThumbnail : FrameworkElement
         // so both lie the way the picture lies. Drawn after it, so neither is under it.
         Caption(drawingContext, rect, name);
         Padlock(drawingContext, rect, locked);
+        Motion(drawingContext, rect, picture0);
 
         if (trimmed)
         {
@@ -278,11 +285,16 @@ internal sealed class SceneThumbnail : FrameworkElement
             ? new CorePoint(normalised.X + (normalised.Width / 2), normalised.Bottom)
             : new CorePoint(normalised.Right, normalised.Y + (normalised.Height / 2));
 
+        // Into the same space the picture is drawn in: the mask is pushed inside the turn, so its
+        // two ends have to be taken back out of the view's angle exactly as the box was.
+        var mapped = Placing.InTile(normalised, _view, size);
+        var centre = new TilePoint(mapped.X + (mapped.Width / 2), mapped.Y + (mapped.Height / 2));
+
         return new LinearGradientBrush
         {
             MappingMode = BrushMappingMode.Absolute,
-            StartPoint = Placing.InTile(head, _view, size),
-            EndPoint = Placing.InTile(tail, _view, size),
+            StartPoint = Placing.BeforeTurn(Placing.InTile(head, _view, size), centre, _view),
+            EndPoint = Placing.BeforeTurn(Placing.InTile(tail, _view, size), centre, _view),
             GradientStops = FanCut.Stops(cut),
         };
     }
@@ -378,5 +390,67 @@ internal sealed class SceneThumbnail : FrameworkElement
         shackle.Freeze();
 
         drawingContext.DrawGeometry(brush: null, new Pen(Brushes.White, 1.6), shackle);
+    }
+
+    /// <summary>
+    /// Whether this picture MOVES - a small play mark, struck through while it is held.
+    /// <para>
+    /// <b>The thumbnail does not animate, and that is on purpose</b> (Part 7): a tile is a map of
+    /// the table, and twenty running GIFs on it would cost the surface that has to stay readable
+    /// under load exactly what the load is. But then nothing on the tile said which pictures are
+    /// animated at all, and whether the DM had already stopped one - read at the table, where the
+    /// only way to find out was to look at the screen itself (Handlauf M4, dritter Lauf).
+    /// </para>
+    /// <para>
+    /// Top LEFT, opposite the padlock, so the two never have to negotiate a corner. Same size and
+    /// same plate as the padlock, and it does not scale with the picture either, for the reason
+    /// given there: a sign that is only sometimes readable is not a sign.
+    /// </para>
+    /// </summary>
+    private static void Motion(DrawingContext drawingContext, TileRect rect, ImageItem? picture)
+    {
+        if (picture is not { Meta.IsAnimated: true } || rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        const double Size = 12;
+
+        var left = rect.X + 2;
+        var top = rect.Y + 2;
+        var plate = new TileRect(left, top, Size + 4, Size + 4);
+
+        drawingContext.DrawRoundedRectangle(
+            new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0)), pen: null, plate, 3, 3);
+
+        // A triangle, because a play mark is the one symbol nobody has to be taught - and drawn
+        // rather than written, so it never depends on a font being present.
+        var play = new StreamGeometry();
+
+        using (var shape = play.Open())
+        {
+            var tip = new TilePoint(plate.Right - 4.5, plate.Y + ((Size + 4) / 2));
+
+            shape.BeginFigure(new TilePoint(plate.X + 5, plate.Y + 4), isFilled: true, isClosed: true);
+            shape.LineTo(tip, isStroked: true, isSmoothJoin: false);
+            shape.LineTo(new TilePoint(plate.X + 5, plate.Bottom - 4), isStroked: true, isSmoothJoin: false);
+        }
+
+        play.Freeze();
+
+        drawingContext.DrawGeometry(Brushes.White, pen: null, play);
+
+        if (!picture.AnimationPaused)
+        {
+            return;
+        }
+
+        // Struck through rather than swapped for a pause mark: the question the DM is asking is
+        // "does this one move?", and the answer "yes, but it is stopped" is one sign with a line
+        // through it rather than two signs he has to tell apart.
+        drawingContext.DrawLine(
+            new Pen(Brushes.White, 1.6),
+            new TilePoint(plate.X + 3, plate.Bottom - 3),
+            new TilePoint(plate.Right - 3, plate.Y + 3));
     }
 }

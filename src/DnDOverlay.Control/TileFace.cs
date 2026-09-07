@@ -264,6 +264,20 @@ internal sealed class TileFace : Panel
 
         var before = Shape();
 
+        // <b>Was weggelegt wird, ist nicht mehr ausgewählt.</b> Ein Rahmen um eine Karte im Fächer
+        // markiert etwas, woran der DM nicht mehr arbeitet - und er blieb dort durch alles hindurch
+        // stehen, was der Fächer danach tat (Handlauf M4, dritter Lauf). Gefragt wird der ÜBERGANG
+        // und nicht der Zustand: Geparktsein verbietet die Auswahl nicht, das Menü wählt den ganzen
+        // Fächer auf einen Griff aus.
+        foreach (var away in scene.Items)
+        {
+            if (away.Parked
+                && _scene.Items.Any(was => was.ItemId == away.ItemId && !was.Parked))
+            {
+                _selection.Drop(away.ItemId);
+            }
+        }
+
         _scene = scene;
         _screen = screen;
         _view = view;
@@ -456,12 +470,19 @@ internal sealed class TileFace : Panel
             return false;
         }
 
+        Fan(card);
+
+        return true;
+    }
+
+    /// <summary>Begins looking at one card, whichever way the hand arrived at it.</summary>
+    private void Fan(ItemId card)
+    {
         _fan = new Fanning(card);
 
         _thumbnail.Peeking(card);
+        _marks.Peeking(card);
         Redraw.Ask(_thumbnail);
-
-        return true;
     }
 
     /// <summary>
@@ -488,6 +509,7 @@ internal sealed class TileFace : Panel
                 // under the hand it makes the eye chase it, shown where the hand landed the fan
                 // turns into a slide viewer (Parking.Peek).
                 _thumbnail.Peeking(next);
+                _marks.Peeking(next);
                 Redraw.Ask(_thumbnail);
             }
 
@@ -528,6 +550,7 @@ internal sealed class TileFace : Panel
         _fan = null;
 
         _thumbnail.Peeking(null);
+        _marks.Peeking(null);
         Redraw.Ask(_thumbnail);
     }
 
@@ -593,6 +616,13 @@ internal sealed class TileFace : Panel
 
         if (picture.Parked)
         {
+            // <b>A card is handed to the fan, not refused.</b> Refusing it let a selection frame
+            // begin on a picture - and a frame begins strictly OUTSIDE one (Part 7). It happens
+            // wherever a card's BODY reaches past the band, which is most of a long card: the point
+            // picks the card, but it is not on the bar, so the fan gesture did not start either and
+            // the drag became a rubber band from there to the tile edge (Handlauf M4, dritter Lauf).
+            Fan(id);
+
             return false;
         }
 
@@ -882,10 +912,11 @@ internal sealed class TileFace : Panel
             {
                 _mouseAt = now;
             }
-            else if (!Grab(from))
+            else if (!Grab(from) && _fan is null)
             {
                 // Free area, so this is a frame. The two never collide: a frame begins strictly
-                // OUTSIDE a picture and taking hold strictly ON one (Part 7).
+                // OUTSIDE a picture and taking hold strictly ON one (Part 7) - and a card of the
+                // fan is a picture, however far from the bar the hand met it.
                 Frame(from);
             }
         }
@@ -964,7 +995,12 @@ internal sealed class TileFace : Panel
             return;
         }
 
-        if (_hold is not null)
+        // <c>_behind</c> gehört in diese Bedingung, und sein Fehlen war der ganze Befund: Ein
+        // Mausgriff auf dem Hintergrund legte eine lokale Kopie an, und losgelassen wurde nur, was
+        // ein <c>_hold</c> war. Die Kopie blieb also stehen und überzeichnete von da an alles, was
+        // vom Hub kam - „Bildschirm füllen" wirkte am Tisch und nicht in der Kachel, und der
+        // nächste Zug sprang auf den alten Stand zurück (Handlauf M4, dritter Lauf, 38b).
+        if (_hold is not null || _behind is not null)
         {
             LetGo(from is { } start ? Math.Abs(at.X - start.X) + Math.Abs(at.Y - start.Y) : 0, turning: false);
 
@@ -1055,7 +1091,12 @@ internal sealed class TileFace : Panel
             _marks.Frame(null);
         }
 
-        Asked?.Invoke(this, new MenuAsk(on, where, Picking.At(_scene, _screen, where)));
+        // <b>Das Menü wird an <c>at</c> gehängt, nicht an <c>on</c>.</b> Beide sind derselbe Ort,
+        // aber in zwei Räumen: <c>on</c> ist um die Zentrierung der Miniatur verschoben, und die
+        // Platzierung eines Kontextmenüs rechnet gegen dieses Element. In der Einzelansicht ist
+        // diese Verschiebung breit, und das Menü erschien weit links vom Zeiger - so weit links,
+        // wie die Miniatur mittig sitzt (Handlauf M4, dritter Lauf, 24a).
+        Asked?.Invoke(this, new MenuAsk(at, where, Picking.At(_scene, _screen, where)));
     }
 
     /// <summary>
@@ -1177,7 +1218,9 @@ internal sealed class TileFace : Panel
             {
                 var travelled = moved.CumulativeManipulation.Translation;
 
-                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > Press.Tolerance && !Grab(began))
+                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > Press.Tolerance
+                    && !Grab(began)
+                    && _fan is null)
                 {
                     Frame(began);
                 }
