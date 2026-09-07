@@ -17,9 +17,16 @@ namespace DnDOverlay.Core;
 /// fill after connecting.
 /// </para>
 /// <para>
-/// It lives here rather than in the display because the thumbnail shows the same highlight, with
-/// the same rule and the same duration (Part 6), and two implementations of "what is new" would
-/// disagree the first time one of them was fixed.
+/// <b>The thumbnail does NOT show this</b>, and the reason is who the highlight is for: the
+/// players, who otherwise miss that the DM has put something down. The DM has just done the
+/// putting down, so at the control it would answer a question nobody asked (Part 6, decided
+/// 08.09.2026 - the sentence promising the thumbnail its own highlight described a gap rather
+/// than a state; nothing of the kind was ever built there).
+/// </para>
+/// <para>
+/// It lives here rather than in the display all the same: this is a decision over a PATCH, and
+/// therefore one that can be tested without a window - the same split <see cref="AnimationBudget"/>
+/// makes, and for the same reason (Part 2, Part 11).
 /// </para>
 /// </summary>
 public static class Arrival
