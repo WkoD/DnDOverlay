@@ -301,6 +301,14 @@ public sealed class SessionApi : ISessionApi, IDisposable
                     RotationDeg = rotationDeg,
                 },
                 context);
+
+            // <b>The tick moves only when something actually moved.</b> Switching the hand mode on
+            // and putting a finger down sends a step of nothing - the release reports whatever the
+            // hold is holding - and the DM would lose the answer to "what did I set this to" by
+            // merely opening the menu (07.09.2026). Compared with a tolerance rather than exactly,
+            // because the clamp and the snap on release can return the same arrangement through a
+            // last bit of arithmetic.
+            wanted = Moved(background, wanted) ? wanted with { Fit = null } : wanted with { Fit = background.Fit };
         }
         finally
         {
@@ -341,6 +349,9 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 CenterY = centre.Y,
                 Scale = scale,
                 RotationDeg = 0,
+
+                // Which of the two it now stands in, so the menu can say so.
+                Fit = fit,
             };
         }
         finally
@@ -350,6 +361,19 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
         await ApplyAsync(screen, new SetBackground(wanted), cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Whether these two arrangements are different ones. <b>A tolerance rather than an exact
+    /// comparison</b>: a gesture that grips and lets go without travelling still travels through
+    /// the edge clamp and the quarter-turn snap, and coming back the same to the last bit is not
+    /// the question being asked. A tenth of a degree and a thousandth of a screen are below what a
+    /// hand can do on purpose.
+    /// </summary>
+    private static bool Moved(BackgroundItem before, BackgroundItem after) =>
+        Math.Abs(before.CenterX - after.CenterX) > 0.001
+        || Math.Abs(before.CenterY - after.CenterY) > 0.001
+        || Math.Abs(before.Scale - after.Scale) > 0.001
+        || Math.Abs(before.RotationDeg - after.RotationDeg) > 0.1;
 
     /// <inheritdoc />
     public Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>

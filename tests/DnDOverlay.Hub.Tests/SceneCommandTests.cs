@@ -188,6 +188,61 @@ public sealed class SceneCommandTests
     }
 
     /// <summary>
+    /// <b>The layer remembers how it was last arranged, and only a movement forgets it.</b> The
+    /// menu ticks one of three - fill, fit, customize - so the DM can see at a glance what he set
+    /// this to (07.09.2026). Switching the hand mode on and putting a finger down reports a step of
+    /// nothing, and losing the answer by merely opening the menu would be the opposite of what the
+    /// tick is for.
+    /// </summary>
+    [Fact]
+    public async Task The_background_remembers_its_arrangement_until_it_is_actually_moved()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+        await session.SetBackgroundFitAsync(Target, BackgroundFit.Cover, Cancellation);
+
+        var filled = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(filled);
+        Assert.Equal(BackgroundFit.Cover, filled.Fit);
+
+        // A gesture that reports the values it already has - a finger down and up again.
+        await session.TransformBackgroundAsync(
+            Target,
+            new Point(filled.CenterX, filled.CenterY),
+            filled.Scale,
+            filled.RotationDeg,
+            Cancellation);
+
+        var untouched = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(untouched);
+        Assert.Equal(BackgroundFit.Cover, untouched.Fit);
+
+        // And one that really moves it.
+        await session.TransformBackgroundAsync(
+            Target,
+            new Point(filled.CenterX + 0.1, filled.CenterY),
+            filled.Scale,
+            filled.RotationDeg,
+            Cancellation);
+
+        var moved = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(moved);
+        Assert.Null(moved.Fit);
+
+        // Back into an arrangement, and it is remembered again - so the tick can come back.
+        await session.SetBackgroundFitAsync(Target, BackgroundFit.Contain, Cancellation);
+
+        Assert.Equal(
+            BackgroundFit.Contain,
+            (await session.GetSceneAsync(Target, Cancellation)).Background?.Fit);
+    }
+
+    /// <summary>
     /// Without a background it does nothing rather than failing - the same rule an unknown ItemId
     /// follows (Part 11). The menu entry is disabled, and a second control need not know that.
     /// </summary>

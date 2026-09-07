@@ -149,6 +149,23 @@ public enum BackgroundFit
 /// it stays unreachable in any case - the background layer takes no gestures (Part 6).
 /// </para>
 /// </summary>
+/// <param name="Fit">
+/// Which of the two ready-made arrangements the layer was last put into, or <see langword="null"/>
+/// once the DM has moved it himself.
+/// <para>
+/// <b>It is a memory, not a mode.</b> The place, the size and the angle are the truth about where
+/// the layer lies; this only says how it got there, so that the menu can tick what was last used
+/// (Handlauf M4, 07.09.2026). It goes with the scene rather than beside it because M5b loads a
+/// saved scene onto a screen of another shape, and "it was filling the screen" is the one thing
+/// that says what to do then.
+/// </para>
+/// <para>
+/// <b>Cleared only by a change, never by the mode.</b> Switching the hand mode on and looking is
+/// not an arrangement; the tick moves to "customize" when the layer has actually been moved,
+/// turned or zoomed. Otherwise the DM would lose the answer to "what did I set this to" by merely
+/// opening the menu.
+/// </para>
+/// </param>
 public sealed record BackgroundItem(
     AssetId AssetId,
     AssetMeta Meta,
@@ -158,7 +175,8 @@ public sealed record BackgroundItem(
     double CenterY,
     double Scale,
     double RotationDeg,
-    bool AnimationPaused);
+    bool AnimationPaused,
+    BackgroundFit? Fit = null);
 
 /// <summary>
 /// The whole of one screen. The hub keeps one of these per <see cref="ScreenRef"/> - per screen,

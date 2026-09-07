@@ -91,20 +91,24 @@ internal sealed class TileMenus(
         // unrelated things when they are one question with three answers: by hand, or one of the
         // two obvious positions. Ordered as the DM asked for them (Handlauf M4, dritter Lauf).
         //
-        // "By hand" rather than "free": what it turns on is a MODE in which the hand works the
-        // layer directly, and the two beside it are what the machine does instead.
-        var adjusting0 = new MenuItem
+        // <b>The tick says what the layer was last put into</b>, not which mode is switched on -
+        // that is what the golden frame on the tile is for. Three entries, one arrangement, so the
+        // menu answers "what did I set this to" at a glance (07.09.2026).
+        //
+        // "Customize" rather than "by hand": it stands beside two names for what the machine does,
+        // and the DM asked for the more technical word.
+        var custom = new MenuItem
         {
-            Header = "By hand",
+            Header = "Customize",
             IsCheckable = true,
-            IsChecked = adjusting,
+            IsChecked = scene.Background is { Fit: null },
         };
 
-        adjusting0.Click += (_, _) => Adjusting?.Invoke(this, !adjusting);
+        custom.Click += (_, _) => Adjusting?.Invoke(this, !adjusting);
 
         var background = new MenuItem { Header = "Adjust background", IsEnabled = scene.Background is not null };
 
-        background.Items.Add(adjusting0);
+        background.Items.Add(custom);
         background.Items.Add(Fitted("Fill screen", BackgroundFit.Cover, scene));
         background.Items.Add(Fitted("Fit whole on screen", BackgroundFit.Contain, scene));
 
@@ -228,6 +232,12 @@ internal sealed class TileMenus(
             () => _ = session.SetBackgroundFitAsync(screen, fit, CancellationToken.None));
 
         entry.IsEnabled = scene.Background is not null;
+
+        // Ticked while the layer still stands in this arrangement. It stays ticked through the
+        // hand mode being switched on and off - only an actual movement takes it away
+        // (BackgroundItem.Fit).
+        entry.IsCheckable = true;
+        entry.IsChecked = scene.Background?.Fit == fit;
 
         return entry;
     }
