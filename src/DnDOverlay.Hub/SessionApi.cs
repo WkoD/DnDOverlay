@@ -911,8 +911,14 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var scene = _scenes.Get(target);
 
             // Bottom of the stack first, so that the depths handed out below rebuild the same
-            // stack on the other side.
-            var order = Sorted(lying, items, item => item.ZOrder);
+            // stack on the other side - and <b>what the eye calls the stack is Parking.Depth</b>,
+            // not the ZOrder field. A parked card's ZOrder is the depth it had on the table before
+            // it was tidied away; nothing draws it any more and nobody remembers it. What it has
+            // instead is a place in the fan, and the fan is what the DM is looking at when he sends
+            // the selection over. Depth answers both in one number, and it is the same number the
+            // table draws by, so a mixed selection arrives the way it looked: the free pictures
+            // below, the cards from the fan above them, because that is where the fan lies.
+            var order = Sorted(lying, items, item => Parking.Depth(lying, item));
 
             var ops = new List<ScreenOp>(copy ? order.Count : order.Count * 2);
             var landed = new List<ItemId>(order.Count);

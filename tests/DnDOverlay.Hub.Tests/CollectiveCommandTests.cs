@@ -385,6 +385,130 @@ public sealed class CollectiveCommandTests
         Assert.Equal(table, await ByDepth(session, Target));
     }
 
+    /// <summary>
+    /// <b>A card in the fan has no stack depth any more, it has a place in the fan</b> - and that is
+    /// what has to travel. Its <c>ZOrder</c> field still holds the depth it had on the table before
+    /// it was tidied away; nothing draws that number and nobody remembers it.
+    /// <para>
+    /// The cards are parked ONE AT A TIME and deliberately not in the order they lay in, so the fan
+    /// says something different from the stale field. Sorting by <c>ZOrder</c> - which is what this
+    /// did until 08.09.2026 - brings them out in an order the DM never saw.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_selection_from_the_fan_travels_in_the_fans_order_and_lands_open()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, Two(), reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(4)], Cancellation);
+
+        // The fan is filled against the grain of the table: 2, 0, 3, 1.
+        foreach (var index in (int[])[2, 0, 3, 1])
+        {
+            await session.ParkItemAsync(Target, added[index], parked: true, Cancellation);
+        }
+
+        IReadOnlyList<ItemId> fan = [added[2], added[0], added[3], added[1]];
+
+        await session.MoveItemsAsync(Target, Other, Scrambled(added), Cancellation);
+
+        // Not [0, 1, 2, 3], which is what the ZOrder field would still say.
+        Assert.Equal(fan, await ByDepth(session, Other));
+
+        // "Open on the screen, not in the target's fan" - sent over is wanted over there.
+        Assert.All(
+            (await session.GetSceneAsync(Other, Cancellation)).Items,
+            item => Assert.False(item.Parked));
+    }
+
+    /// <summary>
+    /// A selection holding both, and the answer comes from the one function that already decides
+    /// what covers what: the fan lies above the whole table, so the cards land above the free
+    /// pictures - the selection arrives looking the way it looked.
+    /// </summary>
+    [Fact]
+    public async Task A_mixed_selection_arrives_the_way_it_looked()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, Two(), reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(4)], Cancellation);
+
+        await session.ParkItemAsync(Target, added[1], parked: true, Cancellation);
+        await session.ParkItemAsync(Target, added[3], parked: true, Cancellation);
+
+        await session.MoveItemsAsync(Target, Other, Scrambled(added), Cancellation);
+
+        // The two that lay free, in their stack order - then the two from the fan, in the fan's.
+        Assert.Equal([added[0], added[2], added[1], added[3]], await ByDepth(session, Other));
+    }
+
+    /// <summary>
+    /// <b>Into the fan by the depth on the table</b>, and the test makes the two candidate keys
+    /// disagree - which the round trip above cannot do on its own.
+    /// <para>
+    /// One picture is raised to the front first, so the stack order stops being the order the scene
+    /// holds the items in. Sorting by <c>ParkedAt</c> instead would tie on every item, because
+    /// nothing is parked yet, and fall back to exactly that scene order: green, and wrong.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_selection_goes_into_the_fan_by_the_stack_and_not_by_the_scenes_order()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(4)], Cancellation);
+
+        var lowest = (await session.GetSceneAsync(Target, Cancellation))
+            .Items.Single(item => item.ItemId == added[0]);
+
+        await session.TransformItemAsync(
+            Target,
+            new ItemTransform(lowest.ItemId, lowest.CenterX, lowest.CenterY, lowest.Scale, lowest.RotationDeg),
+            fromTable: false,
+            toFront: true,
+            Cancellation);
+
+        IReadOnlyList<ItemId> stack = [added[1], added[2], added[3], added[0]];
+
+        Assert.Equal(stack, await ByDepth(session, Target));
+
+        await session.ParkItemsAsync(Target, Scrambled(added), parked: true, Cancellation);
+
+        IReadOnlyList<ItemId> fan =
+        [
+            .. (await session.GetSceneAsync(Target, Cancellation))
+                .Items.OrderBy(item => item.ParkedAt).Select(item => item.ItemId),
+        ];
+
+        Assert.Equal(stack, fan);
+    }
+
+    /// <summary>
+    /// <b>Out of the fan by the fan's order</b>, and here too the keys are made to disagree: the
+    /// cards go in one at a time and against the grain of the table, so the stale <c>ZOrder</c>
+    /// field says something else than the fan does.
+    /// </summary>
+    [Fact]
+    public async Task A_selection_comes_out_of_the_fan_by_the_fan_and_not_by_the_stale_field()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(4)], Cancellation);
+
+        foreach (var index in (int[])[2, 0, 3, 1])
+        {
+            await session.ParkItemAsync(Target, added[index], parked: true, Cancellation);
+        }
+
+        await session.ParkItemsAsync(Target, Scrambled(added), parked: false, Cancellation);
+
+        Assert.Equal([added[2], added[0], added[3], added[1]], await ByDepth(session, Target));
+    }
+
     /// <summary>Turning a whole selection towards the DM is one command and therefore one patch.</summary>
     [Fact]
     public async Task Turning_a_selection_is_one_patch()
