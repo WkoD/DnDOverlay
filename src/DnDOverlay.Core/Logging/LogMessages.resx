@@ -264,6 +264,12 @@
   <data name="E3034_ItemCopied" xml:space="preserve">
     <value>An image was copied onto {ScreenName}.</value>
   </data>
+  <data name="E3036_ItemsMoved" xml:space="preserve">
+    <value>A selection of {Count} moved from {FromScreen} to {ToScreen}.</value>
+  </data>
+  <data name="E3037_ItemsCopied" xml:space="preserve">
+    <value>A selection of {Count} copied onto {ScreenName}.</value>
+  </data>
   <data name="E3031_TouchReporting" xml:space="preserve">
     <value>Touch points from this table are {Reporting}.</value>
   </data>

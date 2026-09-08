@@ -422,6 +422,30 @@ internal static partial class HubLog
     internal static partial void ItemCopied(ILogger logger, string screenName);
 
     /// <summary>
+    /// A whole selection sent to another screen from the thumbnail's menu, in one command and one
+    /// patch.
+    /// <para>
+    /// Separate from 3033 rather than a count added to it, because the two answer different
+    /// questions of an evening. 3033 is "where did that picture go?" and is written by a hand
+    /// dragging one across; this one is "what did I just do to the table?" - and the number is the
+    /// whole of the answer, because a selection of seven hundred and a selection of two look the
+    /// same in every other line.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3036,
+        Level = LogLevel.Information,
+        Message = "A selection of {Count} moved from {FromScreen} to {ToScreen}.")]
+    internal static partial void ItemsMoved(ILogger logger, int count, string fromScreen, string toScreen);
+
+    /// <summary>The same for copying, and it is the count that makes the line worth writing.</summary>
+    [LoggerMessage(
+        EventId = 3037,
+        Level = LogLevel.Information,
+        Message = "A selection of {Count} copied onto {ScreenName}.")]
+    internal static partial void ItemsCopied(ILogger logger, int count, string screenName);
+
+    /// <summary>
     /// A hand at the table took hold of a locked picture. The display refuses the gesture itself
     /// and gives the finger the same short answer it gives on a disabled screen, so this line is
     /// not the player's feedback - it is the DM's, for the evening when somebody says "that one is

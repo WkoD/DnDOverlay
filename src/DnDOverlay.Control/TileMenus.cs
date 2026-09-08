@@ -146,7 +146,7 @@ internal sealed class TileMenus(
 
         var menu = new ContextMenu();
 
-        menu.Items.Add(Entry("Turn to me", () => Each(many, item => ToMe(item, context, where))));
+        menu.Items.Add(Entry("Turn to me", () => _ = ToMe(many, context, where)));
 
         // "Park" only, and only for what is lying out. Taking hold of a card in the thumbnail is
         // the way back out of the fan, exactly as at the table - and the entry that did it from
@@ -205,10 +205,10 @@ internal sealed class TileMenus(
 
         menu.Items.Add(choosing);
 
-        menu.Items.Add(Onto("Copy to", (target, item) =>
-            session.CopyItemAsync(screen, target, item.ItemId, position: null, CancellationToken.None), many));
-        menu.Items.Add(Onto("Move to", (target, item) =>
-            session.MoveItemAsync(screen, target, item.ItemId, position: null, CancellationToken.None), many));
+        menu.Items.Add(Onto("Copy to", target =>
+            session.CopyItemsAsync(screen, target, Ids(many), CancellationToken.None)));
+        menu.Items.Add(Onto("Move to", target =>
+            session.MoveItemsAsync(screen, target, Ids(many), CancellationToken.None)));
 
         // Set apart, and expressly NOT beside "move to": in the menu they are neighbours, in effect
         // they are opposites, and a slip there clears a picture off the table (Part 7).
@@ -277,7 +277,7 @@ internal sealed class TileMenus(
     /// A target list over the screens, this one included: copying onto the same screen is what
     /// puts a second guard on the table, and moving onto it does nothing on purpose (Part 4).
     /// </summary>
-    private MenuItem Onto(string header, Func<ScreenRef, SceneItem, Task> what, IReadOnlyList<SceneItem> many)
+    private MenuItem Onto(string header, Func<ScreenRef, Task> what)
     {
         var entry = new MenuItem { Header = header };
 
@@ -286,7 +286,7 @@ internal sealed class TileMenus(
             var target = view.Screen;
             var choice = new MenuItem { Header = view.Info.Label };
 
-            choice.Click += (_, _) => Each(many, item => what(target, item));
+            choice.Click += (_, _) => _ = what(target);
 
             entry.Items.Add(choice);
         }
@@ -298,47 +298,32 @@ internal sealed class TileMenus(
 
     /// <summary>
     /// The same thing the double tap does, and the same arithmetic: the edge nearest the place the
-    /// menu was opened on (Part 6).
+    /// menu was opened on (Part 6). The whole selection turns at once and in one patch - one
+    /// command of the DM, one step back out of it.
     /// </summary>
-    private Task ToMe(SceneItem item, ScreenContext context, CorePoint where)
+    private Task ToMe(IReadOnlyList<SceneItem> many, ScreenContext context, CorePoint where) =>
+        session.TransformItemsAsync(
+            screen,
+            [.. many.Select(item => Turned(item, context, where))],
+
+            // Turning is not taking hold of: the pictures stay at the depths they had, so this run
+            // hands out none and has no order to get wrong.
+            toFront: false,
+            CancellationToken.None);
+
+    /// <summary>Where one picture ends up when it is turned towards the place the menu was opened on.</summary>
+    private static ItemTransform Turned(SceneItem item, ScreenContext context, CorePoint where)
     {
         var turned = CoreManipulation.HoldAtEdge(
             item with { RotationDeg = CoreManipulation.TurnToMe(where, context) },
             context);
 
-        return session.TransformItemAsync(
-            screen,
-            new ItemTransform(item.ItemId, turned.CenterX, turned.CenterY, turned.Scale, turned.RotationDeg),
-            fromTable: false,
-            toFront: false,
-            CancellationToken.None);
+        return new ItemTransform(item.ItemId, turned.CenterX, turned.CenterY, turned.Scale, turned.RotationDeg);
     }
 
     /// <summary>The ids the menu acts on, in the order the selection holds them.</summary>
     private static IReadOnlyList<ItemId> Ids(IReadOnlyList<SceneItem> many) =>
         [.. many.Select(item => item.ItemId)];
-
-    /// <summary>
-    /// Runs one command over everything the menu acts on, <b>one command per item</b>. <b>The label
-    /// was decided from the picture that was hit</b>, so the whole selection follows that one - four
-    /// mercenaries of which one is unlocked all end up locked, which is what "lock" on that menu
-    /// said.
-    /// <para>
-    /// <b>Only two entries still come through here, and both are owed a collective form</b>: "turn
-    /// to me", whose transform is clamped and held at the edge per item in the hub, and the move and
-    /// copy entries, whose patch spans TWO screens and therefore does not fit the per-screen shape
-    /// the other five use. Everything else now travels as one patch (<c>ISessionApi</c>), which is
-    /// what a selection of seven hundred needs: as one command per item it fills a subscriber's
-    /// queue and cuts its stream (07.09.2026).
-    /// </para>
-    /// </summary>
-    private static void Each(IReadOnlyList<SceneItem> many, Func<SceneItem, Task> what)
-    {
-        foreach (var item in many)
-        {
-            _ = what(item);
-        }
-    }
 
     private static MenuItem Entry(string header, Action what)
     {

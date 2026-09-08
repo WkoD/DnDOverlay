@@ -16,6 +16,24 @@ namespace DnDOverlay.Hub;
 /// M1a implements the two members the running thread needs. The rest of the surface from Part 4
 /// arrives with the milestones that serve it.
 /// </para>
+/// <para>
+/// <b>Three shapes, and which one to reach for is decided here rather than by taste.</b> A command
+/// that means the whole screen has a form that says so - <see cref="ToggleItemsAsync"/>,
+/// <see cref="UnlockAllAsync"/>, <see cref="RefitAsync"/>, and the null item of
+/// <see cref="SetShowNameAsync"/> - and that form wins whenever the selection IS the whole screen,
+/// because it is one operation where the collective form would be seven hundred. A command over a
+/// selection takes the collective form. The single form is for a command that genuinely concerns
+/// one picture: a hand at the table, a drag in the thumbnail, a drop aimed at a point.
+/// </para>
+/// <para>
+/// <b>What must never happen is the fourth shape: a single form in a loop.</b> That is what the
+/// menu of the thumbnail did until 07.09.2026, and it cost an evening - seven hundred commands,
+/// unawaited, filled a subscriber queue that holds 256, the hub ended that stream as it must, and
+/// the control went deaf while the table beside it carried on perfectly. A loop also throws the
+/// order away, which is the quieter half of the damage and bites at twenty pictures, long before
+/// any queue is full. The rule it broke is older than the bug and reads in one line at
+/// <c>ScenePatch</c>: what one command of the DM produces is one patch.
+/// </para>
 /// </summary>
 public interface ISessionApi
 {
@@ -50,6 +68,15 @@ public interface ISessionApi
     /// <para>
     /// <b>Parking derives per item and therefore folds:</b> each card takes its depth and its place
     /// in the fan's order from the scene as it stands after the card before it.
+    /// </para>
+    /// <para>
+    /// <b>The order is the command's business, not the caller's.</b> A selection arrives in the
+    /// order it was picked - <c>Selection</c> is oldest-choice-first on purpose, because the focus
+    /// of M5b reads exactly that - and for some of these commands that is the wrong order. Taking a
+    /// whole selection back out of the fan hands out fresh depths as it goes, so the run's order
+    /// becomes the stacking order on the table; it is therefore sorted by the fan's own order and
+    /// not by the order the cards were tapped. Where the key has to be read off the scene, only the
+    /// hub can read it, so no caller is asked to.
     /// </para>
     /// </summary>
     Task RemoveItemsAsync(
@@ -244,6 +271,43 @@ public interface ISessionApi
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// A whole selection sent to another screen, in <b>one</b> patch over two screens and one step
+    /// in the timeline.
+    /// <para>
+    /// <b>The stack is rebuilt, not scrambled.</b> Five pictures that lay one on top of the other
+    /// lie the same way over there, because the hub sorts the selection by the depth it has on the
+    /// SOURCE before it hands out new depths on the target. Neither of the orders a caller could
+    /// offer is that one: the selection carries the order it was picked in, and the menu passes
+    /// whatever order the scene happens to hold.
+    /// </para>
+    /// <para>
+    /// <b>They arrive as a closed block on top</b>, with new depths. Carrying the source's numbers
+    /// across would interleave them with what already lies on the target - in the bad case under
+    /// it, and a picture somebody deliberately sent over is the last one that should land out of
+    /// sight.
+    /// </para>
+    /// <para>
+    /// Everything the single forms decide is decided the same way here: a parked picture is
+    /// unparked and placed like a new one, a copy steps beside its template, a moved picture keeps
+    /// where it lay. Moving onto the source screen does nothing, copying onto it is the ordinary
+    /// way to put a second guard on the table.
+    /// </para>
+    /// </summary>
+    Task MoveItemsAsync(
+        ScreenRef source,
+        ScreenRef target,
+        IReadOnlyList<ItemId> items,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="MoveItemsAsync"/>
+    /// <returns>The ids of the copies, in the order they were laid down.</returns>
+    Task<IReadOnlyList<ItemId>> CopyItemsAsync(
+        ScreenRef source,
+        ScreenRef target,
+        IReadOnlyList<ItemId> items,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Moves an item to where it now lies. Everything the sender may not decide happens here: the
     /// position is held at the edge, the scale between its bounds, and the revision and the
     /// <c>ZOrder</c> are handed out (Part 4).
@@ -268,6 +332,27 @@ public interface ISessionApi
         ScreenRef screen,
         ItemTransform transform,
         bool fromTable,
+        bool toFront,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// One transform over a whole selection - "turn to me" on four pictures at once - as one patch.
+    /// <para>
+    /// <b>There is no <c>fromTable</c> here, and that is the point of the separation.</b> A hand at
+    /// the table holds ONE picture; a selection is something only the DM has. The lock question
+    /// that <paramref name="fromTable"/> asks in the single form therefore cannot arise, and the
+    /// single form stays what it is: the shape a gesture uses, per item and per frame, where
+    /// bundling would only add delay.
+    /// </para>
+    /// <para>
+    /// Each picture is clamped against the screen on its own. Order matters only under
+    /// <paramref name="toFront"/>, and then it is the order the caller passed - unlike a
+    /// relocation, where the order that counts is the one on the screen.
+    /// </para>
+    /// </summary>
+    Task TransformItemsAsync(
+        ScreenRef screen,
+        IReadOnlyList<ItemTransform> transforms,
         bool toFront,
         CancellationToken cancellationToken = default);
 

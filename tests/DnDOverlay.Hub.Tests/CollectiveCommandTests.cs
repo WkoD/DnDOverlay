@@ -20,7 +20,9 @@ public sealed class CollectiveCommandTests
 {
     private static readonly DeviceId Device = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"));
     private static readonly ScreenId Screen = new(@"\\?\DISPLAY#COLLECTIVE#1");
+    private static readonly ScreenId Second = new(@"\\?\DISPLAY#COLLECTIVE#2");
     private static readonly ScreenRef Target = new(Device, Screen);
+    private static readonly ScreenRef Other = new(Device, Second);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -200,6 +202,191 @@ public sealed class CollectiveCommandTests
         }
     }
 
+    /// <summary>
+    /// <b>The test this whole thread is about.</b> A selection carries the order it was PICKED in,
+    /// which is not the order the DM sees on the table - so the selection is handed over here in
+    /// exactly the wrong order, and the stack still has to come out right on the other side.
+    /// <para>
+    /// It fails in two different ways without the sort, and both matter. Landing hands out rising
+    /// depths as the run proceeds, so a scrambled run rebuilds a scrambled stack; and before the
+    /// collective form existed at all, the menu fired one unawaited command per picture, which put
+    /// the order at the mercy of whichever call reached the gate first.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_moved_selection_lies_on_the_target_in_the_order_it_had_on_the_source()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, Two(), reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(5)], Cancellation);
+        var stacked = await ByDepth(session, Target);
+
+        Assert.Equal(added, stacked);
+
+        await session.MoveItemsAsync(Target, Other, Scrambled(stacked), Cancellation);
+
+        Assert.Empty((await session.GetSceneAsync(Target, Cancellation)).Items);
+
+        // A move keeps the ItemId, so the stack can be compared picture by picture.
+        Assert.Equal(stacked, await ByDepth(session, Other));
+    }
+
+    /// <summary>The same for copying, where the ids are new and the assets carry the comparison.</summary>
+    [Fact]
+    public async Task A_copied_selection_lies_on_the_target_in_the_order_it_had_on_the_source()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, Two(), reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(5)], Cancellation);
+        var assets = await AssetsByDepth(session, Target);
+
+        var copies = await session.CopyItemsAsync(Target, Other, Scrambled(added), Cancellation);
+
+        Assert.Equal(5, copies.Count);
+
+        // The templates stay exactly as they were.
+        Assert.Equal(assets, await AssetsByDepth(session, Target));
+        Assert.Equal(assets, await AssetsByDepth(session, Other));
+    }
+
+    /// <summary>
+    /// One patch over TWO screens, which is the shape the single form already had and the reason
+    /// this could not simply reuse the per-screen collective machinery.
+    /// </summary>
+    [Fact]
+    public async Task Moving_a_selection_is_one_patch_that_names_both_screens()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, Two(), reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(4)], Cancellation);
+
+        var stream = session.Subscribe(Cancellation).GetAsyncEnumerator(Cancellation);
+
+        await using (stream.ConfigureAwait(false))
+        {
+            Assert.True(await stream.MoveNextAsync());
+
+            await session.MoveItemsAsync(Target, Other, added, Cancellation);
+
+            Assert.True(await stream.MoveNextAsync());
+
+            var patched = Assert.IsType<SessionEvent.ScenePatched>(stream.Current);
+
+            // Four pictures, four departures and four arrivals, one patch.
+            Assert.Equal(8, patched.Patch.Ops.Count);
+            Assert.Equal(4, patched.Patch.Ops.Count(op => op.Screen == Target && op.Op is RemoveItem));
+            Assert.Equal(4, patched.Patch.Ops.Count(op => op.Screen == Other && op.Op is AddItem));
+        }
+    }
+
+    /// <summary>
+    /// Moving onto the screen it already lies on does nothing, exactly as the single form has it -
+    /// and it must not become a departure followed by an arrival, which would hand out new depths
+    /// and fire the arrival highlight for pictures that went nowhere (Part 4).
+    /// </summary>
+    [Fact]
+    public async Task Moving_a_selection_onto_its_own_screen_does_nothing()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, Two(), reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(3)], Cancellation);
+        var stacked = await ByDepth(session, Target);
+
+        var stream = session.Subscribe(Cancellation).GetAsyncEnumerator(Cancellation);
+
+        await using (stream.ConfigureAwait(false))
+        {
+            Assert.True(await stream.MoveNextAsync());
+
+            await session.MoveItemsAsync(Target, Target, added, Cancellation);
+
+            // Something else afterwards, so the test cannot pass by reading nothing at all.
+            await session.ToggleItemsAsync(Target, visible: false, Cancellation);
+
+            Assert.True(await stream.MoveNextAsync());
+
+            var patched = Assert.IsType<SessionEvent.ScenePatched>(stream.Current);
+
+            _ = Assert.IsType<ToggleItems>(Assert.Single(patched.Patch.Ops).Op);
+        }
+
+        Assert.Equal(stacked, await ByDepth(session, Target));
+    }
+
+    /// <summary>
+    /// <b>The same question of order one level in.</b> Coming back out of the fan hands out fresh
+    /// depths, so the run's order becomes the stacking order on the table - and the order that
+    /// belongs there is the fan's own, which the players could see, not the order the DM happened
+    /// to tap the cards in.
+    /// </summary>
+    [Fact]
+    public async Task A_selection_taken_out_of_the_fan_lands_in_the_fans_order_not_the_taps()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(5)], Cancellation);
+
+        await session.ParkItemsAsync(Target, added, parked: true, Cancellation);
+
+        IReadOnlyList<ItemId> fan =
+        [
+            .. (await session.GetSceneAsync(Target, Cancellation))
+                .Items.OrderBy(item => item.ParkedAt).Select(item => item.ItemId),
+        ];
+
+        Assert.Equal(added, fan);
+
+        await session.ParkItemsAsync(Target, Scrambled(fan), parked: false, Cancellation);
+
+        Assert.Equal(fan, await ByDepth(session, Target));
+    }
+
+    /// <summary>Turning a whole selection towards the DM is one command and therefore one patch.</summary>
+    [Fact]
+    public async Task Turning_a_selection_is_one_patch()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        var added = await session.AddItemsAsync(Target, [.. Many(6)], Cancellation);
+        var before = (await session.GetSceneAsync(Target, Cancellation)).Items;
+
+        var stream = session.Subscribe(Cancellation).GetAsyncEnumerator(Cancellation);
+
+        await using (stream.ConfigureAwait(false))
+        {
+            Assert.True(await stream.MoveNextAsync());
+
+            await session.TransformItemsAsync(
+                Target,
+                [
+                    .. before.Select(item => new ItemTransform(
+                        item.ItemId, item.CenterX, item.CenterY, item.Scale, RotationDeg: 180)),
+                ],
+                toFront: false,
+                Cancellation);
+
+            Assert.True(await stream.MoveNextAsync());
+
+            var patched = Assert.IsType<SessionEvent.ScenePatched>(stream.Current);
+
+            Assert.Equal(6, patched.Patch.Ops.Count);
+            Assert.All(patched.Patch.Ops, op => Assert.IsType<TransformItem>(op.Op));
+        }
+
+        var after = (await session.GetSceneAsync(Target, Cancellation)).Items;
+
+        Assert.All(after, item => Assert.Equal(180, item.RotationDeg));
+
+        // Turning is not taking hold of: nothing changed places in the stack.
+        Assert.Equal(added, await ByDepth(session, Target));
+    }
+
     private static IEnumerable<AssetRef> Many(int count) =>
         Enumerable.Range(0, count).Select(index => new AssetRef(
             new AssetId(index.ToString("x4", CultureInfo.InvariantCulture).PadLeft(64, 'd')),
@@ -225,6 +412,33 @@ public sealed class CollectiveCommandTests
             NullLogger<SessionApi>.Instance);
     }
 
-    private static ScreenInfo Info() =>
-        new(Screen, "TISCH-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true);
+    private static ScreenInfo Info() => Info(Screen, "TISCH-PC//DISPLAY1", primary: true);
+
+    private static ScreenInfo Info(ScreenId screen, string label, bool primary) =>
+        new(screen, label, null, new PixelSize(1920, 1080), 96, primary);
+
+    /// <summary>Both screens of a relocation.</summary>
+    private static ScreenInfo[] Two() =>
+        [Info(), Info(Second, "TISCH-PC//DISPLAY2", primary: false)];
+
+    /// <summary>The ids of one screen's pictures, bottom of the stack first.</summary>
+    private static async Task<IReadOnlyList<ItemId>> ByDepth(SessionApi session, ScreenRef screen) =>
+        [
+            .. (await session.GetSceneAsync(screen, Cancellation))
+                .Items.OrderBy(item => item.ZOrder).Select(item => item.ItemId),
+        ];
+
+    /// <summary>The assets of one screen's pictures, bottom first - what a copy carries over.</summary>
+    private static async Task<IReadOnlyList<AssetId>> AssetsByDepth(SessionApi session, ScreenRef screen) =>
+        [
+            .. (await session.GetSceneAsync(screen, Cancellation))
+                .Items.OfType<ImageItem>().OrderBy(item => item.ZOrder).Select(item => item.AssetId),
+        ];
+
+    /// <summary>
+    /// The same ids in an order that is deliberately NOT the stacking order - which is what a
+    /// selection hands over, since it carries the order the DM picked in and the menu whatever
+    /// order the scene happens to hold.
+    /// </summary>
+    private static IReadOnlyList<ItemId> Scrambled(IReadOnlyList<ItemId> ids) => [.. ids.Reverse()];
 }

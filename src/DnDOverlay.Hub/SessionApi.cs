@@ -351,27 +351,48 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// <inheritdoc />
     public Task RemoveItemsAsync(
         ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default) =>
-        ManyAsync(screen, items, (_, current) => new RemoveItem(current.ItemId), cancellationToken);
+        ManyAsync(
+            screen, items, (_, current) => new RemoveItem(current.ItemId), inOrder: null, cancellationToken);
 
     /// <inheritdoc />
     public Task ParkItemsAsync(
         ScreenRef screen, IReadOnlyList<ItemId> items, bool parked, CancellationToken cancellationToken = default) =>
-        ManyAsync(screen, items, (scene, current) => Parked(scene, current, parked), cancellationToken);
+        ManyAsync(
+            screen,
+            items,
+            (scene, current) => Parked(scene, current, parked),
+
+            // <b>Out of the fan in the fan's own order, not in the order the cards were picked.</b>
+            // Unparking hands out fresh depths as it goes, so whatever order this run has IS the
+            // order the cards end up lying in on the table. A selection arrives here in whatever
+            // order the DM tapped or the frame caught (Selection is oldest-choice-first by design,
+            // because the focus of M5b reads exactly that) - and none of those is the order the
+            // player saw in the fan. Going IN needs no key: the fan is drawn above the table and
+            // ParkedAt is handed out as the run proceeds.
+            parked ? null : item => item.ParkedAt,
+            cancellationToken);
 
     /// <inheritdoc />
     public Task SetItemsLockedAsync(
         ScreenRef screen, IReadOnlyList<ItemId> items, bool locked, CancellationToken cancellationToken = default) =>
-        ManyAsync(screen, items, (_, current) => new SetLocked(current.ItemId, locked), cancellationToken);
+        ManyAsync(
+            screen, items, (_, current) => new SetLocked(current.ItemId, locked), inOrder: null, cancellationToken);
 
     /// <inheritdoc />
     public Task SetItemsShowNameAsync(
         ScreenRef screen, IReadOnlyList<ItemId> items, bool show, CancellationToken cancellationToken = default) =>
-        ManyAsync(screen, items, (_, current) => new SetShowName(current.ItemId, show), cancellationToken);
+        ManyAsync(
+            screen, items, (_, current) => new SetShowName(current.ItemId, show), inOrder: null, cancellationToken);
 
     /// <inheritdoc />
     public Task SetItemsAnimationPausedAsync(
         ScreenRef screen, IReadOnlyList<ItemId> items, bool paused, CancellationToken cancellationToken = default) =>
-        ManyAsync(screen, items, (_, current) => new SetAnimationPaused(current.ItemId, paused), cancellationToken);
+        ManyAsync(
+            screen,
+            items,
+            (_, current) => new SetAnimationPaused(current.ItemId, paused),
+            inOrder: null,
+            cancellationToken);
 
     /// <summary>
     /// One command over a selection: the operations are worked out item by item against the scene
@@ -392,11 +413,19 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// have moved on by the time they are applied. Keeping the gate across both would be a second
     /// locking discipline in one class, which is worse than the window it closes.
     /// </para>
+    /// <para>
+    /// <b><paramref name="inOrder"/> is how a command says which order it means</b>, and it is
+    /// asked HERE rather than of the caller because the key is read off the scene, which only the
+    /// hub has. A selection arrives in the order it was picked; for some commands that is the right
+    /// one and for others it is not. Sorting in the hub means no caller can get it wrong, where
+    /// sorting at the call site means every caller can.
+    /// </para>
     /// </summary>
     private async Task ManyAsync(
         ScreenRef screen,
         IReadOnlyList<ItemId> items,
         Func<SceneState, SceneItem, PatchOp> op,
+        Func<SceneItem, long>? inOrder,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -415,7 +444,10 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var context = _screens.ContextFor(screen);
             var scene = _scenes.Get(screen);
 
-            foreach (var id in items)
+            // Read off the scene the run STARTS from, before anything has been folded into it.
+            var order = inOrder is null ? items : Sorted(scene, items, inOrder);
+
+            foreach (var id in order)
             {
                 if (scene.Items.FirstOrDefault(candidate => candidate.ItemId == id) is not { } current)
                 {
@@ -436,6 +468,25 @@ public sealed class SessionApi : ISessionApi, IDisposable
         await ApplyAsync(screen, ops, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// A selection put into the order one command means, by a key read off the scene it is standing
+    /// in. What is no longer there falls out; the caller's loop skips it in any case.
+    /// </summary>
+    private static IReadOnlyList<ItemId> Sorted(
+        SceneState scene, IReadOnlyList<ItemId> items, Func<SceneItem, long> key)
+    {
+        var picked = items.ToHashSet();
+
+        // Walked over the SCENE and not over the selection, so that OrderBy - which is stable - has
+        // a defined starting order even where the key ties.
+        return
+        [
+            .. scene.Items
+                .Where(item => picked.Contains(item.ItemId))
+                .OrderBy(key)
+                .Select(item => item.ItemId),
+        ];
+    }
 
     /// <inheritdoc />
     public Task SetBackgroundAsync(
@@ -795,6 +846,171 @@ public sealed class SessionApi : ISessionApi, IDisposable
         }
     }
 
+    /// <inheritdoc />
+    public Task MoveItemsAsync(
+        ScreenRef source,
+        ScreenRef target,
+        IReadOnlyList<ItemId> items,
+        CancellationToken cancellationToken = default) =>
+        RelocateAsync(source, target, items, copy: false, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ItemId>> CopyItemsAsync(
+        ScreenRef source,
+        ScreenRef target,
+        IReadOnlyList<ItemId> items,
+        CancellationToken cancellationToken = default) =>
+        RelocateAsync(source, target, items, copy: true, cancellationToken);
+
+    /// <summary>
+    /// A whole selection sent to another screen, as one patch and in the order the DM can see.
+    /// <para>
+    /// <b>The order is the stack's, and it has to be read here.</b> A selection carries the order
+    /// it was PICKED in - <c>Selection</c> is oldest-choice-first on purpose, because the focus of
+    /// M5b reads exactly that - and the menu hands over whatever order the scene happens to hold.
+    /// Neither is the order the DM sees on the table. Landing hands out rising depths as the run
+    /// proceeds, so whatever order this loop has becomes the stacking order on the target: five
+    /// pictures that lay one on top of the other have to be walked bottom-up, or they arrive
+    /// shuffled. That is what <see cref="Sorted"/> is for.
+    /// </para>
+    /// <para>
+    /// <b>New depths, not the old ones.</b> The target keeps its own number space, so carrying the
+    /// source's depths across would interleave the arrivals with what is already lying there - in
+    /// the bad case underneath it, which for a picture somebody deliberately sent over is the one
+    /// outcome nobody wants. They arrive as a closed block on top, in their own order.
+    /// </para>
+    /// <para>
+    /// Both scenes are folded, and for the same reason a run of arrivals is: <c>Arriving</c> reads
+    /// the target's <c>TopZOrder</c> and <c>Placement</c> counts what already lies there. Copying
+    /// onto the source screen is allowed and moving onto it is not - the same asymmetry the single
+    /// forms have (Part 4) - so the source is folded only when something actually leaves it.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<ItemId>> RelocateAsync(
+        ScreenRef source,
+        ScreenRef target,
+        IReadOnlyList<ItemId> items,
+        bool copy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        if (items.Count == 0 || (!copy && source == target))
+        {
+            return [];
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var leaving = _screens.ContextFor(source);
+            var context = _screens.ContextFor(target);
+            var lying = _scenes.Get(source);
+            var scene = _scenes.Get(target);
+
+            // Bottom of the stack first, so that the depths handed out below rebuild the same
+            // stack on the other side.
+            var order = Sorted(lying, items, item => item.ZOrder);
+
+            var ops = new List<ScreenOp>(copy ? order.Count : order.Count * 2);
+            var landed = new List<ItemId>(order.Count);
+
+            foreach (var id in order)
+            {
+                // Read from the SOURCE as it started: a copy onto the screen it came from must not
+                // find its own copies and go on copying those.
+                if (lying.Items.FirstOrDefault(candidate => candidate.ItemId == id) is not { } current)
+                {
+                    continue;
+                }
+
+                var revision = _scenes.NextRevision();
+
+                var arriving = Arriving(current, scene, context, position: null, revision) with
+                {
+                    // Sent over is wanted over there, so it never lands in the fan - the same
+                    // correction the single forms carry (hand-run of M4, 25b).
+                    Parked = false,
+                    ParkedAt = 0,
+                };
+
+                if (copy)
+                {
+                    arriving = arriving with { ItemId = new ItemId(Guid.NewGuid()) };
+                }
+
+                // The three cases of the single forms, unchanged: a parked picture has no place of
+                // its own - its coordinates are its slot in the fan - so it is placed like a new
+                // one; a copy steps beside its template; a moved picture keeps where it lay.
+                if (current.Parked)
+                {
+                    var centre = Placement.NextPosition(scene, arriving.Scale, arriving.AspectRatio, context);
+
+                    arriving = arriving with { CenterX = centre.X, CenterY = centre.Y };
+                }
+                else if (copy)
+                {
+                    var centre = Placement.Beside(
+                        arriving.CenterX, arriving.CenterY, arriving.Scale, arriving.AspectRatio, context);
+
+                    arriving = arriving with { CenterX = centre.X, CenterY = centre.Y };
+                }
+
+                if (!copy)
+                {
+                    var removal = new RemoveItem(id);
+
+                    ops.Add(new ScreenOp(source, removal));
+                    lying = SceneReducer.Apply(lying, removal, leaving);
+                }
+
+                var addition = new AddItem(arriving);
+
+                ops.Add(new ScreenOp(target, addition));
+                scene = SceneReducer.Apply(scene, addition, context);
+                landed.Add(arriving.ItemId);
+            }
+
+            if (ops.Count == 0)
+            {
+                // Every one of them had gone in the meantime. A patch with no operations would
+                // still be a step in the timeline.
+                return [];
+            }
+
+            if (!copy)
+            {
+                _scenes.Set(source, lying);
+            }
+
+            _scenes.Set(target, scene);
+
+            // ONE patch over two screens, exactly as the single forms make one over two. Both
+            // halves reach every display, and the arrival highlight reads the ops of ITS screen -
+            // plain AddItems on the target, plain RemoveItems on the source (Arrival).
+            var patch = new ScenePatch(ops);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+
+            if (copy)
+            {
+                HubLog.ItemsCopied(_logger, landed.Count, target.Screen.Value);
+            }
+            else
+            {
+                HubLog.ItemsMoved(_logger, landed.Count, source.Screen.Value, target.Screen.Value);
+            }
+
+            return landed;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>
     /// What an item looks like when it lands on a screen: its own place unless one was aimed at,
     /// its size capped against the target's width, the top of the target's stack, and - if it is
@@ -851,42 +1067,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return;
             }
 
-            // Everything the sender may not decide, in the order the arithmetic needs: the scale
-            // first, because the hull the edge clamp measures depends on it.
-            var scale = Layout.ClampScale(transform.Scale, current.AspectRatio, context);
-
-            var held = Manipulation.HoldAtEdge(
-                current with
-                {
-                    CenterX = transform.CenterX,
-                    CenterY = transform.CenterY,
-                    Scale = scale,
-                    RotationDeg = transform.RotationDeg,
-                },
-                context);
-
-            op = new TransformItem(
-                transform.Item,
-                held.CenterX,
-                held.CenterY,
-                held.Scale,
-                held.RotationDeg,
-
-                // What is taken hold of comes to the front (Part 3). Already on top counts as
-                // done: raising it every twentieth of a second through a gesture would run the
-                // number space up and change nothing anybody can see.
-                //
-                // What is taken hold of comes to the front, LOCKED OR NOT, and that is a
-                // correction from the table (hand-run of M4, 20). M4a had read Part 3's "not raised
-                // for locked items" as a rule and asked the lock here; the DM asked for the
-                // opposite, and the reason is in the same sentence: Part 3 gives its rule the
-                // reason "they cannot be taken hold of", which is true at the TABLE and false in
-                // the thumbnail. A picture the DM has just touched has to be the one he sees.
-                // At the table the question does not arise - a locked item is refused above.
-                ZOrder: toFront
-                    ? Math.Max(current.ZOrder, scene.TopZOrder + 1)
-                    : current.ZOrder,
-                Revision: _scenes.NextRevision());
+            op = Transformed(scene, context, current, transform, toFront);
 
             _scenes.Set(screen, SceneReducer.Apply(scene, op, context));
 
@@ -899,6 +1080,89 @@ public sealed class SessionApi : ISessionApi, IDisposable
         {
             _gate.Release();
         }
+    }
+
+    /// <inheritdoc />
+    public Task TransformItemsAsync(
+        ScreenRef screen,
+        IReadOnlyList<ItemTransform> transforms,
+        bool toFront,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transforms);
+
+        var wanted = new Dictionary<ItemId, ItemTransform>();
+
+        foreach (var transform in transforms)
+        {
+            wanted[transform.Item] = transform;
+        }
+
+        return ManyAsync(
+            screen,
+            [.. wanted.Keys],
+
+            // ContextFor inside the lambda and not hoisted: this runs under the gate, where every
+            // other read of the catalogue in this class happens.
+            (scene, current) => Transformed(
+                scene, _screens.ContextFor(screen), current, wanted[current.ItemId], toFront),
+
+            // <b>No key, and that is the answer rather than an omission.</b> Without toFront no
+            // depth is handed out, so the run has no order to get wrong; with it, the order the
+            // caller passed IS what the command means - unlike a relocation, where the order that
+            // matters is the one the DM sees and only the scene knows it.
+            inOrder: null,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// What one transform comes to once the hub has had its say, worked out against the scene it
+    /// happens in.
+    /// <para>
+    /// Pulled out of <c>TransformItemAsync</c> so a whole selection can be turned in one patch and
+    /// each picture still be clamped against the screen on its own. With <paramref name="toFront"/>
+    /// the depth comes from <c>TopZOrder</c>, so a run has to be folded between one and the next.
+    /// </para>
+    /// </summary>
+    private TransformItem Transformed(
+        SceneState scene, ScreenContext context, SceneItem current, ItemTransform transform, bool toFront)
+    {
+        // Everything the sender may not decide, in the order the arithmetic needs: the scale
+        // first, because the hull the edge clamp measures depends on it.
+        var scale = Layout.ClampScale(transform.Scale, current.AspectRatio, context);
+
+        var held = Manipulation.HoldAtEdge(
+            current with
+            {
+                CenterX = transform.CenterX,
+                CenterY = transform.CenterY,
+                Scale = scale,
+                RotationDeg = transform.RotationDeg,
+            },
+            context);
+
+        return new TransformItem(
+            transform.Item,
+            held.CenterX,
+            held.CenterY,
+            held.Scale,
+            held.RotationDeg,
+
+            // What is taken hold of comes to the front (Part 3). Already on top counts as
+            // done: raising it every twentieth of a second through a gesture would run the
+            // number space up and change nothing anybody can see.
+            //
+            // What is taken hold of comes to the front, LOCKED OR NOT, and that is a
+            // correction from the table (hand-run of M4, 20). M4a had read Part 3's "not raised
+            // for locked items" as a rule and asked the lock here; the DM asked for the
+            // opposite, and the reason is in the same sentence: Part 3 gives its rule the
+            // reason "they cannot be taken hold of", which is true at the TABLE and false in
+            // the thumbnail. A picture the DM has just touched has to be the one he sees.
+            // At the table the question does not arise - a locked item never reaches here.
+            ZOrder: toFront
+                ? Math.Max(current.ZOrder, scene.TopZOrder + 1)
+                : current.ZOrder,
+            Revision: _scenes.NextRevision());
     }
 
     /// <inheritdoc />

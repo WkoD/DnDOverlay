@@ -155,6 +155,20 @@ public sealed record ScreenOp(ScreenRef Screen, PatchOp Op);
 /// separately inserted images are five patches with five revisions and five steps in the undo
 /// timeline (Part 4).
 /// <para>
+/// <b>And the sentence holds in the other direction too, which is the half that had to be learnt.</b>
+/// One command over seven hundred pictures is ONE patch of seven hundred operations - not seven
+/// hundred patches. The undo timeline is why this is a rule and not an optimisation: it stores
+/// pairs of patches, so "one command, one patch" is the whole of what makes an intake of seven
+/// hundred a single step back. Split the command up and that information is gone before the
+/// timeline ever sees it, and no amount of care further down can put it back.
+/// </para>
+/// <para>
+/// The two halves are one rule and cannot be served by a machine that guesses. A hub that bundled
+/// whatever fell within some window could not tell seven hundred from one menu click apart from
+/// five quick ones, and would break the first half to serve the second. Only the caller knows what
+/// the DM meant, which is why the collective forms are named ones (<c>ISessionApi</c>).
+/// </para>
+/// <para>
 /// The patch is part of the MODEL, not just of the protocol: the reducer takes a
 /// <see cref="PatchOp"/>, and the undo timeline stores pairs of these (Part 3).
 /// </para>
