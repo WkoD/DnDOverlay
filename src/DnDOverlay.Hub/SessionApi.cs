@@ -362,14 +362,15 @@ public sealed class SessionApi : ISessionApi, IDisposable
             items,
             (scene, current) => Parked(scene, current, parked),
 
-            // <b>Out of the fan in the fan's own order, not in the order the cards were picked.</b>
-            // Unparking hands out fresh depths as it goes, so whatever order this run has IS the
-            // order the cards end up lying in on the table. A selection arrives here in whatever
-            // order the DM tapped or the frame caught (Selection is oldest-choice-first by design,
-            // because the focus of M5b reads exactly that) - and none of those is the order the
-            // player saw in the fan. Going IN needs no key: the fan is drawn above the table and
-            // ParkedAt is handed out as the run proceeds.
-            parked ? null : item => item.ParkedAt,
+            // <b>Both ways round, and the pair of keys is what makes the round trip an identity.</b>
+            // Each direction hands out a fresh order as the run proceeds - ParkedAt going in, the
+            // depth coming out - so whatever order the run has becomes the order that is seen.
+            // A selection arrives here in whatever order the DM tapped or the frame caught
+            // (Selection is oldest-choice-first by design, because the focus of M5b reads exactly
+            // that), and that is neither of them. Going in, the fan takes over the stack as it lay
+            // on the table; coming out, the table takes back the order the players saw in the fan.
+            // Park a selection and unpark it again and it lies exactly as it did.
+            parked ? item => item.ZOrder : item => item.ParkedAt,
             cancellationToken);
 
     /// <inheritdoc />

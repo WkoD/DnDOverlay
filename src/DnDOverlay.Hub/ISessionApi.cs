@@ -72,11 +72,12 @@ public interface ISessionApi
     /// <para>
     /// <b>The order is the command's business, not the caller's.</b> A selection arrives in the
     /// order it was picked - <c>Selection</c> is oldest-choice-first on purpose, because the focus
-    /// of M5b reads exactly that - and for some of these commands that is the wrong order. Taking a
-    /// whole selection back out of the fan hands out fresh depths as it goes, so the run's order
-    /// becomes the stacking order on the table; it is therefore sorted by the fan's own order and
-    /// not by the order the cards were tapped. Where the key has to be read off the scene, only the
-    /// hub can read it, so no caller is asked to.
+    /// of M5b reads exactly that - and for some of these commands that is the wrong order. Parking
+    /// hands out a place in the fan as the run proceeds, and unparking a fresh depth, so in both
+    /// directions the run's order becomes the order that is seen: <b>into</b> the fan the selection
+    /// is therefore sorted by the stack it had on the table, and <b>out of</b> it by the fan's own
+    /// order. Put a selection away and fetch it back and it lies exactly as it did. Where the key
+    /// has to be read off the scene, only the hub can read it, so no caller is asked to.
     /// </para>
     /// </summary>
     Task RemoveItemsAsync(
@@ -321,11 +322,13 @@ public interface ISessionApi
     /// Whether this was a GRAB rather than a command - the first report of a gesture, and from M4
     /// the moment the DM takes hold in the thumbnail. What is taken hold of comes to the front.
     /// <para>
-    /// <b>A locked item never rises, and that holds for the thumbnail too.</b> At the table the
-    /// question does not arise, because the gesture is refused before it gets here; in the
-    /// thumbnail the DM may move a locked picture (the lock guards against the table, Part 3) - and
-    /// it still stays where it lies in the stack. Part 3 states the rule and gives a reason that
-    /// only covers the table, "they cannot be taken hold of"; the rule is the wider of the two.
+    /// <b>A locked item rises too, and that is a correction from the table</b> (hand-run of M4,
+    /// step 20). M4a had read Part 3's "a locked item does not change its ZOrder" as a rule of its
+    /// own and asked the lock here; the DM asked for the opposite, and the reason stands in the
+    /// same sentence of Part 3, which gives the rule the reason "they cannot be taken hold of" -
+    /// true at the TABLE and false in the thumbnail. A picture the DM has just taken hold of has to
+    /// be the one he sees. At the table the question does not arise, because the gesture is refused
+    /// before it gets here.
     /// </para>
     /// </param>
     Task TransformItemAsync(

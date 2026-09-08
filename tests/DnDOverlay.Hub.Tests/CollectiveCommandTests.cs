@@ -346,6 +346,45 @@ public sealed class CollectiveCommandTests
         Assert.Equal(fan, await ByDepth(session, Target));
     }
 
+    /// <summary>
+    /// <b>Away and back again is an identity, and it takes both keys to be one.</b> Each direction
+    /// hands out a fresh order as the run proceeds - a place in the fan going in, a depth coming
+    /// out - so each direction would otherwise write whatever order the selection happened to
+    /// carry into what the players see.
+    /// <para>
+    /// The selection is handed over scrambled BOTH times, and differently each time, so that
+    /// neither leg can pass by accident: with only the outbound key the fan would already hold the
+    /// tap order, and the return leg would faithfully restore the wrong thing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_selection_put_away_and_fetched_back_lies_exactly_as_it_did()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        _ = await session.AddItemsAsync(Target, [.. Many(6)], Cancellation);
+
+        var table = await ByDepth(session, Target);
+
+        await session.ParkItemsAsync(Target, Scrambled(table), parked: true, Cancellation);
+
+        IReadOnlyList<ItemId> fan =
+        [
+            .. (await session.GetSceneAsync(Target, Cancellation))
+                .Items.OrderBy(item => item.ParkedAt).Select(item => item.ItemId),
+        ];
+
+        // The fan took over the stack as it lay, not the order the cards were tapped in.
+        Assert.Equal(table, fan);
+
+        // Scrambled the other way for the way back, so the return leg cannot ride on the first.
+        await session.ParkItemsAsync(
+            Target, [.. table.Skip(2), .. table.Take(2)], parked: false, Cancellation);
+
+        Assert.Equal(table, await ByDepth(session, Target));
+    }
+
     /// <summary>Turning a whole selection towards the DM is one command and therefore one patch.</summary>
     [Fact]
     public async Task Turning_a_selection_is_one_patch()

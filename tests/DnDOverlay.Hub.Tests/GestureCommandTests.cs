@@ -153,8 +153,9 @@ public sealed class GestureCommandTests
 
     /// <summary>
     /// The fourth combination, and the one M4 introduces: a grab that did NOT come from the table.
-    /// The DM may move a locked picture in the thumbnail, and it still does not come to the front
-    /// (Part 3, Part 11 - "a locked item does not change its ZOrder", said without a proviso).
+    /// The DM may move a locked picture in the thumbnail, and it comes to the front with the
+    /// movement like any other - the correction of the M4 hand-run, step 20, against Part 3's
+    /// "a locked item does not change its ZOrder", whose reason only covers the table.
     /// <para>
     /// The counter-check belongs in the same test: an unlocked item taken hold of the same way DOES
     /// rise. Without it the assertion would also pass if <c>toFront</c> had stopped working
