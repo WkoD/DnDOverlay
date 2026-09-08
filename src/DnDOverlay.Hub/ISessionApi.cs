@@ -35,6 +35,43 @@ public interface ISessionApi
     Task RemoveItemAsync(ScreenRef screen, ItemId item, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The collective forms of the five item commands a selection can carry: <b>one</b> patch, one
+    /// revision, one drawing at each end - and, for removal, one step in the timeline.
+    /// <para>
+    /// The menu of the thumbnail has always acted on the whole selection; it did so by firing one
+    /// command per item and not waiting for any of them. Twenty pictures were twenty patches in no
+    /// guaranteed order, and "select all" on a full table was the same flood that cut a subscriber's
+    /// stream on 07.09.2026. What the DM did was one thing, so it travels as one thing.
+    /// </para>
+    /// <para>
+    /// An item that is gone by the time the command runs is skipped, not refused (Part 11), and a
+    /// selection that comes down to nothing produces no patch at all rather than an empty one.
+    /// </para>
+    /// <para>
+    /// <b>Parking derives per item and therefore folds:</b> each card takes its depth and its place
+    /// in the fan's order from the scene as it stands after the card before it.
+    /// </para>
+    /// </summary>
+    Task RemoveItemsAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="RemoveItemsAsync"/>
+    Task ParkItemsAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool parked, CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="RemoveItemsAsync"/>
+    Task SetItemsLockedAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool locked, CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="RemoveItemsAsync"/>
+    Task SetItemsShowNameAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool show, CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="RemoveItemsAsync"/>
+    Task SetItemsAnimationPausedAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool paused, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Puts a picture on the background layer of a screen, replacing whatever was there.
     /// <see cref="ClearBackgroundAsync"/> is the counterpart, and it is a separate call rather than
     /// this one with a null: the two are strictly separate operations, which is what makes "empty
@@ -122,6 +159,30 @@ public interface ISessionApi
         ScreenRef screen,
         AssetRef asset,
         Point? position,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A whole run of arrivals as <b>one</b> command: one patch, one revision, one step in the
+    /// timeline, one drawing at each end.
+    /// <para>
+    /// <c>ScenePatch</c> has said since M1 that a command produces "exactly one patch, with as many
+    /// operations as that one command needs" - and that five images inserted SEPARATELY are five
+    /// patches. A folder the DM drops is one command, not seven hundred, and sending it as seven
+    /// hundred is what filled a subscriber's queue and cut its stream (07.09.2026).
+    /// </para>
+    /// <para>
+    /// The places and depths are worked out against the scene <b>as it fills</b>, not against the
+    /// one it started from - otherwise every picture of the run lands on the same grid place at the
+    /// same depth.
+    /// </para>
+    /// <para>
+    /// Returns the new items in the order they were given, which is the order they lie in: what is
+    /// chosen first lies underneath (Part 7).
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<ItemId>> AddItemsAsync(
+        ScreenRef screen,
+        IReadOnlyList<AssetRef> assets,
         CancellationToken cancellationToken = default);
 
     /// <summary>

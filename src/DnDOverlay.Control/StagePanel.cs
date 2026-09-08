@@ -488,10 +488,10 @@ internal sealed class StagePanel : StackPanel
                 $"{placeable[0].Name} is the background; the other {others} went into the stock only.");
         }
 
-        foreach (var asset in placeable)
-        {
-            await _session.AddItemAsync(screen, asset, position: null).ConfigureAwait(true);
-        }
+        // ONE command, one patch. As one AddItem per picture this loop published 714 events into a
+        // subscriber queue that holds 256 and cut the control off from its own hub (07.09.2026);
+        // the places and depths are folded inside the hub, where the scene is (AddItemsAsync).
+        await _session.AddItemsAsync(screen, placeable).ConfigureAwait(true);
 
         return null;
     }

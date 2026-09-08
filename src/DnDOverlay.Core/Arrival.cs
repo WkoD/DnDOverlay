@@ -55,6 +55,22 @@ public static class Arrival
     /// </item>
     /// </list>
     /// <para>
+    /// <b>At most the LAST few, and the order is the whole of it.</b> An intake is one command and
+    /// therefore one patch (Part 4), so a run of seven hundred would otherwise be seven hundred
+    /// arrival marks at once - and when everything is new, nothing stands out, which is the one
+    /// thing this exists to do. The bound is <see cref="AnimationBudget.DefaultMaximum"/> rather
+    /// than a number chosen here: the same ceiling simultaneous animations already have, so raising
+    /// one raises the other (Guide <c>G24</c>).
+    /// </para>
+    /// <para>
+    /// <b>The last, not the first</b>, and that is not a preference. The hub hands each arrival the
+    /// next depth up, so the ones placed last lie ON TOP - they are the only ones a player can see
+    /// at all. Taking the first few would light up exactly the pictures buried under the rest. The
+    /// display used to cap this at its own end, by counting flashes as they came, which is first
+    /// come first served and therefore the wrong end; the decision belongs here, where the order is
+    /// still the patch's.
+    /// </para>
+    /// <para>
     /// <b>A picture that arrives by being moved from another screen DOES light up</b>, and that
     /// follows from the same clause rather than from an exception: on the target screen such a patch
     /// is a plain <c>AddItem</c>. It is also the right answer - for the players at that table the
@@ -77,7 +93,8 @@ public static class Arrival
         [
             .. ops.OfType<AddItem>()
                 .Select(op => op.Item.ItemId)
-                .Where(id => !standing.Contains(id)),
+                .Where(id => !standing.Contains(id))
+                .TakeLast(AnimationBudget.DefaultMaximum),
         ];
     }
 }

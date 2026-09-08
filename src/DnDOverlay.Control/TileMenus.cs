@@ -156,16 +156,16 @@ internal sealed class TileMenus(
         {
             menu.Items.Add(Entry(
                 "Park",
-                () => Each(many, item => session.ParkItemAsync(
-                    screen, item.ItemId, parked: true, CancellationToken.None))));
+                () => _ = session.ParkItemsAsync(
+                    screen, Ids(many), parked: true, CancellationToken.None)));
         }
 
         menu.Items.Add(new Separator());
 
         menu.Items.Add(Entry(
             picture.Locked ? "Unlock" : "Lock",
-            () => Each(many, item => session.SetLockedAsync(
-                screen, item.ItemId, !picture.Locked, CancellationToken.None))));
+            () => _ = session.SetItemsLockedAsync(
+                screen, Ids(many), !picture.Locked, CancellationToken.None)));
 
         // Offered only where there is an animation to stop - a greyed entry on every still picture
         // would be four fifths of the menu saying no (Part 7).
@@ -173,17 +173,17 @@ internal sealed class TileMenus(
         {
             menu.Items.Add(Entry(
                 animated.AnimationPaused ? "Resume animation" : "Pause animation",
-                () => Each(many, item => session.SetAnimationPausedAsync(
-                    screen, item.ItemId, !animated.AnimationPaused, CancellationToken.None))));
+                () => _ = session.SetItemsAnimationPausedAsync(
+                    screen, Ids(many), !animated.AnimationPaused, CancellationToken.None)));
         }
 
         menu.Items.Add(Entry(
             picture is ImageItem { ShowName: true } ? "Hide name" : "Show name",
-            () => Each(many, item => session.SetShowNameAsync(
+            () => _ = session.SetItemsShowNameAsync(
                 screen,
-                item.ItemId,
+                Ids(many),
                 picture is not ImageItem { ShowName: true },
-                CancellationToken.None))));
+                CancellationToken.None)));
 
         menu.Items.Add(new Separator());
 
@@ -215,7 +215,7 @@ internal sealed class TileMenus(
         menu.Items.Add(new Separator());
         menu.Items.Add(Entry(
             "Remove",
-            () => Each(many, item => session.RemoveItemAsync(screen, item.ItemId, CancellationToken.None))));
+            () => _ = session.RemoveItemsAsync(screen, Ids(many), CancellationToken.None)));
 
         Open(menu, over, at);
     }
@@ -314,10 +314,23 @@ internal sealed class TileMenus(
             CancellationToken.None);
     }
 
+    /// <summary>The ids the menu acts on, in the order the selection holds them.</summary>
+    private static IReadOnlyList<ItemId> Ids(IReadOnlyList<SceneItem> many) =>
+        [.. many.Select(item => item.ItemId)];
+
     /// <summary>
-    /// Runs one command over everything the menu acts on. <b>The label was decided from the picture
-    /// that was hit</b>, so the whole selection follows that one - four mercenaries of which one is
-    /// unlocked all end up locked, which is what "lock" on that menu said.
+    /// Runs one command over everything the menu acts on, <b>one command per item</b>. <b>The label
+    /// was decided from the picture that was hit</b>, so the whole selection follows that one - four
+    /// mercenaries of which one is unlocked all end up locked, which is what "lock" on that menu
+    /// said.
+    /// <para>
+    /// <b>Only two entries still come through here, and both are owed a collective form</b>: "turn
+    /// to me", whose transform is clamped and held at the edge per item in the hub, and the move and
+    /// copy entries, whose patch spans TWO screens and therefore does not fit the per-screen shape
+    /// the other five use. Everything else now travels as one patch (<c>ISessionApi</c>), which is
+    /// what a selection of seven hundred needs: as one command per item it fills a subscriber's
+    /// queue and cuts its stream (07.09.2026).
+    /// </para>
     /// </summary>
     private static void Each(IReadOnlyList<SceneItem> many, Func<SceneItem, Task> what)
     {

@@ -183,38 +183,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var context = _screens.ContextFor(screen);
             var scene = _scenes.Get(screen);
 
-            var aspectRatio = asset.Meta.AspectRatio;
-
-            // Two bounds, composed, and each at the boundary it belongs to: how large a picture may
-            // arrive on this SCREEN, and then how large it may be in the PLACE it is going to. The
-            // second is what stopped a 7000×4211 picture overlapping its neighbours (hand-run of
-            // M2b), and it does nothing at all in Cascade, which has no places.
-            var scale = Placement.FitIntoItsPlace(
-                Layout.ScaleOnLoad(aspectRatio, context), aspectRatio, context);
-
-            // An aimed drop point wins; otherwise the placement mode of this screen decides. An
-            // aimed one keeps the fitted size too - the DM chose the spot, not the size.
-            var centre = position ?? Placement.NextPosition(scene, scale, aspectRatio, context);
-
-            var item = new ImageItem(
-                ItemId: new ItemId(Guid.NewGuid()),
-                CenterX: centre.X,
-                CenterY: centre.Y,
-                Scale: scale,
-                AspectRatio: aspectRatio,
-                RotationDeg: context.DefaultRotationDeg,
-                // What is touched comes to the front, and a new image counts as touched
-                // (Part 3). The number space is per screen, which is why it is read from the
-                // TARGET scene rather than carried along.
-                ZOrder: scene.TopZOrder + 1,
-                Locked: false,
-                Parked: false,
-                Revision: _scenes.NextRevision(),
-                AssetId: asset.AssetId,
-                Meta: asset.Meta,
-                Name: asset.Name,
-                ShowName: false,
-                AnimationPaused: false);
+            var item = Arriving(scene, context, asset, position);
 
             var op = new AddItem(item);
 
@@ -241,8 +210,232 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ItemId>> AddItemsAsync(
+        ScreenRef screen,
+        IReadOnlyList<AssetRef> assets,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+
+        if (assets.Count == 0)
+        {
+            return [];
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var context = _screens.ContextFor(screen);
+            var scene = _scenes.Get(screen);
+
+            var ops = new List<ScreenOp>(assets.Count);
+            var arrived = new List<ItemId>(assets.Count);
+
+            foreach (var asset in assets)
+            {
+                var op = new AddItem(Arriving(scene, context, asset, position: null));
+
+                ops.Add(new ScreenOp(screen, op));
+                arrived.Add(op.Item.ItemId);
+
+                // Folded before the next one is worked out - see Arriving for what happens without
+                // this line.
+                scene = SceneReducer.Apply(scene, op, context);
+            }
+
+            _scenes.Set(screen, scene);
+
+            // ONE patch, and that is the whole point of this method. Measured at the table
+            // (07.09.2026): as one AddItem per picture, a run of 714 filled a subscriber queue that
+            // holds 256, the hub ended that stream as it must, and the control went deaf. The wire,
+            // the display and the reducer were built for a patch of many ops all along - the
+            // display even groups by screen so that a load of twenty is one drawing rather than
+            // twenty. Only the control never sent one.
+            var patch = new ScenePatch(ops);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+
+            return arrived;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+
+    /// <summary>
+    /// The finished item one arriving picture becomes on this screen, worked out against the scene
+    /// it is arriving INTO.
+    /// <para>
+    /// Pulled out of <c>AddItemAsync</c> so that a run of arrivals can fold: the place comes from
+    /// <see cref="Placement"/>, which counts what already lies there, and the depth from
+    /// <c>TopZOrder</c>. Both read the scene, so a batch that worked every item out against the
+    /// SAME starting scene would put all of them on one grid place at one depth - seven hundred
+    /// pictures exactly on top of each other, looking for all the world like one.
+    /// </para>
+    /// </summary>
+    private ImageItem Arriving(SceneState scene, ScreenContext context, AssetRef asset, Point? position)
+    {
+        var aspectRatio = asset.Meta.AspectRatio;
+
+        // Two bounds, composed, and each at the boundary it belongs to: how large a picture may
+        // arrive on this SCREEN, and then how large it may be in the PLACE it is going to. The
+        // second is what stopped a 7000×4211 picture overlapping its neighbours (hand-run of
+        // M2b), and it does nothing at all in Cascade, which has no places.
+        var scale = Placement.FitIntoItsPlace(
+            Layout.ScaleOnLoad(aspectRatio, context), aspectRatio, context);
+
+        // An aimed drop point wins; otherwise the placement mode of this screen decides. An
+        // aimed one keeps the fitted size too - the DM chose the spot, not the size.
+        var centre = position ?? Placement.NextPosition(scene, scale, aspectRatio, context);
+
+        var item = new ImageItem(
+            ItemId: new ItemId(Guid.NewGuid()),
+            CenterX: centre.X,
+            CenterY: centre.Y,
+            Scale: scale,
+            AspectRatio: aspectRatio,
+            RotationDeg: context.DefaultRotationDeg,
+            // What is touched comes to the front, and a new image counts as touched
+            // (Part 3). The number space is per screen, which is why it is read from the
+            // TARGET scene rather than carried along.
+            ZOrder: scene.TopZOrder + 1,
+            Locked: false,
+            Parked: false,
+            Revision: _scenes.NextRevision(),
+            AssetId: asset.AssetId,
+            Meta: asset.Meta,
+            Name: asset.Name,
+            ShowName: false,
+            AnimationPaused: false);
+
+        return item;
+    }
+
+    /// <summary>
+    /// What parking or unparking one item comes to, worked out against the scene it happens in.
+    /// <para>
+    /// Pulled out of <c>ParkItemAsync</c> so a whole selection can be parked in one patch and each
+    /// card still gets its own depth and its own place in the fan's order - worked out against the
+    /// scene AS IT FILLS, not against the one the run started from.
+    /// </para>
+    /// </summary>
+    private ParkItem Parked(SceneState scene, SceneItem current, bool parked)
+    {
+        var revision = _scenes.NextRevision();
+
+        return new ParkItem(
+            current.ItemId,
+            parked,
+
+            // Coming back out of the fan counts as being touched, so it goes to the front like
+            // anything else that is touched. Going in needs no depth of its own: the fan is
+            // drawn ABOVE the whole table (Parking.FanAbove), because the one thing the players
+            // must always be able to reach is the way to get a picture back.
+            ZOrder: parked ? current.ZOrder : Math.Max(current.ZOrder, scene.TopZOrder + 1),
+            Revision: revision,
+
+            // The fan's own order. The same number the revision got, because it is the one
+            // monotonic counter the hub already keeps - but in a field of its own, so that a
+            // later change to a parked item cannot silently reshuffle the fan.
+            ParkedAt: parked ? revision : 0);
+    }
+
+    /// <inheritdoc />
     public Task RemoveItemAsync(ScreenRef screen, ItemId item, CancellationToken cancellationToken = default) =>
         ApplyAsync(screen, new RemoveItem(item), cancellationToken);
+
+    /// <inheritdoc />
+    public Task RemoveItemsAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default) =>
+        ManyAsync(screen, items, (_, current) => new RemoveItem(current.ItemId), cancellationToken);
+
+    /// <inheritdoc />
+    public Task ParkItemsAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool parked, CancellationToken cancellationToken = default) =>
+        ManyAsync(screen, items, (scene, current) => Parked(scene, current, parked), cancellationToken);
+
+    /// <inheritdoc />
+    public Task SetItemsLockedAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool locked, CancellationToken cancellationToken = default) =>
+        ManyAsync(screen, items, (_, current) => new SetLocked(current.ItemId, locked), cancellationToken);
+
+    /// <inheritdoc />
+    public Task SetItemsShowNameAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool show, CancellationToken cancellationToken = default) =>
+        ManyAsync(screen, items, (_, current) => new SetShowName(current.ItemId, show), cancellationToken);
+
+    /// <inheritdoc />
+    public Task SetItemsAnimationPausedAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, bool paused, CancellationToken cancellationToken = default) =>
+        ManyAsync(screen, items, (_, current) => new SetAnimationPaused(current.ItemId, paused), cancellationToken);
+
+    /// <summary>
+    /// One command over a selection: the operations are worked out item by item against the scene
+    /// <b>as it changes</b>, and then go out as a single patch.
+    /// <para>
+    /// The folding is not caution. Parking derives a depth and a place in the fan's order from the
+    /// scene, so a run built against one starting scene would hand every card the same two numbers
+    /// - a fan in which nothing has an order.
+    /// </para>
+    /// <para>
+    /// An item that is no longer there is skipped rather than refused, exactly as the single forms
+    /// do it: with two ways of steering and hands on the table, gone-in-the-meantime is a normal
+    /// course of events and not an error (Part 11).
+    /// </para>
+    /// <para>
+    /// The gate is let go before <c>ApplyAsync</c> takes it again, which is the shape every single
+    /// form here already has - the operations are built against a scene that could in principle
+    /// have moved on by the time they are applied. Keeping the gate across both would be a second
+    /// locking discipline in one class, which is worse than the window it closes.
+    /// </para>
+    /// </summary>
+    private async Task ManyAsync(
+        ScreenRef screen,
+        IReadOnlyList<ItemId> items,
+        Func<SceneState, SceneItem, PatchOp> op,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        List<PatchOp> ops = [];
+
+        try
+        {
+            var context = _screens.ContextFor(screen);
+            var scene = _scenes.Get(screen);
+
+            foreach (var id in items)
+            {
+                if (scene.Items.FirstOrDefault(candidate => candidate.ItemId == id) is not { } current)
+                {
+                    continue;
+                }
+
+                var built = op(scene, current);
+
+                ops.Add(built);
+                scene = SceneReducer.Apply(scene, built, context);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await ApplyAsync(screen, ops, cancellationToken).ConfigureAwait(false);
+    }
+
 
     /// <inheritdoc />
     public Task SetBackgroundAsync(
@@ -823,23 +1016,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return;
             }
 
-            var revision = _scenes.NextRevision();
-
-            op = new ParkItem(
-                item,
-                parked,
-
-                // Coming back out of the fan counts as being touched, so it goes to the front like
-                // anything else that is touched. Going in needs no depth of its own: the fan is
-                // drawn ABOVE the whole table (Parking.FanAbove), because the one thing the players
-                // must always be able to reach is the way to get a picture back.
-                ZOrder: parked ? current.ZOrder : Math.Max(current.ZOrder, scene.TopZOrder + 1),
-                Revision: revision,
-
-                // The fan's own order. The same number the revision got, because it is the one
-                // monotonic counter the hub already keeps - but in a field of its own, so that a
-                // later change to a parked item cannot silently reshuffle the fan.
-                ParkedAt: parked ? revision : 0);
+            op = Parked(scene, current, parked);
         }
         finally
         {

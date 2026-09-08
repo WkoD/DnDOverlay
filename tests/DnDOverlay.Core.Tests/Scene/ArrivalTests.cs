@@ -11,6 +11,53 @@ public sealed class ArrivalTests
 {
     private static SceneState Standing(params SceneItem[] items) => Build.SceneWith(items);
 
+    /// <summary>
+    /// An intake is one command and therefore one patch, so without a bound a run of seven hundred
+    /// would be seven hundred marks at once - and when everything is new, nothing stands out
+    /// (Part 6).
+    /// </summary>
+    [Fact]
+    public void A_run_larger_than_the_ceiling_marks_only_a_ceiling_full()
+    {
+        var standing = Standing(Build.Item());
+        var arriving = Enumerable.Range(0, 700).Select(_ => Build.Item()).ToList();
+
+        var marked = Arrival.Marked(standing, [.. arriving.Select(item => new AddItem(item))]);
+
+        Assert.Equal(AnimationBudget.DefaultMaximum, marked.Count);
+    }
+
+    /// <summary>
+    /// <b>The last, not the first.</b> The hub hands each arrival the next depth up, so the ones
+    /// placed last lie on top and are the only ones a player can see at all - marking the first few
+    /// would light up exactly the pictures buried under the rest. The display used to cap this at
+    /// its own end by counting flashes as they came, which is first come first served.
+    /// </summary>
+    [Fact]
+    public void The_ones_that_are_marked_are_the_ones_that_ended_up_on_top()
+    {
+        var standing = Standing(Build.Item());
+        var arriving = Enumerable.Range(0, 20).Select(_ => Build.Item()).ToList();
+
+        var marked = Arrival.Marked(standing, [.. arriving.Select(item => new AddItem(item))]);
+
+        Assert.Equal(
+            arriving.TakeLast(AnimationBudget.DefaultMaximum).Select(item => item.ItemId),
+            marked);
+    }
+
+    /// <summary>A run that fits under the ceiling is marked whole, which is the ordinary case.</summary>
+    [Fact]
+    public void A_run_under_the_ceiling_is_marked_whole()
+    {
+        var standing = Standing(Build.Item());
+        var arriving = Enumerable.Range(0, AnimationBudget.DefaultMaximum).Select(_ => Build.Item()).ToList();
+
+        Assert.Equal(
+            arriving.Select(item => item.ItemId),
+            Arrival.Marked(standing, [.. arriving.Select(item => new AddItem(item))]));
+    }
+
     [Fact]
     public void An_item_added_to_a_standing_scene_is_marked()
     {
