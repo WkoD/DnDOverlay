@@ -19,7 +19,7 @@ public sealed class ParkingTests
     private static SceneState Parked(int count, ScreenContext screen) =>
         Parking.Arrange(
             Build.SceneWith(
-                [.. Enumerable.Range(0, count).Select(index => Build.Item(parked: true, parkedAt: index + 1))]),
+                [.. Enumerable.Range(0, count).Select(index => Build.Item(parked: true, zOrder: index + 1))]),
             screen);
 
     /// <summary>How far a card sits along its fan, whichever axis that fan runs on.</summary>
@@ -56,12 +56,62 @@ public sealed class ParkingTests
         var screen = Build.Screen();
         var fan = Parking.Fan(Parked(5, screen));
 
-        Assert.Equal(5, fan[0].ParkedAt);
-        Assert.Equal([5L, 4, 3, 2, 1], [.. fan.Select(item => item.ParkedAt)]);
+        Assert.Equal(5, fan[0].ZOrder);
+        Assert.Equal([5, 4, 3, 2, 1], [.. fan.Select(item => item.ZOrder)]);
 
         var places = fan.Select(item => Along(item, screen)).ToList();
 
         Assert.Equal([.. places.Order()], places);
+    }
+
+    /// <summary>
+    /// <b>Each layer counts its own ceiling.</b> A screen has three - the background, the table,
+    /// the fan - and <c>ZOrder</c> orders WITHIN one of them, so the number a new depth is measured
+    /// against has to come from the layer it is going into.
+    /// <para>
+    /// Counted across both, a card tidied away at depth 300 would hand the next picture arriving on
+    /// an otherwise empty table a depth of 301: the number space would grow with everything ever
+    /// put away rather than with what is lying out. It would also make parking reach into the
+    /// table's numbers, which is how a selection came back out of the fan in an order nobody had
+    /// seen (08.09.2026).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Each_layer_counts_its_own_ceiling()
+    {
+        var scene = Build.SceneWith(
+            Build.Item(zOrder: 7),
+            Build.Item(zOrder: 3),
+            Build.Item(parked: true, zOrder: 300),
+            Build.Item(parked: true, zOrder: 299));
+
+        Assert.Equal(7, scene.TopZOrder);
+        Assert.Equal(300, scene.TopParkedZOrder);
+
+        // A screen with only one of the layers in use says -1 for the other, and -1 is what makes
+        // the first depth handed out a 0.
+        Assert.Equal(-1, Build.SceneWith(Build.Item(parked: true, zOrder: 4)).TopZOrder);
+        Assert.Equal(-1, Build.SceneWith(Build.Item(zOrder: 4)).TopParkedZOrder);
+        Assert.Equal(-1, SceneState.Empty.TopZOrder);
+        Assert.Equal(-1, SceneState.Empty.TopParkedZOrder);
+    }
+
+    /// <summary>
+    /// The layer decides before the number does, and the test says it with numbers that argue the
+    /// other way: the card in the fan carries the lowest depth there is and the picture on the
+    /// table one far above it.
+    /// </summary>
+    [Fact]
+    public void The_layer_decides_before_the_number_does()
+    {
+        var card = Build.Item(parked: true, zOrder: 0);
+        var lying = Build.Item(zOrder: 100_000);
+
+        Assert.True(Parking.Depth(card) > Parking.Depth(lying));
+
+        // And within a layer the number decides again.
+        Assert.True(Parking.Depth(lying) > Parking.Depth(Build.Item(zOrder: 99_999)));
+        Assert.True(Parking.Depth(Build.Item(parked: true, zOrder: 1)) > Parking.Depth(card));
     }
 
     /// <summary>And it lies on top, so the newest is the one that is fully visible.</summary>
@@ -71,13 +121,13 @@ public sealed class ParkingTests
         var screen = Build.Screen();
         var table = Build.Item(zOrder: 5000);
         var scene = Parking.Arrange(
-            Build.SceneWith(table, Build.Item(parked: true, parkedAt: 1), Build.Item(parked: true, parkedAt: 2)),
+            Build.SceneWith(table, Build.Item(parked: true, zOrder: 1), Build.Item(parked: true, zOrder: 2)),
             screen);
 
         var fan = Parking.Fan(scene);
 
-        Assert.True(Parking.Depth(scene, fan[0]) > Parking.Depth(scene, fan[1]));
-        Assert.True(Parking.Depth(scene, fan[1]) > Parking.Depth(scene, table));
+        Assert.True(Parking.Depth(fan[0]) > Parking.Depth(fan[1]));
+        Assert.True(Parking.Depth(fan[1]) > Parking.Depth(table));
     }
 
     /// <summary>
@@ -145,7 +195,7 @@ public sealed class ParkingTests
         var screen = ScreenContext.Default(new PixelSize(width, height), 96) with { DefaultRotationDeg = 90 };
 
         var scene = Parking.Arrange(
-            Build.SceneWith(Build.Item(parked: true, parkedAt: 1, scale: 0.9, rotationDeg: 33)),
+            Build.SceneWith(Build.Item(parked: true, zOrder: 1, scale: 0.9, rotationDeg: 33)),
             screen);
 
         Assert.Equal(Layout.ScaleOnLoad(scene.Items[0].AspectRatio, screen), scene.Items[0].Scale);
@@ -241,7 +291,7 @@ public sealed class ParkingTests
         var screen = Build.Screen();
         var lying = Build.Item(centerX: 0.2, centerY: 0.3);
 
-        var scene = Parking.Arrange(Build.SceneWith(lying, Build.Item(parked: true, parkedAt: 1)), screen);
+        var scene = Parking.Arrange(Build.SceneWith(lying, Build.Item(parked: true, zOrder: 1)), screen);
 
         Assert.Equal(lying, scene.Items[0]);
     }
@@ -261,8 +311,8 @@ public sealed class ParkingTests
             scene with { Items = [.. scene.Items.Where(item => item.ItemId != newest.ItemId)] },
             screen);
 
-        Assert.Equal([4L, 3, 2], [.. Parking.Fan(scene).Select(item => item.ParkedAt).Take(3)]);
-        Assert.Equal([3L, 2, 1], [.. Parking.Fan(shorter).Select(item => item.ParkedAt)]);
+        Assert.Equal([4, 3, 2], [.. Parking.Fan(scene).Select(item => item.ZOrder).Take(3)]);
+        Assert.Equal([3, 2, 1], [.. Parking.Fan(shorter).Select(item => item.ZOrder)]);
 
         // The one that was second is now first, so it moved to the near end.
         Assert.Equal(Along(Parking.Fan(scene)[0], screen), Along(Parking.Fan(shorter)[0], screen), precision: 9);
@@ -328,8 +378,8 @@ public sealed class ParkingTests
         var screen = Build.Screen() with { ParkEdge = edge };
         var scene = Parking.Arrange(
             Build.SceneWith(
-                Build.Item(parked: true, parkedAt: 1, aspectRatio: aspect),
-                Build.Item(parked: true, parkedAt: 2, aspectRatio: aspect)),
+                Build.Item(parked: true, zOrder: 1, aspectRatio: aspect),
+                Build.Item(parked: true, zOrder: 2, aspectRatio: aspect)),
             screen);
 
         foreach (var card in Parking.Fan(scene))
@@ -361,8 +411,8 @@ public sealed class ParkingTests
     public void A_long_card_is_cut_at_both_ends_and_each_edge_fades()
     {
         var screen = Build.Screen();
-        var plain = Build.Item(parked: true, parkedAt: 1);
-        var tower = Build.Item(parked: true, parkedAt: 2, aspectRatio: 0.05);
+        var plain = Build.Item(parked: true, zOrder: 1);
+        var tower = Build.Item(parked: true, zOrder: 2, aspectRatio: 0.05);
 
         var scene = Parking.Arrange(Build.SceneWith(plain, tower), screen);
 
@@ -406,7 +456,7 @@ public sealed class ParkingTests
         var alongY = edge is ParkEdge.Left or ParkEdge.Right;
 
         var parked = Parking.Arrange(
-            Build.SceneWith(Build.Item(parked: true, parkedAt: 1, aspectRatio: aspect)), screen)
+            Build.SceneWith(Build.Item(parked: true, zOrder: 1, aspectRatio: aspect)), screen)
             .Items[0];
 
         var rect = Layout.ItemToRect(parked, screen);

@@ -55,6 +55,12 @@ public static class Parking
     /// Coming back out is the ordinary rule and needs no exception: a picture pulled from the fan
     /// has been touched, so it goes to the front like anything else that is touched.
     /// </para>
+    /// <para>
+    /// <b>It is an offset and not a replacement:</b> a card's drawing depth is this plus its own
+    /// <c>ZOrder</c>, which orders the fan exactly as it orders the table. The gap therefore has to
+    /// be wider than any <c>ZOrder</c> a table will ever reach - a quarter of a million touches on
+    /// one screen in one evening, and the number space is per screen and dies with the session.
+    /// </para>
     /// </summary>
     public const int FanAbove = 1 << 18;
 
@@ -97,28 +103,30 @@ public static class Parking
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        return [.. scene.Items.Where(item => item.Parked).OrderByDescending(item => item.ParkedAt)];
+        // The fan is ordered by the same field the table is, because it is the same kind of
+        // question: which of these lies on top of which. Highest first, so the newest card - the
+        // one parking just handed the top of the layer - is at the near end.
+        return [.. scene.Items.Where(item => item.Parked).OrderByDescending(item => item.ZOrder)];
     }
 
     /// <summary>
     /// How deep an item is drawn, for a renderer that has to put the scene in order. Both ends use
     /// it, so the table and the thumbnail agree on what covers what (Part 1, rule 9).
+    /// <para>
+    /// <b>Layer first, <c>ZOrder</c> second, and that is the whole of it.</b> A screen has three
+    /// layers - the background, the table, the fan - and within a layer the pictures are ordered by
+    /// the one field that has always meant "what lies on top of what". The fan used to be ordered
+    /// by a second field of its own and this function had to rebuild the whole fan to find one
+    /// card's place in it; two fields meaning one thing is what made every collective command ask
+    /// which of them it meant, and get it wrong three times in a row (08.09.2026). It also made
+    /// drawing quadratic: a renderer calls this for every picture of every pass.
+    /// </para>
     /// </summary>
-    public static int Depth(SceneState scene, SceneItem item)
+    public static int Depth(SceneItem item)
     {
-        ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(item);
 
-        if (!item.Parked)
-        {
-            return item.ZOrder;
-        }
-
-        var fan = Fan(scene);
-
-        // Oldest lowest, so the newest ends up on top of the pile - and the fan as a whole above
-        // everything on the table.
-        return FanAbove + (fan.Count - 1 - IndexIn(fan, item.ItemId));
+        return item.Parked ? FanAbove + item.ZOrder : item.ZOrder;
     }
 
     /// <summary>

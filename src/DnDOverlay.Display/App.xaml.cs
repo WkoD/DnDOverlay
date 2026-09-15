@@ -2050,7 +2050,7 @@ public sealed partial class App : Application, IDisposable
                 transform.CenterY,
                 transform.Scale,
                 transform.RotationDeg,
-                toFront ? Math.Max(standing.ZOrder, scene.TopZOrder + 1) : standing.ZOrder,
+                toFront ? Math.Max(standing.ZOrder, scene.Top(standing.Parked) + 1) : standing.ZOrder,
                 standing.Revision),
             context);
     }

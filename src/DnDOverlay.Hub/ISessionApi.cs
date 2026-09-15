@@ -73,11 +73,11 @@ public interface ISessionApi
     /// <b>The order is the command's business, not the caller's.</b> A selection arrives in the
     /// order it was picked - <c>Selection</c> is oldest-choice-first on purpose, because the focus
     /// of M5b reads exactly that - and for some of these commands that is the wrong order. Parking
-    /// hands out a place in the fan as the run proceeds, and unparking a fresh depth, so in both
-    /// directions the run's order becomes the order that is seen: <b>into</b> the fan the selection
-    /// is therefore sorted by the stack it had on the table, and <b>out of</b> it by the fan's own
-    /// order. Put a selection away and fetch it back and it lies exactly as it did. Where the key
-    /// has to be read off the scene, only the hub can read it, so no caller is asked to.
+    /// and unparking each hand out a place at the top of the layer they move to, so the run's order
+    /// becomes the order that is seen; the selection is therefore sorted by <c>ZOrder</c>, which is
+    /// the stack on the table going in and the place in the fan coming out. Put a selection away
+    /// and fetch it back and it lies exactly as it did. The key is read off the scene, which only
+    /// the hub has, so no caller is asked to sort.
     /// </para>
     /// </summary>
     Task RemoveItemsAsync(
@@ -225,9 +225,11 @@ public interface ISessionApi
     /// <see cref="Layout.WidthCap"/>).
     /// </para>
     /// <para>
-    /// <b>A parked item stays parked and joins the fan of the target</b> - at its ParkEdge, in that
-    /// screen's arrival size, at the end of its order (Part 11). Nothing here computes that:
-    /// <c>ParkedAt</c> is handed out and the reducer lays out the fan.
+    /// <b>A parked item arrives lying free, not in the target's fan</b> - the correction from the
+    /// table (hand-run of M4, 25b), against Part 11, which had it staying parked. A picture sent to
+    /// another screen is one that is WANTED there, and it was arriving where nobody was looking.
+    /// It has no place of its own to keep either: a parked card's coordinates are its slot in the
+    /// source's fan and mean nothing outside it, so it is placed like a new picture.
     /// </para>
     /// <para>
     /// <b>Moving onto the screen it already lies on does nothing</b>, deliberately. Dragging inside

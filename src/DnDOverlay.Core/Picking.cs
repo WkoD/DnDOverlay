@@ -94,7 +94,7 @@ public static class Picking
         [
             .. scene.Items
                 .Where(item => Touches(Layout.ItemToHullRect(item, screen), frame))
-                .OrderBy(item => Parking.Depth(scene, item))
+                .OrderBy(item => Parking.Depth(item))
                 .Select(item => item.ItemId),
         ];
     }

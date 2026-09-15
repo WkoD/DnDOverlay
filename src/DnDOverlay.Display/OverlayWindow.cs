@@ -639,7 +639,7 @@ internal sealed class OverlayWindow : Window
                     mount.Element,
                     _held.ContainsKey(image.ItemId) || _fan?.Card == image.ItemId
                         ? HeldAbove + item.ZOrder
-                        : Parking.Depth(scene, item));
+                        : Parking.Depth(item));
 
                 // <b>At most one picture is hung up per pass.</b> Twenty arriving at once would
                 // otherwise all be built into the visual tree in one drawing - and that drawing is
@@ -946,7 +946,7 @@ internal sealed class OverlayWindow : Window
 
         Place(mount, item, context);
         Trim(mount, Parking.CutOf(_scene, context, card), context);
-        Panel.SetZIndex(mount.Element, Parking.Depth(_scene, item));
+        Panel.SetZIndex(mount.Element, Parking.Depth(item));
     }
 
     /// <summary>The end of a fan gesture that never took a card out: nothing happened.</summary>

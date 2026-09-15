@@ -109,7 +109,7 @@ public sealed class SceneGestureTests
 
         var after = SceneReducer.Apply(
             Build.SceneWith(item),
-            new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9, ParkedAt: 9),
+            new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9),
             Screen);
 
         var parked = after.Items[0];
@@ -117,7 +117,7 @@ public sealed class SceneGestureTests
         Assert.True(parked.Parked);
         Assert.Equal(Layout.ScaleOnLoad(item.AspectRatio, Screen), parked.Scale);
         Assert.Equal(Screen.DefaultRotationDeg, parked.RotationDeg);
-        Assert.Equal(9, parked.ParkedAt);
+        Assert.Equal(4, parked.ZOrder);
         Assert.Equal(Parking.Arrange(Build.SceneWith(parked), Screen).Items[0], parked);
     }
 
@@ -153,14 +153,14 @@ public sealed class SceneGestureTests
         var scene = Build.SceneWith(item);
 
         var parked = SceneReducer.Apply(
-            scene, new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9, ParkedAt: 9), Screen);
+            scene, new ParkItem(item.ItemId, Parked: true, ZOrder: 4, Revision: 9), Screen);
 
         var back = SceneReducer.Apply(
             parked, new ParkItem(item.ItemId, Parked: false, ZOrder: 5, Revision: 10), Screen);
 
         Assert.Equal(parked.Items[0].RotationDeg, back.Items[0].RotationDeg);
         Assert.Equal(parked.Items[0].Scale, back.Items[0].Scale);
-        Assert.Equal(0, back.Items[0].ParkedAt);
+        Assert.Equal(5, back.Items[0].ZOrder);
     }
 
     /// <summary>

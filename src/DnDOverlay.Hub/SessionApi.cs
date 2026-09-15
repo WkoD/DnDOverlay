@@ -319,29 +319,25 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// What parking or unparking one item comes to, worked out against the scene it happens in.
     /// <para>
     /// Pulled out of <c>ParkItemAsync</c> so a whole selection can be parked in one patch and each
-    /// card still gets its own depth and its own place in the fan's order - worked out against the
-    /// scene AS IT FILLS, not against the one the run started from.
+    /// card still gets a place of its own - worked out against the scene AS IT FILLS, not against
+    /// the one the run started from.
     /// </para>
     /// </summary>
     private ParkItem Parked(SceneState scene, SceneItem current, bool parked)
     {
-        var revision = _scenes.NextRevision();
-
         return new ParkItem(
             current.ItemId,
             parked,
 
-            // Coming back out of the fan counts as being touched, so it goes to the front like
-            // anything else that is touched. Going in needs no depth of its own: the fan is
-            // drawn ABOVE the whole table (Parking.FanAbove), because the one thing the players
-            // must always be able to reach is the way to get a picture back.
-            ZOrder: parked ? current.ZOrder : Math.Max(current.ZOrder, scene.TopZOrder + 1),
-            Revision: revision,
-
-            // The fan's own order. The same number the revision got, because it is the one
-            // monotonic counter the hub already keeps - but in a field of its own, so that a
-            // later change to a parked item cannot silently reshuffle the fan.
-            ParkedAt: parked ? revision : 0);
+            // <b>The top of the layer it is moving to, and the old number is spent.</b> Both
+            // directions are the same sentence: a card put away goes on top of the fan, a card
+            // pulled out goes on top of the table, because whatever is touched comes to the front
+            // (Part 3). There is nothing to keep from the other side - the depth a picture had on
+            // the table before it was tidied away is a number nobody draws and nobody remembers,
+            // and carrying it across is what made a selection come back out in an order the DM had
+            // never seen (08.09.2026).
+            ZOrder: scene.Top(parked) + 1,
+            Revision: _scenes.NextRevision());
     }
 
     /// <inheritdoc />
@@ -362,15 +358,14 @@ public sealed class SessionApi : ISessionApi, IDisposable
             items,
             (scene, current) => Parked(scene, current, parked),
 
-            // <b>Both ways round, and the pair of keys is what makes the round trip an identity.</b>
-            // Each direction hands out a fresh order as the run proceeds - ParkedAt going in, the
-            // depth coming out - so whatever order the run has becomes the order that is seen.
-            // A selection arrives here in whatever order the DM tapped or the frame caught
-            // (Selection is oldest-choice-first by design, because the focus of M5b reads exactly
-            // that), and that is neither of them. Going in, the fan takes over the stack as it lay
-            // on the table; coming out, the table takes back the order the players saw in the fan.
-            // Park a selection and unpark it again and it lies exactly as it did.
-            parked ? item => item.ZOrder : item => item.ParkedAt,
+            // <b>One key for both directions, and it used to be two.</b> Each direction hands out
+            // a fresh place at the top of the layer it moves to, so whatever order this run has
+            // becomes the order that is seen - and a selection arrives in the order the DM tapped
+            // or the frame caught (Selection is oldest-choice-first by design, because the focus of
+            // M5b reads exactly that), which is neither the table's order nor the fan's. Reading
+            // the depth answers both: going in it is the stack on the table, coming out it is the
+            // place in the fan. Park a selection and fetch it back and it lies exactly as it did.
+            item => item.ZOrder,
             cancellationToken);
 
     /// <inheritdoc />
@@ -744,7 +739,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var arriving = Arriving(current, scene, context, position, revision) with
             {
                 Parked = false,
-                ParkedAt = 0,
             };
 
             // <b>And it needs a place of its own.</b> A parked card's own coordinates are its slot
@@ -812,7 +806,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
                 // The copy is a picture that is wanted now, so it never lands in the fan.
                 Parked = false,
-                ParkedAt = 0,
             };
 
             // Where it goes, once it is no longer parked. Three cases, and only the first is the
@@ -918,7 +911,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
             // the selection over. Depth answers both in one number, and it is the same number the
             // table draws by, so a mixed selection arrives the way it looked: the free pictures
             // below, the cards from the fan above them, because that is where the fan lies.
-            var order = Sorted(lying, items, item => Parking.Depth(lying, item));
+            var order = Sorted(lying, items, item => Parking.Depth(item));
 
             var ops = new List<ScreenOp>(copy ? order.Count : order.Count * 2);
             var landed = new List<ItemId>(order.Count);
@@ -939,7 +932,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
                     // Sent over is wanted over there, so it never lands in the fan - the same
                     // correction the single forms carry (hand-run of M4, 25b).
                     Parked = false,
-                    ParkedAt = 0,
                 };
 
                 if (copy)
@@ -1035,9 +1027,9 @@ public sealed class SessionApi : ISessionApi, IDisposable
             Scale = Math.Min(current.Scale, Layout.WidthCap(current.AspectRatio, context)),
 
             // Arriving counts as being touched (Part 3), and the number space is the target's.
+            // The top of the layer it lands in, and a relocation always lands on the table.
             ZOrder = scene.TopZOrder + 1,
             Revision = revision,
-            ParkedAt = current.Parked ? revision : 0,
         };
     }
 
@@ -1166,8 +1158,12 @@ public sealed class SessionApi : ISessionApi, IDisposable
             // reason "they cannot be taken hold of", which is true at the TABLE and false in
             // the thumbnail. A picture the DM has just touched has to be the one he sees.
             // At the table the question does not arise - a locked item never reaches here.
+            //
+            // The top of the picture's OWN layer, not of the table: a card is taken hold of in the
+            // fan too - that is the way back out - and a depth from the table's number space would
+            // drop it at an arbitrary place among the other cards.
             ZOrder: toFront
-                ? Math.Max(current.ZOrder, scene.TopZOrder + 1)
+                ? Math.Max(current.ZOrder, scene.Top(current.Parked) + 1)
                 : current.ZOrder,
             Revision: _scenes.NextRevision());
     }

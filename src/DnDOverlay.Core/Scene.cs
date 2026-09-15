@@ -46,19 +46,7 @@ public abstract record SceneItem(
     int ZOrder,
     bool Locked,
     bool Parked,
-    long Revision,
-
-    /// <summary>
-    /// When this item went into the fan, as a number the hub hands out - <c>0</c> while it is not
-    /// parked. It orders the fan, and nothing else reads it.
-    /// <para>
-    /// A field of its own rather than the revision it happens to share today: a parked item's
-    /// revision is the parking only for as long as nothing else ever touches a parked item, and
-    /// the thumbnail of M4 will be able to. A number that answers two questions eventually answers
-    /// the wrong one.
-    /// </para>
-    /// </summary>
-    long ParkedAt = 0);
+    long Revision);
 
 /// <summary>An image on a screen.</summary>
 /// <param name="Name">
@@ -84,10 +72,8 @@ public sealed record ImageItem(
     AssetMeta Meta,
     string Name,
     bool ShowName,
-    bool AnimationPaused,
-    long ParkedAt = 0)
-    : SceneItem(
-        ItemId, CenterX, CenterY, Scale, AspectRatio, RotationDeg, ZOrder, Locked, Parked, Revision, ParkedAt);
+    bool AnimationPaused)
+    : SceneItem(ItemId, CenterX, CenterY, Scale, AspectRatio, RotationDeg, ZOrder, Locked, Parked, Revision);
 
 /// <summary>
 /// Where an item lies, as an INTENTION - what a display reports after a gesture and what the DM's
@@ -204,8 +190,40 @@ public sealed record SceneState(
     public static SceneState Empty { get; } =
         new(null, [], ItemsVisible: true, BackgroundVisible: true, []);
 
-    /// <summary>The highest <c>ZOrder</c> in use, or -1 when the screen is empty.</summary>
-    public int TopZOrder => Items.Count == 0 ? -1 : Items.Max(item => item.ZOrder);
+    /// <summary>
+    /// The highest <c>ZOrder</c> on the TABLE, or -1 when nothing lies there.
+    /// <para>
+    /// <b>The fan is a layer of its own and is not counted here</b> (<see cref="Parking"/>). A
+    /// screen has three layers - the background, the table, the fan - and the depth of a picture is
+    /// its layer first and its <c>ZOrder</c> second. Counting parked cards into this number would
+    /// mean a card tidied away at depth 300 handed the next arrival on an otherwise empty table a
+    /// depth of 301; the number space would grow with everything ever put away rather than with
+    /// what is lying out.
+    /// </para>
+    /// </summary>
+    public int TopZOrder => Top(parked: false);
+
+    /// <summary>
+    /// The highest <c>ZOrder</c> in the fan, or -1 when nothing is parked. The near end of the fan
+    /// is the highest, so the most recently put away card lies on top of the pile.
+    /// </summary>
+    public int TopParkedZOrder => Top(parked: true);
+
+    /// <summary>The top of one layer, which is the only ceiling a new depth is ever measured against.</summary>
+    public int Top(bool parked)
+    {
+        var top = -1;
+
+        foreach (var item in Items)
+        {
+            if (item.Parked == parked && item.ZOrder > top)
+            {
+                top = item.ZOrder;
+            }
+        }
+
+        return top;
+    }
 
     public bool Equals(SceneState? other) =>
         other is not null

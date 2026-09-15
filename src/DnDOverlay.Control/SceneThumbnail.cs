@@ -151,7 +151,7 @@ internal sealed class SceneThumbnail : FrameworkElement
 
         foreach (var item in _scene.Items
             .OrderBy(item => item.ItemId == peeked ? 1 : 0)
-            .ThenBy(item => Parking.Depth(_scene, item)))
+            .ThenBy(item => Parking.Depth(item)))
         {
             // A card under the hand is drawn where it would STEP OUT to, and that place comes from
             // the same arithmetic the table uses - out along the fan at its own slot, not under the

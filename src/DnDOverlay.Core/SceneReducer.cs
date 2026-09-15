@@ -66,7 +66,6 @@ public static class SceneReducer
                         // them on every pass, which is what lets a scene move to a screen of a
                         // different shape and arrive as a fan rather than a heap (Part 6, rebuilt
                         // at the end of M3).
-                        ParkedAt = park.Parked ? park.ParkedAt : 0,
 
                         // <b>Putting a picture away takes the padlock off it.</b> The lock holds a
                         // picture WHERE IT LIES on the table, so that a hand at the table cannot

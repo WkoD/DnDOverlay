@@ -327,7 +327,9 @@ public sealed class GestureCommandTests
         Assert.True(parked.Parked);
         Assert.Equal(Layout.ScaleOnLoad(parked.AspectRatio, Context()), parked.Scale, precision: 9);
         Assert.Equal(Context().DefaultRotationDeg, parked.RotationDeg);
-        Assert.True(parked.ParkedAt > 0, "the fan got no order");
+        // The top of the FAN, not of the table: the other picture is still lying out at the
+        // depth this one used to share, and putting one away must not reach into that layer.
+        Assert.Equal(0, parked.ZOrder);
         Assert.Equal(parked, Manipulation.HoldAtEdge(parked, Context()));
 
         await session.ParkItemAsync(Target, item, parked: false, Cancellation);

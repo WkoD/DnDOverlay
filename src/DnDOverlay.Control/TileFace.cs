@@ -404,7 +404,7 @@ internal sealed class TileFace : Panel
                 Items =
                 [
                     .. _scene.Items.Select(item => item.ItemId == hold.Item.ItemId
-                        ? hold.Item with { ZOrder = _scene.TopZOrder + 1 }
+                        ? hold.Item with { ZOrder = _scene.Top(hold.Item.Parked) + 1 }
                         : item),
                 ],
             }

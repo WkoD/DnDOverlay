@@ -101,7 +101,7 @@ public sealed class SceneReducerTests
 
         var parked = SceneReducer.Apply(
             scene,
-            new ParkItem(locked.ItemId, Parked: true, ZOrder: locked.ZOrder, Revision: 2, ParkedAt: 2),
+            new ParkItem(locked.ItemId, Parked: true, ZOrder: locked.ZOrder, Revision: 2),
             screen);
 
         Assert.False(parked.Items.Single().Locked, "the padlock came into the fan with it");
@@ -121,7 +121,7 @@ public sealed class SceneReducerTests
 
         var freed = SceneReducer.Apply(
             scene,
-            new ParkItem(locked.ItemId, Parked: false, ZOrder: 9, Revision: 3, ParkedAt: 0),
+            new ParkItem(locked.ItemId, Parked: false, ZOrder: 9, Revision: 3),
             screen);
 
         Assert.True(freed.Items.Single().Locked, "coming out of the fan lost a lock it should keep");

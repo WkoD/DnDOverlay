@@ -89,14 +89,14 @@ public sealed class CollectiveCommandTests
     }
 
     /// <summary>
-    /// The same fold seen from the other side, and the assertion is deliberately on the way OUT of
-    /// the fan.
+    /// The same fold seen from the other side, and now it is proved in BOTH directions.
     /// <para>
-    /// Going in, each card takes its order from <c>NextRevision</c>, which is monotonic whether or
-    /// not the scene is folded - so distinct <c>ParkedAt</c> values prove nothing about folding.
-    /// Coming out, the depth is <c>TopZOrder + 1</c> and is therefore read from the scene: without
-    /// the fold every card of the selection would be handed the SAME depth and the order the DM had
-    /// in the fan would be flattened on the way back to the table.
+    /// It used to be provable only on the way out. Going in, a card took its place in the fan from
+    /// the hub's revision counter, which is monotonic whether or not the scene is folded, so
+    /// distinct values said nothing. Since the fan is ordered by the same <c>ZOrder</c> the table
+    /// is, both directions read the top of a layer OFF THE SCENE - and without the fold every card
+    /// of the selection would be handed the same number and the order would be flat at whichever
+    /// end the run happened to be.
     /// </para>
     /// </summary>
     [Fact]
@@ -113,7 +113,9 @@ public sealed class CollectiveCommandTests
             .Items.Where(item => item.Parked).ToList();
 
         Assert.Equal(5, parked.Count);
-        Assert.Equal(5, parked.Select(item => item.ParkedAt).Distinct().Count());
+
+        // Five places in the fan, not one - the fold worked on the way in too.
+        Assert.Equal(5, parked.Select(item => item.ZOrder).Distinct().Count());
 
         await session.ParkItemsAsync(Target, added, parked: false, Cancellation);
 
@@ -336,7 +338,7 @@ public sealed class CollectiveCommandTests
         IReadOnlyList<ItemId> fan =
         [
             .. (await session.GetSceneAsync(Target, Cancellation))
-                .Items.OrderBy(item => item.ParkedAt).Select(item => item.ItemId),
+                .Items.OrderBy(item => item.ZOrder).Select(item => item.ItemId),
         ];
 
         Assert.Equal(added, fan);
@@ -372,7 +374,7 @@ public sealed class CollectiveCommandTests
         IReadOnlyList<ItemId> fan =
         [
             .. (await session.GetSceneAsync(Target, Cancellation))
-                .Items.OrderBy(item => item.ParkedAt).Select(item => item.ItemId),
+                .Items.OrderBy(item => item.ZOrder).Select(item => item.ItemId),
         ];
 
         // The fan took over the stack as it lay, not the order the cards were tapped in.
@@ -445,12 +447,13 @@ public sealed class CollectiveCommandTests
     }
 
     /// <summary>
-    /// <b>Into the fan by the depth on the table</b>, and the test makes the two candidate keys
-    /// disagree - which the round trip above cannot do on its own.
+    /// <b>Into the fan by the depth on the table</b>, and the test is built so that the depth and
+    /// the order the scene happens to hold the items in say different things.
     /// <para>
-    /// One picture is raised to the front first, so the stack order stops being the order the scene
-    /// holds the items in. Sorting by <c>ParkedAt</c> instead would tie on every item, because
-    /// nothing is parked yet, and fall back to exactly that scene order: green, and wrong.
+    /// One picture is raised to the front first, which pulls the two apart. A run that did not sort
+    /// at all would take the selection in the order it was handed over, and a run that fell back on
+    /// the scene's own list would take that: both are green against a lazier test and both put a
+    /// card in the fan where the DM never saw it.
     /// </para>
     /// </summary>
     [Fact]
@@ -480,7 +483,7 @@ public sealed class CollectiveCommandTests
         IReadOnlyList<ItemId> fan =
         [
             .. (await session.GetSceneAsync(Target, Cancellation))
-                .Items.OrderBy(item => item.ParkedAt).Select(item => item.ItemId),
+                .Items.OrderBy(item => item.ZOrder).Select(item => item.ItemId),
         ];
 
         Assert.Equal(stack, fan);

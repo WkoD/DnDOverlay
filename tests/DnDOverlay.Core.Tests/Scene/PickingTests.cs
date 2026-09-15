@@ -57,7 +57,7 @@ public sealed class PickingTests
     public void A_parked_card_wins_against_the_table_beneath_it()
     {
         var screen = Build.Screen();
-        var card = Build.Item(scale: 0.2, parked: true, parkedAt: 5, zOrder: 1);
+        var card = Build.Item(scale: 0.2, parked: true, zOrder: 1);
         var lying = Build.Item(centerX: 0.5, centerY: 0.5, scale: 2, zOrder: 99);
 
         var scene = Parking.Arrange(Build.SceneWith(card, lying), screen);
@@ -176,7 +176,7 @@ public sealed class PickingTests
     {
         var screen = Build.Screen();
         var locked = Build.Item(centerX: 0.5, centerY: 0.5, scale: 0.2, locked: true);
-        var parked = Build.Item(scale: 0.2, parked: true, parkedAt: 3);
+        var parked = Build.Item(scale: 0.2, parked: true, zOrder: 3);
 
         var scene = Parking.Arrange(Build.SceneWith(locked, parked), screen);
 

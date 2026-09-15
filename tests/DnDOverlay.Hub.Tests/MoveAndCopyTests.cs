@@ -163,8 +163,8 @@ public sealed class MoveAndCopyTests
         await session.ParkItemAsync(Table, item, parked: true, Cancellation);
 
         // One already lying in the target's fan, so the arrival has an order to join. It was parked
-        // BEFORE the traveller, and it still ends up behind it: the arriving picture is the newest
-        // in this fan, which is what a fresh ParkedAt says.
+        // BEFORE the traveller, and it still ends up behind it: the arriving picture lands on the
+        // table, and the fan it did not join keeps the card it had.
         var resident = await session.AddItemAsync(Beamer, Reference(), position: null, Cancellation);
         await session.ParkItemAsync(Beamer, resident, parked: true, Cancellation);
 
@@ -174,7 +174,6 @@ public sealed class MoveAndCopyTests
         var arrived = scene.Items.Single(candidate => candidate.ItemId == item);
 
         Assert.False(arrived.Parked, "it went into the target's fan instead of onto the table");
-        Assert.Equal(0, arrived.ParkedAt);
 
         // The one card that was already put away is still put away, and alone in the fan.
         Assert.Equal([resident], Parking.Fan(scene).Select(card => card.ItemId));

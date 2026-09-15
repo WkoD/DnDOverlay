@@ -83,8 +83,14 @@ public sealed record SetLocked(ItemId Item, bool Locked) : PatchOp;
 /// soon as one picture left, and a scene loaded onto another screen would carry the first
 /// screen's edge with it.
 /// </para>
+/// <para>
+/// <b>The <c>ZOrder</c> is the one in the layer the item is moving TO.</b> Parking hands out a
+/// place at the top of the fan, unparking a place at the top of the table, and the old number is
+/// spent either way - a picture pulled out of the fan has been touched and goes to the front like
+/// anything else that is touched, so there is nothing to keep.
+/// </para>
 /// </summary>
-public sealed record ParkItem(ItemId Item, bool Parked, int ZOrder, long Revision, long ParkedAt = 0) : PatchOp;
+public sealed record ParkItem(ItemId Item, bool Parked, int ZOrder, long Revision) : PatchOp;
 
 /// <summary>
 /// Puts a picture on the background layer, replacing whatever was there. Removing is
