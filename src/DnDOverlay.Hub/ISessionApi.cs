@@ -333,11 +333,21 @@ public interface ISessionApi
     /// before it gets here.
     /// </para>
     /// </param>
+    /// <param name="binding">
+    /// Whether this is the LAST report of a gesture, the one sent when the hand lets go (Part 4,
+    /// rule 5). Together with <paramref name="fromTable"/> it is what lets the hub keep conflict
+    /// rule 2 for a display: the middle of a gesture is not echoed back to the device that reported
+    /// it, because that device already knows better and an answer arriving late walks the picture
+    /// backwards through its own movement. The grab and this one still go back - they carry the
+    /// binding depth and the hub's clamping. Everyone else receives all of it either way, and the
+    /// control's thumbnail is not touched at all: it follows through <c>SessionEvent</c>.
+    /// </param>
     Task TransformItemAsync(
         ScreenRef screen,
         ItemTransform transform,
         bool fromTable,
         bool toFront,
+        bool binding,
         CancellationToken cancellationToken = default);
 
     /// <summary>

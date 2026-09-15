@@ -1958,7 +1958,8 @@ public sealed partial class App : Application, IDisposable
             screen,
             reported.Transform,
             reported.KnownRevision,
-            reported.Grabbed));
+            reported.Grabbed,
+            reported.Binding));
     }
 
     /// <summary>

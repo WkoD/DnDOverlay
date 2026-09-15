@@ -811,6 +811,10 @@ internal sealed class TileFace : Panel
                 hold.Item.RotationDeg),
             fromTable: false,
             toFront: grabbing,
+
+            // The control is not the table, so this changes no dispatch - but it says what the
+            // report IS, and the throttle two lines up already asks the same question.
+            binding,
             CancellationToken.None);
     }
 
@@ -1486,6 +1490,10 @@ internal sealed class TileFace : Panel
             new ItemTransform(item, placed.CenterX, placed.CenterY, placed.Scale, placed.RotationDeg),
             fromTable: false,
             toFront: true,
+
+            // A finished placement, not the middle of one: this is called once, when the DM has
+            // let go or tapped twice.
+            binding: true,
             CancellationToken.None);
     }
 

@@ -513,11 +513,31 @@ public sealed record AssetProgressMessage(IReadOnlyList<AssetLoad> Loads) : Prot
 /// </summary>
 public sealed record SpotlightPulseMessage(ScreenId Screen, double X, double Y) : ProtocolMessage;
 
+/// <param name="Binding">
+/// True on the LAST report of a gesture - the one sent when the hand lets go (Part 4, rule 5).
+/// <para>
+/// <b>It is what lets the hub keep conflict rule 2.</b> That rule says a display corrects itself
+/// when a broadcast arrives "that it did not cause itself", and until M4 that was unkeepable: the
+/// hub sends every patch to every device whose screen it names, the reporting device included, so
+/// a gesture came back as a stream of echoes of itself. While the hand still held the picture they
+/// were merely not drawn (rule 3); the ones still in flight when it let go were drawn, and the
+/// picture walked backwards through its own movement before landing. Measured at the table on
+/// 15.09.2026 with seven hundred pictures, where the round trip is long enough for a real backlog.
+/// </para>
+/// <para>
+/// With this flag the hub can leave the reporting device out of the middle of its own gesture and
+/// send it only the two answers it actually waits for: the grab, which carries the binding depth,
+/// and this one, which carries the hub's clamping if it differs. Everyone else - the second screen,
+/// the control's thumbnail - goes on receiving all of it, because that live stream is how they
+/// follow a hand at the table at all.
+/// </para>
+/// </param>
 public sealed record ItemTransformedMessage(
     ScreenId Screen,
     ItemTransform Transform,
     long KnownRevision,
-    bool Grabbed) : ProtocolMessage;
+    bool Grabbed,
+    bool Binding = false) : ProtocolMessage;
 
 /// <summary>
 /// A player swiped a picture into the slot bar, or took one back out of it.

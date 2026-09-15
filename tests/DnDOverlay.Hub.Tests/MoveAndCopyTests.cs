@@ -74,6 +74,7 @@ public sealed class MoveAndCopyTests
             new ItemTransform(travelling, 0.2, 0.8, 0.3, 45),
             fromTable: true,
             toFront: false,
+            binding: true,
             Cancellation);
 
         // Two pictures already lying on the target, so "on top" is a statement about its stack.
@@ -229,6 +230,7 @@ public sealed class MoveAndCopyTests
             new ItemTransform(template, 0.4, 0.6, 0.28, 30),
             fromTable: true,
             toFront: false,
+            binding: true,
             Cancellation);
 
         var before = (await session.GetSceneAsync(Table, Cancellation)).Items.Single();

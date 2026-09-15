@@ -632,6 +632,7 @@ public static class HubEndpoints
                                 transformed.Transform,
                                 fromTable: true,
                                 toFront: transformed.Grabbed,
+                                binding: transformed.Binding,
                                 cancellationToken).ConfigureAwait(false);
                         }
                         else

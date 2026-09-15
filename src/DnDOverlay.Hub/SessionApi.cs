@@ -1039,6 +1039,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
         ItemTransform transform,
         bool fromTable,
         bool toFront,
+        bool binding,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(transform);
@@ -1072,7 +1073,23 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
             var patch = new ScenePatch([new ScreenOp(screen, op)]);
 
-            _connections.Dispatch(patch);
+            // <b>The middle of a gesture is not sent back to the hand that is making it.</b>
+            // Conflict rule 2 says a display corrects itself on a broadcast "that it did not cause
+            // itself" - and from the outside it cannot tell, so the hub keeps the rule by not
+            // sending. The ORIGIN needs no parameter: a report from the table came over that
+            // device's own socket for that device's own screen, so it is screen.Device.
+            //
+            // The two ends of a gesture still go back. The grab carries the binding depth, which
+            // the display raises locally and then takes from here (Part 3); the last report carries
+            // the hub's clamping, if it differs at all. What is left out is only the twenty a
+            // second in between, which the reporting device throws away and which, when they
+            // arrive late, walk the picture backwards through its own movement (15.09.2026).
+            _connections.Dispatch(
+                patch,
+                except: fromTable && !toFront && !binding ? screen.Device : null);
+
+            // Unconditional, and that is the half that must not be touched: the control's thumbnail
+            // follows a hand at the table through this channel alone.
             _events.Publish(new SessionEvent.ScenePatched(patch));
         }
         finally

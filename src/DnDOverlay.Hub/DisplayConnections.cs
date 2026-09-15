@@ -66,12 +66,29 @@ public sealed class DisplayConnections
     /// Sends a patch to every device it concerns, cut down to the operations for that device's
     /// screens. A device whose screens the patch never mentions gets nothing at all.
     /// </summary>
-    public void Dispatch(ScenePatch patch)
+    /// <param name="except">
+    /// A device that is not to be told, because it is the one that asked for this - conflict rule 2
+    /// (Part 4): a display corrects itself on a broadcast "that it did not cause itself", and it
+    /// cannot tell the difference from the outside, so the hub keeps the rule for it by not
+    /// sending. Used for the middle of a gesture, where the hand knows better than any answer could
+    /// and an answer that arrives late is a picture walking backwards through its own movement.
+    /// <para>
+    /// <b>It does not reach the surfaces.</b> The control's thumbnail follows a hand at the table
+    /// through <c>SessionEvent.ScenePatched</c>, which is a separate channel, so leaving a device
+    /// out here takes nothing away from anybody watching.
+    /// </para>
+    /// </param>
+    public void Dispatch(ScenePatch patch, DeviceId? except = null)
     {
         ArgumentNullException.ThrowIfNull(patch);
 
         foreach (var connection in _connections.Values)
         {
+            if (connection.Device == except)
+            {
+                continue;
+            }
+
             var mine = patch.Ops.Where(op => connection.Screens.Contains(op.Screen)).ToList();
 
             if (mine.Count > 0)

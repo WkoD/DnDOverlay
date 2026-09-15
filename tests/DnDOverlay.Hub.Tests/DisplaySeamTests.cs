@@ -213,6 +213,77 @@ public sealed class DisplaySeamTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// <b>The middle of a gesture does not come back to the hand that is making it</b> - conflict
+    /// rule 2, which the hub keeps on the display's behalf because the display cannot tell from the
+    /// outside which broadcast it caused itself.
+    /// <para>
+    /// Measured at the table on 15.09.2026 with seven hundred pictures: every report of a drag came
+    /// back as a patch, and the ones still in flight when the hand let go were drawn, so the picture
+    /// walked backwards through its own movement before landing where it had been put down. While
+    /// the hand still held it they were merely not drawn (rule 3) - the rule ends at
+    /// <c>ManipulationCompleted</c> and the backlog does not.
+    /// </para>
+    /// <para>
+    /// The test needs no timeout to prove an absence. The patches travel as <c>SendClass.State</c>,
+    /// which is never dropped, over one socket, which keeps its order - so if the two middle reports
+    /// were echoed they would have to arrive BEFORE the answer to the last one. Reading until that
+    /// answer and counting what came with it is therefore exact.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task TheMiddleOfAGestureIsNotEchoedToTheHandMakingIt()
+    {
+        using var run = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+
+        var item = new ItemId(Guid.Parse("11111111-2222-3333-4444-777777777777"));
+        var inbox = Channel.CreateUnbounded<ProtocolMessage>();
+        var outbox = new TaskCompletionSource<SendQueues>();
+
+        var pump = Start(inbox, outbox, run.Token, Lying(item));
+
+        await Until<WelcomeMessage>(inbox, run.Token);
+        await Until<SceneSnapshotMessage>(inbox, run.Token);
+
+        var queues = await outbox.Task;
+
+        // A whole gesture: the grab, two reports from the middle of it, and the one on letting go.
+        Assert.True(queues.TrySend(new ItemTransformedMessage(
+            Screen, new ItemTransform(item, 0.20, 0.20, 0.25, 0), KnownRevision: 1, Grabbed: true)));
+        Assert.True(queues.TrySend(new ItemTransformedMessage(
+            Screen, new ItemTransform(item, 0.40, 0.40, 0.25, 0), KnownRevision: 1, Grabbed: false)));
+        Assert.True(queues.TrySend(new ItemTransformedMessage(
+            Screen, new ItemTransform(item, 0.60, 0.60, 0.25, 0), KnownRevision: 1, Grabbed: false)));
+        Assert.True(queues.TrySend(new ItemTransformedMessage(
+            Screen,
+            new ItemTransform(item, 0.80, 0.80, 0.25, 0),
+            KnownRevision: 1,
+            Grabbed: false,
+            Binding: true)));
+
+        var came = new List<double>();
+
+        while (true)
+        {
+            var patch = await Until<ScenePatchMessage>(inbox, run.Token);
+            var moved = Assert.IsType<TransformItem>(Assert.Single(patch.Patch.Ops).Op);
+
+            came.Add(Math.Round(moved.CenterX, 2));
+
+            if (moved.CenterX > 0.79)
+            {
+                break;
+            }
+        }
+
+        // The grab and the last report, and nothing from between them.
+        Assert.Equal([0.20, 0.80], came);
+
+        await run.CancelAsync();
+        await Finished(pump);
+    }
+
+    /// <summary>
     /// The other half of the same wire: a swipe into the slot bar. It is the gesture the players use
     /// most to clear the table, and until M3b there was no message for it at all - Part 4 has the
     /// operation and never gave the table a way to ask for it.

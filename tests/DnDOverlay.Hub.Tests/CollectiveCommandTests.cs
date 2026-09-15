@@ -472,6 +472,7 @@ public sealed class CollectiveCommandTests
             new ItemTransform(lowest.ItemId, lowest.CenterX, lowest.CenterY, lowest.Scale, lowest.RotationDeg),
             fromTable: false,
             toFront: true,
+            binding: true,
             Cancellation);
 
         IReadOnlyList<ItemId> stack = [added[1], added[2], added[3], added[0]];

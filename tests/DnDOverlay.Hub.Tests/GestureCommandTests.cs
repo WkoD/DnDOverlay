@@ -29,6 +29,7 @@ public sealed class GestureCommandTests
             new ItemTransform(item, 0.25, 0.75, 0.3, 90),
             fromTable: true,
             toFront: true,
+            binding: true,
             Cancellation);
 
         var moved = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
@@ -56,6 +57,7 @@ public sealed class GestureCommandTests
             new ItemTransform(item, 5, 0.5, 0.3, 0),
             fromTable: true,
             toFront: false,
+            binding: true,
             Cancellation);
 
         var moved = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
@@ -77,6 +79,7 @@ public sealed class GestureCommandTests
             new ItemTransform(item, 0.5, 0.5, 500, 0),
             fromTable: true,
             toFront: false,
+            binding: true,
             Cancellation);
 
         Assert.Equal(
@@ -106,6 +109,7 @@ public sealed class GestureCommandTests
             new ItemTransform(item, 0.1, 0.1, 0.2, 45),
             fromTable: true,
             toFront: true,
+            binding: true,
             Cancellation);
 
         Assert.Equal(before, (await session.GetSceneAsync(Target, Cancellation)).Items.Single());
@@ -115,6 +119,7 @@ public sealed class GestureCommandTests
             new ItemTransform(item, 0.1, 0.1, 0.2, 45),
             fromTable: false,
             toFront: false,
+            binding: true,
             Cancellation);
 
         var moved = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
@@ -134,7 +139,7 @@ public sealed class GestureCommandTests
         await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
 
         await session.TransformItemAsync(
-            Target, new ItemTransform(lower, 0.4, 0.4, 0.3, 0), fromTable: true, toFront: true, Cancellation);
+            Target, new ItemTransform(lower, 0.4, 0.4, 0.3, 0), fromTable: true, toFront: true, binding: true, Cancellation);
 
         var scene = await session.GetSceneAsync(Target, Cancellation);
         var raised = scene.Items.Single(item => item.ItemId == lower);
@@ -144,7 +149,7 @@ public sealed class GestureCommandTests
         // The rest of the gesture does not keep raising it: twenty reports a second would run the
         // number space up and change nothing anybody can see.
         await session.TransformItemAsync(
-            Target, new ItemTransform(lower, 0.41, 0.4, 0.3, 0), fromTable: true, toFront: false, Cancellation);
+            Target, new ItemTransform(lower, 0.41, 0.4, 0.3, 0), fromTable: true, toFront: false, binding: true, Cancellation);
 
         Assert.Equal(
             raised.ZOrder,
@@ -182,6 +187,7 @@ public sealed class GestureCommandTests
             new ItemTransform(lower, 0.2, 0.8, 0.35, 30),
             fromTable: false,
             toFront: true,
+            binding: true,
             Cancellation);
 
         var moved = (await session.GetSceneAsync(Target, Cancellation)).Items.Single(item => item.ItemId == lower);
@@ -205,6 +211,7 @@ public sealed class GestureCommandTests
             new ItemTransform(upper, 0.6, 0.4, 0.3, 0),
             fromTable: false,
             toFront: true,
+            binding: true,
             Cancellation);
 
         var after = await session.GetSceneAsync(Target, Cancellation);
@@ -234,6 +241,7 @@ public sealed class GestureCommandTests
                 // the most recent truth there is, and the ordering is the hub's either way.
                 fromTable: true,
                 toFront: false,
+                binding: true,
                 Cancellation);
 
             revisions.Add((await session.GetSceneAsync(Target, Cancellation)).Items.Single().Revision);
@@ -318,7 +326,7 @@ public sealed class GestureCommandTests
         await session.AddItemAsync(Target, Reference(), position: null, Cancellation);
 
         await session.TransformItemAsync(
-            Target, new ItemTransform(item, 0.5, 0.5, 0.3, 90), fromTable: true, toFront: false, Cancellation);
+            Target, new ItemTransform(item, 0.5, 0.5, 0.3, 90), fromTable: true, toFront: false, binding: true, Cancellation);
 
         await session.ParkItemAsync(Target, item, parked: true, Cancellation);
 
@@ -351,7 +359,7 @@ public sealed class GestureCommandTests
         await session.RemoveItemAsync(Target, item, Cancellation);
 
         await session.TransformItemAsync(
-            Target, new ItemTransform(item, 0.2, 0.2, 0.3, 0), fromTable: true, toFront: true, Cancellation);
+            Target, new ItemTransform(item, 0.2, 0.2, 0.3, 0), fromTable: true, toFront: true, binding: true, Cancellation);
         await session.ParkItemAsync(Target, item, parked: true, Cancellation);
         await session.SetLockedAsync(Target, item, locked: true, Cancellation);
 
@@ -373,7 +381,7 @@ public sealed class GestureCommandTests
 
         // Pushed as far to the right edge as a 1080p table allows.
         await session.TransformItemAsync(
-            Target, new ItemTransform(item, 5, 0.5, 0.1, 0), fromTable: true, toFront: false, Cancellation);
+            Target, new ItemTransform(item, 5, 0.5, 0.1, 0), fromTable: true, toFront: false, binding: true, Cancellation);
 
         var before = (await session.GetSceneAsync(Target, Cancellation)).Items.Single();
 
@@ -459,7 +467,7 @@ public sealed class GestureCommandTests
             SceneState.Empty with { Items = [Lying(item, revision: 4711)] });
 
         await session.TransformItemAsync(
-            Target, new ItemTransform(item, 0.4, 0.4, 0.3, 0), fromTable: true, toFront: false, Cancellation);
+            Target, new ItemTransform(item, 0.4, 0.4, 0.3, 0), fromTable: true, toFront: false, binding: true, Cancellation);
 
         Assert.True(
             (await session.GetSceneAsync(Target, Cancellation)).Items.Single().Revision > 4711,

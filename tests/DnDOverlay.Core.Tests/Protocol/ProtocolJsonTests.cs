@@ -83,7 +83,8 @@ public sealed class ProtocolJsonTests
             Screen.Screen,
             new ItemTransform(new ItemId(Guid.Parse("22222222-0000-0000-0000-000000000001")), 0.3, 0.7, 0.25, 90),
             KnownRevision: 17,
-            Grabbed: true),
+            Grabbed: true,
+            Binding: true),
 
         new ItemParkedMessage(
             Screen.Screen,
