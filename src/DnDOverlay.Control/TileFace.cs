@@ -94,6 +94,20 @@ internal sealed class TileFace : Panel
     private TilePoint _between;
 
     private bool _carrying;
+
+    /// <summary>
+    /// Where the hand was in the scene the last time it was over this tile, and for which grip. Kept
+    /// with the grip rather than on its own, so that a value from an earlier grip can never be read
+    /// into a later one.
+    /// </summary>
+    private (Hold Hold, CorePoint At)? _inside;
+
+    /// <summary>
+    /// While the hand is outside: which grip, and where in the picture the hand held it - the offset
+    /// from the picture's centre to the hand, in scene units. The picture does not turn or scale
+    /// while it waits, so the offset still fits when the hand comes back.
+    /// </summary>
+    private (Hold Hold, CorePoint Offset)? _away;
     private Behind? _behind;
 
     private TilePoint? _pressed;
@@ -687,8 +701,20 @@ internal sealed class TileFace : Panel
     /// came back over its own tile was still carrying, and could only let go. Now the hold stays
     /// alive. Outside, the picture waits at the place it had when the hand left - no step is taken,
     /// so Ctrl held for a copy cannot turn it either - and the stage shows the picture under the
-    /// pointer. Back inside, the ghost goes and pushing carries on from where the hand is, without
-    /// a jump. <b>Let go over another tile</b> and it is moved there, as before (Part 7).
+    /// pointer. <b>Let go over another tile</b> and it is moved there, as before (Part 7).
+    /// </para>
+    /// <para>
+    /// <b>Back inside, the picture comes back under the hand, held at the same point</b> (sixth
+    /// hand-run, 15.09.2026). It used to carry on from where it had waited, so a hand that came back
+    /// somewhere else pushed a picture that was no longer under it. The point in the picture the hand
+    /// held when it left is kept, and on the way back in the picture is placed so that point is under
+    /// the pointer again - then held at the edge like any other placement.
+    /// </para>
+    /// <para>
+    /// <b>Both moments are reported at once, past the throttle.</b> The throttle lets the first report
+    /// of every 50 ms through and drops the rest, with nothing trailing - so a hand leaving the tile
+    /// took the last dropped steps with it, and the table stopped short of the tile, the further the
+    /// faster the hand had been (sixth hand-run). The tile draws its own grip and looked right.
     /// </para>
     /// <para>
     /// <b>In the single view there is nowhere to carry to</b>, so leaving the tile shows nothing at
@@ -708,15 +734,39 @@ internal sealed class TileFace : Panel
 
         if (Over(local))
         {
-            if (_carrying)
+            if (_away is { } away && ReferenceEquals(away.Hold, hold))
             {
-                // Back over its own tile: no longer a carry, still a grip.
-                _carrying = false;
+                _away = null;
 
-                Carried?.Invoke(this, new Carry(default, null, PointToScreen(local), Phase.Ended, Copy: false));
+                Regripped(hold, local, away.Offset);
+
+                if (_carrying)
+                {
+                    // Back over its own tile: no longer a carry, still a grip.
+                    _carrying = false;
+
+                    Carried?.Invoke(this, new Carry(default, null, PointToScreen(local), Phase.Ended, Copy: false));
+                }
+
+                // This event placed the picture. A step on top of it would move it twice.
+                return true;
             }
 
+            _inside = (hold, Where(local));
+
             return false;
+        }
+
+        if (_away is not { } gone || !ReferenceEquals(gone.Hold, hold))
+        {
+            // The moment the hand leaves: where in the picture it held it, from the last place it was
+            // seen over the tile - or where the grip began, if the very first move already left.
+            var held = _inside is { } seen && ReferenceEquals(seen.Hold, hold) ? seen.At : hold.Tap;
+
+            _away = (hold, new CorePoint(held.X - hold.Item.CenterX, held.Y - hold.Item.CenterY));
+
+            // And the table catches up with the tile before the picture starts waiting.
+            Send(binding: false, grabbing: false, forced: true);
         }
 
         if (Opened)
@@ -738,6 +788,24 @@ internal sealed class TileFace : Panel
         Carried?.Invoke(this, new Carry(hold.Item.ItemId, picture, PointToScreen(local), Phase.Began, Copy: false));
 
         return true;
+    }
+
+    /// <summary>
+    /// Puts a waiting picture back under a hand that has come back over its tile, held at the point
+    /// it was held at when the hand left, and reports it at once.
+    /// </summary>
+    private void Regripped(Hold hold, TilePoint local, CorePoint offset)
+    {
+        var at = Where(local);
+
+        hold.Item = CoreManipulation.HoldAtEdge(
+            hold.Item with { CenterX = at.X - offset.X, CenterY = at.Y - offset.Y },
+            _screen);
+
+        _inside = (hold, at);
+
+        Draw();
+        Send(binding: false, grabbing: false, forced: true);
     }
 
     /// <summary>
@@ -806,6 +874,12 @@ internal sealed class TileFace : Panel
 
         _carrying = false;
 
+        // <b>The press is spent</b> (sixth hand-run, 15.09.2026). The left button is still down after a
+        // right click, and a press that is not spent goes on meaning something: the next move started
+        // a grip or a frame from where the press BEGAN, and letting go became a tap that selected.
+        _spent = true;
+        _pressed = null;
+
         if (puttingDown && _hold is not null)
         {
             LetGo(0, turning: false, parking: false);
@@ -830,6 +904,7 @@ internal sealed class TileFace : Panel
             LetGo(0, turning: false, parking: false);
         }
 
+        _spent = true;
         _pressed = null;
     }
 
@@ -931,10 +1006,15 @@ internal sealed class TileFace : Panel
     /// here</b> - it comes from the hub, and a stage that trusted its own command would drift from a
     /// second control changing the same table (rule 1).
     /// </summary>
-    private void Send(bool binding, bool grabbing)
+    /// <param name="forced">
+    /// Past the throttle, for a moment the table must not miss: the hand leaving the tile or coming
+    /// back to it. The throttle only ever lets the FIRST report of an interval through, so whatever
+    /// was dropped just before such a moment would otherwise never arrive.
+    /// </param>
+    private void Send(bool binding, bool grabbing, bool forced = false)
     {
         if (_hold is not { } hold
-            || !_throttle.Allows(hold.Item.ItemId, Environment.TickCount64, binding))
+            || (!forced && !_throttle.Allows(hold.Item.ItemId, Environment.TickCount64, binding)))
         {
             return;
         }
