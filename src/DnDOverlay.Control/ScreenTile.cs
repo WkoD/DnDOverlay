@@ -244,6 +244,9 @@ internal sealed class ScreenTile : Border
     /// </summary>
     internal CorePoint? Landing(TilePoint absolute) => _face.Landing(absolute);
 
+    /// <inheritdoc cref="TileFace.SelectWhenItArrives"/>
+    internal void SelectWhenItArrives(ItemId item) => _face.SelectWhenItArrives(item);
+
     /// <summary>
     /// Which of the two menus this grip asks for: the picture's if one was hit, the screen's
     /// otherwise. <b>That is not a grip with two meanings but the nature of a context menu</b> - the

@@ -53,6 +53,12 @@ internal sealed class TileFace : Panel
     private readonly Marks _marks;
     private readonly Fingers _pointing = new();
     private readonly Selection _selection;
+
+    /// <summary>
+    /// A picture that is to be selected the moment it arrives on this screen - carried over from
+    /// another tile, whose patch may still be on its way (<see cref="SelectWhenItArrives"/>).
+    /// </summary>
+    private ItemId? _awaited;
     private readonly Pictures _pictures;
 
     /// <summary>
@@ -285,6 +291,13 @@ internal sealed class TileFace : Panel
         // A picture that has left this screen is no longer selected - a menu command to an item
         // that is not there would be ineffective at the hub and a broken promise in the surface.
         _selection.Keep(scene);
+
+        // And one carried in from another tile is, as soon as it is here.
+        if (_awaited is { } awaited && scene.Items.Any(lying => lying.ItemId == awaited))
+        {
+            _awaited = null;
+            _selection.Only(awaited);
+        }
 
         Draw();
 
@@ -533,6 +546,10 @@ internal sealed class TileFace : Panel
 
         _hold = new Hold(card with { CenterX = peek.X, CenterY = peek.Y, Parked = false }, now, at);
 
+        // Putting a card away took its outline off; taking it back out is taking hold of it, and
+        // it gets one like anything else a hand presses (fourth hand-run, 15.09.2026).
+        Chosen(card.ItemId);
+
         Unfan();
         Send(binding: false, grabbing: true);
 
@@ -604,7 +621,7 @@ internal sealed class TileFace : Panel
     /// so there was nothing to look at and nothing to leaf through.
     /// </para>
     /// </summary>
-    private bool Grab(TilePoint at)
+    private bool Grab(TilePoint at, bool selecting = true)
     {
         var place = Where(at);
 
@@ -627,6 +644,11 @@ internal sealed class TileFace : Panel
         }
 
         _hold = new Hold(picture, place, OnFace(at));
+
+        if (selecting)
+        {
+            Chosen(id);
+        }
 
         // The first report of a gesture is the grab, and what is taken hold of comes to the front -
         // unless it is locked, which the hub decides rather than this (Part 3).
@@ -1040,7 +1062,8 @@ internal sealed class TileFace : Panel
         var at = turned.GetPosition(this);
         var standing = _hold is not null || _behind is not null;
 
-        if (!standing && !Beneath(at) && !Grab(at))
+        // Turning the wheel over a picture zooms it and selects nothing: that is not pressing it.
+        if (!standing && !Beneath(at) && !Grab(at, selecting: false))
         {
             return;
         }
@@ -1406,6 +1429,61 @@ internal sealed class TileFace : Panel
         return new TilePoint(
             Math.Clamp(at.X, 0, Math.Max(0, face.Width)),
             Math.Clamp(at.Y, 0, Math.Max(0, face.Height)));
+    }
+
+    /// <summary>
+    /// Selects a picture a hand has just taken hold of.
+    /// <para>
+    /// <b>Pressing a picture selects it, whether the hand then lets go or pulls</b> (fourth
+    /// hand-run, 15.09.2026). A tap did this and a drag did not - the selection changed only in
+    /// <see cref="Tap"/>, which a drag never reaches - so a picture clicked and released carried an
+    /// outline and the same picture clicked and moved did not.
+    /// </para>
+    /// <para>
+    /// <b>A picture that is already selected keeps the selection as it is.</b> The outline stays
+    /// until ANOTHER picture is pressed, and pulling one member of a selection is not pressing
+    /// another. With Ctrl held it joins the selection rather than replacing it - the mouse's way
+    /// of choosing several, as on a tap. A finger has no Ctrl, and the selection circles are its
+    /// way (Part 7).
+    /// </para>
+    /// </summary>
+    private void Chosen(ItemId item)
+    {
+        if (_selection.Contains(item))
+        {
+            return;
+        }
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            _selection.Add([item]);
+        }
+        else
+        {
+            _selection.Only(item);
+        }
+    }
+
+    /// <summary>
+    /// Selects a picture on this screen as soon as it is here - now, if it already is.
+    /// <para>
+    /// Asked by the stage when a picture was carried in from another tile. <b>The patch that puts
+    /// it here may not have arrived yet</b>, and selecting an id this scene does not hold would
+    /// be undone by the very next <c>Show</c>, which drops whatever is not on the screen. So the
+    /// wish waits for the picture rather than for a moment.
+    /// </para>
+    /// </summary>
+    internal void SelectWhenItArrives(ItemId item)
+    {
+        if (_scene.Items.Any(lying => lying.ItemId == item))
+        {
+            _awaited = null;
+            _selection.Only(item);
+
+            return;
+        }
+
+        _awaited = item;
     }
 
     /// <summary>

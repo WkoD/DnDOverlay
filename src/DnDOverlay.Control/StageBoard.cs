@@ -621,13 +621,42 @@ internal sealed class StageBoard : Panel
 
         var place = target.Landing(carried.At);
 
-        _ = carried.Copy
-            ? _session.CopyItemAsync(from.Screen, target.Screen, from.Item, place, CancellationToken.None)
-            : _session.MoveItemAsync(from.Screen, target.Screen, from.Item, place, CancellationToken.None);
+        // <b>The outline goes with the picture, and only there</b> (fourth hand-run, 15.09.2026).
+        // The picture the DM carried over is the one he is working on, so the source lets go of it
+        // at once - for a copy as well, whose original stays behind unselected - and the target
+        // selects what lands. A carry that lands on no other tile returned above and leaves the
+        // outline where it was. The context menu's copy and move do none of this: there the
+        // selection stays where the DM made it.
+        _tiles.GetValueOrDefault(from.Screen)?.Selected.Drop(from.Item);
 
         // The DM has just worked on the target, so that is where the next blind grip lands
         // (Part 7).
         Activate(target.Screen);
+
+        _ = Deliver();
+
+        async Task Deliver()
+        {
+            if (carried.Copy)
+            {
+                // A copy has an id of its own, and only the hub hands it out.
+                var copy = await _session
+                    .CopyItemAsync(from.Screen, target.Screen, from.Item, place, CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                if (copy is { } landed)
+                {
+                    target.SelectWhenItArrives(landed);
+                }
+
+                return;
+            }
+
+            await _session.MoveItemAsync(from.Screen, target.Screen, from.Item, place, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            target.SelectWhenItArrives(from.Item);
+        }
     }
 
     private ScreenTile? Under(ScreenPoint at) =>
