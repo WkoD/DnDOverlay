@@ -1943,23 +1943,22 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        // A grab is never held back: it is what brings the picture to the front, and a front that
-        // arrives a twentieth of a second late is a picture that was under another one while
-        // somebody was already moving it.
-        if (!_throttle.Allows(
-            reported.Transform.Item,
-            Environment.TickCount64,
-            binding: reported.Binding || reported.Grabbed))
-        {
-            return;
-        }
-
-        _ = outbox.TrySend(new ItemTransformedMessage(
+        var message = new ItemTransformedMessage(
             screen,
             reported.Transform,
             reported.KnownRevision,
             reported.Grabbed,
-            reported.Binding));
+            reported.Binding);
+
+        // A grab is never held back: it is what brings the picture to the front, and a front that
+        // arrives a twentieth of a second late is a picture that was under another one while
+        // somebody was already moving it. A step may wait and is sent when its interval ends, from a
+        // timer's thread - which the send queue takes (TransformThrottle).
+        var kind = reported.Binding ? ReportKind.Final
+            : reported.Grabbed ? ReportKind.Urgent
+            : ReportKind.Step;
+
+        _throttle.Report(reported.Transform.Item, kind, () => _ = outbox.TrySend(message));
     }
 
     /// <summary>

@@ -630,20 +630,20 @@ internal sealed class TileFace : Panel
     /// </summary>
     private void Send(Behind behind, bool binding)
     {
+        // Taken now: a held step is sent from a timer's thread, and must not read the gesture then.
+        var session = _session;
+        var screen = _screenRef;
+        var centre = new CorePoint(behind.Background.CenterX, behind.Background.CenterY);
+        var scale = behind.Background.Scale;
+        var rotation = behind.Background.RotationDeg;
+
         // Under the empty id, which no item can have: a screen carries exactly one background, so
         // one entry is all it needs - and sharing an item's key would let a picture and the layer
         // under it throttle each other.
-        if (!_throttle.Allows(default, Environment.TickCount64, binding))
-        {
-            return;
-        }
-
-        _ = _session.TransformBackgroundAsync(
-            _screenRef,
-            new CorePoint(behind.Background.CenterX, behind.Background.CenterY),
-            behind.Background.Scale,
-            behind.Background.RotationDeg,
-            CancellationToken.None);
+        _throttle.Report(
+            default,
+            binding ? ReportKind.Final : ReportKind.Step,
+            () => _ = session.TransformBackgroundAsync(screen, centre, scale, rotation, CancellationToken.None));
     }
 
     /// <summary>
@@ -1007,33 +1007,43 @@ internal sealed class TileFace : Panel
     /// second control changing the same table (rule 1).
     /// </summary>
     /// <param name="forced">
-    /// Past the throttle, for a moment the table must not miss: the hand leaving the tile or coming
-    /// back to it. The throttle only ever lets the FIRST report of an interval through, so whatever
-    /// was dropped just before such a moment would otherwise never arrive.
+    /// At once, for a moment the table must not miss: the hand leaving the tile or coming back to it.
+    /// A held step would reach the table too, but up to an interval later; this takes its place.
     /// </param>
     private void Send(bool binding, bool grabbing, bool forced = false)
     {
-        if (_hold is not { } hold
-            || (!forced && !_throttle.Allows(hold.Item.ItemId, Environment.TickCount64, binding)))
+        if (_hold is not { } hold)
         {
             return;
         }
 
-        _ = _session.TransformItemAsync(
-            _screenRef,
-            new ItemTransform(
-                hold.Item.ItemId,
-                hold.Item.CenterX,
-                hold.Item.CenterY,
-                hold.Item.Scale,
-                hold.Item.RotationDeg),
-            fromTable: false,
-            toFront: grabbing,
+        // Taken now: a held step is sent from a timer's thread, and must not read the hold then.
+        var session = _session;
+        var screen = _screenRef;
+        var transform = new ItemTransform(
+            hold.Item.ItemId,
+            hold.Item.CenterX,
+            hold.Item.CenterY,
+            hold.Item.Scale,
+            hold.Item.RotationDeg);
 
-            // The control is not the table, so this changes no dispatch - but it says what the
-            // report IS, and the throttle two lines up already asks the same question.
-            binding,
-            CancellationToken.None);
+        var kind = binding ? ReportKind.Final
+            : grabbing || forced ? ReportKind.Urgent
+            : ReportKind.Step;
+
+        _throttle.Report(
+            transform.Item,
+            kind,
+            () => _ = session.TransformItemAsync(
+                screen,
+                transform,
+                fromTable: false,
+                toFront: grabbing,
+
+                // The control is not the table, so this changes no dispatch - but it says what the
+                // report IS, and the throttle asks the same question.
+                binding,
+                CancellationToken.None));
     }
 
     private void Pressed(MouseButtonEventArgs pressed)
