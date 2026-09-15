@@ -26,6 +26,12 @@ internal sealed class Pictures(AssetStore store)
     private readonly Dictionary<AssetId, BitmapSource?> _loaded = [];
     private readonly Dictionary<AssetId, BitmapSource?> _grey = [];
 
+    /// <summary>Colour previews held, failures included - read by the memory line (<c>StageMemory</c>).</summary>
+    internal int Loaded => _loaded.Count;
+
+    /// <summary>Grey previews held beside them.</summary>
+    internal int Greyed => _grey.Count;
+
     /// <summary>
     /// The preview of one asset, or <see langword="null"/> when there is none to be had - a
     /// thumbnail that has not been written yet, or a file that has gone missing.

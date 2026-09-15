@@ -92,6 +92,9 @@ internal sealed class StageBoard : Panel
     /// <summary>Raised when the DM has made another tile the active one.</summary>
     internal event EventHandler? ActiveChanged;
 
+    /// <summary>How many tiles the stage holds, laid out or not - read by the memory line.</summary>
+    internal int Tiles => _tiles.Count;
+
     /// <summary>
     /// Takes what is selected on the active screen off it - the Del key, and the same command as
     /// "Remove" in the picture's menu: one patch for the whole selection (<c>RemoveItemsAsync</c>).

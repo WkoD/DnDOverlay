@@ -29,6 +29,7 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Uri _address;
     private readonly LogList _log;
     private readonly CancellationTokenSource _listening = new();
+    private readonly StageMemory _memory = new();
     private readonly ListBox _list = new() { Margin = new Thickness(0, 0, 0, 8), MinHeight = 160 };
     private readonly ComboBox _state = new() { Width = 160, Margin = new Thickness(0, 0, 8, 0) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
@@ -63,7 +64,9 @@ internal sealed class MainWindow : Window, IDisposable
         _address = address;
         _log = new LogList(log, "Control") { Height = 200 };
 
-        _board = new StageBoard(session, settings, new Pictures(store));
+        var pictures = new Pictures(store);
+
+        _board = new StageBoard(session, settings, pictures);
 
         _logger = log.CreateLogger("Control");
 
@@ -80,19 +83,41 @@ internal sealed class MainWindow : Window, IDisposable
         // It reports and does not judge: a budget needs a cadence, and a stream this sparse cannot
         // estimate one - measured in the second hand-run of M4, where a stage holding 16.7 ms was
         // warned against a budget of 2.8 ms (FrameWatch.WhileDrawing).
-        _frames = FrameWatch.WhileDrawing(window => ControlLog.FrameTimes(
-            _logger,
-            window.Seconds,
-            window.Frames,
-            window.MedianMs,
-            window.P95Ms,
-            window.MaxMs,
-            window.CadenceMs,
-            window.CpuPercent,
-            window.GcMs,
-            window.Sweeps,
-            window.DrawMs,
-            window.HandMs));
+        _frames = FrameWatch.WhileDrawing(window =>
+        {
+            ControlLog.FrameTimes(
+                _logger,
+                window.Seconds,
+                window.Frames,
+                window.MedianMs,
+                window.P95Ms,
+                window.MaxMs,
+                window.CadenceMs,
+                window.CpuPercent,
+                window.GcMs,
+                window.Sweeps,
+                window.DrawMs,
+                window.HandMs);
+
+            // Right behind it and over the same window, so the two lines read as one: the frame
+            // line says THAT the collector took the time, this one says what it was collecting
+            // (fourth hand-run, 15.09.2026 - see StageMemory for the three causes it separates).
+            var memory = _memory.Read();
+
+            ControlLog.StageMemory(
+                _logger,
+                window.Seconds,
+                memory.AllocatedMb,
+                memory.HeapMb,
+                memory.LargeMb,
+                memory.ProcessMb,
+                memory.Gen0,
+                memory.Gen1,
+                memory.Gen2,
+                pictures.Loaded,
+                pictures.Greyed,
+                _board.Tiles);
+        });
 
         Redraw.Measure(_frames);
 

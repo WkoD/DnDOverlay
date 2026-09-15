@@ -339,6 +339,9 @@
   <data name="E4015_SessionStreamRestarted" xml:space="preserve">
     <value>Fell behind the session stream and the hub ended it - taken up again and redrawn from the hub. {Restarts} so far this run.</value>
   </data>
+  <data name="E4016_StageMemory" xml:space="preserve">
+    <value>Stage memory over {Seconds} s: {AllocatedMb} MB allocated, heap {HeapMb} MB (large {LargeMb} MB), process {ProcessMb} MB, collections {Gen0}/{Gen1}/{Gen2}, {Pictures} pictures and {Greyed} grey cached, {Tiles} tiles.</value>
+  </data>
   <data name="E4013_FrameTimes" xml:space="preserve">
     <value>Stage frames over {Seconds} s, {Frames} of them: median {MedianMs} ms, 95th {P95Ms} ms, max {MaxMs} ms, cadence {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} sweep(s), longest draw {DrawMs} ms, hand {HandMs} ms late.</value>
   </data>

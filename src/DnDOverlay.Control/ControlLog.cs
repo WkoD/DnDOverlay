@@ -231,4 +231,42 @@ internal static partial class ControlLog
         Message = "Fell behind the session stream and the hub ended it - taken up again "
                   + "and redrawn from the hub. {Restarts} so far this run.")]
     internal static partial void SessionStreamRestarted(ILogger logger, int restarts);
+
+    /// <summary>
+    /// What memory did over the frame window 4013 just reported, written right behind it.
+    /// <para>
+    /// <b>A measurement asked for before any fix</b> (fourth hand-run, 15.09.2026). Changing the
+    /// window's width stuttered badly, its height not at all, and 4013 read 1335.6 ms of collection
+    /// in 173 full collections within 30 seconds at under one percent CPU - and a restart cleared
+    /// it. Something builds up over a session. 4013 cannot say what, because churn, a leak and
+    /// WPF's bitmap memory pressure all end in full collections; this line is built to tell them
+    /// apart (<c>StageMemory</c>): allocation high and levels flat is churn, a heap that climbs from
+    /// line to line is a leak, few managed bytes with far more gen2 than gen0 and a growing process
+    /// is bitmap pressure. The cache counts say whether a cache grows with the width rather than
+    /// with the assets.
+    /// </para>
+    /// <para>
+    /// <b>Information, and only while the stage draws</b>, on exactly the cadence of 4013 - an idle
+    /// evening writes neither.
+    /// </para>
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4016,
+        Level = LogLevel.Information,
+        Message = "Stage memory over {Seconds} s: {AllocatedMb} MB allocated, heap {HeapMb} MB "
+                  + "(large {LargeMb} MB), process {ProcessMb} MB, collections {Gen0}/{Gen1}/{Gen2}, "
+                  + "{Pictures} pictures and {Greyed} grey cached, {Tiles} tiles.")]
+    internal static partial void StageMemory(
+        ILogger logger,
+        int seconds,
+        double allocatedMb,
+        double heapMb,
+        double largeMb,
+        double processMb,
+        int gen0,
+        int gen1,
+        int gen2,
+        int pictures,
+        int greyed,
+        int tiles);
 }

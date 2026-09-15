@@ -812,11 +812,20 @@ into one of them would have made the range names stop meaning anything.
 | 4012 | `UnhandledFault` | Critical | display |
 | 4013 | `FrameTimes` | Information | control |
 | 4015 | `SessionStreamRestarted` | Warning | control |
+| 4016 | `StageMemory` | Information | control |
 
-**Next free: 4016. 4014 is retired**, never issued in a release and never to be reused: it was the
+**Next free: 4017. 4014 is retired**, never issued in a release and never to be reused: it was the
 control's own frame-budget warning, and the second hand-run of M4 showed every one of its lines to
 be false - a stage holding 16.7 ms warned against a budget of 2.8 ms, because the budget follows a
 cadence that a sparse stream cannot estimate. The reading stays, the judgement went.
+
+**4016 is read beside 4013, never alone.** It is written right behind it over the same window, and
+it was built to answer one question the frame line cannot: when the collector takes the time, what
+is it collecting? Churn shows as many megabytes allocated with heap and process flat; a leak as a
+heap that climbs from one line to the next; WPF's bitmap memory pressure as few managed megabytes,
+full collections far above the gen0 and gen1 counts, and a process that grows where the heap does
+not. Asked for at the fourth hand-run of M4, where widening the window stuttered, 4013 read 173
+full collections in 30 seconds, and a restart made it go away.
 
 **4013 is the same measurement as 3023 and deliberately not the same number.**
 The range follows the subject of the sentence: 3023 is about a screen at the table, 4013 is about
