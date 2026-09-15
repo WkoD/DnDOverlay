@@ -138,9 +138,9 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// when it comes back. A number per screen can be handed out twice; a list cannot.
     /// </para>
     /// <para>
-    /// <b>Not per monitor arrangement</b>, unlike <see cref="StageViews"/>, and that is the whole
-    /// point of it: this describes how the ROOM looks - the table in the middle, the beamer on the
-    /// wall - and the room does not change when the surface is docked (Part 1, rule 4).
+    /// <b>It describes the ROOM</b> - the table in the middle, the beamer on the wall - and the
+    /// room does not change when the surface is docked, so it is kept once and not per monitor
+    /// arrangement (Part 1, rule 4).
     /// </para>
     /// <para>
     /// Written in M4a, read by the stage in M4b: what an unknown entry means, where a new screen
@@ -148,18 +148,6 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// </para>
     /// </summary>
     public IReadOnlyList<ScreenKey> TileOrder { get; set; } = [];
-
-    /// <summary>
-    /// Which stage view was last open, PER monitor arrangement - the one view property that is
-    /// kept that way (Part 7).
-    /// <para>
-    /// The reason is the opposite of the one for <see cref="TileOrder"/>: this describes how the DM
-    /// is sitting right now. Docked at the desk he works on the big monitor with one screen open;
-    /// undocked on the surface he wants the overview. Carrying one answer across both would be
-    /// wrong twice a day.
-    /// </para>
-    /// </summary>
-    public IReadOnlyList<StageView> StageViews { get; set; } = [];
 
     /// <summary>
     /// Where the window stood when it was last closed.
@@ -183,16 +171,6 @@ public sealed record ControlConfiguration : IConfigurationDocument
 /// </para>
 /// </summary>
 public sealed record ScreenKey(Guid DeviceId, string ScreenId);
-
-/// <summary>
-/// One monitor arrangement and the stage view that was open in it - no screen means the overview.
-/// </summary>
-/// <param name="Monitors">
-/// What identifies the arrangement. It is formed by whoever knows the monitors, so this is a plain
-/// string here: what makes two arrangements "the same" is a question for the platform, not for the
-/// file (Part 2).
-/// </param>
-public sealed record StageView(string Monitors, ScreenKey? Opened);
 
 /// <summary>Where a window stood, in the coordinates the window system uses.</summary>
 public sealed record WindowPlacement(double Left, double Top, double Width, double Height, bool Maximised);

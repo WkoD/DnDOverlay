@@ -50,10 +50,11 @@ public sealed class ConfigurationFileTests : IDisposable
     }
 
     /// <summary>
-    /// The four things the stage remembers, through the file and back: how the DM looks at a screen,
-    /// the order of the tiles, which view was open in which monitor arrangement, and where the
-    /// window stood (Part 7). Written in M4a and read by the tiles in M4b - the round trip is what
-    /// can be asked of them today, and it is the half that a UI test would never reach.
+    /// The three things the stage remembers, through the file and back: how the DM looks at a
+    /// screen, the order of the tiles, and where the window stood (Part 7). Which view was open was
+    /// a fourth until the fourth hand-run, and is now deliberately forgotten - every start is the
+    /// overview. Written in M4a and read by the tiles in M4b - the round trip is what can be asked
+    /// of them today, and it is the half that a UI test would never reach.
     /// </summary>
     [Fact]
     public void What_the_stage_remembers_survives_the_file()
@@ -82,7 +83,6 @@ public sealed class ConfigurationFileTests : IDisposable
                 // The beamer first, which is not the order the device tree would give - an order
                 // that happens to match the default proves nothing.
                 TileOrder = [beamer, table],
-                StageViews = [new StageView("docked", table), new StageView("surface", null)],
                 Window = new WindowPlacement(120, 60, 1400, 900, Maximised: false),
             });
 
@@ -94,7 +94,6 @@ public sealed class ConfigurationFileTests : IDisposable
 
         Assert.Equal(ViewRotation.Half, Assert.Single(loaded.KnownScreens).View);
         Assert.Equal([beamer, table], loaded.TileOrder);
-        Assert.Equal([new StageView("docked", table), new StageView("surface", null)], loaded.StageViews);
         Assert.Equal(new WindowPlacement(120, 60, 1400, 900, Maximised: false), loaded.Window);
     }
 

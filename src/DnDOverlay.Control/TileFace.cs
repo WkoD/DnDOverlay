@@ -1546,9 +1546,23 @@ internal sealed class TileFace : Panel
     /// tile's own view rotation</b>. A picture carried onto a table the DM looks at from the side
     /// has to land where he let go of it, not where the source tile would have put it (Part 7).
     /// </para>
+    /// <para>
+    /// <b>A tile that is not laid out answers "not on me", and that is an answer rather than an
+    /// error.</b> In the single view only the open tile is in the tree at all - the others are not
+    /// measured, arranged or drawn (<c>StageBoard.Lay</c>) - and <c>PointFromScreen</c> on a visual
+    /// with no <c>PresentationSource</c> throws. The search for a drop target walks every tile, so
+    /// carrying a picture OUT of the open one in the single view brought the control down
+    /// (hand-run of M4, fourth run). It only happened there and only on the way out: as long as the
+    /// hand is over the open tile, the search finds it first and never reaches a detached one.
+    /// </para>
     /// </summary>
     internal CorePoint? Landing(TilePoint absolute)
     {
+        if (!IsVisible)
+        {
+            return null;
+        }
+
         var on = OnFace(PointFromScreen(absolute));
         var face = Wanted(RenderSize);
 

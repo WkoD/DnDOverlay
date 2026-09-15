@@ -51,7 +51,6 @@ public sealed class ConfigurationDefaultsTests
         // than null, and no window - a placement of zeros would put the window in a corner it was
         // never in (rule 7).
         Assert.Empty(value.TileOrder);
-        Assert.Empty(value.StageViews);
         Assert.Null(value.Window);
     }
 

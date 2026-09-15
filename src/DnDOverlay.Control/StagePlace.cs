@@ -1,63 +1,21 @@
 using System.Windows;
-using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
 using DnDOverlay.Platform.Windows;
 
 namespace DnDOverlay.Control;
 
 /// <summary>
-/// Where the window stands and which view was open in it - the two values Part 7 keeps PER MONITOR
-/// ARRANGEMENT rather than per screen.
+/// Where the window stood when it was last closed, and how to put it back there.
 /// <para>
-/// The difference is the one rule 4 draws. The tile order describes the ROOM and does not change
-/// when the surface is docked; these two describe how the DM is sitting right now. Docked at the
-/// desk he works on the big monitor with one screen open, undocked on the surface he wants the
-/// overview - carrying one answer across both would be wrong twice a day.
+/// <b>Which view was open is deliberately NOT kept</b> (fourth hand-run, 15.09.2026). It used to
+/// be, per monitor arrangement, on the reasoning that a DM docked at the desk works with one
+/// screen open while the same DM undocked on the surface wants the overview. The DM asked for the
+/// opposite, and the rule is now plain: <b>every start is the overview.</b> Opening one screen is
+/// something done for a moment, not a state a session inherits from the one before it.
 /// </para>
 /// </summary>
 internal static class StagePlace
 {
-    /// <summary>
-    /// What identifies this arrangement: the screens of this machine, in a fixed order.
-    /// <para>
-    /// The identifiers rather than the positions, because moving a monitor on the desk does not
-    /// make it another arrangement - unplugging one does. The order is sorted, so that the same
-    /// two monitors enumerated the other way round are still the same arrangement.
-    /// </para>
-    /// </summary>
-    internal static string Arrangement()
-    {
-        var screens = Screens.Enumerate(Environment.MachineName)
-            .Select(monitor => monitor.Screen.ScreenId.Value)
-            .OrderBy(id => id, StringComparer.Ordinal);
-
-        return string.Join('|', screens);
-    }
-
-    /// <summary>The view that was open in this arrangement, and on which screen.</summary>
-    internal static StageView? Remembered(ControlConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        var here = Arrangement();
-
-        return configuration.StageViews.FirstOrDefault(view => view.Monitors == here);
-    }
-
-    /// <summary>Keeps the view for this arrangement and leaves every other arrangement alone.</summary>
-    internal static IReadOnlyList<StageView> With(
-        IReadOnlyList<StageView> views, ScreenRef? opened)
-    {
-        ArgumentNullException.ThrowIfNull(views);
-
-        var here = Arrangement();
-        var mine = new StageView(
-            here,
-            opened is { } screen ? new ScreenKey(screen.Device.Value, screen.Screen.Value) : null);
-
-        return [.. views.Where(view => view.Monitors != here), mine];
-    }
-
     /// <summary>
     /// Puts the window back where it was - <b>if that place still exists</b>.
     /// <para>

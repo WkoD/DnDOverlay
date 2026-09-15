@@ -198,11 +198,6 @@ internal sealed class MainWindow : Window, IDisposable
         // shown, so it never appears in one place and jumps to another.
         StagePlace.Restore(this, settings.Current.Window);
 
-        if (StagePlace.Remembered(settings.Current) is { Opened: not null })
-        {
-            Switch(single: true);
-        }
-
         Closing += (_, _) =>
         {
             _settings.Update(current => current with { Window = StagePlace.Taken(this) });
@@ -349,7 +344,6 @@ internal sealed class MainWindow : Window, IDisposable
     private void Remember() =>
         _settings.Update(current => current with
         {
-            StageViews = StagePlace.With(current.StageViews, _board.Single ? _board.Active : null),
         });
 
     private ScreenRef? Selected() =>
