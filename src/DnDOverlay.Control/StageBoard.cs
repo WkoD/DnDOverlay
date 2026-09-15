@@ -603,6 +603,13 @@ internal sealed class StageBoard : Panel
 
                 break;
 
+            case TileFace.Phase.Ended:
+                // Back over its own tile, or abandoned: the ghost goes, nothing lands.
+                Unghost();
+                _carried = null;
+
+                break;
+
             case TileFace.Phase.Dropped:
                 Land(carried);
 
@@ -627,12 +634,7 @@ internal sealed class StageBoard : Panel
     /// </summary>
     private void Land(TileFace.Carry carried)
     {
-        if (_ghost is { } ghost)
-        {
-            AdornerLayer.GetAdornerLayer(this)?.Remove(ghost);
-        }
-
-        _ghost = null;
+        Unghost();
 
         var taken = _carried;
 
@@ -683,6 +685,17 @@ internal sealed class StageBoard : Panel
 
             target.SelectWhenItArrives(from.Item);
         }
+    }
+
+    /// <summary>Takes the picture that follows the pointer off the stage, if one is showing.</summary>
+    private void Unghost()
+    {
+        if (_ghost is { } ghost)
+        {
+            AdornerLayer.GetAdornerLayer(this)?.Remove(ghost);
+        }
+
+        _ghost = null;
     }
 
     private ScreenTile? Under(ScreenPoint at) =>

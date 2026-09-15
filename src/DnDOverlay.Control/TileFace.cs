@@ -134,6 +134,16 @@ internal sealed class TileFace : Panel
         PreviewMouseLeftButtonDown += (_, pressed) => Pressed(pressed);
         PreviewMouseMove += (_, moved) => Dragged(moved);
         PreviewMouseLeftButtonUp += (_, released) => Lifted(released);
+
+        // Only while the button is still DOWN: letting go releases the capture too, and that release
+        // is Lifted's to handle, which runs first and has already seen the button come up.
+        LostMouseCapture += (_, lost) =>
+        {
+            if (Mouse.LeftButton is MouseButtonState.Pressed)
+            {
+                Interrupted(lost.GetPosition(this));
+            }
+        };
         PreviewMouseWheel += (_, turned) => Wheel(turned);
 
         ManipulationStarting += (_, starting) =>
@@ -170,8 +180,19 @@ internal sealed class TileFace : Panel
         // "holding" means must not differ between a finger and a mouse (Part 7).
         PreviewMouseRightButtonUp += (_, clicked) =>
         {
-            Menu(clicked.GetPosition(this));
             clicked.Handled = true;
+
+            // Mid-carry the right button ends the carry and asks for nothing: a menu opened there
+            // would belong to whichever tile the pointer happens to be over, and it took the mouse
+            // away from this one (fifth hand-run, 15.09.2026).
+            if (_carrying)
+            {
+                Abandoned(clicked.GetPosition(this));
+
+                return;
+            }
+
+            Menu(clicked.GetPosition(this));
         };
 
         // The middle button is the mouse's spotlight: a button of its own, immediate,
@@ -658,17 +679,51 @@ internal sealed class TileFace : Panel
     }
 
     /// <summary>
-    /// Whether the hand has left this tile, and what follows from it: the picture stops here and
-    /// the stage takes over carrying it.
+    /// Whether the hand is outside this tile with a picture in it - and while it is, the picture
+    /// waits where the hand left and nothing is pushed.
     /// <para>
-    /// <b>Leaving the tile is what turns a push into a move</b>, and that one rule saves a second
-    /// grip: inside a tile a drag is a transform, past its edge it is <c>MoveItem</c> (Part 7).
-    /// The picture is put down bindingly at the last place it had inside - if the carry comes to
-    /// nothing, it lies where the hand left it rather than where it started.
+    /// <b>Leaving the tile no longer ends the grip</b> (fifth hand-run, 15.09.2026). It used to put
+    /// the picture down at the edge and turn the gesture into a carry with no way back: a hand that
+    /// came back over its own tile was still carrying, and could only let go. Now the hold stays
+    /// alive. Outside, the picture waits at the place it had when the hand left - no step is taken,
+    /// so Ctrl held for a copy cannot turn it either - and the stage shows the picture under the
+    /// pointer. Back inside, the ghost goes and pushing carries on from where the hand is, without
+    /// a jump. <b>Let go over another tile</b> and it is moved there, as before (Part 7).
+    /// </para>
+    /// <para>
+    /// <b>In the single view there is nowhere to carry to</b>, so leaving the tile shows nothing at
+    /// all: the picture simply waits at its edge until the hand comes back or lets go. That is what
+    /// "it cannot be pulled out" means from the hand's side.
     /// </para>
     /// </summary>
     private bool Left(TilePoint local)
     {
+        if (_hold is not { } hold)
+        {
+            // The hold ended some other way while a carry was showing: take the ghost away with it.
+            Abandoned(local, puttingDown: false);
+
+            return false;
+        }
+
+        if (Over(local))
+        {
+            if (_carrying)
+            {
+                // Back over its own tile: no longer a carry, still a grip.
+                _carrying = false;
+
+                Carried?.Invoke(this, new Carry(default, null, PointToScreen(local), Phase.Ended, Copy: false));
+            }
+
+            return false;
+        }
+
+        if (Opened)
+        {
+            return true;
+        }
+
         if (_carrying)
         {
             Carried?.Invoke(this, new Carry(default, null, PointToScreen(local), Phase.Moved, Copy: false));
@@ -676,32 +731,37 @@ internal sealed class TileFace : Panel
             return true;
         }
 
-        if (_hold is not { } hold)
-        {
-            return false;
-        }
-
-        var face = Wanted(RenderSize);
-        var on = OnFace(local);
-
-        if (on.X >= 0 && on.Y >= 0 && on.X <= face.Width && on.Y <= face.Height)
-        {
-            return false;
-        }
-
         var picture = hold.Item is ImageItem image ? _pictures.For(image.AssetId) : null;
-        var item = hold.Item.ItemId;
 
         _carrying = true;
 
-        LetGo(0, turning: false);
-
-        Carried?.Invoke(this, new Carry(item, picture, PointToScreen(local), Phase.Began, Copy: false));
+        Carried?.Invoke(this, new Carry(hold.Item.ItemId, picture, PointToScreen(local), Phase.Began, Copy: false));
 
         return true;
     }
 
-    /// <summary>The hand let go of what it was carrying, wherever that was.</summary>
+    /// <summary>
+    /// Whether a place is on this tile's face. Asked where the hand IS rather than remembered from
+    /// where it was, so no flag can be left standing by a hold that ended some other way.
+    /// </summary>
+    private bool Over(TilePoint local)
+    {
+        var face = Wanted(RenderSize);
+        var on = OnFace(local);
+
+        return on.X >= 0 && on.Y >= 0 && on.X <= face.Width && on.Y <= face.Height;
+    }
+
+    /// <summary>
+    /// The hand let go outside its tile. The picture is put down where it waited - <b>never into the
+    /// fan</b>, because letting go on the fan is a statement made with the hand ON the tile, and this
+    /// hand is not - and then the stage is told, and moves it if another tile lies underneath.
+    /// <para>
+    /// Put down first and moved second, and the order is safe either way round at the hub: a
+    /// transform that arrives after the move finds the picture gone from this screen and does
+    /// nothing (Part 11).
+    /// </para>
+    /// </summary>
     private void Dropped(TilePoint local)
     {
         if (!_carrying)
@@ -711,6 +771,11 @@ internal sealed class TileFace : Panel
 
         _carrying = false;
 
+        if (_hold is not null)
+        {
+            LetGo(0, turning: false, parking: false);
+        }
+
         Carried?.Invoke(
             this,
             new Carry(
@@ -719,6 +784,53 @@ internal sealed class TileFace : Panel
                 PointToScreen(local),
                 Phase.Dropped,
                 Keyboard.Modifiers.HasFlag(ModifierKeys.Control)));
+    }
+
+    /// <summary>
+    /// A carry that ends without being let go of - the right button pressed mid-carry, the mouse
+    /// captured away, or the hold gone underneath it. The picture stays on its own screen, put down
+    /// where it waited, and the ghost is taken off the stage.
+    /// <para>
+    /// <b>Found at the fifth hand-run:</b> a right click while carrying opened the context menu,
+    /// the menu took the mouse, and the left button's release never reached this tile. The carry
+    /// was never ended, so the ghost stood where the click had been, and the next grip on the
+    /// original was a carry at once, even inside its own tile.
+    /// </para>
+    /// </summary>
+    private void Abandoned(TilePoint local, bool puttingDown = true)
+    {
+        if (!_carrying)
+        {
+            return;
+        }
+
+        _carrying = false;
+
+        if (puttingDown && _hold is not null)
+        {
+            LetGo(0, turning: false, parking: false);
+        }
+
+        Carried?.Invoke(this, new Carry(default, null, PointToScreen(local), Phase.Ended, Copy: false));
+    }
+
+    /// <summary>
+    /// The mouse was taken away while the left button was still down - a menu, a dialog, another
+    /// window. Nothing will tell this tile that the hand let go, so it lets go now: a carry ends as
+    /// abandoned, a grip is put down where it lies. Neither is a statement, so neither parks.
+    /// </summary>
+    private void Interrupted(TilePoint local)
+    {
+        if (_carrying)
+        {
+            Abandoned(local);
+        }
+        else if (_hold is not null || _behind is not null)
+        {
+            LetGo(0, turning: false, parking: false);
+        }
+
+        _pressed = null;
     }
 
     /// <summary>One step of a hand on a picture, or on the background while the mode is on.</summary>
@@ -750,7 +862,11 @@ internal sealed class TileFace : Panel
     /// The hand let go: the angle settles onto a quarter turn if it is near one, or the picture
     /// turns to whoever tapped it twice - and the last report goes out whatever the throttle says.
     /// </summary>
-    private void LetGo(double totalDip, bool turning)
+    /// <param name="parking">
+    /// Whether lying on the fan when the hand opens means "put it away". Only for a hand that let
+    /// go on this tile: off the tile, or interrupted, the picture is put down where it is.
+    /// </param>
+    private void LetGo(double totalDip, bool turning, bool parking = true)
     {
         if (_behind is { } behind)
         {
@@ -781,7 +897,7 @@ internal sealed class TileFace : Panel
         // the table - a pointer cannot flick, so lying on the fan when the hand opens IS the
         // statement (Part 6) - and it gives the thumbnail the way INTO the fan that the hand-run
         // asked for.
-        if (Parking.OnTheFan(new CorePoint(hold.Item.CenterX, hold.Item.CenterY), _screen))
+        if (parking && Parking.OnTheFan(new CorePoint(hold.Item.CenterX, hold.Item.CenterY), _screen))
         {
             _ = _session.ParkItemAsync(_screenRef, hold.Item.ItemId, parked: true, CancellationToken.None);
 
@@ -1028,7 +1144,12 @@ internal sealed class TileFace : Panel
         // nächste Zug sprang auf den alten Stand zurück (Handlauf M4, dritter Lauf, 38b).
         if (_hold is not null || _behind is not null)
         {
-            LetGo(from is { } start ? Math.Abs(at.X - start.X) + Math.Abs(at.Y - start.Y) : 0, turning: false);
+            // Parks only if the hand let go ON this tile. In the single view there is no carry, so a
+            // hand that let go outside comes through here - and must not park either.
+            LetGo(
+                from is { } start ? Math.Abs(at.X - start.X) + Math.Abs(at.Y - start.Y) : 0,
+                turning: false,
+                parking: Over(at));
 
             return;
         }
@@ -1312,7 +1433,7 @@ internal sealed class TileFace : Panel
 
         if (_hold is not null || _behind is not null)
         {
-            LetGo(Math.Abs(total.X) + Math.Abs(total.Y), turning: false);
+            LetGo(Math.Abs(total.X) + Math.Abs(total.Y), turning: false, parking: Over(done.ManipulationOrigin));
 
             return;
         }
@@ -1659,9 +1780,20 @@ internal sealed class TileFace : Panel
     /// <summary>How far along a carry is.</summary>
     internal enum Phase
     {
+        /// <summary>The hand has left its tile with a picture in it.</summary>
         Began,
+
+        /// <summary>It is still outside, somewhere else.</summary>
         Moved,
+
+        /// <summary>It let go outside its tile, and the stage decides whether that lands anywhere.</summary>
         Dropped,
+
+        /// <summary>
+        /// The carry is over without landing: the hand came back over its own tile and goes on
+        /// pushing, or the carry was abandoned. Either way the ghost goes and nothing is moved.
+        /// </summary>
+        Ended,
     }
 
     /// <summary>
