@@ -19,8 +19,8 @@ namespace DnDOverlay.Hub;
 /// <para>
 /// <b>Three shapes, and which one to reach for is decided here rather than by taste.</b> A command
 /// that means the whole screen has a form that says so - <see cref="ToggleItemsAsync"/>,
-/// <see cref="UnlockAllAsync"/>, <see cref="RefitAsync"/>, and the null item of
-/// <see cref="SetShowNameAsync"/> - and that form wins whenever the selection IS the whole screen,
+/// <see cref="UnlockAllAsync"/>, <see cref="RefitAsync"/> - and that form wins whenever the
+/// selection IS the whole screen,
 /// because it is one operation where the collective form would be seven hundred. A command over a
 /// selection takes the collective form. The single form is for a command that genuinely concerns
 /// one picture: a hand at the table, a drag in the thumbnail, a drop aimed at a point.

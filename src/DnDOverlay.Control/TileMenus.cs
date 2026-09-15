@@ -76,39 +76,33 @@ internal sealed class TileMenus(
 
         menu.Items.Add(new Separator());
 
-        // Switched here rather than on the picture, because the background layer takes no hits at
-        // all and has no item to take hold of (Part 6).
-        var named = Entry(
-            scene.Background is { ShowName: true } ? "Hide background name" : "Show background name",
-            () => _ = session.SetShowNameAsync(
-                screen, item: null, !(scene.Background?.ShowName ?? false), CancellationToken.None));
-
-        named.IsEnabled = scene.Background is not null;
-        menu.Items.Add(named);
+        // <b>No entry for the background's name any more</b> (fourth hand-run, 15.09.2026). It was
+        // drawn under the layer the way a picture's is, and a background reaches past the screen
+        // on one axis by design - so the caption sat exactly where it could not be read. What the
+        // DM wants instead is free text placed on the screen, recorded for the end of M4.
 
         // <b>The three ways to adjust the background, under one head.</b> They used to stand flat
         // and apart - two buttons here, the mode three entries further down - which read as three
         // unrelated things when they are one question with three answers: by hand, or one of the
         // two obvious positions. Ordered as the DM asked for them (Handlauf M4, dritter Lauf).
         //
-        // <b>The tick says what the layer was last put into</b>, not which mode is switched on -
-        // that is what the golden frame on the tile is for. Three entries, one arrangement, so the
-        // menu answers "what did I set this to" at a glance (07.09.2026).
+        // <b>Only the two positions carry a tick</b> (fourth hand-run, 15.09.2026): Fill and Fit are
+        // the two special states worth seeing at a glance, and "Customize" is a mode, whose sign is
+        // the golden frame on the tile. Picking either position ends that mode - moving the layer
+        // on by hand after choosing where it goes would undo the choice the moment it was made.
         //
         // "Customize" rather than "by hand": it stands beside two names for what the machine does,
         // and the DM asked for the more technical word.
-        var custom = new MenuItem
-        {
-            Header = "Customize",
-            IsCheckable = true,
-            IsChecked = scene.Background is { Fit: null },
-        };
+        var custom = new MenuItem { Header = "Customize" };
 
         custom.Click += (_, _) => Adjusting?.Invoke(this, !adjusting);
 
         var background = new MenuItem { Header = "Adjust background", IsEnabled = scene.Background is not null };
 
         background.Items.Add(custom);
+
+        // A mode above, two positions below: two kinds of answer, and the line says so.
+        background.Items.Add(new Separator());
         background.Items.Add(Fitted("Fill screen", BackgroundFit.Cover, scene));
         background.Items.Add(Fitted("Fit whole on screen", BackgroundFit.Contain, scene));
 
@@ -213,9 +207,15 @@ internal sealed class TileMenus(
         // Set apart, and expressly NOT beside "move to": in the menu they are neighbours, in effect
         // they are opposites, and a slip there clears a picture off the table (Part 7).
         menu.Items.Add(new Separator());
-        menu.Items.Add(Entry(
+        var removing = Entry(
             "Remove",
-            () => _ = session.RemoveItemsAsync(screen, Ids(many), CancellationToken.None)));
+            () => _ = session.RemoveItemsAsync(screen, Ids(many), CancellationToken.None));
+
+        // The key, written where Windows writes it: right-aligned in the entry, in the text the
+        // keyboard shows. InputGestureText only SHOWS it - the key itself is handled by the main
+        // window, which is where a key arrives whatever has focus (fourth hand-run, 15.09.2026).
+        removing.InputGestureText = "Del";
+        menu.Items.Add(removing);
 
         Open(menu, over, at);
     }
@@ -229,7 +229,14 @@ internal sealed class TileMenus(
     {
         var entry = Entry(
             header,
-            () => _ = session.SetBackgroundFitAsync(screen, fit, CancellationToken.None));
+            () =>
+            {
+                _ = session.SetBackgroundFitAsync(screen, fit, CancellationToken.None);
+
+                // Choosing where the layer goes ends moving it by hand. Switching off a mode that
+                // is already off does nothing (TileFace.Adjusting).
+                Adjusting?.Invoke(this, false);
+            });
 
         entry.IsEnabled = scene.Background is not null;
 

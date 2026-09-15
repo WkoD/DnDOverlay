@@ -29,6 +29,73 @@ public sealed class AnimationBudgetTests
         Assert.False(plan.Background);
     }
 
+    /// <summary>
+    /// <b>A card in the fan does not take a place in the budget.</b> It is put away, and a timer on
+    /// something put away is the cost the budget exists to avoid (fourth hand-run, 15.09.2026).
+    /// </summary>
+    [Fact]
+    public void A_parked_picture_takes_no_place_in_the_budget()
+    {
+        var lying = Moving();
+        var parked = Moving() with { Parked = true };
+
+        var plan = AnimationBudget.Plan(Build.SceneWith(lying, parked));
+
+        Assert.Equal([lying.ItemId], plan.Items);
+    }
+
+    /// <summary>
+    /// <b>Put away, a picture HOLDS its animation rather than starting over</b>, and it takes both
+    /// halves of the rule to get that. Out of the budget alone it would be "not admitted, not
+    /// paused", which freezes it back to its first frame - the reset the DM did not want. Paused
+    /// alone it would still be admitted and go on moving. Together they are a hold, and pulled
+    /// back out it is admitted again and resumes where it stood.
+    /// </summary>
+    [Fact]
+    public void A_parked_picture_holds_its_frame_and_resumes_when_it_comes_back()
+    {
+        var parked = Moving() with { Parked = true };
+
+        Assert.True(AnimationBudget.Holds(parked), "a parked picture was not held still");
+        Assert.Equal(PictureAction.Hold, Action(PictureState.Moving, parked));
+
+        var back = parked with { Parked = false };
+
+        Assert.False(AnimationBudget.Holds(back), "a picture back on the table was still held");
+        Assert.Equal(PictureAction.Resume, Action(PictureState.Held, back));
+    }
+
+    /// <summary>
+    /// The counter-check: a picture that leaves the budget WITHOUT being held is frozen - reset to
+    /// its first frame. It is the path a parked picture must not take, and keeping it visible here
+    /// means the difference cannot quietly disappear.
+    /// </summary>
+    [Fact]
+    public void A_picture_turned_away_without_being_held_is_frozen()
+    {
+        var picture = Moving();
+
+        Assert.Equal(
+            PictureAction.Freeze,
+            PictureTransition.Next(
+                PictureState.Moving,
+                picture.AssetId,
+                picture.AssetId,
+                sameRendering: true,
+                admitted: false,
+                paused: false));
+    }
+
+    /// <summary>What the renderer does with a picture in a given state, by the rules it runs by.</summary>
+    private static PictureAction Action(PictureState state, ImageItem picture) =>
+        PictureTransition.Next(
+            state,
+            picture.AssetId,
+            picture.AssetId,
+            sameRendering: true,
+            admitted: AnimationBudget.Plan(Build.SceneWith(picture)).Items.Contains(picture.ItemId),
+            paused: AnimationBudget.Holds(picture));
+
     /// <summary>The switch the DM has for exactly this case (Part 6).</summary>
     [Fact]
     public void A_paused_picture_does_not_run()

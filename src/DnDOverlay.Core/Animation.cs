@@ -214,7 +214,8 @@ public static class AnimationBudget
         var items = scene.ItemsVisible
             ? scene.Items
                 .OfType<ImageItem>()
-                .Where(item => item is { AnimationPaused: false, Meta.IsAnimated: true })
+                // A card in the fan takes no place: it is put away, and it holds still (Holds).
+                .Where(item => item is { AnimationPaused: false, Parked: false, Meta.IsAnimated: true })
                 .OrderByDescending(item => item.ZOrder)
                 .Take(Math.Max(0, left))
                 .Select(item => item.ItemId)
@@ -222,5 +223,27 @@ public static class AnimationBudget
             : [];
 
         return new AnimationPlan(background, items);
+    }
+
+    /// <summary>
+    /// Whether a picture stands still where it is - the DM's switch, or being put away in the fan.
+    /// <para>
+    /// <b>Parked, a picture HOLDS its animation; it does not start over</b> (fourth hand-run,
+    /// 15.09.2026). The renderer needs both halves of that. Left out of <see cref="Plan"/> alone, a
+    /// card would be "not admitted and not paused", which <see cref="PictureTransition.Next"/>
+    /// answers with a freeze back to the first frame - the reset the DM did not want. With this
+    /// saying "held" it is a hold instead, and pulled back out it is admitted again and resumes
+    /// from the frame it stood on.
+    /// </para>
+    /// <para>
+    /// Both the table and the thumbnail's animation mark read this one rule, so the mark shows a
+    /// card in the fan as stopped for exactly as long as it is.
+    /// </para>
+    /// </summary>
+    public static bool Holds(ImageItem picture)
+    {
+        ArgumentNullException.ThrowIfNull(picture);
+
+        return picture.AnimationPaused || picture.Parked;
     }
 }

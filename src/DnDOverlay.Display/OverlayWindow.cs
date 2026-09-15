@@ -651,7 +651,7 @@ internal sealed class OverlayWindow : Window
                         image.AssetId,
                         moving.GetValueOrDefault(image.AssetId),
                         animating.Items.Contains(image.ItemId),
-                        image.AnimationPaused,
+                        AnimationBudget.Holds(image),
                         spent: staggering && hung))
                 {
                     hung = true;
@@ -1827,7 +1827,9 @@ internal sealed class OverlayWindow : Window
             background.RotationDeg,
             width,
             height,
-            background.ShowName ? background.Name : null,
+            // No caption on the background: it hung below a layer that reaches past the screen,
+            // where nobody could read it (fourth hand-run, 15.09.2026).
+            null,
             context.ImageTextSize);
     }
 

@@ -125,7 +125,8 @@ internal sealed class SceneThumbnail : FrameworkElement
                 background.RotationDeg,
                 _pictures.For(background.AssetId),
                 size,
-                background.ShowName ? background.Name : null,
+                // The table draws no caption on the background, so neither does its picture here.
+                null,
                 locked: false,
                 Parking.Cut.Whole,
                 picture0: null);
@@ -440,7 +441,8 @@ internal sealed class SceneThumbnail : FrameworkElement
 
         drawingContext.DrawGeometry(Brushes.White, pen: null, play);
 
-        if (!picture.AnimationPaused)
+        // Stopped by the DM, or put away in the fan - the same rule the table runs by.
+        if (!AnimationBudget.Holds(picture))
         {
             return;
         }

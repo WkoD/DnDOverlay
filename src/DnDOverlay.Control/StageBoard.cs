@@ -93,6 +93,29 @@ internal sealed class StageBoard : Panel
     internal event EventHandler? ActiveChanged;
 
     /// <summary>
+    /// Takes what is selected on the active screen off it - the Del key, and the same command as
+    /// "Remove" in the picture's menu: one patch for the whole selection (<c>RemoveItemsAsync</c>).
+    /// <para>
+    /// The ACTIVE screen, because a selection lives on each tile and the key has to mean one of
+    /// them. The active one is where the DM last did something, which is where he selected.
+    /// </para>
+    /// </summary>
+    /// <returns>Whether there was anything to remove, so the caller knows the key was used.</returns>
+    internal bool RemoveSelected()
+    {
+        if (Active is not { } screen
+            || !_tiles.TryGetValue(screen, out var tile)
+            || !tile.Selected.Any)
+        {
+            return false;
+        }
+
+        _ = _session.RemoveItemsAsync(screen, [.. tile.Selected.Items], CancellationToken.None);
+
+        return true;
+    }
+
+    /// <summary>
     /// Makes one screen the active one from outside - the list of screens beside the stage, which
     /// has to say the same thing as the frame on the tile (hand-run of M4, 24a).
     /// </summary>

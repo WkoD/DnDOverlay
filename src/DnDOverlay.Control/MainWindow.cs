@@ -192,6 +192,15 @@ internal sealed class MainWindow : Window, IDisposable
             {
                 key.Handled = true;
             }
+
+            // Del removes what is selected, as the menu's "Remove" does (fourth hand-run,
+            // 15.09.2026) - except while typing, where it belongs to the text. The stock list has
+            // no delete of its own yet; when it gets one (M5b) the key has to be split by focus.
+            if (key.Key is Key.Delete
+                && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            {
+                key.Handled = _board.RemoveSelected();
+            }
         };
 
         // Where the window stood, if that place is still there (Part 7). Done before the window is
