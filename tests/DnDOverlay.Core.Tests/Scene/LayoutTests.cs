@@ -169,6 +169,78 @@ public sealed class LayoutTests
     }
 
     /// <summary>
+    /// <b>Touching a picture does not change its size, whatever its shape.</b> The size a picture
+    /// arrives at is already one the gesture accepts, so the first touch has nothing to correct.
+    /// <para>
+    /// Found at the table (fourth hand-run, 15.09.2026): a 1:10 tower arrived at 0.40 and jumped
+    /// to 0.74 when a hand touched it, a 10:1 panorama from 0.053 to 0.074, and a 39x6500 sliver
+    /// twenty-five-fold. Arrival stopped at the width cap and the grid cell; the gesture held the
+    /// floor. Now both read <see cref="Layout.Graspable"/>.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(1, 10)]
+    [InlineData(10, 1)]
+    [InlineData(39, 6500)]
+    [InlineData(6500, 39)]
+    [InlineData(4, 3)]
+    [InlineData(16, 9)]
+    public void Touching_a_picture_does_not_change_its_size(double pixelWidth, double pixelHeight)
+    {
+        var screen = Build.Screen();
+        var aspectRatio = pixelWidth / pixelHeight;
+
+        var arrived = Placement.ArrivalScale(aspectRatio, screen);
+
+        Assert.Equal(arrived, Layout.ClampScale(arrived, aspectRatio, screen), precision: 12);
+    }
+
+    /// <summary>
+    /// The lift must not bring back what M2b took away: a picture of any shape still arrives
+    /// inside the screen, now measured on the size that actually lands rather than on the
+    /// configured size before the lift.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 10)]
+    [InlineData(10, 1)]
+    [InlineData(39, 6500)]
+    [InlineData(6500, 39)]
+    [InlineData(5000, 500)]
+    public void A_lifted_picture_still_arrives_inside_the_screen(double pixelWidth, double pixelHeight)
+    {
+        var screen = Build.Screen();
+        var aspectRatio = pixelWidth / pixelHeight;
+
+        var rect = Layout.ItemToRect(
+            Build.Item(scale: Placement.ArrivalScale(aspectRatio, screen), aspectRatio: aspectRatio), screen);
+
+        Assert.True(
+            rect.Width <= screen.MaxWidthOnLoad + 1e-9,
+            $"{rect.Width * 100:F0} % of the screen width, capped at {screen.MaxWidthOnLoad * 100:F0} %");
+
+        Assert.True(rect.Height <= 1 + 1e-9, $"{rect.Height * 100:F0} % of the screen height");
+    }
+
+    /// <summary>
+    /// The lift only touches slivers. An ordinary picture keeps exactly the size the grid gives it
+    /// - the rule that pictures lie side by side without overlapping is not bent for them.
+    /// </summary>
+    [Theory]
+    [InlineData(4, 3)]
+    [InlineData(16, 9)]
+    [InlineData(1, 1)]
+    public void An_ordinary_picture_arrives_as_the_grid_places_it(double pixelWidth, double pixelHeight)
+    {
+        var screen = Build.Screen();
+        var aspectRatio = pixelWidth / pixelHeight;
+
+        Assert.Equal(
+            Placement.FitIntoItsPlace(Layout.ScaleOnLoad(aspectRatio, screen), aspectRatio, screen),
+            Placement.ArrivalScale(aspectRatio, screen),
+            precision: 12);
+    }
+
+    /// <summary>
     /// A picture always fits the screen it is put on, however extreme its shape. Found at the
     /// table (hand-run of M2b, step 15): a 6500x39 panorama arrived at <b>694 %</b> of the screen
     /// width and hung out over both edges.

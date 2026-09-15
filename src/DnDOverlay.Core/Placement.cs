@@ -136,6 +136,28 @@ public static class Placement
     }
 
     /// <summary>
+    /// How large a picture of this shape arrives on the table: the configured size, capped to the
+    /// screen's width and to its place in the grid - <b>and then lifted to the size at which it can
+    /// be taken hold of</b>, if it came out smaller.
+    /// <para>
+    /// The lift is last on purpose. The two caps are what make pictures lie side by side, and they
+    /// win for every ordinary shape because the floor is far below them. On a sliver they cut below
+    /// the floor, and what the gesture would do on the first touch has to happen here instead: a
+    /// picture that changes size because somebody touched it is a picture the table cannot trust
+    /// (fourth hand-run, 15.09.2026). <see cref="Layout.Graspable"/> is capped by what fits, so the
+    /// lift never undoes the rule that a picture arrives inside the screen.
+    /// </para>
+    /// </summary>
+    public static double ArrivalScale(double aspectRatio, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var fitted = FitIntoItsPlace(Layout.ScaleOnLoad(aspectRatio, screen), aspectRatio, screen);
+
+        return Math.Max(fitted, Layout.Graspable(aspectRatio, screen));
+    }
+
+    /// <summary>
     /// Holds a scale down to what fits in one place of the grid. In <see cref="PlacementMode.Flow"/>
     /// only - <see cref="PlacementMode.Cascade"/> has no places to fit into.
     /// <para>

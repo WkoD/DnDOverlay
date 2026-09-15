@@ -285,8 +285,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
         // arrive on this SCREEN, and then how large it may be in the PLACE it is going to. The
         // second is what stopped a 7000×4211 picture overlapping its neighbours (hand-run of
         // M2b), and it does nothing at all in Cascade, which has no places.
-        var scale = Placement.FitIntoItsPlace(
-            Layout.ScaleOnLoad(aspectRatio, context), aspectRatio, context);
+        var scale = Placement.ArrivalScale(aspectRatio, context);
 
         // An aimed drop point wins; otherwise the placement mode of this screen decides. An
         // aimed one keeps the fitted size too - the DM chose the spot, not the size.
@@ -1024,7 +1023,12 @@ public sealed class SessionApi : ISessionApi, IDisposable
         {
             CenterX = centre.X,
             CenterY = centre.Y,
-            Scale = Math.Min(current.Scale, Layout.WidthCap(current.AspectRatio, context)),
+            // Capped to the target's width, and lifted to what can be taken hold of there - a
+            // screen of another shape can cap a picture below its floor, and it would then jump on
+            // the first touch exactly as a new one used to (Placement.ArrivalScale).
+            Scale = Math.Max(
+                Math.Min(current.Scale, Layout.WidthCap(current.AspectRatio, context)),
+                Layout.Graspable(current.AspectRatio, context)),
 
             // Arriving counts as being touched (Part 3), and the number space is the target's.
             // The top of the layer it lands in, and a relocation always lands on the table.

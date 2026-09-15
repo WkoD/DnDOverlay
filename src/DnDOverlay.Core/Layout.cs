@@ -256,11 +256,13 @@ public static class Layout
         // because the shorter-edge factor divides by six thousandths.
         //
         // Which demand gives way is not a close call: a picture that does not FIT is unusable for
-        // everyone, while one whose short edge is under 80 DIP is merely hard to grab - and a
-        // sliver is a sliver whatever we do with it. The lower bound keeps its job where it
-        // belongs, at the GESTURE (M3): it stops the DM zooming a picture away. How large a
-        // picture ARRIVES is a different question, and it has two answers already - the configured
-        // size and the width cap.
+        // everyone, while one whose short edge is under 80 DIP is merely hard to grab.
+        //
+        // The floor is still not applied HERE, and for a reason that outlived the one above: the
+        // fan measures its slots by this number (Parking.Cap), and a tower lifted to its floor
+        // would take twice the bar. A picture landing on the TABLE is lifted afterwards, in
+        // Placement.ArrivalScale, by Graspable - which is capped by what fits, so the explosion
+        // measured here cannot come back through that door.
         return Math.Min(screen.ScaleOnLoad, widthCap);
     }
 
@@ -301,10 +303,39 @@ public static class Layout
     {
         ArgumentNullException.ThrowIfNull(screen);
 
-        var shorterEdgeFactor = aspectRatio <= 0 ? 1 : Math.Min(1, aspectRatio);
-        var minimum = shorterEdgeFactor <= 0 ? screen.MinScale : screen.MinScale / shorterEdgeFactor;
+        var minimum = Graspable(aspectRatio, screen);
 
         return Math.Clamp(scale, minimum, Math.Max(minimum, screen.MaxScale));
+    }
+
+    /// <summary>
+    /// The smallest scale at which a picture of this shape can still be taken hold of - "80 DIP on
+    /// the shorter edge" (Part 6) - <b>but never more than fits the screen.</b>
+    /// <para>
+    /// Expressed against the shorter edge, the bound does not merely bind on a sliver, it explodes:
+    /// a 1:10 tower divides by a tenth, a 39x6500 one by six thousandths and would have to be
+    /// twelve screens tall. M2b settled which demand gives way - a picture that does not FIT is
+    /// unusable for everyone, one whose short edge is under 80 DIP is merely hard to grab - and
+    /// this is that rule in one place. It caps at the full height and at the width cap, the same
+    /// two bounds a picture arrives under.
+    /// </para>
+    /// <para>
+    /// <b>One number for both ends, and that is the point of it</b> (fourth hand-run, 15.09.2026).
+    /// Arrival used to stop at the width cap and the grid cell while the gesture held this floor,
+    /// so a 1:10 tower arrived at 0.40 and jumped to 0.74 the moment a hand touched it, a 10:1
+    /// panorama from 0.053 to 0.074. The DM chose to let a narrow picture ARRIVE at this size: it
+    /// stays usable, and being narrow it cannot cover much.
+    /// </para>
+    /// </summary>
+    public static double Graspable(double aspectRatio, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var shorterEdgeFactor = aspectRatio <= 0 ? 1 : Math.Min(1, aspectRatio);
+        var wanted = shorterEdgeFactor <= 0 ? screen.MinScale : screen.MinScale / shorterEdgeFactor;
+
+        // Scale is the height, so 1 is the whole screen tall; the width cap is the other axis.
+        return Math.Min(wanted, Math.Min(1, WidthCap(aspectRatio, screen)));
     }
 
     /// <summary>
