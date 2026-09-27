@@ -24,8 +24,9 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 
 > **Status: under construction.** Pictures already go from the DM's machine onto the screens
 > and the players can move them: displays find the control by themselves and are paired by
-> hand, the campaign holds a stock, all four ways in work, and the table takes gestures. Still
-> missing are the DM's own surface and the installers, which are empty — so **nothing is
+> hand, the campaign holds a stock, all four ways in work, the table takes gestures, and the DM
+> sees every screen live and handles it with the same grips. Still missing are scenes, undo,
+> the stock as a panel of its own and the installers, which are empty — so **nothing is
 > installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
@@ -90,15 +91,18 @@ The players move the pictures themselves, and they cannot break anything doing i
 has a way back, nothing can be made too small to grab, and nothing slides off the screen.
 Several people at once, without being told how.
 
-| Grip | Finger | Mouse |
-|---|---|---|
-| Move | drag | drag with the left button |
-| Scale | pinch | wheel, about the pointer |
-| Rotate | turn with two fingers | hold Ctrl and drag, about the centre |
-| Bring to the front | touch it | click it |
-| Turn it to face you | double tap | — |
-| Park it at the edge | flick towards the park edge | push it out past that edge |
-| Fetch one back | run along the fan, then pull away from the edge | the same, with the button held |
+| Grip | Finger | Mouse | On the DM's stage |
+|---|---|---|---|
+| Move | drag | drag with the left button | the same |
+| Scale | pinch | wheel, about the pointer | the same |
+| Rotate | turn with two fingers | hold Ctrl and drag, about the centre | the same |
+| Bring to the front | touch it | click it | the same — a locked picture too |
+| Turn it to face you | double tap | double-click | the same, towards the nearest edge of that screen |
+| Park it at the edge | flick towards the park edge | drag it onto the fan and let go | the same |
+| Fetch one back | run along the fan, then pull away from the edge | the same, with the button held | the same |
+
+The last column is the point: **one set of grips for two surfaces.** The stage does the same
+arithmetic as the table, so nothing has to be learned twice.
 
 The **right mouse button stays unassigned on purpose**: a grip that exists on only one of the
 two surfaces is worse than a grip missing from both, and Ctrl+drag sits under the same hand
@@ -150,6 +154,41 @@ picture from one screen to another, hiding it and bringing it back, or putting t
 twice in an evening costs no transfer at all. Only a picture that was evicted to make room is
 fetched again. Pictures arrive **three at a time**: twenty at once are twenty pictures that are
 all slow, and after ten seconds none of them is there.
+
+## On the DM's stage
+
+The control shows every screen as a **live tile** — the pictures where they lie, the fan, the
+background, and the fingers of the players as circles with a fading trail. The tiles stand in the
+order you drag them into by their head, and each one opens on its own as a large single view.
+Whatever you do on a tile happens at the table at once; a picture still on its way there shows
+it by **filling with colour from the bottom up** as it arrives.
+
+| Grip | Finger | Mouse |
+|---|---|---|
+| Select one | tap it | click it |
+| Select several | drag a frame from free area | the same, or Ctrl+click one by one |
+| Move a picture to another screen | drag it onto that tile | the same |
+| … or copy it there | — | hold Ctrl while dragging it off the tile |
+| Point at something for the players | tap with two fingers | middle button, or hold Space and click |
+| Open a menu | press and hold | right-click |
+| Remove what is selected | — | Del |
+
+**A picture you drag off its tile is still in your hand.** Come back without letting go and you
+go on moving it, under the same spot of your hand; let go on another tile and it goes there. A
+whole selection goes to another screen through the menu, stacked as it was.
+
+**The two menus carry the rarer things.** A picture's menu — or the selection's, if the picture is
+part of one — turns it to face you or to a fixed **0°, 90°, 180° or 270°**, parks, locks, pauses
+an animation, shows the name, selects everything on the screen or in the fan, copies and moves
+to another screen, and, set apart at the bottom, removes. A screen's menu, on free area or on the
+tile's head, opens the single view, sets up the screen, turns the view of it by a quarter for a
+DM who sits at the side, and handles the background: **Customize** lets you move, zoom and turn
+it with the same grips as a picture, while the pictures above it turn see-through; **Fill
+screen** and **Fit whole on screen** put it back into the two obvious positions; and it turns by
+the quarter like a picture.
+
+**Unlock all** is a button on each tile, because a padlock on a picture is set one at a time and
+should not have to be taken off that way.
 
 ## Building
 
