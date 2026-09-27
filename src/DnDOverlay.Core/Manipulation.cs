@@ -332,6 +332,27 @@ public static class Manipulation
     }
 
     /// <summary>
+    /// Which quarter turn an angle is - 0, 90, 180 or 270 - or <see langword="null"/> when it is none.
+    /// It is what the menu entry <i>Turn</i> ticks (end of M4, 27.09.2026).
+    /// <para>
+    /// <b>Exact, and not within the snap tolerance.</b> Every way an angle becomes a quarter turn
+    /// already lands on it exactly - a release that snaps, "turn to me", the menu itself. A picture
+    /// that stands at 88° stands there because snapping is switched off or the hand let go outside
+    /// the tolerance, and a tick at 90° would claim something the table does not show. The margin
+    /// below only absorbs the last bit of floating-point arithmetic.
+    /// </para>
+    /// </summary>
+    public static int? Quarter(double rotationDeg)
+    {
+        const double Margin = 1e-6;
+
+        var normalised = Normalise(rotationDeg);
+        var quarter = Math.Round(normalised / 90) * 90;
+
+        return Math.Abs(normalised - quarter) < Margin ? (int)Normalise(quarter) : null;
+    }
+
+    /// <summary>
     /// "Turn to me": the angle that puts the picture the right way up for somebody sitting at the
     /// edge nearest the point they tapped - the biggest single comfort gain on a table lying flat
     /// (Part 6).

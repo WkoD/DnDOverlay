@@ -129,10 +129,10 @@ public enum BackgroundFit
 /// there - an item may have no asset at all - and a background always has one.
 /// </para>
 /// <para>
-/// <b><see cref="RotationDeg"/> has no caller until the end of M4</b>, and that is written down
-/// rather than discovered later: the fit buttons set centre and scale, the thumbnail's grips arrive
-/// in M4c, and how a background is turned, zoomed and moved is decided when they do. At the table
-/// it stays unreachable in any case - the background layer takes no gestures (Part 6).
+/// <b><see cref="RotationDeg"/> is set from the control alone</b>: by the background mode in the
+/// thumbnail, which turns the layer with the same gesture as a picture, and by the quarter turns in
+/// the screen menu. At the table it stays unreachable - the background layer takes no gestures
+/// (Part 6).
 /// </para>
 /// </summary>
 /// <param name="Fit">
@@ -147,8 +147,7 @@ public enum BackgroundFit
 /// </para>
 /// <para>
 /// <b>Cleared only by a change, never by the mode.</b> Switching the hand mode on and looking is
-/// not an arrangement; the tick moves to "customize" when the layer has actually been moved,
-/// turned or zoomed. Otherwise the DM would lose the answer to "what did I set this to" by merely
+/// not an arrangement; the tick goes when the layer has actually been moved, turned or zoomed. Otherwise the DM would lose the answer to "what did I set this to" by merely
 /// opening the menu.
 /// </para>
 /// </param>

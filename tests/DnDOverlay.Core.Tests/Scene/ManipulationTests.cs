@@ -275,6 +275,37 @@ public sealed class ManipulationTests
     }
 
     /// <summary>
+    /// Which quarter turn the menu ticks. Negative angles and whole turns are the same quarter,
+    /// because the angle a gesture leaves behind is not normalised on its way.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(90, 90)]
+    [InlineData(180, 180)]
+    [InlineData(270, 270)]
+    [InlineData(360, 0)]
+    [InlineData(-90, 270)]
+    [InlineData(450, 90)]
+    [InlineData(359.9999999999, 0)]
+    public void A_quarter_turn_is_recognised_whichever_way_it_was_reached(double degrees, int quarter)
+    {
+        Assert.Equal(quarter, Manipulation.Quarter(degrees));
+    }
+
+    /// <summary>
+    /// <b>Near is not a quarter turn.</b> A picture at 88° is where snapping left it, and a tick at 90°
+    /// would claim something the table does not show.
+    /// </summary>
+    [Theory]
+    [InlineData(88)]
+    [InlineData(45)]
+    [InlineData(-1)]
+    public void An_angle_near_a_quarter_turn_is_none(double degrees)
+    {
+        Assert.Null(Manipulation.Quarter(degrees));
+    }
+
+    /// <summary>
     /// Zooming around the pointer keeps what is under it under it. Without this a pinch walks the
     /// picture out from under the fingers - the Java bug this arithmetic exists to avoid.
     /// </summary>

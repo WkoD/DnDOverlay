@@ -29,7 +29,7 @@ internal sealed class Selection
     /// <summary>What is selected, oldest choice first.</summary>
     internal IReadOnlyList<ItemId> Items => _items;
 
-    /// <summary>Whether anything is selected - which is also what makes the circles appear.</summary>
+    /// <summary>Whether anything is selected.</summary>
     internal bool Any => _items.Count > 0;
 
     /// <summary>Raised whenever the list changed, so the drawing can follow.</summary>
@@ -44,9 +44,10 @@ internal sealed class Selection
     internal void Only(ItemId item) => Set([item]);
 
     /// <summary>
-    /// Adds or removes one - Ctrl+click with the mouse, a tap on the selection circle with a
-    /// finger. <b>Added at the end</b>, because the end is where the newest choice belongs in an
-    /// order the focus later reads.
+    /// Adds or removes one - Ctrl+click with the mouse. A finger has no such grip on the tile since
+    /// the selection circles went (hand-run of M4, 25a); it gathers several with the frame.
+    /// <b>Added at the end</b>, because the end is where the newest choice belongs in an order the
+    /// focus later reads.
     /// </summary>
     internal void Toggle(ItemId item)
     {

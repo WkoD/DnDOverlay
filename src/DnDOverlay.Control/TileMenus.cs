@@ -79,7 +79,8 @@ internal sealed class TileMenus(
         // <b>No entry for the background's name any more</b> (fourth hand-run, 15.09.2026). It was
         // drawn under the layer the way a picture's is, and a background reaches past the screen
         // on one axis by design - so the caption sat exactly where it could not be read. What the
-        // DM wants instead is free text placed on the screen, recorded for the end of M4.
+        // DM wants instead is free text placed on the screen - a design of its own in M5b, because
+        // it changes the model (Part 10).
 
         // <b>The three ways to adjust the background, under one head.</b> They used to stand flat
         // and apart - two buttons here, the mode three entries further down - which read as three
@@ -107,6 +108,20 @@ internal sealed class TileMenus(
         background.Items.Add(Fitted("Fit whole on screen", BackgroundFit.Contain, scene));
 
         menu.Items.Add(background);
+
+        // An entry of its own and not a third level under "Adjust background": nothing here nests
+        // deeper than one submenu, because anything deeper cannot be hit with a finger (Part 7).
+        // Centre and scale stay as they are; the hub keeps the turned layer on the glass.
+        var turned = Quarters(
+            "Turn background",
+            scene.Background?.RotationDeg,
+            angle => scene.Background is { } layer
+                ? session.TransformBackgroundAsync(
+                    screen, new CorePoint(layer.CenterX, layer.CenterY), layer.Scale, angle, CancellationToken.None)
+                : Task.CompletedTask);
+
+        turned.IsEnabled = scene.Background is not null;
+        menu.Items.Add(turned);
 
         // Last, and on its own: it is the one entry here that throws something away.
         var cleared = Entry(
@@ -141,6 +156,26 @@ internal sealed class TileMenus(
         var menu = new ContextMenu();
 
         menu.Items.Add(Entry("Turn to me", () => _ = ToMe(many, context, where)));
+
+        // <b>Quarter turns, set and not added</b> (end of M4, 27.09.2026): "90°" means standing at
+        // 90° to the screen, the same way "Turn view" means it, so choosing it twice changes nothing.
+        // Offered only for what lies out, like "Park": the fan owns every card's angle, and a turn
+        // given to a card there would be a second truth beside it.
+        var lying = many.Where(item => !item.Parked).ToList();
+
+        if (!picture.Parked)
+        {
+            menu.Items.Add(Quarters(
+                "Turn",
+                Shared(lying),
+                angle => session.TransformItemsAsync(
+                    screen,
+                    [.. lying.Select(item => Squared(item, angle))],
+
+                    // As with "Turn to me": turning is not taking hold of, so no depth is handed out.
+                    toFront: false,
+                    CancellationToken.None)));
+        }
 
         // "Park" only, and only for what is lying out. Taking hold of a card in the thumbnail is
         // the way back out of the fan, exactly as at the table - and the entry that did it from
@@ -250,7 +285,7 @@ internal sealed class TileMenus(
     }
 
     /// <summary>
-    /// The one submenu in the whole surface, and the one level of nesting: four equal values laid
+    /// A submenu, and like every other one here a single level of nesting: four equal values laid
     /// out flat would take up half the menu, and anything deeper cannot be hit with a finger
     /// (Part 7).
     /// <para>
@@ -279,6 +314,51 @@ internal sealed class TileMenus(
 
         return turning;
     }
+
+    /// <summary>
+    /// The four quarter turns for a picture or the background, the one the target already stands at
+    /// ticked - the same four values and the same tick as <see cref="Turned(ViewRotation)"/>, but
+    /// turning what lies on the screen rather than the way the DM looks at it.
+    /// </summary>
+    private static MenuItem Quarters(string header, double? current, Func<int, Task> turn)
+    {
+        var entry = new MenuItem { Header = header };
+        var standing = current is { } degrees ? CoreManipulation.Quarter(degrees) : null;
+
+        foreach (var angle in (int[])[0, 90, 180, 270])
+        {
+            var choice = new MenuItem
+            {
+                Header = $"{angle}°",
+                IsCheckable = true,
+                IsChecked = angle == standing,
+            };
+
+            choice.Click += (_, _) => _ = turn(angle);
+
+            entry.Items.Add(choice);
+        }
+
+        return entry;
+    }
+
+    /// <summary>
+    /// The angle a whole selection stands at, if it stands at one - otherwise nothing is ticked,
+    /// because a tick for one of four pictures would describe the other three wrongly.
+    /// </summary>
+    private static double? Shared(IReadOnlyList<SceneItem> many)
+    {
+        var quarters = many.Select(item => CoreManipulation.Quarter(item.RotationDeg)).Distinct().ToList();
+
+        return quarters is [{ } quarter] ? quarter : null;
+    }
+
+    /// <summary>
+    /// One picture set to a quarter turn where it lies. Only the angle is decided here: the hub
+    /// clamps the turned picture against the edge, as it does every transform (Part 4, rule 2).
+    /// </summary>
+    private static ItemTransform Squared(SceneItem item, int angle) =>
+        new(item.ItemId, item.CenterX, item.CenterY, item.Scale, angle);
 
     /// <summary>
     /// A target list over the screens, this one included: copying onto the same screen is what

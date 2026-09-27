@@ -1530,8 +1530,9 @@ internal sealed class TileFace : Panel
 
         if (_framing is not null)
         {
-            // A finger has no Ctrl: on touch a frame always replaces, and adding is what the
-            // selection circles are for (Part 7).
+            // A finger has no Ctrl: on touch a frame always replaces. There is no way to add one
+            // picture to a selection by finger since the selection circles went (hand-run of M4,
+            // 25a) - several are gathered with the frame itself.
             Framing(done.ManipulationOrigin, adding: false);
 
             _pressed = null;
@@ -1539,8 +1540,7 @@ internal sealed class TileFace : Panel
             return;
         }
 
-        // A manipulation that took hold of nothing was a tap on free area - or on a selection
-        // circle, which lies on a picture and is therefore asked first.
+        // A manipulation that took hold of nothing was a tap on free area.
         if (_pressed is { } began && Math.Abs(total.X) + Math.Abs(total.Y) <= Press.Tolerance)
         {
             Tap(OnFace(began), adding: false);
