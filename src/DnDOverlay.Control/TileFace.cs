@@ -249,8 +249,8 @@ internal sealed class TileFace : Panel
     /// <b>A mode, and the only one on the stage.</b> Part 7 keeps modes out of the surface on
     /// purpose - selection is ordinary selection - and this is the exception it forces: the
     /// background is a layer without an item, it takes no touches at the table (Part 6), and every
-    /// grip a tile has is already spoken for. A one-finger drag draws a frame, two fingers pan the
-    /// stage, a long press opens a menu.
+    /// grip a tile has is already spoken for. A one-finger drag draws a frame, two fingers scale and
+    /// turn a picture, a long press opens a menu.
     /// </para>
     /// <para>
     /// <b>What makes it bearable is that it is visible and that it is asked for.</b> It is switched
@@ -1410,8 +1410,8 @@ internal sealed class TileFace : Panel
     /// <para>
     /// <b>Decided at the end, on the count and the travel.</b> The two arrive as the same
     /// manipulation, and Part 7 has them mean two different things on purpose: the tap points, the
-    /// drag pans - and the drag is the one that would collide if the tap were decided on the way
-    /// down.
+    /// drag scales and turns what it holds - and the drag is the one that would collide if the tap
+    /// were decided on the way down.
     /// </para>
     /// </summary>
     private bool Pointed()
@@ -1551,7 +1551,8 @@ internal sealed class TileFace : Panel
 
     /// <summary>
     /// Begins a frame from free tile area. The one-finger drag is free for it because the stage
-    /// itself pans with two fingers and there is nothing on a tile to scroll (Part 7).
+    /// neither pans nor zooms (decided at the end of M4) and there is nothing on a tile to scroll
+    /// (Part 7).
     /// </summary>
     private void Frame(TilePoint from)
     {

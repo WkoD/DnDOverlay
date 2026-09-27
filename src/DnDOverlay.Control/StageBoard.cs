@@ -55,8 +55,8 @@ internal sealed class StageBoard : Panel
 
     /// <summary>
     /// Whether one screen is open on its own. <b>Switched by a button and never by a swipe</b>: a
-    /// swipe on the stage already means moving or panning, and a third meaning for the same grip
-    /// would go wrong regularly (Part 7).
+    /// swipe on the stage already means moving or drawing a frame, and a third meaning for the same
+    /// grip would go wrong regularly (Part 7).
     /// </summary>
     internal bool Single
     {
