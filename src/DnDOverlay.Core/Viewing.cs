@@ -65,11 +65,11 @@ public static class Viewing
     /// table rather than the same one from another side.
     /// </summary>
     public static double AngleInView(double angleDeg, ViewRotation view) =>
-        Normalise(angleDeg + (int)view);
+        Manipulation.Normalise(angleDeg + (int)view);
 
     /// <summary>An angle taken from the view, back in the scene's terms.</summary>
     public static double AngleToScene(double angleDeg, ViewRotation view) =>
-        Normalise(angleDeg - (int)view);
+        Manipulation.Normalise(angleDeg - (int)view);
 
     /// <summary>
     /// The rectangle an unrotated placement occupies in the view: the centre turns, and on a
@@ -155,12 +155,4 @@ public static class Viewing
         view is ViewRotation.Quarter or ViewRotation.ThreeQuarters
             ? aspectRatio <= 0 ? aspectRatio : 1 / aspectRatio
             : aspectRatio;
-
-    /// <summary>Into 0..360, so that two angles that mean the same are the same number.</summary>
-    private static double Normalise(double angleDeg)
-    {
-        var turned = angleDeg % 360;
-
-        return turned < 0 ? turned + 360 : turned;
-    }
 }
