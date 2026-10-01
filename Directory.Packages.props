@@ -14,10 +14,10 @@
     <!-- Logging goes through ILogger, never through a sink directly - that is what keeps the
          sink exchangeable (Part 1, rule 8; Part 8). The hub gets these abstractions through the
          ASP.NET Core framework reference; Transport, Campaign and Imaging need the package. -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <!-- The generic host with DI for the display. The control gets the same thing through the
          ASP.NET Core framework reference it needs for Kestrel anyway (Part 2). -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Platform">
@@ -25,7 +25,7 @@
          referenced by exactly one project, DnDOverlay.Platform.Windows. The architecture test
          forbids this assembly in all five libraries by name: pairing is hub business, and a
          ProtectedData there would compile without a murmur (Part 4, Part 11). -->
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Imaging">
@@ -42,9 +42,9 @@
   </ItemGroup>
 
   <ItemGroup Label="Testing">
-    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.4" />
     <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.4" />
     <!-- ArchUnitNET reads assemblies with Cecil anyway. We use it directly for the rules it
