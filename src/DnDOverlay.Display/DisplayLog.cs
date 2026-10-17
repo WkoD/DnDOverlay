@@ -396,17 +396,6 @@ internal static partial class DisplayLog
     internal static partial void PairingRefused(ILogger logger, string reason);
 
     /// <summary>
-    /// Written by the application rather than by Transport, because the waiting belongs to the
-    /// loop that decides WHETHER to try again - which is this one. Same range either way: who is
-    /// talking to whom (Part 8).
-    /// </summary>
-    [LoggerMessage(
-        EventId = 1042,
-        Level = LogLevel.Information,
-        Message = "Trying again in {Delay}.")]
-    internal static partial void RetryingIn(ILogger logger, TimeSpan delay);
-
-    /// <summary>
     /// The same last word as the control's 4011, with its own number because the ranges are global
     /// and the two say different things about different machines. On a display PC it matters more:
     /// nobody is sitting in front of it to see the process go.

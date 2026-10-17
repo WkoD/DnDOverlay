@@ -858,15 +858,12 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
-    /// Finding a control and staying with it, for as long as this application runs.
-    /// <para>
-    /// A configured host is tried FIRST and is not the only way in: it is a preferred address, not
-    /// an exclusive one, because it changes when the Surface moves between Wi-Fi and its dock. So
-    /// an attempt that fails hands over to discovery, and a connection that worked hands back
-    /// (Part 4).
-    /// </para>
+    /// Finding a control and staying with it, for as long as this application runs. The loop
+    /// itself lives in <see cref="ConnectionLoop"/>, where it can be tested; what stays here is
+    /// what only the application knows - which control this device is bound to right now, and
+    /// what one connection does to its windows.
     /// </summary>
-    private async Task RunAsync(
+    private Task RunAsync(
         string? preferred,
         int port,
         string deviceName,
@@ -874,101 +871,20 @@ public sealed partial class App : Application, IDisposable
     {
         var client = new DisplayClient(loggers.CreateLogger<DisplayClient>());
         var discovery = new DiscoveryListener(loggers.CreateLogger<DiscoveryListener>());
-        var backoff = new ReconnectBackoff();
-        var tryPreferred = preferred is not null;
+        var loop = new ConnectionLoop(loggers.CreateLogger<ConnectionLoop>(), TimeProvider.System, new ReconnectBackoff());
 
-        while (!_shutdown.IsCancellationRequested)
-        {
-            var target = tryPreferred
-                ? new Target(preferred!, port)
-                : Found(await FindAsync(discovery, preferred is not null).ConfigureAwait(false));
+        return loop.RunAsync(
+            preferred is null ? null : new HubAddress(preferred, port),
 
-            // Only the preferred address survives one failure without being earned again.
-            tryPreferred = false;
-
-            if (target is null)
-            {
-                continue;
-            }
-
-            var attempt = await ConnectAsync(client, target, deviceName).ConfigureAwait(false);
-
-            if (attempt is Attempt.Worthwhile)
-            {
-                // It worked once, so next time it is worth starting from the top again - both the
-                // address and the waiting.
-                backoff.Succeeded();
-                tryPreferred = preferred is not null;
-            }
-
-            if (_shutdown.IsCancellationRequested)
-            {
-                return;
-            }
-
-            // A refusal steps out of the growing wait entirely. It used to count as "reached" and
-            // therefore RESET the wait to one second, so a rejected device knocked once a second
-            // for as long as it ran - the tightest loop the code can produce, at the one moment
-            // where nothing is going to change without a person (Part 4).
-            var delay = attempt is Attempt.Refused ? backoff.Refused() : backoff.Next();
-
-            DisplayLog.RetryingIn(_logger, delay);
-            await Task.Delay(delay, _shutdown.Token).ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>Where to knock. From the beacon's sender, never from what the beacon says about itself.</summary>
-    private sealed record Target(string Host, int Port);
-
-    private static Target? Found(Sighting? sighting) =>
-        sighting is null ? null : new Target(sighting.Host, sighting.Beacon.Port);
-
-    /// <summary>
-    /// Waits for a control to announce itself - unbounded while nothing else is known, briefly
-    /// when a host was configured. Without that bound a control that was merely restarting would
-    /// never be tried again on the address that used to work.
-    /// </summary>
-    private async Task<Sighting?> FindAsync(DiscoveryListener discovery, bool hasPreferred)
-    {
-        using var listening = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
-
-        if (hasPreferred)
-        {
-            listening.CancelAfter(TimeSpan.FromSeconds(5));
-        }
-
-        return await discovery.ListenAsync(_settings.ControlId, listening.Token).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// What one connection amounted to - and with it, how long to wait before the next.
-    /// <para>
-    /// Three values rather than the "did it reach a control" it used to be, because a control that
-    /// answers can answer three quite different things, and only one of them is worth trying again
-    /// straight away.
-    /// </para>
-    /// </summary>
-    private enum Attempt
-    {
-        /// <summary>
-        /// Nobody answered - or a control answered <b>not now</b>. A limit that was reached is a
-        /// state of the hub and passes on its own, so the growing wait is exactly right for it.
-        /// </summary>
-        Fruitless,
-
-        /// <summary>
-        /// It worked, or the device just changed the question it is asking: a clone that was told
-        /// its identity collides has made itself a fresh one, so the next attempt is a new
-        /// question and not a repetition.
-        /// </summary>
-        Worthwhile,
-
-        /// <summary>A control said no. Only a person takes that back.</summary>
-        Refused,
+            // Read on every search, not once: after a pairing this device is bound to a control it
+            // did not know when the loop started.
+            listening => discovery.ListenAsync(_settings.ControlId, listening),
+            (target, _) => ConnectAsync(client, target, deviceName),
+            _shutdown.Token);
     }
 
     /// <summary>Runs one connection to the end, and says what it amounted to.</summary>
-    private async Task<Attempt> ConnectAsync(DisplayClient client, Target target, string deviceName)
+    private async Task<Attempt> ConnectAsync(DisplayClient client, HubAddress target, string deviceName)
     {
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {

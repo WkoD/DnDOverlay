@@ -620,7 +620,7 @@ the same application that draws.
 | 1039 | `BeaconStopped` | Information | hub |
 | 1040 | `BeaconInterfaceFailed` | Debug | hub |
 | 1041 | `BeaconReachedNobody` | Warning | hub |
-| 1042 | `RetryingIn` | Information | display |
+| 1042 | `RetryingIn` | Information | transport |
 | 1043 | `StateQueueFull` | Warning | hub |
 | 1044 | `WriteTimedOut` | Warning | hub |
 | 1045 | `HeartbeatLost` | Information | hub |
@@ -661,8 +661,9 @@ write outright, gets no line here**: the receive side already reports the end, a
 one event would be noise exactly when the log is being read.
 
 **Next free: 1054.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
-free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the display's backoff
-1042, the send side 1043–1045 with its counterparts at 1051–1052, and log forwarding 1046–1047 with
+free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the reconnect
+loop's backoff 1042 (written by `ConnectionLoop` in transport since M5a; the number stayed when
+the line moved), the send side 1043–1045 with its counterparts at 1051–1052, and log forwarding 1046–1047 with
 the touch rate beside it at 1053.
 **1050 belongs to discovery without adjoining it** — a number is never moved to keep a range tidy,
 because the number is the contract and the tidiness is not.

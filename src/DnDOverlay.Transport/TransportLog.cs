@@ -124,4 +124,15 @@ internal static partial class TransportLog
         Level = LogLevel.Warning,
         Message = "A message to {HubUri} did not go out within {Limit}; treating the control as gone.")]
     internal static partial void SendTimedOut(ILogger logger, Uri hubUri, TimeSpan limit);
+
+    /// <summary>
+    /// Written by the loop that decides WHETHER to try again (<see cref="ConnectionLoop"/>), and it
+    /// moved here with it from the display application on 17.10.2026. The number stays: it is the
+    /// contract, and the line it names has not changed.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1042,
+        Level = LogLevel.Information,
+        Message = "Trying again in {Delay}.")]
+    internal static partial void RetryingIn(ILogger logger, TimeSpan delay);
 }
