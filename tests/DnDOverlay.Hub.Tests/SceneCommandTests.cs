@@ -243,6 +243,38 @@ public sealed class SceneCommandTests
     }
 
     /// <summary>
+    /// <b>The fit keeps a quarter turn, and pulls anything between onto the nearest one</b> (last
+    /// hand-run of M4, 17.10.2026). It used to put the angle back to 0, and the DM's 90 degrees from
+    /// the menu went with it.
+    /// </summary>
+    [Theory]
+    [InlineData(90, 90)]
+    [InlineData(95, 90)]
+    [InlineData(15, 0)]
+    [InlineData(270, 270)]
+    public async Task A_fit_keeps_the_quarter_turn_the_background_stands_nearest(double before, int after)
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+
+        var placed = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(placed);
+
+        await session.TransformBackgroundAsync(
+            Target, new Point(placed.CenterX, placed.CenterY), placed.Scale, before, Cancellation);
+        await session.SetBackgroundFitAsync(Target, BackgroundFit.Cover, Cancellation);
+
+        var filled = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(filled);
+        Assert.Equal(after, filled.RotationDeg);
+        Assert.Equal(BackgroundFit.Cover, filled.Fit);
+    }
+
+    /// <summary>
     /// Without a background it does nothing rather than failing - the same rule an unknown ItemId
     /// follows (Part 11). The menu entry is disabled, and a second control need not know that.
     /// </summary>

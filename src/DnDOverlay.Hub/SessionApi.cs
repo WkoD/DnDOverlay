@@ -493,7 +493,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
         // worked out is not worked out again at the other end (Part 1, rule 2). A fresh background
         // arrives covering the screen, and is moved from the thumbnail afterwards (Part 6).
         var (centre, scale) = Layout.FitBackground(
-            asset.Meta.AspectRatio, BackgroundFit.Cover, _screens.ContextFor(screen));
+            asset.Meta.AspectRatio, BackgroundFit.Cover, _screens.ContextFor(screen), quarter: 0);
 
         var background = new BackgroundItem(
             asset.AssetId,
@@ -576,18 +576,23 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return;
             }
 
-            var (centre, scale) = Layout.FitBackground(
-                background.Meta.AspectRatio, fit, _screens.ContextFor(screen));
+            // <b>A quarter turn stays, anything between goes to the nearest one</b> (last hand-run
+            // of M4, 17.10.2026). It used to go back to 0 - the fix for 38b in the first hand-run,
+            // when a background left at 15 degrees was in neither obvious position and there were
+            // no quarter turns to choose. Since the menu sets them, 90 degrees is a position the DM
+            // chose, and filling the screen must not take it away; 95 degrees is that position
+            // missed by a hand, so it is pulled onto 90 rather than back to nothing.
+            var quarter = Manipulation.NearestQuarter(background.RotationDeg);
 
-            // The angle goes back to nothing with them. Both buttons put the picture into one of
-            // the two obvious positions, and a background left standing at 15 degrees was in
-            // neither of them (hand-run of M4, 38b).
+            var (centre, scale) = Layout.FitBackground(
+                background.Meta.AspectRatio, fit, _screens.ContextFor(screen), quarter);
+
             wanted = background with
             {
                 CenterX = centre.X,
                 CenterY = centre.Y,
                 Scale = scale,
-                RotationDeg = 0,
+                RotationDeg = quarter,
 
                 // Which of the two it now stands in, so the menu can say so.
                 Fit = fit,

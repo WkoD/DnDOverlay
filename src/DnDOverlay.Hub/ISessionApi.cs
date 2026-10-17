@@ -116,6 +116,11 @@ public interface ISessionApi
     /// button is the way back to a known position, which is what makes free handling safe.
     /// </para>
     /// <para>
+    /// <b>The angle is kept as a quarter turn</b>: one the background already stands at stays, and
+    /// an angle in between goes to the nearest one - 95 degrees to 90. A picture on its side is
+    /// fitted as it lies.
+    /// </para>
+    /// <para>
     /// There is no operation of its own for this - the background travels as a whole layer, so
     /// changing it is a read, a change and a <c>SetBackground</c> under the same lock. A screen
     /// with no background is left alone rather than given an empty one.
