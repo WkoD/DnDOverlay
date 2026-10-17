@@ -37,9 +37,10 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 - **[Architecture](docs/architecture.md)** — the projects, what may depend on what, and the
   decisions that were measured rather than chosen.
 - **[Protocol](docs/protocol.md)** — messages, scene operations and the log event catalogue.
+- **[Data model](docs/data-model.md)** — screens, scenes and pictures: how they are addressed,
+  laid out, ordered and locked.
 
-Further documents (`data-model.md`, `manual-acceptance.md`) appear as the features they
-describe are built.
+`manual-acceptance.md` appears once the manual checks are written down for good.
 
 ## Images
 

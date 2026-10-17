@@ -1,9 +1,10 @@
 # Protocol
 
 What travels between the control and a display, and the rules both ends keep to. This document
-grows with each milestone; today it covers what **M1a** put on the wire.
+grows with each milestone and covers what is built.
 
-For the principles behind these decisions, see [design-principles.md](design-principles.md).
+For the principles behind these decisions, see [design-principles.md](design-principles.md); for
+the types that travel, [data-model.md](data-model.md).
 
 ## Transport
 
