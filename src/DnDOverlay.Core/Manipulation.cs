@@ -353,6 +353,21 @@ public static class Manipulation
     }
 
     /// <summary>
+    /// The quarter turn nearest an angle - what the two fit buttons put a background at (last
+    /// hand-run of M4, 17.10.2026): 95° becomes 90°, 90° stays.
+    /// <para>
+    /// <b>Exactly halfway goes clockwise</b>, so 45° becomes 90° and 315° becomes 0°. Any rule would
+    /// do as long as there is one; this one is the direction a positive angle already turns.
+    /// </para>
+    /// </summary>
+    public static int NearestQuarter(double rotationDeg)
+    {
+        var quarter = Math.Round(Normalise(rotationDeg) / 90, MidpointRounding.AwayFromZero) * 90;
+
+        return (int)Normalise(quarter);
+    }
+
+    /// <summary>
     /// "Turn to me": the angle that puts the picture the right way up for somebody sitting at the
     /// edge nearest the point they tapped - the biggest single comfort gain on a table lying flat
     /// (Part 6).

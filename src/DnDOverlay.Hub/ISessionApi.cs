@@ -116,6 +116,11 @@ public interface ISessionApi
     /// button is the way back to a known position, which is what makes free handling safe.
     /// </para>
     /// <para>
+    /// <b>The angle is kept as a quarter turn</b>: one the background already stands at stays, and
+    /// an angle in between goes to the nearest one - 95 degrees to 90. A picture on its side is
+    /// fitted as it lies.
+    /// </para>
+    /// <para>
     /// There is no operation of its own for this - the background travels as a whole layer, so
     /// changing it is a read, a change and a <c>SetBackground</c> under the same lock. A screen
     /// with no background is left alone rather than given an empty one.
@@ -125,6 +130,23 @@ public interface ISessionApi
         ScreenRef screen,
         BackgroundFit fit,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Turns the background to a quarter turn - the menu entry <i>Turn background</i>.
+    /// <para>
+    /// <b>A background standing filled or fitted stays filled or fitted</b> (follow-up to the last
+    /// hand-run of M4, 17.10.2026): turned on its side, the same arrangement is computed again for
+    /// the new angle, and the menu keeps its tick. Without that, a filled screen turned by 90
+    /// degrees would show two bare strips, and the DM would have to press <i>Fill screen</i> again
+    /// after every turn. A background the DM placed by hand is turned where it lies.
+    /// </para>
+    /// <para>
+    /// <b>One command, one patch</b> (Part 4): turning and refitting are not two calls from the
+    /// control, which would put two steps on the timeline for one grip. An angle that is not a
+    /// quarter turn is taken to the nearest one. Ineffective while no background is set.
+    /// </para>
+    /// </summary>
+    Task TurnBackgroundAsync(ScreenRef screen, int quarter, CancellationToken cancellationToken = default);
 
     /// <summary>Takes the background layer away, leaving the items where they are.</summary>
     Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default);

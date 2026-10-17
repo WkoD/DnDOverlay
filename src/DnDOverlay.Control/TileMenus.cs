@@ -111,14 +111,12 @@ internal sealed class TileMenus(
 
         // An entry of its own and not a third level under "Adjust background": nothing here nests
         // deeper than one submenu, because anything deeper cannot be hit with a finger (Part 7).
-        // Centre and scale stay as they are; the hub keeps the turned layer on the glass.
+        // A filled or fitted layer is filled or fitted again at the new angle - one command in the
+        // hub, so one patch (TurnBackgroundAsync).
         var turned = Quarters(
             "Turn background",
             scene.Background?.RotationDeg,
-            angle => scene.Background is { } layer
-                ? session.TransformBackgroundAsync(
-                    screen, new CorePoint(layer.CenterX, layer.CenterY), layer.Scale, angle, CancellationToken.None)
-                : Task.CompletedTask);
+            angle => session.TurnBackgroundAsync(screen, angle, CancellationToken.None));
 
         turned.IsEnabled = scene.Background is not null;
         menu.Items.Add(turned);

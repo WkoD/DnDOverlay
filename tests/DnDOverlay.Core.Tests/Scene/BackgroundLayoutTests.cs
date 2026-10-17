@@ -27,7 +27,7 @@ public sealed class BackgroundLayoutTests
     /// <summary>32:9 - the shape both fits have to disagree about.</summary>
     private const double Panorama = 32d / 9d;
 
-    private const double Precision = 9;
+    private const int Precision = 9;
 
     /// <summary>
     /// Cover fills. Whichever axis is short becomes exactly the screen, and the other overhangs -
@@ -125,6 +125,54 @@ public sealed class BackgroundLayoutTests
     }
 
     /// <summary>
+    /// <b>On its side, Cover still fills</b> (last hand-run of M4, 17.10.2026). The fit keeps a
+    /// quarter turn now, so a picture at 90 or 270 degrees has to be measured lying down - the
+    /// rectangle that counts is the one it really covers, its hull, and that leaves no edge free.
+    /// </summary>
+    [Theory]
+    [InlineData(3200, 900, 90)]
+    [InlineData(900, 3200, 90)]
+    [InlineData(1600, 900, 270)]
+    public void Cover_on_its_side_leaves_no_edge_uncovered(int width, int height, int quarter)
+    {
+        var hull = Lying(width, height, BackgroundFit.Cover, quarter);
+
+        Assert.True(hull.X <= 1e-9 && hull.Y <= 1e-9, $"{hull} leaves a gap at the top or left");
+        Assert.True(hull.X + hull.Width >= 1 - 1e-9 && hull.Y + hull.Height >= 1 - 1e-9, $"{hull} leaves a gap");
+    }
+
+    /// <summary>
+    /// On its side, Contain still shows everything - inside the screen on both axes, and touching
+    /// it on one, or it would be smaller than it has to be.
+    /// </summary>
+    [Theory]
+    [InlineData(3200, 900, 90)]
+    [InlineData(900, 3200, 270)]
+    [InlineData(1600, 900, 90)]
+    public void Contain_on_its_side_shows_the_whole_picture(int width, int height, int quarter)
+    {
+        var hull = Lying(width, height, BackgroundFit.Contain, quarter);
+
+        Assert.True(hull.X >= -1e-9 && hull.Y >= -1e-9, $"{hull} reaches past the top or left");
+        Assert.True(hull.X + hull.Width <= 1 + 1e-9 && hull.Y + hull.Height <= 1 + 1e-9, $"{hull} reaches past");
+        Assert.True(Math.Abs(hull.Width - 1) < 1e-9 || Math.Abs(hull.Height - 1) < 1e-9, $"{hull} touches no edge");
+    }
+
+    /// <summary>
+    /// The numbers: a picture of the screen's own shape, turned on its side, is a different scale
+    /// under each fit - 16/9 to fill, 9/16 to show whole - where upright both are 1.
+    /// </summary>
+    [Fact]
+    public void A_picture_of_the_screens_shape_on_its_side_needs_two_different_scales()
+    {
+        var shape = Build.Meta(1600, 900).AspectRatio;
+
+        Assert.Equal(16d / 9d, Layout.FitBackground(shape, BackgroundFit.Cover, Screen, quarter: 90).Scale, Precision);
+        Assert.Equal(9d / 16d, Layout.FitBackground(shape, BackgroundFit.Contain, Screen, quarter: 90).Scale, Precision);
+        Assert.Equal(1, Layout.FitBackground(shape, BackgroundFit.Cover, Screen, quarter: 180).Scale, Precision);
+    }
+
+    /// <summary>
     /// A picture of the screen's own shape is the same rectangle either way - the case where the
     /// two fits have to agree, and the one a formula with a sign error still gets wrong.
     /// </summary>
@@ -151,6 +199,28 @@ public sealed class BackgroundLayoutTests
     }
 
     /// <summary>
+    /// The rectangle a picture fitted at a quarter turn really covers. Measured as an ITEM with the
+    /// same numbers, because the background and an item share one formula (test above) and only
+    /// the item side has a hull.
+    /// </summary>
+    private static Rect Lying(int width, int height, BackgroundFit fit, int quarter)
+    {
+        var meta = Build.Meta(width, height);
+        var (centre, scale) = Layout.FitBackground(meta.AspectRatio, fit, Screen, quarter);
+
+        var item = Build.Item() with
+        {
+            CenterX = centre.X,
+            CenterY = centre.Y,
+            Scale = scale,
+            RotationDeg = quarter,
+            AspectRatio = meta.AspectRatio,
+        };
+
+        return Layout.ItemToHullRect(item, Screen);
+    }
+
+    /// <summary>
     /// The rectangle the button produces: fit first, then draw what it decided.
     /// <para>
     /// It takes pixels rather than a ratio, and that is not decoration. The fit is computed from
@@ -162,7 +232,7 @@ public sealed class BackgroundLayoutTests
     private static Rect Fitted(int width, int height, BackgroundFit fit)
     {
         var meta = Build.Meta(width, height);
-        var (centre, scale) = Layout.FitBackground(meta.AspectRatio, fit, Screen);
+        var (centre, scale) = Layout.FitBackground(meta.AspectRatio, fit, Screen, quarter: 0);
 
         return Layout.BackgroundRect(
             Build.Background(meta: meta, centerX: centre.X, centerY: centre.Y, scale: scale),
