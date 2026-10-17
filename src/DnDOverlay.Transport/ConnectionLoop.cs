@@ -104,6 +104,27 @@ public sealed class ConnectionLoop
 
                 if (target is null)
                 {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    if (preferred is not null)
+                    {
+                        // <b>The bound is over and nobody spoke: back to the configured host.</b>
+                        // That is what the bound is for. Until 17.10.2026 this was a bare
+                        // "go round again", so after one failure the host was never tried again
+                        // and the display searched in five-second slices for ever - on exactly the
+                        // network where a host had been set because discovery does not get through.
+                        // The search itself was the wait.
+                        tryPreferred = true;
+                        continue;
+                    }
+
+                    // <b>The search ended without being asked to</b> - the port could not be had,
+                    // or there is no network. Waited after like a failed connection; answered
+                    // with "go round again", the loop spun as fast as the listener could fail.
+                    await WaitAsync(_backoff.Next(), cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -126,16 +147,23 @@ public sealed class ConnectionLoop
                 // and therefore RESET the wait to one second, so a rejected device knocked once a
                 // second for as long as it ran - the tightest loop the code can produce, at the one
                 // moment where nothing is going to change without a person (Part 4).
-                var delay = attempt is Attempt.Refused ? _backoff.Refused() : _backoff.Next();
-
-                TransportLog.RetryingIn(_logger, delay);
-                await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
+                await WaitAsync(
+                    attempt is Attempt.Refused ? _backoff.Refused() : _backoff.Next(),
+                    cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // The application is going away; nothing to say.
         }
+    }
+
+    /// <summary>Every wait says so - the hand-runs read 1042 to know the loop came round at all.</summary>
+    private Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        TransportLog.RetryingIn(_logger, delay);
+
+        return Task.Delay(delay, _time, cancellationToken);
     }
 
     private static HubAddress? Found(Sighting? sighting) =>

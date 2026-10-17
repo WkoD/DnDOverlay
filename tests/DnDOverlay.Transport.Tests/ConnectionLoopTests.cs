@@ -107,6 +107,40 @@ public sealed class ConnectionLoopTests
     }
 
     /// <summary>
+    /// The bound exists so that the configured host gets its turn again: a search that hears
+    /// nothing hands back to it. Without that, a display with a host - set precisely because
+    /// discovery does not get through - never tried that host again after one failure, and a
+    /// control restart left it searching in five-second slices for ever.
+    /// </summary>
+    [Fact(Timeout = 10_000)]
+    public async Task A_search_that_hears_nothing_hands_back_to_the_configured_host()
+    {
+        var script = new Script(Attempt.Fruitless, Attempt.Fruitless) { Hears = false };
+
+        await Run(Preferred, script, TestContext.Current.CancellationToken);
+
+        Assert.Equal([Preferred, Preferred], script.Targets);
+    }
+
+    /// <summary>
+    /// A search that ends without being asked to - the port could not be had, there is no network -
+    /// is waited after like a failed connection. Answered with a bare "go round again", the loop
+    /// spun as fast as the listener could fail.
+    /// </summary>
+    [Fact(Timeout = 10_000)]
+    public async Task A_search_that_fails_by_itself_is_waited_after()
+    {
+        // The fourth search takes the application with it, so it is not waited after.
+        var script = new Script(Attempt.Fruitless) { Hears = false, FailsAfterSearches = 4 };
+
+        await Run(preferred: null, script, TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, script.Searches);
+        Assert.Equal(3, _time.Requested.Count);
+        Assert.InRange(_time.Requested[2], TimeSpan.FromSeconds(3.2), TimeSpan.FromSeconds(4.8));
+    }
+
+    /// <summary>
     /// Every wait says so. The hand-runs read this line to know that the loop came round at all -
     /// without it, everything after a control restart proves nothing.
     /// </summary>
@@ -161,11 +195,48 @@ public sealed class ConnectionLoopTests
 
         internal int ListenedBeforeFirstConnect { get; private set; } = -1;
 
-        internal Task<Sighting?> Listen(CancellationToken cancellationToken)
+        /// <summary>
+        /// Whether a beacon is heard. When not, a search ends the way the real listener ends it:
+        /// with nothing, once its token is cancelled - by the bound, or by the application.
+        /// </summary>
+        internal bool Hears { get; init; } = true;
+
+        /// <summary>
+        /// After this many searches the listener fails by itself and answers at once, the way it
+        /// does when the port cannot be had. The application then goes away.
+        /// </summary>
+        internal int? FailsAfterSearches { get; init; }
+
+        internal int Searches => _listened;
+
+        internal async Task<Sighting?> Listen(CancellationToken cancellationToken)
         {
             _listened++;
 
-            return Task.FromResult<Sighting?>(Heard);
+            if (Hears)
+            {
+                return Heard;
+            }
+
+            if (FailsAfterSearches is { } limit)
+            {
+                if (_listened >= limit)
+                {
+                    await Stop.CancelAsync().ConfigureAwait(false);
+                }
+
+                return null;
+            }
+
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            return null;
         }
 
         internal Task<Attempt> Connect(HubAddress target, CancellationToken cancellationToken)

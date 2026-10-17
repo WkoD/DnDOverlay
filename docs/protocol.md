@@ -167,7 +167,10 @@ more than one interface — and that is precisely the machine this has to work o
 **Discovery stays active even when a host is configured.** The stored host is a *preferred*
 address, not an exclusive one: it changes when the Surface moves between Wi-Fi and its dock. So a
 configured host is tried first, an attempt that fails hands over to discovery, and a connection
-that worked hands back.
+that worked hands back. **Discovery gets five seconds when a host is configured, and a search that
+hears nothing in that time hands back too** — a host is usually set precisely because discovery
+does not get through, so the host has to keep getting its turn. A search that ends by itself,
+because the discovery port could not be had, is waited after like a failed connection.
 
 **A paired display discards foreign beacons.** It belongs to *its* control — the address cannot
 tell controls apart, and a second control in the same network is no invention.
