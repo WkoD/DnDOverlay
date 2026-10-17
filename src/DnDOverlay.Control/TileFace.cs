@@ -1448,17 +1448,19 @@ internal sealed class TileFace : Panel
             return;
         }
 
+        var grabbedNow = false;
+
         if (_hold is null && _behind is null)
         {
             // Past the tolerance a finger has meant something other than a tap: the picture
             // under where it landed, or a frame from free area.
-            if (_framing is null && _pressed is { } began)
+            if (_framing is null && _pressed is { } began && Meant(moved.CumulativeManipulation.Translation))
             {
-                var travelled = moved.CumulativeManipulation.Translation;
-
-                if (Math.Abs(travelled.X) + Math.Abs(travelled.Y) > Press.Tolerance
-                    && !Grab(began)
-                    && _fan is null)
+                if (TakeHold(began))
+                {
+                    grabbedNow = true;
+                }
+                else if (_fan is null)
                 {
                     Frame(began);
                 }
@@ -1478,7 +1480,13 @@ internal sealed class TileFace : Panel
         }
 
         var face = Wanted(RenderSize);
-        var delta = moved.DeltaManipulation;
+
+        // <b>The step that takes hold carries everything since the fingers landed</b> (last hand-run
+        // of M4, 17.10.2026). The table takes hold when the gesture starts and counts every step from
+        // there; this tile takes hold late, so a tap can still select, and everything before the
+        // grab used to be thrown away - most of a pinch, all of a turn. Counted in at the grab, the
+        // picture ends where the same hands would have left it at the table.
+        var delta = grabbedNow ? moved.CumulativeManipulation : moved.DeltaManipulation;
         var pushed = Placing.DeltaInScene(delta.Translation, _view, face);
 
         Step(
@@ -1489,6 +1497,58 @@ internal sealed class TileFace : Panel
                 delta.Rotation,
                 Placing.InScene(OnFace(moved.ManipulationOrigin), _view, face)),
             Math.Abs(delta.Translation.X) + Math.Abs(delta.Translation.Y));
+    }
+
+    /// <summary>
+    /// Whether the hands on the tile have stopped being a tap and started meaning something.
+    /// <para>
+    /// <b>One finger: when the point between the fingers has travelled past the tolerance</b>, as
+    /// before - a single finger is that point. <b>Two fingers: also when either of them has
+    /// travelled further than a tap may</b> (last hand-run of M4, 17.10.2026). A pinch or a turn
+    /// moves both fingers and leaves the point between them nearly where it was, so measured there
+    /// alone it never took hold, or late: zooming felt heavy and turning did not happen at all,
+    /// while the same hands at the table worked. The tap's own limit and not the tolerance, because
+    /// a two-finger tap points, and a tap that took hold on the way would raise and select the
+    /// picture under the spotlight.
+    /// </para>
+    /// </summary>
+    private bool Meant(Vector travelled) =>
+        Math.Abs(travelled.X) + Math.Abs(travelled.Y) > Press.Tolerance
+        || (_most >= 2 && _travelled > Tapping.TravelDip);
+
+    /// <summary>
+    /// Takes hold of the picture under the first finger - or, with two, under the second or between
+    /// them. At the table every picture is its own gesture, so two fingers on it are always on it;
+    /// on a tile one gesture covers everything, and a small picture is easily held with one finger
+    /// beside it. Asking only where the FIRST finger landed turned that pinch into a selection frame.
+    /// </summary>
+    private bool TakeHold(TilePoint began)
+    {
+        if (Grab(began))
+        {
+            return true;
+        }
+
+        // A card handed to the fan is a gesture of its own; no second picture is looked for.
+        if (_most < 2 || _fan is not null)
+        {
+            return false;
+        }
+
+        foreach (var finger in _fingers.Values.ToList())
+        {
+            if (Grab(finger.At))
+            {
+                return true;
+            }
+
+            if (_fan is not null)
+            {
+                return false;
+            }
+        }
+
+        return Grab(_between);
     }
 
     private void Completed(ManipulationCompletedEventArgs done)

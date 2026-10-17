@@ -1,9 +1,10 @@
 # Protocol
 
 What travels between the control and a display, and the rules both ends keep to. This document
-grows with each milestone; today it covers what **M1a** put on the wire.
+grows with each milestone and covers what is built.
 
-For the principles behind these decisions, see [design-principles.md](design-principles.md).
+For the principles behind these decisions, see [design-principles.md](design-principles.md); for
+the types that travel, [data-model.md](data-model.md).
 
 ## Transport
 
@@ -496,12 +497,27 @@ timeline.
 | Operation | Since | Effect |
 |---|---|---|
 | `addItem` | M1a | puts a finished item on a screen |
+| `removeItem` | M2b | takes one item off a screen; an id the scene does not carry changes nothing |
+| `setBackground` | M2b | puts a picture on the background layer, replacing what was there. Since M4 it carries centre, scale and turn like an item, and which of the two fits it stands in, if any |
+| `clearBackground` | M2b | takes the background layer away and leaves the items alone |
+| `setName` | M2b | renames an **asset**: every item of the scene showing it, and the background |
+| `setShowName` | M2b | whether one item wears its caption |
+| `setAnimationPaused` | M2b | holds one animation still, or lets it run again |
+| `toggleItems` · `toggleBackground` | M2b | whether a layer is drawn — carried as the resulting value, not as a flip, because a patch may arrive twice |
 | `transformItem` | M3a | where an item lies now — pushed, zoomed, turned |
 | `setLocked` | M3a | locks one item against gestures at the table, or releases it |
 | `parkItem` | M3a | lays an item into the fan along the park edge, or takes it out |
 
-The remaining operations arrive with the milestones that implement them. An operation that
-serialises but does nothing in the reducer would look implemented while being a trap.
+The remaining operations — `clearItems` and `setFocus` — arrive with the milestone that implements
+them. An operation that serialises but does nothing in the reducer would look implemented while
+being a trap.
+
+**Moving, copying and gripping the background are commands, not operations.** Moving a picture to
+another screen is one patch of a `removeItem` on the source and an `addItem` on the target under
+the **same** `ItemId`, so no state in between is ever seen. Copying is an `addItem` with a new
+`ItemId`. A grip on the background travels as `setBackground` with the whole layer: a screen
+carries exactly one background and it has no bookkeeping fields, so the layer as a whole is the
+change.
 
 **"Unlock all" is not an operation**: it is one `setLocked` per locked item, in one patch. Nor is
 there one for parking positions — where a parked picture lies follows from the list of parked
@@ -783,8 +799,8 @@ the sentence is whether a screen stays lit, and that is what decides the range. 
 are worth the same line, and the second one more than the first: from the room, a device that was
 *told* to let go looks exactly like one that failed to hold on.
 
-Of these, 3007–3014 and 3021–3022 are written by the **hub** and 3015–3019 and 3023–3032 by the
-**display** — the range
+Of these, 3007–3014, 3021–3022 and 3033–3037 are written by the **hub** and 3001–3006,
+3015–3020 and 3023–3032 by the **display** — the range
 follows the subject of the sentence, never the assembly it is written in. Only one of the three
 inventory findings is a warning, and that is the point of telling them apart: a missing screen
 loses nothing, a new one is a fact, and a screen whose **metrics changed** has had its images

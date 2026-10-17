@@ -374,9 +374,19 @@ public static class Layout
     /// <c>Cover</c> the choice of section is what an offset used to express, and it is now made by
     /// moving the picture - which can do everything the offset could and more.
     /// </para>
+    /// <para>
+    /// <b>The picture may be lying on its side</b> (last hand-run of M4, 17.10.2026). The fit keeps a
+    /// quarter turn rather than undoing it, so at 90° and 270° the picture's height runs ACROSS the
+    /// screen and its width up it, and both fits have to be measured against that: filling a
+    /// screen with a picture turned on its side is a different scale from filling it upright.
+    /// </para>
     /// </summary>
+    /// <param name="aspectRatio">The picture's own width over height, upright.</param>
+    /// <param name="fit">Which of the two positions.</param>
+    /// <param name="screen">The screen it is fitted to.</param>
+    /// <param name="quarter">The quarter turn it stands at - 0, 90, 180 or 270.</param>
     public static (Point Centre, double Scale) FitBackground(
-        double aspectRatio, BackgroundFit fit, ScreenContext screen)
+        double aspectRatio, BackgroundFit fit, ScreenContext screen, int quarter)
     {
         ArgumentNullException.ThrowIfNull(screen);
 
@@ -390,8 +400,16 @@ public static class Layout
         // Normalised height is a fraction of the screen height and normalised width a fraction of
         // the screen WIDTH, so the picture's shape has to travel through both aspect ratios - the
         // same trap as in ItemToRect, and the reason both live here rather than at two call sites.
-        var upright = screen.AspectRatio / aspectRatio;
+        //
+        // The two scales at which one axis exactly meets the screen. Upright, the height meets it at
+        // 1 and the width at screen/picture. On its side the picture's height lies along the
+        // screen's width, so it meets it at the screen's own ratio, and the picture's width stands
+        // along the screen's height and meets it at 1/picture.
+        var lying = Manipulation.Normalise(quarter) is 90 or 270;
+        var (first, second) = lying
+            ? (screen.AspectRatio, 1 / aspectRatio)
+            : (1, screen.AspectRatio / aspectRatio);
 
-        return (centre, fit is BackgroundFit.Contain ? Math.Min(1, upright) : Math.Max(1, upright));
+        return (centre, fit is BackgroundFit.Contain ? Math.Min(first, second) : Math.Max(first, second));
     }
 }

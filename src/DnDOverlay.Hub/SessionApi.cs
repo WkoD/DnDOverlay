@@ -403,10 +403,8 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// course of events and not an error (Part 11).
     /// </para>
     /// <para>
-    /// The gate is let go before <c>ApplyAsync</c> takes it again, which is the shape every single
-    /// form here already has - the operations are built against a scene that could in principle
-    /// have moved on by the time they are applied. Keeping the gate across both would be a second
-    /// locking discipline in one class, which is worse than the window it closes.
+    /// The run is built and written in one hold of the gate, so the scene it starts from is the
+    /// scene it lands on.
     /// </para>
     /// <para>
     /// <b><paramref name="inOrder"/> is how a command says which order it means</b>, and it is
@@ -416,7 +414,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// sorting at the call site means every caller can.
     /// </para>
     /// </summary>
-    private async Task ManyAsync(
+    private Task ManyAsync(
         ScreenRef screen,
         IReadOnlyList<ItemId> items,
         Func<SceneState, SceneItem, PatchOp> op,
@@ -427,40 +425,34 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
         if (items.Count == 0)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        List<PatchOp> ops = [];
-
-        try
-        {
-            var context = _screens.ContextFor(screen);
-            var scene = _scenes.Get(screen);
-
-            // Read off the scene the run STARTS from, before anything has been folded into it.
-            var order = inOrder is null ? items : Sorted(scene, items, inOrder);
-
-            foreach (var id in order)
+        return ApplyAsync(
+            screen,
+            (scene, context) =>
             {
-                if (scene.Items.FirstOrDefault(candidate => candidate.ItemId == id) is not { } current)
+                List<PatchOp> ops = [];
+
+                // Read off the scene the run STARTS from, before anything has been folded into it.
+                var order = inOrder is null ? items : Sorted(scene, items, inOrder);
+
+                foreach (var id in order)
                 {
-                    continue;
+                    if (scene.Items.FirstOrDefault(candidate => candidate.ItemId == id) is not { } current)
+                    {
+                        continue;
+                    }
+
+                    var built = op(scene, current);
+
+                    ops.Add(built);
+                    scene = SceneReducer.Apply(scene, built, context);
                 }
 
-                var built = op(scene, current);
-
-                ops.Add(built);
-                scene = SceneReducer.Apply(scene, built, context);
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        await ApplyAsync(screen, ops, cancellationToken).ConfigureAwait(false);
+                return ops;
+            },
+            cancellationToken);
     }
 
     /// <summary>
@@ -493,7 +485,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
         // worked out is not worked out again at the other end (Part 1, rule 2). A fresh background
         // arrives covering the screen, and is moved from the thumbnail afterwards (Part 6).
         var (centre, scale) = Layout.FitBackground(
-            asset.Meta.AspectRatio, BackgroundFit.Cover, _screens.ContextFor(screen));
+            asset.Meta.AspectRatio, BackgroundFit.Cover, _screens.ContextFor(screen), quarter: 0);
 
         var background = new BackgroundItem(
             asset.AssetId,
@@ -511,95 +503,85 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
     /// <inheritdoc />
     /// <inheritdoc />
-    public async Task TransformBackgroundAsync(
+    public Task TransformBackgroundAsync(
         ScreenRef screen,
         Point centre,
         double scale,
         double rotationDeg,
-        CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        BackgroundItem wanted;
-
-        try
-        {
-            if (_scenes.Get(screen).Background is not { } background)
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(
+            screen,
+            (scene, context) =>
             {
-                return;
-            }
-
-            var context = _screens.ContextFor(screen);
-
-            wanted = Manipulation.HoldAtEdge(
-                background with
+                if (scene.Background is not { } background)
                 {
-                    CenterX = centre.X,
-                    CenterY = centre.Y,
-                    Scale = Layout.ClampScale(scale, background.Meta.AspectRatio, context),
-                    RotationDeg = rotationDeg,
-                },
-                context);
+                    return [];
+                }
 
-            // <b>The tick moves only when something actually moved.</b> Switching the hand mode on
-            // and putting a finger down sends a step of nothing - the release reports whatever the
-            // hold is holding - and the DM would lose the answer to "what did I set this to" by
-            // merely opening the menu (07.09.2026). Compared with a tolerance rather than exactly,
-            // because the clamp and the snap on release can return the same arrangement through a
-            // last bit of arithmetic.
-            wanted = Moved(background, wanted) ? wanted with { Fit = null } : wanted with { Fit = background.Fit };
-        }
-        finally
-        {
-            _gate.Release();
-        }
+                var wanted = Manipulation.HoldAtEdge(
+                    background with
+                    {
+                        CenterX = centre.X,
+                        CenterY = centre.Y,
+                        Scale = Layout.ClampScale(scale, background.Meta.AspectRatio, context),
+                        RotationDeg = rotationDeg,
+                    },
+                    context);
 
-        await ApplyAsync(screen, new SetBackground(wanted), cancellationToken).ConfigureAwait(false);
-    }
+                // <b>The tick moves only when something actually moved.</b> Switching the hand mode
+                // on and putting a finger down sends a step of nothing - the release reports whatever
+                // the hold is holding - and the DM would lose the answer to "what did I set this to"
+                // by merely opening the menu (07.09.2026). Compared with a tolerance rather than
+                // exactly, because the clamp and the snap on release can return the same arrangement
+                // through a last bit of arithmetic.
+                wanted = Moved(background, wanted) ? wanted with { Fit = null } : wanted with { Fit = background.Fit };
+
+                return [new SetBackground(wanted)];
+            },
+            cancellationToken);
 
     /// <inheritdoc />
-    public async Task SetBackgroundFitAsync(
+    public Task SetBackgroundFitAsync(
         ScreenRef screen,
         BackgroundFit fit,
-        CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        BackgroundItem wanted;
-
-        try
-        {
-            // Read and change under the same lock as the write, or two grips on the fit would
-            // each compute from a background the other has already replaced.
-            if (_scenes.Get(screen).Background is not { } background)
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(
+            screen,
+            (scene, context) =>
             {
-                return;
-            }
+                // Read and change in the same hold as the write, or two grips on the fit would
+                // each compute from a background the other has already replaced.
+                if (scene.Background is not { } background)
+                {
+                    return [];
+                }
 
-            var (centre, scale) = Layout.FitBackground(
-                background.Meta.AspectRatio, fit, _screens.ContextFor(screen));
+                // <b>A quarter turn stays, anything between goes to the nearest one</b> (last
+                // hand-run of M4, 17.10.2026). It used to go back to 0 - the fix for 38b in the
+                // first hand-run, when a background left at 15 degrees was in neither obvious
+                // position and there were no quarter turns to choose. Since the menu sets them, 90
+                // degrees is a position the DM chose, and filling the screen must not take it away;
+                // 95 degrees is that position missed by a hand, so it is pulled onto 90 rather than
+                // back to nothing.
+                var quarter = Manipulation.NearestQuarter(background.RotationDeg);
 
-            // The angle goes back to nothing with them. Both buttons put the picture into one of
-            // the two obvious positions, and a background left standing at 15 degrees was in
-            // neither of them (hand-run of M4, 38b).
-            wanted = background with
-            {
-                CenterX = centre.X,
-                CenterY = centre.Y,
-                Scale = scale,
-                RotationDeg = 0,
+                var (centre, scale) = Layout.FitBackground(background.Meta.AspectRatio, fit, context, quarter);
 
-                // Which of the two it now stands in, so the menu can say so.
-                Fit = fit,
-            };
-        }
-        finally
-        {
-            _gate.Release();
-        }
+                return
+                [
+                    new SetBackground(background with
+                    {
+                        CenterX = centre.X,
+                        CenterY = centre.Y,
+                        Scale = scale,
+                        RotationDeg = quarter,
 
-        await ApplyAsync(screen, new SetBackground(wanted), cancellationToken).ConfigureAwait(false);
-    }
+                        // Which of the two it now stands in, so the menu can say so.
+                        Fit = fit,
+                    }),
+                ];
+            },
+            cancellationToken);
 
     /// <summary>
     /// Whether these two arrangements are different ones. <b>A tolerance rather than an exact
@@ -613,6 +595,43 @@ public sealed class SessionApi : ISessionApi, IDisposable
         || Math.Abs(before.CenterY - after.CenterY) > 0.001
         || Math.Abs(before.Scale - after.Scale) > 0.001
         || Math.Abs(before.RotationDeg - after.RotationDeg) > 0.1;
+
+    /// <inheritdoc />
+    public Task TurnBackgroundAsync(
+        ScreenRef screen, int quarter, CancellationToken cancellationToken = default) =>
+        ApplyAsync(
+            screen,
+            (scene, context) =>
+            {
+                if (scene.Background is not { } background)
+                {
+                    return [];
+                }
+
+                var turned = Manipulation.NearestQuarter(quarter);
+
+                if (background.Fit is { } fit)
+                {
+                    // The arrangement the menu ticks, computed again for the new angle - and the
+                    // tick stays, because the layer stands in that arrangement again.
+                    var (centre, scale) = Layout.FitBackground(background.Meta.AspectRatio, fit, context, turned);
+
+                    return
+                    [
+                        new SetBackground(background with
+                        {
+                            CenterX = centre.X,
+                            CenterY = centre.Y,
+                            Scale = scale,
+                            RotationDeg = turned,
+                        }),
+                    ];
+                }
+
+                // Placed by hand: turned where it lies, and held on the glass like any transform.
+                return [new SetBackground(Manipulation.HoldAtEdge(background with { RotationDeg = turned }, context))];
+            },
+            cancellationToken);
 
     /// <inheritdoc />
     public Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
@@ -664,25 +683,47 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// the loading of a layout will need in M5b: one command, one patch, one step in the timeline -
     /// a half-rebuilt table must never become visible (Part 4).
     /// </summary>
-    private async Task ApplyAsync(
+    private Task ApplyAsync(
         ScreenRef screen,
         IReadOnlyList<PatchOp> ops,
+        CancellationToken cancellationToken) =>
+        ApplyAsync(screen, (_, _) => ops, cancellationToken);
+
+    /// <summary>
+    /// A command that has to READ the scene to know what to write: <paramref name="decide"/> is
+    /// handed the scene and its context and returns the operations, and it runs under the same
+    /// hold of the gate as the write.
+    /// <para>
+    /// <b>One hold, not two.</b> Until 17.10.2026 these commands read under the gate, let go, and
+    /// took it again to write - a window in which a gesture from the table could land and then be
+    /// overwritten by operations built from the scene before it. A turn over a selection carries
+    /// absolute positions, so the picture a player was pushing would have jumped back. The window
+    /// had been kept on the argument that holding across both would be a second locking
+    /// discipline; it was the other way round - <see cref="TransformItemAsync"/>,
+    /// <see cref="MoveItemAsync"/> and <see cref="AddItemAsync"/> always read and wrote in one
+    /// hold, and now every command does.
+    /// </para>
+    /// </summary>
+    private async Task ApplyAsync(
+        ScreenRef screen,
+        Func<SceneState, ScreenContext, IReadOnlyList<PatchOp>> decide,
         CancellationToken cancellationToken)
     {
-        if (ops.Count == 0)
-        {
-            // Nothing to say. A patch with no operations would still be a revision and a step in
-            // the timeline, and "unlock all" on a screen with nothing locked is the normal way to
-            // get here.
-            return;
-        }
-
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
             var context = _screens.ContextFor(screen);
             var scene = _scenes.Get(screen);
+            var ops = decide(scene, context);
+
+            if (ops.Count == 0)
+            {
+                // Nothing to say. A patch with no operations would still be a revision and a step
+                // in the timeline, and "unlock all" on a screen with nothing locked is the normal
+                // way to get here.
+                return;
+            }
 
             foreach (var op in ops)
             {
@@ -1190,71 +1231,59 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task RefitAsync(ScreenRef screen, CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        List<PatchOp> ops = [];
-
-        try
-        {
-            var context = _screens.ContextFor(screen);
-            var scene = _scenes.Get(screen);
-
-            if (scene.Items.Count == 0)
+    public Task RefitAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
+        ApplyAsync(
+            screen,
+            (scene, context) =>
             {
-                return;
-            }
+                List<PatchOp> ops = [];
 
-            // Parked pictures move because their bar does - it is measured in the new screen's
-            // units - so the whole scene is fitted first and then read off. Working item by item
-            // would leave the bar computed against a scene half of whose items had already moved.
-            //
-            // What does NOT follow is MinScale, and that is a property of the model rather than an
-            // omission here: MinVisiblePixels is in DIP and means the same length on any screen,
-            // while MinScale is a FRACTION of the screen height - the number that meant 80 DIP on
-            // a 1080p table means 44 on an 800x600 one. Re-deriving it would need a screen to be
-            // able to say "I have no opinion of my own", and there is no such state; it is the
-            // same gap Part 6 records for the base size (M5b/M8).
-            var fitted = Parking.Arrange(
-                scene with
-                {
-                    Items =
-                    [
-                        .. scene.Items.Select(item => Manipulation.HoldAtEdge(
-                            item with { Scale = Layout.ClampScale(item.Scale, item.AspectRatio, context) },
-                            context)),
-                    ],
-                },
-                context);
+                // Parked pictures move because their bar does - it is measured in the new screen's
+                // units - so the whole scene is fitted first and then read off. Working item by
+                // item would leave the bar computed against a scene half of whose items had
+                // already moved.
+                //
+                // What does NOT follow is MinScale, and that is a property of the model rather than
+                // an omission here: MinVisiblePixels is in DIP and means the same length on any
+                // screen, while MinScale is a FRACTION of the screen height - the number that meant
+                // 80 DIP on a 1080p table means 44 on an 800x600 one. Re-deriving it would need a
+                // screen to be able to say "I have no opinion of my own", and there is no such
+                // state; it is the same gap Part 6 records for the base size (M5b/M8).
+                var fitted = Parking.Arrange(
+                    scene with
+                    {
+                        Items =
+                        [
+                            .. scene.Items.Select(item => Manipulation.HoldAtEdge(
+                                item with { Scale = Layout.ClampScale(item.Scale, item.AspectRatio, context) },
+                                context)),
+                        ],
+                    },
+                    context);
 
-            foreach (var (before, after) in scene.Items.Zip(fitted.Items))
-            {
-                if (before == after)
+                foreach (var (before, after) in scene.Items.Zip(fitted.Items))
                 {
-                    continue;
+                    if (before == after)
+                    {
+                        continue;
+                    }
+
+                    // The finished values travel, as everywhere else: the display is not asked to
+                    // work out what a changed screen means, or the two ends would each have their
+                    // own idea of where a picture ended up (Part 1, rule 2).
+                    ops.Add(new TransformItem(
+                        after.ItemId,
+                        after.CenterX,
+                        after.CenterY,
+                        after.Scale,
+                        after.RotationDeg,
+                        after.ZOrder,
+                        _scenes.NextRevision()));
                 }
 
-                // The finished values travel, as everywhere else: the display is not asked to work
-                // out what a changed screen means, or the two ends would each have their own idea
-                // of where a picture ended up (Part 1, rule 2).
-                ops.Add(new TransformItem(
-                    after.ItemId,
-                    after.CenterX,
-                    after.CenterY,
-                    after.Scale,
-                    after.RotationDeg,
-                    after.ZOrder,
-                    _scenes.NextRevision()));
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        await ApplyAsync(screen, ops, cancellationToken).ConfigureAwait(false);
-    }
+                return ops;
+            },
+            cancellationToken);
 
     /// <inheritdoc />
     public Task SetLockedAsync(
@@ -1262,57 +1291,27 @@ public sealed class SessionApi : ISessionApi, IDisposable
         ApplyAsync(screen, new SetLocked(item, locked), cancellationToken);
 
     /// <inheritdoc />
-    public async Task UnlockAllAsync(ScreenRef screen, CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        IReadOnlyList<PatchOp> ops;
-
-        try
-        {
-            // Read under the same lock the write takes, then let go of it: which items are locked
-            // has to be decided from the scene the patch is built against.
-            ops =
+    public Task UnlockAllAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
+        ApplyAsync(
+            screen,
+            // Which items are locked is decided from the scene the patch lands on.
+            (scene, _) =>
             [
-                .. _scenes.Get(screen).Items
+                .. scene.Items
                     .Where(item => item.Locked)
                     .Select(item => new SetLocked(item.ItemId, false)),
-            ];
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        await ApplyAsync(screen, ops, cancellationToken).ConfigureAwait(false);
-    }
+            ],
+            cancellationToken);
 
     /// <inheritdoc />
-    public async Task ParkItemAsync(
-        ScreenRef screen, ItemId item, bool parked, CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        PatchOp op;
-
-        try
-        {
-            var scene = _scenes.Get(screen);
-
-            if (scene.Items.FirstOrDefault(candidate => candidate.ItemId == item) is not { } current)
-            {
-                return;
-            }
-
-            op = Parked(scene, current, parked);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        await ApplyAsync(screen, op, cancellationToken).ConfigureAwait(false);
-    }
+    public Task ParkItemAsync(
+        ScreenRef screen, ItemId item, bool parked, CancellationToken cancellationToken = default) =>
+        ApplyAsync(
+            screen,
+            (scene, _) => scene.Items.FirstOrDefault(candidate => candidate.ItemId == item) is { } current
+                ? [Parked(scene, current, parked)]
+                : [],
+            cancellationToken);
 
     /// <inheritdoc />
     public async Task<SceneState> GetSceneAsync(
