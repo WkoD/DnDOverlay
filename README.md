@@ -184,8 +184,8 @@ to another screen, and, set apart at the bottom, removes. A screen's menu, on fr
 tile's head, opens the single view, sets up the screen, turns the view of it by a quarter for a
 DM who sits at the side, and handles the background: **Customize** lets you move, zoom and turn
 it with the same grips as a picture, while the pictures above it turn see-through; **Fill
-screen** and **Fit whole on screen** put it back into the two obvious positions; and it turns by
-the quarter like a picture.
+screen** and **Fit whole on screen** put it back into the two obvious positions, keeping a
+quarter turn; and it turns by the quarter like a picture — filled or fitted, it stays so.
 
 **Unlock all** is a button on each tile, because a padlock on a picture is set one at a time and
 should not have to be taken off that way.

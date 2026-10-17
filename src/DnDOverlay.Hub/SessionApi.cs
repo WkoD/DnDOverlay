@@ -620,6 +620,52 @@ public sealed class SessionApi : ISessionApi, IDisposable
         || Math.Abs(before.RotationDeg - after.RotationDeg) > 0.1;
 
     /// <inheritdoc />
+    public async Task TurnBackgroundAsync(
+        ScreenRef screen, int quarter, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        BackgroundItem wanted;
+
+        try
+        {
+            if (_scenes.Get(screen).Background is not { } background)
+            {
+                return;
+            }
+
+            var context = _screens.ContextFor(screen);
+            var turned = Manipulation.NearestQuarter(quarter);
+
+            if (background.Fit is { } fit)
+            {
+                // The arrangement the menu ticks, computed again for the new angle - and the tick
+                // stays, because the layer stands in that arrangement again.
+                var (centre, scale) = Layout.FitBackground(background.Meta.AspectRatio, fit, context, turned);
+
+                wanted = background with
+                {
+                    CenterX = centre.X,
+                    CenterY = centre.Y,
+                    Scale = scale,
+                    RotationDeg = turned,
+                };
+            }
+            else
+            {
+                // Placed by hand: turned where it lies, and held on the glass like any transform.
+                wanted = Manipulation.HoldAtEdge(background with { RotationDeg = turned }, context);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await ApplyAsync(screen, new SetBackground(wanted), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
         ApplyAsync(screen, new ClearBackground(), cancellationToken);
 

@@ -275,6 +275,74 @@ public sealed class SceneCommandTests
     }
 
     /// <summary>
+    /// <b>A filled background turned from the menu is filled again at the new angle</b>, and keeps
+    /// its tick (follow-up to the last hand-run of M4, 17.10.2026). Stated against the other way to
+    /// the same place - turn first, then fill - so the test does not repeat the formula it checks.
+    /// </summary>
+    [Theory]
+    [InlineData(BackgroundFit.Cover)]
+    [InlineData(BackgroundFit.Contain)]
+    public async Task Turning_a_filled_background_fills_it_again_at_the_new_angle(BackgroundFit fit)
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+        await session.SetBackgroundFitAsync(Target, fit, Cancellation);
+        await session.TurnBackgroundAsync(Target, 90, Cancellation);
+
+        var turned = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        // The other road: turned by hand, then filled.
+        Assert.NotNull(turned);
+        await session.TransformBackgroundAsync(Target, new Point(0.3, 0.4), turned.Scale, 90, Cancellation);
+        await session.SetBackgroundFitAsync(Target, fit, Cancellation);
+
+        var refilled = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(refilled);
+        Assert.Equal(90, turned.RotationDeg);
+        Assert.Equal(fit, turned.Fit);
+        Assert.Equal(refilled.CenterX, turned.CenterX, 9);
+        Assert.Equal(refilled.CenterY, turned.CenterY, 9);
+        Assert.Equal(refilled.Scale, turned.Scale, 9);
+    }
+
+    /// <summary>
+    /// A background the DM placed by hand is only turned: it stays where it lies and at its size,
+    /// and no tick appears that the DM did not choose.
+    /// </summary>
+    [Fact]
+    public async Task Turning_a_background_placed_by_hand_turns_it_where_it_lies()
+    {
+        using var session = Session(out var screens);
+        screens.Report(Device, [Info()], reported: null);
+
+        await session.SetBackgroundAsync(Target, Reference(), Cancellation);
+
+        var placed = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(placed);
+        await session.TransformBackgroundAsync(
+            Target, new Point(placed.CenterX + 0.05, placed.CenterY), placed.Scale, 0, Cancellation);
+
+        var moved = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(moved);
+        Assert.Null(moved.Fit);
+
+        await session.TurnBackgroundAsync(Target, 270, Cancellation);
+
+        var turned = (await session.GetSceneAsync(Target, Cancellation)).Background;
+
+        Assert.NotNull(turned);
+        Assert.Equal(270, turned.RotationDeg);
+        Assert.Null(turned.Fit);
+        Assert.Equal(moved.CenterX, turned.CenterX, 9);
+        Assert.Equal(moved.Scale, turned.Scale, 9);
+    }
+
+    /// <summary>
     /// Without a background it does nothing rather than failing - the same rule an unknown ItemId
     /// follows (Part 11). The menu entry is disabled, and a second control need not know that.
     /// </summary>
