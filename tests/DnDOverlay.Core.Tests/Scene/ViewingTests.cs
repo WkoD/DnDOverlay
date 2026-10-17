@@ -14,7 +14,7 @@ namespace DnDOverlay.Core.Tests.Scene;
 /// </summary>
 public sealed class ViewingTests
 {
-    private const double Precision = 12;
+    private const int Precision = 12;
 
     /// <summary>
     /// A quarter turn clockwise: the left edge of the table becomes the top edge of the view. Read

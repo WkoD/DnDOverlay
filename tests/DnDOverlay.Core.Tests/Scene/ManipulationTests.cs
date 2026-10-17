@@ -293,6 +293,24 @@ public sealed class ManipulationTests
     }
 
     /// <summary>
+    /// The quarter turn a fit button puts the background at: the nearest one, and exactly halfway
+    /// goes clockwise (last hand-run of M4, 17.10.2026).
+    /// </summary>
+    [Theory]
+    [InlineData(95, 90)]
+    [InlineData(90, 90)]
+    [InlineData(44.9, 0)]
+    [InlineData(45, 90)]
+    [InlineData(135, 180)]
+    [InlineData(315, 0)]
+    [InlineData(-95, 270)]
+    [InlineData(359, 0)]
+    public void An_angle_goes_to_the_nearest_quarter_turn(double degrees, int quarter)
+    {
+        Assert.Equal(quarter, Manipulation.NearestQuarter(degrees));
+    }
+
+    /// <summary>
     /// <b>Near is not a quarter turn.</b> A picture at 88° is where snapping left it, and a tick at 90°
     /// would claim something the table does not show.
     /// </summary>

@@ -7,12 +7,11 @@ namespace DnDOverlay.Core;
 /// never over a transmitted type name, which is the same stance the whole protocol takes
 /// (Part 4).
 /// <para>
-/// Only the operations a milestone actually reduces live here. The remaining five of Part 4's
-/// fourteen - <c>TransformItem</c>, <c>SetLocked</c> and <c>ParkItem</c> with the gestures in M3,
-/// <c>SetFocus</c> with them, <c>ClearItems</c> with "empty the lot" in M5b - arrive with the
-/// milestone that implements them: rule 7 is additive, and an operation that serialises but does
-/// nothing in the reducer would look implemented while being a trap. Discriminator strings, once
-/// given out, are never reused for something else.
+/// Only the operations a milestone actually reduces live here. The remaining two of Part 4's
+/// fourteen - <c>SetFocus</c> and <c>ClearItems</c>, both with M5b - arrive with the milestone
+/// that implements them: rule 7 is additive, and an operation that serialises but does nothing in
+/// the reducer would look implemented while being a trap. Discriminator strings, once given out,
+/// are never reused for something else.
 /// </para>
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "op")]
@@ -75,7 +74,7 @@ public sealed record TransformItem(
 public sealed record SetLocked(ItemId Item, bool Locked) : PatchOp;
 
 /// <summary>
-/// Puts an item into the slot bar along the park edge, or takes it out again.
+/// Puts an item into the fan along the park edge, or takes it out again.
 /// <para>
 /// It carries no position: where a parked picture lies follows from the LIST of parked pictures
 /// and the screen's park edge, and both ends work it out with the same function

@@ -206,13 +206,19 @@ public sealed class DiscoveryListenerTests
         Assert.True(log.Count(1017, stranger) > 0, "the repeats have to be written, only at Debug");
     }
 
+    /// <summary>
+    /// Bound to a control nobody runs, so that only the cancellation can end the search. Unbound,
+    /// the test raced the other test assemblies: they send real beacons on this same port, and a
+    /// datagram already waiting at the socket completes the receive before the cancellation is
+    /// even issued - the listener then rightly answers with that sighting (CI, 17.10.2026).
+    /// </summary>
     [Fact(Timeout = 30_000)]
     public async Task Giving_up_the_search_answers_with_nothing()
     {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var listener = new DiscoveryListener(NullLogger<DiscoveryListener>.Instance);
 
-        var listening = listener.ListenAsync(boundTo: null, stop.Token);
+        var listening = listener.ListenAsync(boundTo: Guid.NewGuid(), stop.Token);
 
         await stop.CancelAsync();
 
