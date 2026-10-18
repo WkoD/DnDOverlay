@@ -183,6 +183,9 @@
   <data name="E2003_IntakeFinished" xml:space="preserve">
     <value>Intake over {Sources} source(s) finished in {Milliseconds} ms: {Taken} taken in, {Known} already there, {Refused} refused{Broken}.</value>
   </data>
+  <data name="E2004_DropNotTakenIn" xml:space="preserve">
+    <value>A drop offered nothing that could be taken in. Formats: {Formats}.</value>
+  </data>
 
   <!-- 3000-3999 · Display: what is on a screen, and why is it or is it not? -->
 

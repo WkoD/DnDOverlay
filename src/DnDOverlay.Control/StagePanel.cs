@@ -342,6 +342,12 @@ internal sealed class StagePanel : StackPanel
 
         if (sources.Count == 0)
         {
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                var offered = Entrances.Formats(e.Data);
+
+                ControlLog.DropNotTakenIn(_logger, offered);
+            }
             _status.Text = "Nothing in that drop could be taken in.";
             return;
         }

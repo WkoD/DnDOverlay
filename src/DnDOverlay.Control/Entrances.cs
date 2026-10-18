@@ -97,6 +97,24 @@ internal sealed class Entrances(IAssetSink stock, ControlSettings settings, Time
         }
 
         var offer = Offer(data);
+        var addresses = DroppedAddress.Candidates(
+            offer.Text,
+            Encoded(data, "UniformResourceLocatorW", System.Text.Encoding.Unicode)
+                ?? Encoded(data, "UniformResourceLocator", System.Text.Encoding.Latin1),
+            Text(data, "text/uri-list") ?? Encoded(data, "text/uri-list", System.Text.Encoding.UTF8),
+            offer.Html);
+
+        // <b>An address that names a file on this machine is a file</b>, and files come first. VS
+        // Code's Markdown preview hands a picture over by such an address and nothing else - no
+        // file, no text (before a game session, 18.10.2026). Only an existing file counts.
+        var local = addresses
+            .Select(DroppedAddress.LocalPath)
+            .FirstOrDefault(path => path is not null && File.Exists(path));
+
+        if (local is not null)
+        {
+            return FromFiles([local]);
+        }
 
         if (Bytes(data, LosslessBitmap) is { } lossless)
         {
@@ -111,7 +129,23 @@ internal sealed class Entrances(IAssetSink stock, ControlSettings settings, Time
             return [Immediate(offer, bitmap)];
         }
 
-        return Address(offer) is { } address ? [Fetched(offer, address)] : [];
+        return Address(addresses) is { } address ? [Fetched(offer, address)] : [];
+    }
+
+    /// <summary>
+    /// The formats a drop offered, for the one line written when none of them could be taken in.
+    /// Without it, a refused drop from a new source is a guess at what that source sends.
+    /// </summary>
+    internal static string Formats(IDataObject data)
+    {
+        try
+        {
+            return data is null ? "(nothing)" : string.Join(", ", data.GetFormats(autoConvert: false));
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or OutOfMemoryException)
+        {
+            return "(unreadable)";
+        }
     }
 
     /// <summary>Runs whatever came of an entrance. One picture or two hundred, the same way.</summary>
@@ -196,15 +230,31 @@ internal sealed class Entrances(IAssetSink stock, ControlSettings settings, Time
         return buffer.ToArray();
     }
 
-    /// <summary>An address to fetch, if what lies there is one at all.</summary>
-    private static string? Address(NameSource offer)
-    {
-        var candidate = offer.Text?.Trim();
+    /// <summary>
+    /// The first address to fetch among everything the offer names - the text first, as before,
+    /// then the URL format and the picture in the HTML. A picture dragged out of a browser carries
+    /// its address there and often no text at all.
+    /// </summary>
+    private static string? Address(IReadOnlyList<string> candidates) =>
+        candidates.FirstOrDefault(candidate =>
+            Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps));
 
-        return Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
-            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-            ? candidate
-            : null;
+    /// <summary>
+    /// A format that arrives as bytes rather than as a string - the URL formats of a drag do. Read
+    /// up to the first terminating zero.
+    /// </summary>
+    private static string? Encoded(IDataObject data, string format, System.Text.Encoding encoding)
+    {
+        if (Bytes(data, format) is not { } bytes)
+        {
+            return null;
+        }
+
+        var text = encoding.GetString(bytes);
+        var zero = text.IndexOf('\0', StringComparison.Ordinal);
+
+        return zero < 0 ? text : text[..zero];
     }
 
     private IntakeSource Immediate(NameSource offer, byte[] bytes) =>

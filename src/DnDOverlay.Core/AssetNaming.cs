@@ -205,7 +205,7 @@ public static class AssetNaming
     }
 
     /// <summary>One attribute's value out of a single tag, quoted or bare.</summary>
-    private static string? Attribute(string tag, string name)
+    internal static string? Attribute(string tag, string name)
     {
         var at = 0;
 

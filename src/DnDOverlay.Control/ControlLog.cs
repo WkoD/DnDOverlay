@@ -156,6 +156,17 @@ internal static partial class ControlLog
         ILogger logger, int sources, long milliseconds, int taken, int known, int refused, string broken);
 
     /// <summary>
+    /// A drop none of the entrances could take, with the formats it offered. The status line says
+    /// that nothing came of it; only this line says what the source actually SENT, and without it
+    /// the next new source - a webview, a chat client - is a guess (18.10.2026).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 2004,
+        Level = LogLevel.Information,
+        Message = "A drop offered nothing that could be taken in. Formats: {Formats}.")]
+    internal static partial void DropNotTakenIn(ILogger logger, string formats);
+
+    /// <summary>
     /// The frame times of the last stretch the stage spent drawing.
     /// <para>
     /// <b>The control had no such line at all until the hand-run of M4 asked for one</b>, and the

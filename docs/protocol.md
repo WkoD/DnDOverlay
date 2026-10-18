@@ -706,8 +706,13 @@ later is not a notification but the trail: *did this device ever knock, and what
 | 2001 | `AssetTakenIn` | Information |
 | 2002 | `AssetRefused` | Information |
 | 2003 | `IntakeFinished` | Information |
+| 2004 | `DropNotTakenIn` | Information |
 
-**Next free: 2004.**
+**Next free: 2005.**
+
+**2004 names the formats a refused drop offered.** The status line can only say that nothing came
+of it; which formats the source sent is what decides whether a new source - a webview, a chat
+client - can be taken in at all.
 
 **2001 carries a duration, and that is the point of it.** The range stood empty through M2a and
 M2b, and a hand run showed what that cost: twelve pictures were taken into a campaign and the
