@@ -27,7 +27,6 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly PairingDesk _pairing;
     private readonly ControlSettings _settings;
     private readonly Uri _address;
-    private readonly LogList _log;
     private readonly CancellationTokenSource _listening = new();
     private readonly StageMemory _memory = new();
     private readonly ListBox _list = new() { Margin = new Thickness(0, 0, 0, 8), MinHeight = 160 };
@@ -62,7 +61,6 @@ internal sealed class MainWindow : Window, IDisposable
         _pairing = pairing;
         _settings = settings;
         _address = address;
-        _log = new LogList(log, "Control") { Height = 200 };
 
         var pictures = new Pictures(store);
 
@@ -169,7 +167,6 @@ internal sealed class MainWindow : Window, IDisposable
         Row(TouchRow());
         Row(_stage);
         Row(_status);
-        Row(_log);
 
         Content = panel;
 
@@ -255,8 +252,6 @@ internal sealed class MainWindow : Window, IDisposable
         // fault this line exists to keep out of a shutdown.
         Redraw.Measure(null);
         _frames.Dispose();
-
-        _log.Dispose();
     }
 
     /// <summary>
