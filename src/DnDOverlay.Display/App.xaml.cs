@@ -199,7 +199,12 @@ public sealed partial class App : Application, IDisposable
     private int _touchReports;
     private int _touchPoints;
 
-    private readonly DateTimeOffset _up = DateTimeOffset.UtcNow;
+    /// <summary>
+    /// When this process started, on the MONOTONIC clock. The wall clock jumps when Windows sets it:
+    /// at a session on 18.10.2026 the display PC started 55 days behind, was corrected after two
+    /// hours, and the pulse from then on said "standing after 1337:58:22".
+    /// </summary>
+    private readonly long _up = TimeProvider.System.GetTimestamp();
 
     /// <summary>Screens whose pictures are being fetched right now - one run each, no more.</summary>
     private readonly ConcurrentDictionary<ScreenId, byte> _fetching = new();
@@ -1662,7 +1667,7 @@ public sealed partial class App : Application, IDisposable
                 // something must not be evaluated when the level would throw the line away (CA1873).
                 // Total hours rather than a day-and-hours form: a display is meant to stay up, and
                 // "27:15:00" is read at a glance where "1.03:15:00" has to be worked out.
-                var standing = DateTimeOffset.UtcNow - _up;
+                var standing = TimeProvider.System.GetElapsedTime(_up);
                 var uptime = string.Create(
                     CultureInfo.InvariantCulture,
                     $"{(int)standing.TotalHours}:{standing.Minutes:00}:{standing.Seconds:00}");
