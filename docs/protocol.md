@@ -41,7 +41,7 @@ does not exist here, and the address is typed into a browser by a person standin
 | `Welcome` | control → display | the control's identifier, the **path** assets are served from, and a freshly issued token exactly once |
 | `PairingPending` | control → display | the pairing code, so the device can put its setup screen down |
 | `Rejected` | control → display | why: `Denied` · `InvalidToken` · `LimitExceeded` · `DuplicateDevice` |
-| `Ping` / `Pong` | control ↔ display | heartbeat, and the probe that tells a clone from a restart; the ping carries the last measured round trip |
+| `Ping` / `Pong` | control ↔ display | heartbeat, and the probe that tells a clone from a restart; the ping carries the last measured round trip, the pong the battery |
 | `SceneSnapshot` | control → display | the complete scene of one screen |
 | `ScenePatch` | control → display | one command of the DM, as operations addressed at screens |
 | `LogEntry` | display → control | one log message: identifier, name, level, the device's own timestamp, named values, optional raw text, optional screen |
@@ -416,6 +416,13 @@ right. A delta per screen arrives when there is a surface that gains from it.
 The control sends `Ping` every **5 seconds** and treats a connection as dead after **12 seconds**
 of silence. The ping carries back the last round trip the control measured, so both sides show
 the same latency instead of each working one out its own way.
+
+**The pong carries the battery** — percent and whether the device is on the cable — or nothing on a
+machine without one, and from a display older than M5a, which reads the same. It rides here
+because it is always shown and changes slowly; telemetry that is wanted only while somebody looks
+is requested and droppable instead, and a pong is never dropped. The device list is rebuilt when
+the battery reads differently, not on every beat, and the value goes with the connection: a
+percentage remembered from before the socket closed would read as current.
 
 **A deadline on silence rather than a count of unanswered pings**, and the difference is not
 cosmetic: a device that is busy sending is alive whether or not a `Pong` happened to cross the

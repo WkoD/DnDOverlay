@@ -162,7 +162,8 @@ public sealed class SessionApi : ISessionApi, IDisposable
             here?.Address,
             here?.AppVersion,
             here?.ProtocolVersion,
-            here?.RoundTrip);
+            here?.RoundTrip,
+            here?.Battery);
     }
 
     private void OnDevicesChanged() => _events.Publish(new SessionEvent.DevicesChanged(Devices()));

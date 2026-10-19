@@ -57,6 +57,9 @@ public sealed class DisplayConnection
     /// <summary>The last measured round trip, or <see langword="null"/> before the first answer.</summary>
     public TimeSpan? RoundTrip => _liveness.RoundTrip;
 
+    /// <summary>What the last <c>Pong</c> said about the battery; <see langword="null"/> without one.</summary>
+    public BatteryInfo? Battery => _liveness.Battery;
+
     /// <summary>
     /// The screens this connection is responsible for - the hub addresses per connection.
     /// <para>

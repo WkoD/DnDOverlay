@@ -1,3 +1,4 @@
+using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 
 namespace DnDOverlay.Hub;
@@ -29,6 +30,7 @@ internal sealed class Liveness
     private long _lastHeard;
     private long _pingSentAt;
     private long _roundTripMs = -1;
+    private BatteryInfo? _battery;
     private TaskCompletionSource _pong = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     internal Liveness(TimeProvider time, HubOptions options, Func<ProtocolMessage, bool> send)
@@ -54,6 +56,16 @@ internal sealed class Liveness
             ? null
             : TimeSpan.FromMilliseconds(measured);
 
+    /// <summary>What the last <c>Pong</c> said about the battery; <see langword="null"/> without one.</summary>
+    internal BatteryInfo? Battery => Volatile.Read(ref _battery);
+
+    /// <summary>
+    /// Fires when the battery reads differently from the last <c>Pong</c> - a percent, or the cable.
+    /// The device list is rebuilt on it, and it is not rebuilt on every beat: an unchanged battery
+    /// every five seconds per device would be a stream of identical pictures.
+    /// </summary>
+    internal event Action? BatteryChanged;
+
     /// <summary>Called for every message that arrives. Anything at all counts as a sign of life.</summary>
     internal void Note() => Volatile.Write(ref _lastHeard, _time.GetTimestamp());
 
@@ -61,8 +73,13 @@ internal sealed class Liveness
     /// Called when a <c>Pong</c> arrives. It is answered where it is heard rather than passed on:
     /// it says nothing about the session, it says this socket is alive.
     /// </summary>
-    internal void NotePong()
+    internal void NotePong(BatteryInfo? battery = null)
     {
+        if (Interlocked.Exchange(ref _battery, battery) != battery)
+        {
+            BatteryChanged?.Invoke();
+        }
+
         var sent = Interlocked.Exchange(ref _pingSentAt, 0);
 
         if (sent != 0)

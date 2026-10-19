@@ -15,7 +15,7 @@ namespace DnDOverlay.Core;
 /// </para>
 /// </summary>
 /// <param name="Connected">
-/// Whether a socket is open right now. The four fields after it are only true while it is, and are
+/// Whether a socket is open right now. The five fields after it are only true while it is, and are
 /// <see langword="null"/> otherwise - a version or a round trip remembered from last Tuesday would
 /// be a number that reads as current and is not.
 /// </param>
@@ -32,7 +32,8 @@ public sealed record DeviceView(
     string? Address = null,
     string? AppVersion = null,
     int? ProtocolVersion = null,
-    TimeSpan? RoundTrip = null)
+    TimeSpan? RoundTrip = null,
+    BatteryInfo? Battery = null)
 {
     /// <summary>
     /// Structural over the screen list, like every other list-bearing record here: a record
@@ -49,6 +50,7 @@ public sealed record DeviceView(
         && AppVersion == other.AppVersion
         && ProtocolVersion == other.ProtocolVersion
         && RoundTrip == other.RoundTrip
+        && Battery == other.Battery
         && Screens.SequenceEqual(other.Screens);
 
     public override int GetHashCode()
@@ -62,6 +64,7 @@ public sealed record DeviceView(
         hash.Add(AppVersion);
         hash.Add(ProtocolVersion);
         hash.Add(RoundTrip);
+        hash.Add(Battery);
 
         foreach (var screen in Screens)
         {
@@ -71,3 +74,14 @@ public sealed record DeviceView(
         return hash.ToHashCode();
     }
 }
+
+/// <summary>
+/// How full a display's battery is, and whether it is on the cable.
+/// </summary>
+/// <param name="Percent">0 to 100.</param>
+/// <param name="PluggedIn">
+/// Whether it hangs on the cable, as Windows shows it with its lightning sign. Without it 18 % would
+/// be an alarm while the device is charging - "18 % and falling" is a different message from
+/// "18 % and rising" (Part 7).
+/// </param>
+public sealed record BatteryInfo(int Percent, bool PluggedIn);

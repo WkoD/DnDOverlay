@@ -214,8 +214,20 @@ public sealed record RejectedMessage(RejectionReason Reason) : ProtocolMessage;
 /// </param>
 public sealed record PingMessage(long? RoundTripMs = null) : ProtocolMessage;
 
-/// <summary>The answer to a <see cref="PingMessage"/>. Carries the battery once M5 needs it.</summary>
-public sealed record PongMessage : ProtocolMessage;
+/// <summary>
+/// The answer to a <see cref="PingMessage"/>, and the battery with it.
+/// <para>
+/// <b>The battery rides on the heartbeat because it is always shown</b> and changes slowly: it
+/// stands in the device tree for as long as the device is there, and the heartbeat runs every five
+/// seconds anyway (Part 4). Telemetry that is only wanted while somebody looks goes the other way,
+/// requested and droppable - a <c>Pong</c> is a sign of life and is never dropped.
+/// </para>
+/// </summary>
+/// <param name="Battery">
+/// <see langword="null"/> on a machine without one - and from a display older than M5a, which is
+/// the same answer for the same reason: there is nothing to show (rule 7).
+/// </param>
+public sealed record PongMessage(BatteryInfo? Battery = null) : ProtocolMessage;
 
 /// <summary>The complete scene of one screen. Addressed, like everything, with a <see cref="ScreenRef"/>.</summary>
 public sealed record SceneSnapshotMessage(ScreenRef Screen, SceneState Scene) : ProtocolMessage;

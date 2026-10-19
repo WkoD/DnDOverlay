@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using DnDOverlay.Core.Tests.Configuration;
 
@@ -131,6 +132,46 @@ public sealed class LivenessTests
 
         liveness.NotePong();
         Assert.True(await second);
+    }
+
+    /// <summary>
+    /// The battery rebuilds the device list when it changes - a percent or the cable - and not on
+    /// every beat, or every device would produce an identical picture every five seconds.
+    /// </summary>
+    [Fact]
+    public void Only_a_battery_that_reads_differently_is_announced()
+    {
+        var liveness = Watching(new ManualTime(), new ConcurrentQueue<PingMessage>());
+        var announced = 0;
+
+        liveness.BatteryChanged += () => announced++;
+
+        liveness.NotePong(new BatteryInfo(60, PluggedIn: false));
+        liveness.NotePong(new BatteryInfo(60, PluggedIn: false));
+
+        Assert.Equal(1, announced);
+
+        liveness.NotePong(new BatteryInfo(59, PluggedIn: false));
+        liveness.NotePong(new BatteryInfo(59, PluggedIn: true));
+
+        Assert.Equal(3, announced);
+        Assert.Equal(new BatteryInfo(59, PluggedIn: true), liveness.Battery);
+    }
+
+    /// <summary>A machine without a battery says nothing, and nothing changes for it.</summary>
+    [Fact]
+    public void A_device_without_a_battery_announces_nothing()
+    {
+        var liveness = Watching(new ManualTime(), new ConcurrentQueue<PingMessage>());
+        var announced = 0;
+
+        liveness.BatteryChanged += () => announced++;
+
+        liveness.NotePong();
+        liveness.NotePong();
+
+        Assert.Equal(0, announced);
+        Assert.Null(liveness.Battery);
     }
 
     private static Liveness Watching(TimeProvider time, ConcurrentQueue<PingMessage> pings) =>

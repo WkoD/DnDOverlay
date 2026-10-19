@@ -39,6 +39,21 @@ public sealed class DisplayConnections
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Something about this connection that the device list shows has changed - its battery. Said
+    /// only while it is the registered one: a connection already displaced by a reconnect has
+    /// nothing left to show.
+    /// </summary>
+    public void Refresh(DisplayConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        if (_connections.TryGetValue(connection.Device, out var current) && ReferenceEquals(current, connection))
+        {
+            Changed?.Invoke();
+        }
+    }
+
     public bool TryGet(DeviceId device, out DisplayConnection connection) =>
         _connections.TryGetValue(device, out connection!);
 

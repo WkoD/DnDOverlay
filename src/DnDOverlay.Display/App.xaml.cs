@@ -979,7 +979,7 @@ public sealed partial class App : Application, IDisposable
         string deviceName,
         ILoggerFactory loggers)
     {
-        var client = new DisplayClient(loggers.CreateLogger<DisplayClient>());
+        var client = new DisplayClient(loggers.CreateLogger<DisplayClient>(), Power.Battery);
         var discovery = new DiscoveryListener(loggers.CreateLogger<DiscoveryListener>());
         var loop = new ConnectionLoop(loggers.CreateLogger<ConnectionLoop>(), TimeProvider.System, new ReconnectBackoff());
 

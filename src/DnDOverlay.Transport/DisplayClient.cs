@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading.Channels;
+using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using Microsoft.Extensions.Logging;
 
@@ -20,8 +21,17 @@ namespace DnDOverlay.Transport;
 public sealed class DisplayClient
 {
     private readonly ILogger<DisplayClient> _logger;
+    private readonly Func<BatteryInfo?> _battery;
 
-    public DisplayClient(ILogger<DisplayClient> logger) => _logger = logger;
+    /// <param name="battery">
+    /// Read on every <c>Ping</c>, so the answer is as fresh as the heartbeat. Absent, the device
+    /// says it has none.
+    /// </param>
+    public DisplayClient(ILogger<DisplayClient> logger, Func<BatteryInfo?>? battery = null)
+    {
+        _logger = logger;
+        _battery = battery ?? (static () => null);
+    }
 
     /// <summary>
     /// Connects, announces itself and pumps incoming messages into <paramref name="inbox"/>
@@ -139,7 +149,7 @@ public sealed class DisplayClient
             // and silence is the answer that replaces it (Part 4).
             if (message is PingMessage)
             {
-                _ = outbox.TrySend(new PongMessage());
+                _ = outbox.TrySend(new PongMessage(_battery()));
             }
 
             if (message is not null)

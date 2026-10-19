@@ -214,6 +214,46 @@ public sealed class SessionStreamOverTheWireTests : IAsyncLifetime
         Assert.Equal(AssetLoadState.Loading, load.State);
     }
 
+    /// <summary>
+    /// The battery arrives on the heartbeat's answer and stands in the device tree - and goes with
+    /// the connection, because a percentage remembered from before the socket closed would read as
+    /// current and would not be (Part 4, Part 7).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task The_battery_of_a_device_reaches_the_device_tree()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var stream = await ListenAsync(cancellationToken);
+
+        var socket = await ConnectAsync(Leaving, [Info(First)], cancellationToken);
+
+        _ = await NextAsync<SessionEvent.DevicesChanged>(
+            stream,
+            change => change.Devices.Any(device => device.Device == Leaving && device.Connected));
+
+        await socket.SendAsync(
+            ProtocolJson.Serialise(new PongMessage(new BatteryInfo(18, PluggedIn: true))),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            cancellationToken);
+
+        var charged = await NextAsync<SessionEvent.DevicesChanged>(
+            stream,
+            change => change.Devices.Any(device => device.Device == Leaving && device.Battery is not null));
+
+        Assert.Equal(new BatteryInfo(18, PluggedIn: true), Assert.Single(charged.Devices, device => device.Device == Leaving).Battery);
+
+        socket.Abort();
+        socket.Dispose();
+
+        var gone = await NextAsync<SessionEvent.DevicesChanged>(
+            stream,
+            change => change.Devices.Any(device => device.Device == Leaving && !device.Connected));
+
+        Assert.Null(Assert.Single(gone.Devices, device => device.Device == Leaving).Battery);
+    }
+
     private IAsyncEnumerator<SessionEvent> Listen(CancellationToken cancellationToken) =>
         _app.Services
             .GetRequiredService<ISessionApi>()

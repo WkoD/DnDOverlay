@@ -553,6 +553,13 @@ public static class HubEndpoints
             .ConfigureAwait(false);
 
         connections.Add(connection);
+
+        // The battery stands in the device tree, so a change has to reach it - from here on, once
+        // there is a device to show it on. Unhooked with the connection below.
+        void BatteryChanged() => connections.Refresh(connection);
+
+        liveness.BatteryChanged += BatteryChanged;
+
         HubLog.DisplayConnected(logger, device.Device, device.Name, screenIds.Count);
 
         try
@@ -695,6 +702,7 @@ public static class HubEndpoints
         {
             // By instance, never by device: on a fast reconnect the new connection has already
             // registered under the same DeviceId when this one finishes tidying up.
+            liveness.BatteryChanged -= BatteryChanged;
             connections.Remove(connection);
 
             // The screens stay KNOWN and stay settable; only their availability ends. Removing
@@ -944,9 +952,9 @@ public static class HubEndpoints
 
                 // The Pong stops here. It says nothing about the session - it says this socket is
                 // alive - and passing it on would only get it logged as unhandled.
-                if (message is PongMessage)
+                if (message is PongMessage pong)
                 {
-                    liveness.NotePong();
+                    liveness.NotePong(pong.Battery);
                     continue;
                 }
 

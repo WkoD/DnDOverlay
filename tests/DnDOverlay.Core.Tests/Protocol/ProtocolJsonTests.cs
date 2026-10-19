@@ -113,6 +113,7 @@ public sealed class ProtocolJsonTests
         new RejectedMessage(RejectionReason.Denied),
         new PingMessage(RoundTripMs: 12),
         new PongMessage(),
+        new PongMessage(new BatteryInfo(47, PluggedIn: true)),
         new LogEntryMessage(
             3005,
             "AssetFailed",
@@ -224,6 +225,18 @@ public sealed class ProtocolJsonTests
     /// what an older counterpart reads. Asked of <c>ParkEdge</c> since M4 - it used to be asked of
     /// the background's fit, and that is no longer a stored value.
     /// </summary>
+    /// <summary>
+    /// A display from before M5a answers with a bare <c>Pong</c>, and that has to read as "no
+    /// battery" - which is also what it means: there is nothing to show (rule 7).
+    /// </summary>
+    [Fact]
+    public void A_pong_without_a_battery_reads_as_none()
+    {
+        var pong = Assert.IsType<PongMessage>(ProtocolJson.Parse("""{"t":"Pong"}"""u8.ToArray()));
+
+        Assert.Null(pong.Battery);
+    }
+
     [Fact]
     public void Enums_travel_as_names_rather_than_numbers()
     {
