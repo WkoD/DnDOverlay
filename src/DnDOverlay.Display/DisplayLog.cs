@@ -507,4 +507,34 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Windows is ending the session ({Reason}); settings written.")]
     internal static partial void SessionEnding(ILogger logger, System.Windows.ReasonSessionEnding? reason);
+
+    /// <summary>
+    /// The rescue mark came up: the control has been gone for the grace period (Part 6). Once per
+    /// absence - it is also the moment this device would answer a call for orphaned displays.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3042,
+        Level = LogLevel.Warning,
+        Message = "No control for {Seconds} s; the rescue mark is up on {Screens} screen(s).")]
+    internal static partial void RescueMarkUp(ILogger logger, int screens, int seconds);
+
+    /// <summary>
+    /// The overlays were hidden at the device with the rescue mark. The wishes stand unchanged; the
+    /// next update from a control brings the windows back (Part 6).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3043,
+        Level = LogLevel.Warning,
+        Message = "Hidden at the device with the rescue mark: {Screens} screen(s).")]
+    internal static partial void HiddenAtDevice(ILogger logger, int screens);
+
+    /// <summary>
+    /// The answer to a call for orphaned displays was taken back at the device - the veto on the
+    /// mark's second line (Part 6). That caller is not answered again until this device is accepted.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3044,
+        Level = LogLevel.Information,
+        Message = "Withdrew the offer to {Name}.")]
+    internal static partial void OfferWithdrawn(ILogger logger, string name);
 }

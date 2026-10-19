@@ -114,6 +114,78 @@ public sealed class TakeoverWindowTests
         Assert.True(window.IsOpen);
     }
 
+    /// <summary>The grace is a device parameter, and a changed one counts from the same loss.</summary>
+    [Fact]
+    public void A_changed_grace_applies_to_the_absence_already_running()
+    {
+        var clock = new Clock();
+        var window = new TakeoverWindow(clock);
+
+        window.Connected();
+        window.Lost();
+        clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.False(window.IsOpen);
+
+        window.Grace = TimeSpan.FromSeconds(20);
+
+        Assert.True(window.IsOpen);
+    }
+
+    /// <summary>What the mark says - how long the control has been gone - and nothing before a loss or while connected.</summary>
+    [Fact]
+    public void The_absence_counts_from_the_loss()
+    {
+        var clock = new Clock();
+        var window = new TakeoverWindow(clock);
+
+        Assert.Null(window.Absent);
+
+        window.Connected();
+
+        Assert.Null(window.Absent);
+
+        window.Lost();
+        clock.Advance(TimeSpan.FromMinutes(3));
+
+        Assert.Equal(TimeSpan.FromMinutes(3), window.Absent);
+
+        window.SaidGoodbye();
+
+        Assert.Null(window.Absent);
+    }
+
+    /// <summary>
+    /// The veto is for that caller, and it holds: a caller that keeps calling for two minutes is not
+    /// answered again a moment later. Another caller is still answered, and the next accepted
+    /// connection spends the veto (Part 6).
+    /// </summary>
+    [Fact]
+    public void A_veto_holds_against_that_caller_until_the_next_connection()
+    {
+        var clock = new Clock();
+        var window = new TakeoverWindow(clock);
+        var caller = Guid.NewGuid();
+        var other = Guid.NewGuid();
+
+        window.Connected();
+        window.Lost();
+        clock.Advance(TakeoverWindow.DefaultGrace);
+
+        Assert.True(window.Answers(caller));
+
+        window.Veto(caller);
+
+        Assert.False(window.Answers(caller));
+        Assert.True(window.Answers(other));
+
+        window.Connected();
+        window.Lost();
+        clock.Advance(TakeoverWindow.DefaultGrace);
+
+        Assert.True(window.Answers(caller));
+    }
+
     private sealed class Clock : TimeProvider
     {
         private long _ticks;

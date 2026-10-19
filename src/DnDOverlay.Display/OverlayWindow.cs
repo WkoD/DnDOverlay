@@ -159,6 +159,18 @@ internal sealed class OverlayWindow : Window
     private ParkEdge _diagnosticEdge = ParkEdge.Left;
     private ScreenState _state = ScreenState.Enabled;
 
+    /// <summary>
+    /// The rescue mark (Part 6): top left, the one corner where Windows has nothing. It is the
+    /// second place this window TAKES input rather than passing it through, so it is as small as a
+    /// thumb can hit and no larger.
+    /// </summary>
+    private readonly Border _rescue;
+    private readonly TextBlock _rescueOffer = Line(18);
+    private readonly TextBlock _rescueAsk = Line(18);
+    private readonly StackPanel _rescueChoice;
+    private readonly TextBlock _rescueAbsence = Line(18);
+    private readonly Border _rescueOfferRow;
+
     /// <summary>The frames standing in for pictures that are not here - see <see cref="Placeholder"/>.</summary>
     private readonly Dictionary<(AssetId Asset, string Name, string? Reason), ImageSource> _placeholders = [];
 
@@ -229,6 +241,49 @@ internal sealed class OverlayWindow : Window
             IsHitTestVisible = false,
         };
 
+        _rescueAsk.Text = "Hide every overlay on this device?";
+
+        var hide = Choice("Hide", () =>
+        {
+            HideRequested?.Invoke();
+        });
+
+        var keep = Choice("Cancel", () =>
+        {
+            Ask(false);
+        });
+
+        _rescueChoice = new StackPanel { Orientation = Orientation.Horizontal, Visibility = Visibility.Collapsed };
+        _rescueChoice.Children.Add(hide);
+        _rescueChoice.Children.Add(keep);
+
+        var absence = Tappable(_rescueAbsence, () =>
+        {
+            Ask(true);
+        });
+
+        _rescueOfferRow = Tappable(_rescueOffer, () => OfferWithdrawn?.Invoke());
+        _rescueOfferRow.Visibility = Visibility.Collapsed;
+
+        var rows = new StackPanel();
+        rows.Children.Add(absence);
+        rows.Children.Add(_rescueAsk);
+        rows.Children.Add(_rescueChoice);
+        rows.Children.Add(_rescueOfferRow);
+        _rescueAsk.Visibility = Visibility.Collapsed;
+
+        _rescue = new Border
+        {
+            Child = rows,
+
+            // No signal colour, no blinking, no area: a thin half-transparent line one reads when
+            // looking for it. One can play on with it standing (Part 6).
+            Background = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0)),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Visibility = Visibility.Collapsed,
+        };
+
         _naming = new DispatcherTimer { Interval = ShowNameFor };
         _naming.Tick += (_, _) => Hide(_nameplate);
 
@@ -253,6 +308,10 @@ internal sealed class OverlayWindow : Window
         root.Children.Add(_pointing);
         root.Children.Add(_diagnostics);
         root.Children.Add(_nameplate);
+
+        // Last, so it lies above everything of ours: it has to work where nothing else reacts
+        // (Part 6) - a frozen screen, a locked picture, a focus.
+        root.Children.Add(_rescue);
 
         Title = monitor.Screen.Label;
         Content = root;
@@ -420,6 +479,106 @@ internal sealed class OverlayWindow : Window
                 Diagnose(null, _diagnosticEdge);
             }
         }
+    }
+
+    /// <summary>The DM confirmed "hide" on the rescue mark of this screen - it means every screen of the device.</summary>
+    internal event Action? HideRequested;
+
+    /// <summary>"Don't offer" on the mark's second line: the answer to a call is taken back.</summary>
+    internal event Action? OfferWithdrawn;
+
+    /// <summary>
+    /// Shows the rescue mark, or hides it with <see langword="null"/>. Called once a second, so a
+    /// mark that is asking keeps asking while its text moves on.
+    /// </summary>
+    /// <param name="absence">How long without a control, already in words - "No control for 3 min".</param>
+    /// <param name="offeredTo">The control this device is offering itself to, after answering a call.</param>
+    internal void Rescue(string? absence, string? offeredTo)
+    {
+        if (absence is null)
+        {
+            _rescue.Visibility = Visibility.Collapsed;
+            Ask(false);
+            return;
+        }
+
+        _rescueAbsence.Text = absence + " - hide overlay";
+
+        if (offeredTo is null)
+        {
+            _rescueOfferRow.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            // What a change costs, said where it can still be refused: the screen wishes live in the
+            // control, a new one knows none, so a screen set inactive on purpose is played again.
+            // Scene, names and parameters survive - they travel in the Hello (Part 6).
+            _rescueOffer.Text = $"Offering itself to {offeredTo} - don't offer (an inactive screen would be played again)";
+            _rescueOfferRow.Visibility = Visibility.Visible;
+        }
+
+        _rescue.Visibility = Visibility.Visible;
+    }
+
+    private void Ask(bool asking)
+    {
+        _rescueAsk.Visibility = asking ? Visibility.Visible : Visibility.Collapsed;
+        _rescueChoice.Visibility = asking ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static TextBlock Line(double size) =>
+        new()
+        {
+            FontSize = size,
+            Foreground = Brushes.White,
+            Padding = new Thickness(12, 10, 12, 10),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 640,
+        };
+
+    /// <summary>
+    /// A row that answers a mouse click and a finger alike - a beamer PC without a touchscreen
+    /// needs the mark as much as the table does (Part 6). The touch is handled where it lands, so
+    /// Windows does not also promote it to a click and fire the row twice.
+    /// </summary>
+    private static Border Tappable(TextBlock text, Action tapped)
+    {
+        var row = new Border { Child = text, Background = Brushes.Transparent };
+
+        row.TouchUp += (_, e) =>
+        {
+            e.Handled = true;
+            tapped();
+        };
+
+        row.TouchDown += (_, e) => e.Handled = true;
+
+        row.MouseLeftButtonUp += (_, e) =>
+        {
+            if (e.StylusDevice is null)
+            {
+                e.Handled = true;
+                tapped();
+            }
+        };
+
+        return row;
+    }
+
+    private static Border Choice(string label, Action chosen)
+    {
+        var text = Line(18);
+
+        text.Text = label;
+        text.FontWeight = FontWeights.Bold;
+
+        var row = Tappable(text, chosen);
+
+        row.Margin = new Thickness(0, 0, 8, 0);
+        row.BorderBrush = Brushes.White;
+        row.BorderThickness = new Thickness(1);
+
+        return row;
     }
 
     /// <summary>

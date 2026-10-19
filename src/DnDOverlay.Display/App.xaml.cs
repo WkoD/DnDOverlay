@@ -266,6 +266,30 @@ public sealed partial class App : Application, IDisposable
     /// <summary>The name of the control the last search found, kept for the bar.</summary>
     private string? _heardName;
 
+    /// <summary>The identifier of the control the last search found - the caller, when it answered a call.</summary>
+    private Guid? _heardControl;
+
+    /// <summary>
+    /// The screens hidden at the device with the rescue mark - the local finding, kept apart from
+    /// the control's, which only the control may lift (Part 3). Any arriving <c>ConfigUpdate</c>
+    /// clears it: whoever has their control back wants to play on. UI thread only.
+    /// </summary>
+    private readonly HashSet<ScreenId> _hiddenHere = [];
+
+    /// <summary>The rescue mark's grace as set for this device, or null for the default - kept to be written back (Part 6).</summary>
+    private int? _rescueAfterSeconds;
+
+    /// <summary>Whether the rescue mark is up for the absence running now - its line is written once.</summary>
+    private bool _rescueUp;
+
+    /// <summary>
+    /// What this device is offering itself to after answering a call, and how to take it back: the
+    /// mark's second line (Part 6). Null while it is not offering.
+    /// </summary>
+    private volatile Offer? _offer;
+
+    private sealed record Offer(Guid Caller, string Name, CancellationTokenSource Withdraw);
+
     private long _peakBytes;
 
     /// <summary>
@@ -425,6 +449,10 @@ public sealed partial class App : Application, IDisposable
             Wanted = loaded.Value.Device.KeepAwake ?? true,
         };
 
+        // The rescue mark's grace, and with it the takeover window's - one clock for both (Part 4).
+        _rescueAfterSeconds = loaded.Value.Device.RescueAfterSeconds;
+        _takeover.Grace = loaded.Value.Device.RescueAfter;
+
         // The frame counter starts with the process, not with the first overlay: a device that
         // renders badly while nothing is on it yet is worth knowing about too, and the window is
         // thirty seconds either way (Part 10).
@@ -470,6 +498,9 @@ public sealed partial class App : Application, IDisposable
 
         // The bar and the diagnostics stream, from one reading a second (Part 4, Part 6).
         _ = Task.Run(() => MeasureAsync(_shutdown.Token), _shutdown.Token);
+
+        // The rescue mark, looked at once a second for the length of the process (Part 6).
+        _ = Task.Run(() => WatchAbsenceAsync(_shutdown.Token), _shutdown.Token);
 
         // Said once, at the start: without it there is no way to tell whether forced software
         // rendering took - and that is how the first hand-run of 37a ended (checks/M3.md).
@@ -685,6 +716,18 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void Apply(ConfigUpdate update)
     {
+        // <b>Whoever has their control back wants to play on</b> (Part 6): every arriving update
+        // lifts what the rescue mark hid, before anything else, and the windows come back in exactly
+        // the states that stood there all along - nothing was written over them.
+        var unhidden = _hiddenHere.ToList();
+
+        _hiddenHere.Clear();
+
+        foreach (var screen in unhidden)
+        {
+            Show(screen);
+        }
+
         foreach (var screen in update.Screens)
         {
             if (screen.Settings is { IsEmpty: false } settings && _contexts.TryGetValue(screen.Screen, out var context))
@@ -718,6 +761,12 @@ public sealed partial class App : Application, IDisposable
             _log!.Level = device.Level ?? _log.Level;
             _forwarding!.AtLeast = device.ForwardAtLeast ?? _forwarding.AtLeast;
             _wake!.Wanted = device.KeepAwake ?? _wake.Wanted;
+
+            if (device.RescueAfterSeconds is { } seconds)
+            {
+                _rescueAfterSeconds = seconds;
+                _takeover.Grace = device.RescueAfter;
+            }
         }
 
         // Not stored and not reported back, unlike everything above it: this is the control's one
@@ -772,7 +821,7 @@ public sealed partial class App : Application, IDisposable
                     // overwritten by its own file (Guide G13, ScreenSettings.Opinion).
                     ScreenSettings.Opinion(pair.Value, _names.GetValueOrDefault(pair.Key)))),
             ],
-            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted),
+            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted, _rescueAfterSeconds),
         };
 
         _configuration.Save(_settings);
@@ -791,6 +840,7 @@ public sealed partial class App : Application, IDisposable
         if (!_states.TryGetValue(screen, out var command)
             || command.State == ScreenState.Inactive
             || command.Suppress is not null
+            || _hiddenHere.Contains(screen)
             || !_monitors.TryGetValue(screen, out var monitor))
         {
             Close(screen);
@@ -844,6 +894,11 @@ public sealed partial class App : Application, IDisposable
         // A gesture ended with nothing to report - the park - so the scene has moved and nothing
         // else will ask for a drawing.
         window.Settled += () => Draw(new ScreenRef(_device, screen));
+
+        // The rescue mark: one tap hides every screen of this device, not only the one tapped - the
+        // taskbar may be on another screen (Part 6). The second line takes an answer back.
+        window.HideRequested += HideHere;
+        window.OfferWithdrawn += Withdraw;
 
         // Zoomed past its step: the next one is decoded from the bytes already in the store, so a
         // sharper picture costs a decode and never a second download (Part 6).
@@ -1050,6 +1105,104 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
+    /// The rescue mark, once a second (Part 6): up on every screen with an overlay once the control
+    /// has been gone for the grace period - the same clock as the takeover window, so the mark is up
+    /// exactly when this device would answer a call. Not in windowed mode, where the taskbar lies
+    /// free; and nowhere on a device that was never connected in this run, which has either no
+    /// window or a setup screen that means a control is very much there.
+    /// </summary>
+    private async Task WatchAbsenceAsync(CancellationToken cancellationToken)
+    {
+        using var tick = new PeriodicTimer(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var due = !_windowed && _takeover.IsOpen;
+                var absent = _takeover.Absent;
+                var offer = _offer;
+
+                string? words = null;
+
+                if (due && absent is { } gone)
+                {
+                    words = string.Create(
+                        CultureInfo.CurrentCulture,
+                        $"No control for {Math.Max(1, (int)gone.TotalMinutes)} min");
+                }
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    if (words is not null && !_rescueUp && _windows.Count > 0)
+                    {
+                        _rescueUp = true;
+                        DisplayLog.RescueMarkUp(_logger, _windows.Count, (int)_takeover.Grace.TotalSeconds);
+                    }
+                    else if (words is null)
+                    {
+                        _rescueUp = false;
+                    }
+
+                    foreach (var window in _windows.Values)
+                    {
+                        window.Rescue(words, offer?.Name);
+                    }
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The process is going away.
+        }
+    }
+
+    /// <summary>
+    /// "Hide" on the rescue mark: every screen with an overlay is hidden at the device - a finding,
+    /// not a state, so <c>State</c> stays what the DM wished, frozen stays frozen, and with the
+    /// control back the windows return as they were (Part 6, step 43a). The scene stays in memory.
+    /// </summary>
+    private void HideHere()
+    {
+        var screens = _windows.Keys.ToList();
+
+        foreach (var screen in screens)
+        {
+            _hiddenHere.Add(screen);
+            Show(screen);
+        }
+
+        DisplayLog.HiddenAtDevice(_logger, screens.Count);
+    }
+
+    /// <summary>
+    /// "Don't offer" on the mark's second line: the request at the caller's is dropped and that
+    /// caller is not answered again until this device is accepted somewhere - the veto, not the gate
+    /// (Part 6).
+    /// </summary>
+    private void Withdraw()
+    {
+        if (_offer is not { } offer)
+        {
+            return;
+        }
+
+        _takeover.Veto(offer.Caller);
+        _offer = null;
+
+        try
+        {
+            offer.Withdraw.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The attempt ended in the same moment; there is nothing left to take back.
+        }
+
+        DisplayLog.OfferWithdrawn(_logger, offer.Name);
+    }
+
+    /// <summary>
     /// The address of this machine on the way to the control - the one a human would compare, on a
     /// machine with a dock, a Wi-Fi and a Hyper-V adapter (Part 4). Asked of the routing table by
     /// "connecting" a datagram socket, which sends nothing.
@@ -1077,10 +1230,11 @@ public sealed partial class App : Application, IDisposable
     private async Task<Sighting?> SearchAsync(DiscoveryListener discovery, CancellationToken listening)
     {
         var bound = _settings.ControlId;
-        var sighting = await discovery.ListenAsync(bound, _ => _takeover.IsOpen, listening).ConfigureAwait(false);
+        var sighting = await discovery.ListenAsync(bound, beacon => _takeover.Answers(beacon.ControlId), listening).ConfigureAwait(false);
 
         _answeringFor = sighting is not null && bound is { } own && sighting.Beacon.ControlId != own ? own : null;
         _heardName = sighting?.Beacon.Name;
+        _heardControl = sighting?.Beacon.ControlId;
 
         return sighting;
     }
@@ -1094,8 +1248,10 @@ public sealed partial class App : Application, IDisposable
     {
         var answeringFor = _answeringFor;
         var heardName = _heardName;
+        var heardControl = _heardControl;
         _answeringFor = null;
         _heardName = null;
+        _heardControl = null;
         _diagnosing = false;
 
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
@@ -1125,6 +1281,12 @@ public sealed partial class App : Application, IDisposable
         // stranger's.
         using var abandon = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
         var welcomed = 0;
+
+        // Offering itself to a caller: the rescue mark says so, and can take it back (Part 6).
+        if (answeringFor is not null && heardControl is { } caller)
+        {
+            _offer = new Offer(caller, heardName ?? target.Host, abandon);
+        }
 
         // <b>The old control wins for as long as nothing has been accepted</b> (Part 4). An answer
         // to a call is only a request at the caller's; while it waits, this device goes on
@@ -1203,6 +1365,9 @@ public sealed partial class App : Application, IDisposable
 
             if (message is WelcomeMessage)
             {
+                // Accepted: an offer is a connection now, and there is nothing left to take back.
+                _offer = null;
+
                 _connectedTo = heardName is null ? target.Host : string.Create(CultureInfo.InvariantCulture, $"{heardName} ({target.Host})");
                 _ownAddress = LocalAddressTowards(target.Host, target.Port);
 
@@ -1239,6 +1404,8 @@ public sealed partial class App : Application, IDisposable
         await pump.ConfigureAwait(false);
         await forwarding.ConfigureAwait(false);
         await ownSearch.ConfigureAwait(false);
+
+        _offer = null;
 
         // Dropped for its own control: worth starting from the top at once, the beacon is there.
         return abandon.IsCancellationRequested && !_shutdown.IsCancellationRequested ? Attempt.Worthwhile : attempt;
@@ -1310,7 +1477,11 @@ public sealed partial class App : Application, IDisposable
                         pair.Key,
                         ScreenSettings.Of(pair.Value, _names.GetValueOrDefault(pair.Key)))),
                 ],
-                new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted)),
+                new DeviceSettings(
+                    _log?.Level,
+                    _forwarding?.AtLeast,
+                    _wake?.Wanted,
+                    (int)_takeover.Grace.TotalSeconds)),
 
             // What this device still has on its screens. A control that has just restarted takes
             // it over, and only where it has no scene of its own - which is the one exception to

@@ -134,7 +134,10 @@ public enum SuppressReason
     /// <summary>
     /// Hidden at the device itself with the rescue mark, because no control was reachable. Set
     /// and cleared on the display side; any arriving <c>ConfigUpdate</c> clears it (Part 6).
-    /// Reaches the wire in M5a, when the mark itself is built.
+    /// <b>It does not reach the wire</b>, and that follows from the rule rather than being left
+    /// out: it is set only while no control is there, and the first update of a control that comes
+    /// back clears it - there is never a moment in which a control could be told. Kept as a name
+    /// for the reason the device's own window shows (M6).
     /// </summary>
     HiddenAtDevice = 2,
 }

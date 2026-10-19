@@ -111,7 +111,7 @@ stands there complete.
 
 A screen can be temporarily unplayable for three reasons: it is **unavailable** (gone from the
 Windows inventory, or its device is not connected), **the control's window lies on it** (one
-machine running both), or it was **hidden at the device** (the rescue mark, M5a). All three are
+machine running both), or it was **hidden at the device** (the rescue mark, below). All three are
 `SuppressReason`s — transient findings, never written into the state.
 
 The reason is the way back. A finding that overwrote the wish would have to restore it afterwards,
@@ -122,6 +122,35 @@ untouched there is **nothing to restore**. A screen unplugged as `Inactive` come
 
 The control works out the first two, from the device inventory and its own window position; the
 display knows no "unavailable" and only reports which screens it has.
+
+**The third is the display's own, and kept apart from the control's.** Either one hides the
+screen, but only the control lifts its own, and the device lifts only what it set — it cannot
+judge where the control's window lies. It is set by the **rescue mark** and lifted by any update
+that arrives from a control, so the two never stand on one screen at once and there is no state
+from which only a dead control could free a screen. It never reaches the wire: it exists only
+while no control is there to be told.
+
+### The rescue mark
+
+A display that loses its control keeps showing the table — but an always-on-top overlay can lie
+over the taskbar, and with no control nothing can be done about it from afar. So once the control
+has been gone for **a minute** (a device parameter, `rescueAfterSeconds`, never under ten seconds),
+a thin line appears **top left** on every screen with an overlay — the one corner where Windows has
+nothing: *"No control for 3 min - hide overlay"*. A tap, with mouse or finger, asks once more; the
+answer hides every overlay of that device, because the taskbar may be on another screen. The
+wishes stay as they were: frozen stays frozen, and when a control speaks again the windows return
+in exactly those states. It does not appear in windowed mode, where the taskbar is free, nor on a
+device that was not connected in this run.
+
+It is the same clock as the takeover window: the mark is up exactly when this device would answer
+a call for orphaned displays. When it has answered one, the mark carries a second line — *"Offering
+itself to <name> - don't offer"*, with what a change costs: an inactive screen would be played
+again, because the screen wishes live in the control. Tapping it takes the answer back, and that
+caller is not answered again until this device is accepted somewhere. **The mark is the veto, not
+the gate**: nobody has to walk to each display PC, but anybody standing at one can say no.
+
+Until the display's tray arrives (M6), the way back from a mistaken tap is a control that speaks
+again, or a restart of the display.
 
 ### A display starts quietly
 
