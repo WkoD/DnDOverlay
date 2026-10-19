@@ -49,14 +49,15 @@ public sealed class DiscoveryListener
     /// - it changes - and a second control in the same network is no invention (Part 4).
     /// </param>
     public Task<Sighting?> ListenAsync(Guid? boundTo, CancellationToken cancellationToken) =>
-        ListenAsync(boundTo, answersCall: static () => false, cancellationToken);
+        ListenAsync(boundTo, answersCall: static _ => false, cancellationToken);
 
     /// <summary>
     /// As above, and a beacon of ANOTHER control is taken too when it carries the call for orphaned
-    /// displays and <paramref name="answersCall"/> says this display would answer - its takeover
-    /// window is open (Part 4). Asked per beacon, because the window opens while the search runs.
+    /// displays and <paramref name="answersCall"/> says this display would answer it - its takeover
+    /// window is open (Part 4). Asked per beacon, because the window opens while the search runs,
+    /// and handed the beacon, so a caller that answers only one control can say so.
     /// </summary>
-    public async Task<Sighting?> ListenAsync(Guid? boundTo, Func<bool> answersCall, CancellationToken cancellationToken)
+    public async Task<Sighting?> ListenAsync(Guid? boundTo, Func<Beacon, bool> answersCall, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(answersCall);
 
@@ -85,7 +86,7 @@ public sealed class DiscoveryListener
 
                 if (boundTo is { } control && beacon.ControlId != control)
                 {
-                    if (beacon.CallingOrphans && answersCall())
+                    if (beacon.CallingOrphans && answersCall(beacon))
                     {
                         // An ordinary Hello goes to the caller, and its unknown-token rule makes a
                         // pairing request of it - no message of its own, no second procedure. Loud

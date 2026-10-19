@@ -133,7 +133,12 @@ public sealed class DiscoveryListenerTests
         var listener = new DiscoveryListener(log);
         var open = false;
 
-        var listening = listener.ListenAsync(boundTo: mine, () => Volatile.Read(ref open), cancellationToken);
+        // Open for OUR caller only. The Hub's beacon tests send a real calling beacon on this port
+        // at the same moment (CI, 19.10.2026), and an open window would rightly answer it.
+        var listening = listener.ListenAsync(
+            boundTo: mine,
+            beacon => Volatile.Read(ref open) && beacon.ControlId == caller,
+            cancellationToken);
 
         using (var sender = Sender())
         {
@@ -170,13 +175,17 @@ public sealed class DiscoveryListenerTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var mine = Guid.NewGuid();
+        var other = Guid.NewGuid();
         var listener = new DiscoveryListener(NullLogger<DiscoveryListener>.Instance);
 
-        var listening = listener.ListenAsync(boundTo: mine, () => true, cancellationToken);
+        // The window is open for the other control, which is not calling. Open for everybody, the
+        // test would be answerable by the Hub's beacon tests, which send a real calling beacon on
+        // this port at the same moment - that is how it failed in CI (19.10.2026).
+        var listening = listener.ListenAsync(boundTo: mine, beacon => beacon.ControlId == other, cancellationToken);
 
         var sighting = await Announce(
             listening,
-            new Beacon(Guid.NewGuid(), "SOMEBODY-ELSE", 47800, Protocol.Version),
+            new Beacon(other, "SOMEBODY-ELSE", 47800, Protocol.Version),
             new Beacon(mine, "DM-SURFACE", 47800, Protocol.Version),
             cancellationToken);
 

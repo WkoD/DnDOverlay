@@ -1009,7 +1009,7 @@ public sealed partial class App : Application, IDisposable
     private async Task<Sighting?> SearchAsync(DiscoveryListener discovery, CancellationToken listening)
     {
         var bound = _settings.ControlId;
-        var sighting = await discovery.ListenAsync(bound, () => _takeover.IsOpen, listening).ConfigureAwait(false);
+        var sighting = await discovery.ListenAsync(bound, _ => _takeover.IsOpen, listening).ConfigureAwait(false);
 
         _answeringFor = sighting is not null && bound is { } own && sighting.Beacon.ControlId != own ? own : null;
 
