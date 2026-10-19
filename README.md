@@ -25,9 +25,9 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 > **Status: under construction.** Pictures already go from the DM's machine onto the screens
 > and the players can move them: displays find the control by themselves and are paired by
 > hand, the campaign holds a stock, all four ways in work, the table takes gestures, and the DM
-> sees every screen live and handles it with the same grips. Still missing are scenes, undo,
-> the stock as a panel of its own and the installers, which are empty — so **nothing is
-> installable yet**; it runs from a build.
+> sees every screen live and handles it with the same grips; scenes can be saved and loaded.
+> Still missing are several campaigns, layouts, undo, the stock as a panel of its own and the
+> installers, which are empty — so **nothing is installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
 ## Documentation
