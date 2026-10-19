@@ -120,8 +120,10 @@ Five things make the gestures survive an evening rather than merely work:
   corner is as grabbable as one lying straight.
 - **Two ways into the fan.** A short quick flick towards the park edge from anywhere on the
   table, or simply pushing the picture over and **letting go with your hand on the fan** — where
-  the hand ends is what decides, so nothing is put away that you did not carry there. The second
-  way is the only one a mouse has. A picture set gliding stops short of the fan rather than
+  the hand ends is what decides, so nothing is put away that you did not carry there. While your
+  hand holds a picture on that strip along the edge, **the strip lights up gold** — also when
+  nothing is parked yet and the fan cannot be seen — so letting go there is never a surprise. The
+  second way is the only one a mouse has. A picture set gliding stops short of the fan rather than
   sliding underneath it, because what lies under the fan cannot be picked up again.
 - **The fan is a fan, and its length is the count.** Parked pictures lie along the park edge at
   the size a picture arrives at, newest at the near end and on top, and the whole fan lies over
