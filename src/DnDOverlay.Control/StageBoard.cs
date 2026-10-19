@@ -166,6 +166,9 @@ internal sealed class StageBoard : Panel
     /// <summary>A tile's menu asked to save that screen as a scene.</summary>
     internal event EventHandler<ScreenRef>? Saving;
 
+    /// <summary>Something from outside the control was dropped onto a tile.</summary>
+    internal event EventHandler<(ScreenRef Screen, ScreenTile.Outside Outside)>? DroppedFromOutside;
+
     /// <summary>The screens as the board knows them, for the lists of target screens in other menus.</summary>
     internal IReadOnlyList<ScreenView> Screens => _screens;
 
@@ -254,6 +257,7 @@ internal sealed class StageBoard : Panel
             tile.Turning += (_, turned) => Turn(view.Screen, turned);
             tile.Diagnosing += (_, _) => Wanted(view.Screen.Device);
             tile.Saving += (_, _) => Saving?.Invoke(this, view.Screen);
+            tile.DroppedFromOutside += (_, outside) => DroppedFromOutside?.Invoke(this, (view.Screen, outside));
 
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);
             tile.PreviewTouchDown += (_, _) => Activate(view.Screen);

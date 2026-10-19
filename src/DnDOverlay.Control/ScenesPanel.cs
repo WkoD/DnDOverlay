@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Configuration;
 using DnDOverlay.Hub;
 using Microsoft.Extensions.Logging;
 
@@ -15,9 +16,9 @@ namespace DnDOverlay.Control;
 /// name, newest first. A double tap lays one onto the active screen; the menu loads onto any screen,
 /// replacing or adding, renames, overwrites with a screen, deletes.
 /// <para>
-/// <b>Simple on purpose, and it says so.</b> Part 7 puts this tab into the campaign panel, which
-/// docks, retracts, searches, sorts and zooms. That panel arrives with the campaigns; until then the
-/// tab stands below the stage with everything a scene needs and none of the panel's mechanics.
+/// A tab of the campaign panel since M5b3: the same grid, filter, order and zoom as the pictures,
+/// with the size of the screen it came from top left - the DM recognises his screens by their
+/// measures - and the preview drawn in that shape (Part 7).
 /// </para>
 /// <para>
 /// <b>Loading asks no question, even over a full screen</b> - undo brings the arrangement back, and
@@ -25,9 +26,8 @@ namespace DnDOverlay.Control;
 /// (Part 7).
 /// </para>
 /// </summary>
-internal sealed class ScenesPanel : DockPanel
+internal sealed class ScenesPanel : Grid
 {
-    private const double TileWidth = 150;
 
     private readonly ISessionApi _session;
     private readonly CampaignDesk _desk;
@@ -37,12 +37,18 @@ internal sealed class ScenesPanel : DockPanel
     private readonly Action<string> _say;
     private readonly ILogger _logger;
     private readonly WrapPanel _tiles = new();
+    private readonly ScrollViewer _scroller;
     private readonly TextBlock _empty = new()
     {
         Text = "No scene saved yet. Save one from a screen's menu: \"Save screen as scene ...\".",
         TextWrapping = TextWrapping.Wrap,
         Opacity = 0.7,
+        Margin = new Thickness(4),
     };
+
+    private string _filter = string.Empty;
+    private PanelSort _sort = PanelSort.Newest;
+    private double _zoom = 160;
 
     internal ScenesPanel(
         ISessionApi session,
@@ -61,22 +67,29 @@ internal sealed class ScenesPanel : DockPanel
         _say = say;
         _logger = logger;
 
-        Margin = new Thickness(0, 12, 0, 0);
-
-        var heading = new TextBlock { Text = "Scenes", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 4) };
-
-        SetDock(heading, Dock.Top);
-        Children.Add(heading);
-
-        var scroller = new ScrollViewer
+        _scroller = new ScrollViewer
         {
             Content = new StackPanel { Children = { _empty, _tiles } },
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            MaxHeight = 230,
-            PanningMode = PanningMode.VerticalOnly,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.Both,
         };
 
-        Children.Add(scroller);
+        Children.Add(_scroller);
+
+        Refresh();
+    }
+
+    /// <summary>Draws the grid for this filter, order, tile size and lie of the panel.</summary>
+    internal void Apply(string filter, PanelSort sort, double zoom, bool lying)
+    {
+        _filter = filter;
+        _sort = sort;
+        _zoom = zoom;
+
+        _tiles.Orientation = lying ? Orientation.Vertical : Orientation.Horizontal;
+        _scroller.VerticalScrollBarVisibility = lying ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+        _scroller.HorizontalScrollBarVisibility = lying ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
 
         Refresh();
     }
@@ -93,12 +106,24 @@ internal sealed class ScenesPanel : DockPanel
             return;
         }
 
-        foreach (var summary in open.Shelf.Scenes)
+        var scenes = open.Shelf.Scenes.Where(summary => NameFilter.Matches(NameFilter.Normalise(summary.Name), _filter));
+
+        scenes = _sort switch
+        {
+            PanelSort.Oldest => scenes.OrderBy(summary => summary.SavedAt),
+            PanelSort.NameAscending => scenes.OrderBy(summary => summary.Name, StringComparer.CurrentCultureIgnoreCase),
+            PanelSort.NameDescending => scenes.OrderByDescending(summary => summary.Name, StringComparer.CurrentCultureIgnoreCase),
+            _ => scenes.OrderByDescending(summary => summary.SavedAt),
+        };
+
+        foreach (var summary in scenes)
         {
             _tiles.Children.Add(Tile(open.Shelf, summary));
         }
 
-        _empty.Text = "No scene saved yet. Save one from a screen's menu: \"Save screen as scene ...\".";
+        _empty.Text = open.Shelf.Scenes.Count == 0
+            ? "No scene saved yet. Save one from a screen's menu: \"Save screen as scene ...\"."
+            : "Nothing matches the filter.";
         _empty.Visibility = _tiles.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -199,12 +224,18 @@ internal sealed class ScenesPanel : DockPanel
         return false;
     }
 
-    private StackPanel Tile(SceneShelf shelf, SceneSummary summary)
+    private Grid Tile(SceneShelf shelf, SceneSummary summary)
     {
+        // The frame in the saved measures with room around it in the tile: a scene saved upright
+        // LOOKS upright, even at the smallest zoom where the overlays are gone (Part 7).
+        var aspect = Math.Max(0.1, summary.Origin.AspectRatio);
+        var room = _zoom * 0.9;
         var preview = new SceneThumbnail(_pictures)
         {
-            Width = TileWidth,
-            Height = TileWidth / Math.Max(0.1, summary.Origin.AspectRatio),
+            Width = aspect >= 1 ? room : room * aspect,
+            Height = aspect >= 1 ? room / aspect : room,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
         };
 
         if (shelf.Scene(summary.Name) is { } saved)
@@ -213,25 +244,43 @@ internal sealed class ScenesPanel : DockPanel
             preview.InvalidateVisual();
         }
 
-        var name = new TextBlock
+        var tile = new Grid
         {
-            Text = summary.Name,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            Width = TileWidth,
-            Margin = new Thickness(0, 2, 0, 0),
-        };
-
-        var tile = new StackPanel
-        {
-            Margin = new Thickness(0, 0, 8, 8),
-            Background = Brushes.Transparent,
+            Width = _zoom,
+            Height = _zoom,
+            Margin = new Thickness(0, 0, 6, 6),
+            Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)),
+            ClipToBounds = true,
             ToolTip = string.Create(
                 CultureInfo.CurrentCulture,
                 $"{summary.Name} - {summary.Origin.Width}×{summary.Origin.Height}, saved {summary.SavedAt.LocalDateTime:g}"),
         };
 
-        tile.Children.Add(new Border { Child = preview, BorderBrush = Brushes.Gainsboro, BorderThickness = new Thickness(1) });
-        tile.Children.Add(name);
+        tile.Children.Add(preview);
+
+        if (_zoom >= 96)
+        {
+            tile.Children.Add(new Border
+            {
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Padding = new Thickness(4, 10, 4, 3),
+                Background = new LinearGradientBrush(Color.FromArgb(0xC0, 0, 0, 0), Colors.Transparent, 90),
+                Child = new TextBlock { Text = summary.Name, Foreground = Brushes.White, TextTrimming = TextTrimming.CharacterEllipsis },
+            });
+        }
+
+        if (_zoom >= 128)
+        {
+            tile.Children.Add(new TextBlock
+            {
+                Text = string.Create(CultureInfo.InvariantCulture, $"{summary.Origin.Width}×{summary.Origin.Height}"),
+                Foreground = Brushes.White,
+                FontSize = 11,
+                Margin = new Thickness(4, 1, 4, 1),
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            });
+        }
 
         // A double tap and a double click alike: the touch is promoted to a click, and a click count
         // of two is what both arrive as.

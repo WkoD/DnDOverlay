@@ -177,6 +177,21 @@ public sealed class FocusAndClearCommandTests
         Assert.Empty((await session.GetSceneAsync(Third, Cancellation)).Items);
     }
 
+    /// <summary>"Send as background to all": the same picture behind every played screen, in one patch.</summary>
+    [Fact]
+    public async Task A_background_for_all_is_one_patch_over_the_played_screens()
+    {
+        using var session = Session();
+
+        await session.SetScreenStateAsync(Third, ScreenState.Inactive, Cancellation);
+
+        var patch = Assert.Single(await PatchesDuring(session, () => session.SetBackgroundOnAllAsync(Many(1).Single(), Cancellation)));
+
+        Assert.Equal(2, patch.Ops.Count);
+        Assert.All(patch.Ops, op => Assert.IsType<SetBackground>(op.Op));
+        Assert.Null((await session.GetSceneAsync(Third, Cancellation)).Background);
+    }
+
     [Fact]
     public async Task Clearing_an_empty_table_sends_nothing()
     {

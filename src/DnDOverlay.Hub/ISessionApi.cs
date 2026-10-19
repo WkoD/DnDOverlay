@@ -95,6 +95,13 @@ public interface ISessionApi
     Task ClearEverywhereAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// One picture as the background of every played screen - "send as background ▸ to all"
+    /// (Part 7): the same dungeon on table and projector is the ordinary case. One patch, each
+    /// screen's layer covering it as a fresh background does.
+    /// </summary>
+    Task SetBackgroundOnAllAsync(AssetRef asset, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// "Send to all" (Part 7): these pictures onto every played screen, placed as each screen
     /// places arrivals - one patch over all of them, one step in the timeline (Part 4). Returns the
     /// new items per screen.

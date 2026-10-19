@@ -49,19 +49,32 @@ internal sealed class PanelHead : Border
         Opacity = 0.75,
     };
 
+    /// <summary>
+    /// The menu of the rarer things - clear all, send to all, and set apart below it what has
+    /// nothing to do with play (Part 7). Here because this head is the one place that stays visible.
+    /// </summary>
+    private readonly Button _menu = new()
+    {
+        Content = "☰",
+        Padding = new Thickness(10, 3, 10, 3),
+        Margin = new Thickness(8, 0, 0, 0),
+    };
+
+    private readonly StackPanel _row = new() { Orientation = Orientation.Horizontal };
+
     internal PanelHead()
     {
         Padding = new Thickness(0, 0, 0, 6);
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-
-        row.Children.Add(_campaign);
-        row.Children.Add(_hint);
-        row.Children.Add(_view);
+        _row.Children.Add(_campaign);
+        _row.Children.Add(_hint);
+        _row.Children.Add(_view);
+        _row.Children.Add(_menu);
 
         _campaign.Click += (_, _) => CampaignAsked?.Invoke(this, EventArgs.Empty);
+        _menu.Click += (_, _) => MenuAsked?.Invoke(this, EventArgs.Empty);
 
-        Child = row;
+        Child = _row;
 
         _view.Click += (_, _) => Toggled?.Invoke(this, EventArgs.Empty);
 
@@ -73,6 +86,32 @@ internal sealed class PanelHead : Border
 
     /// <summary>The DM tapped the campaign - the switcher opens.</summary>
     internal event EventHandler? CampaignAsked;
+
+    /// <summary>The DM tapped ☰.</summary>
+    internal event EventHandler? MenuAsked;
+
+    /// <summary>The ☰ button, for the menu to open under.</summary>
+    internal UIElement MenuButton => _menu;
+
+    /// <summary>
+    /// Whether the head stands on the left over the height of a lying panel rather than across the top
+    /// of an upright one (Part 7).
+    /// </summary>
+    internal bool Vertical
+    {
+        set
+        {
+            _row.Orientation = value ? Orientation.Vertical : Orientation.Horizontal;
+            _hint.TextWrapping = value ? TextWrapping.Wrap : TextWrapping.NoWrap;
+            _hint.MaxWidth = value ? 180 : double.PositiveInfinity;
+            Padding = value ? new Thickness(0, 0, 6, 0) : new Thickness(0, 0, 0, 6);
+
+            foreach (var child in _row.Children.OfType<FrameworkElement>())
+            {
+                child.Margin = value ? new Thickness(0, 0, 0, 6) : new Thickness(0, 0, 8, 0);
+            }
+        }
+    }
 
     /// <summary>Which campaign is open, or <see langword="null"/> for none.</summary>
     internal void Campaign(string? label)

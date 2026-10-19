@@ -157,6 +157,20 @@ internal sealed class ScreenTile : Border
 
         _diagnosisPane = new Border { Child = _diagnosis, Background = Brushes.WhiteSmoke };
 
+        // A drop from outside - Explorer, a browser, the editor's preview - onto this tile: taken into
+        // the stock and put on THIS screen where it was let go (Part 7: ingest, entry, AddItem).
+        AllowDrop = true;
+        DragOver += (_, e) =>
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        };
+        Drop += (_, e) =>
+        {
+            e.Handled = true;
+            DroppedFromOutside?.Invoke(this, new Outside(e.Data, _face.Landing(PointToScreen(e.GetPosition(this)))));
+        };
+
         // Over the thumbnail, pushing nothing away: the DM opens it himself and the next tap closes
         // it, and moving the thumbnail would break the grid in the overview (Part 7).
         _reasons = new Popup
@@ -267,6 +281,12 @@ internal sealed class ScreenTile : Border
 
     /// <summary>The DM asked to save this screen as a scene.</summary>
     internal event EventHandler? Saving;
+
+    /// <summary>Something was dropped onto this tile from outside the control.</summary>
+    internal event EventHandler<Outside>? DroppedFromOutside;
+
+    /// <summary>What was dropped, and where on the screen it landed - or nowhere precise when it missed the face.</summary>
+    internal sealed record Outside(IDataObject Data, CorePoint? At);
 
     /// <summary>The diagnostic view of this tile went on or off - the board asks the device for its readings.</summary>
     internal event EventHandler<bool>? Diagnosing;
@@ -417,7 +437,7 @@ internal sealed class ScreenTile : Border
             return;
         }
 
-        _menus.ForScreen(over, at, _scene, _view, _face.Adjusting, Opened, Diagnosed);
+        _menus.ForScreen(over, at, _scene, _view, _face.Adjusting, Opened, Diagnosed, _context.Placement);
     }
 
     /// <summary>A reading from this screen's device, for the diagnostic view.</summary>

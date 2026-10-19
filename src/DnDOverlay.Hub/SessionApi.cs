@@ -493,10 +493,23 @@ public sealed class SessionApi : ISessionApi, IDisposable
         // The finished layer travels, as the finished item does for AddItem: what the hub has
         // worked out is not worked out again at the other end (Part 1, rule 2). A fresh background
         // arrives covering the screen, and is moved from the thumbnail afterwards (Part 6).
-        var (centre, scale) = Layout.FitBackground(
-            asset.Meta.AspectRatio, BackgroundFit.Cover, _screens.ContextFor(screen), quarter: 0);
+        return ApplyAsync(screen, new SetBackground(Covering(asset, _screens.ContextFor(screen))), cancellationToken);
+    }
 
-        var background = new BackgroundItem(
+    /// <inheritdoc />
+    public Task SetBackgroundOnAllAsync(AssetRef asset, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+
+        return ApplyAcrossAsync((_, _, context) => [new SetBackground(Covering(asset, context))], cancellationToken);
+    }
+
+    /// <summary>A fresh background: covering the screen, upright, and moved from the thumbnail afterwards (Part 6).</summary>
+    private static BackgroundItem Covering(AssetRef asset, ScreenContext context)
+    {
+        var (centre, scale) = Layout.FitBackground(asset.Meta.AspectRatio, BackgroundFit.Cover, context, quarter: 0);
+
+        return new BackgroundItem(
             asset.AssetId,
             asset.Meta,
             asset.Name,
@@ -506,8 +519,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
             Scale: scale,
             RotationDeg: 0,
             AnimationPaused: false);
-
-        return ApplyAsync(screen, new SetBackground(background), cancellationToken);
     }
 
     /// <inheritdoc />

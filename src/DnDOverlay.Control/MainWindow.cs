@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Configuration;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Hub;
 using DnDOverlay.Rendering.Windows;
@@ -12,13 +13,13 @@ using Microsoft.Extensions.Logging;
 namespace DnDOverlay.Control;
 
 /// <summary>
-/// The smallest surface that can drive the running thread: which screens are out there, and a
-/// grip that puts the demo image on one.
+/// The DM's window (Part 7): the stage with its tiles, and beside it the campaign panel docked at
+/// an edge, with a line between the two that can be dragged. Notices and the first-run view stand
+/// above, the status line below.
 /// <para>
-/// This is scaffolding, not the DM surface. The stage with its tiles, the campaign panel and
-/// everything Part 7 describes start in M4 - what matters here is that a command travels from
-/// the control to a table and something appears. What is NOT scaffolding is the window it opens:
-/// <see cref="DevicesWindow"/> is the plain form of <i>Devices</i> and stays.
+/// The M2 scaffold below the stage is gone since M5b3: its entrances live at the foot of the tab
+/// "Pictures", its switches on the tiles, the state selector under every tile, and what is no grip
+/// in play - devices, network, touch points - in the head's menu.
 /// </para>
 /// </summary>
 internal sealed class MainWindow : Window, IDisposable
@@ -29,15 +30,17 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Uri _address;
     private readonly CancellationTokenSource _listening = new();
     private readonly StageMemory _memory = new();
-    private readonly ListBox _list = new() { Margin = new Thickness(0, 0, 0, 8), MinHeight = 160 };
-    private readonly ComboBox _state = new() { Width = 160, Margin = new Thickness(0, 0, 8, 0) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Border _firstRun = new() { Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _notices = new() { Margin = new Thickness(0, 0, 0, 12) };
 
     private readonly PanelHead _panelHead = new();
     private readonly StageBoard _board;
-    private readonly StagePanel _stage;
+    private readonly StockView _stock;
+    private readonly IntakeRunner _intake;
+    private readonly CampaignPanel _panel;
+    private readonly Grid _main = new();
+    private readonly GridSplitter _splitter = new() { Background = SystemColors.ControlLightBrush, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
     private readonly FrameWatch _frames;
 
     /// <summary>This window's own line into the trail - shared, so the log carries one category.</summary>
@@ -73,10 +76,9 @@ internal sealed class MainWindow : Window, IDisposable
 
         _logger = log.CreateLogger("Control");
 
-        // The grips below the stage act on the ACTIVE TILE, not on whatever the list happens to
-        // have selected. Two answers to "which screen?" on one surface is one too many, and at the
-        // table it was the first thing to trip over (hand-run of M4, 24a).
-        _stage = new StagePanel(session, entrances, () => _board.Active, _status, _logger);
+        _intake = new IntakeRunner(session, entrances, said => _status.Text = said, _logger);
+
+        _stock = new StockView(session, desk, pictures, () => _board.Active, () => _board.Screens, said => _status.Text = said);
 
         _scenes = new ScenesPanel(
             session,
@@ -133,72 +135,54 @@ internal sealed class MainWindow : Window, IDisposable
 
         Redraw.Measure(_frames);
 
-        Title = "DnDOverlay - M2b";
-        Width = 620;
-        Height = 760;
+        Title = "DnDOverlay";
+        Width = 1280;
+        Height = 820;
 
-        // <b>A Grid rather than a StackPanel, for one row's sake.</b> A stack offers every child
-        // infinite height, so the stage could never be told how much room it had - and an open tile
-        // asks exactly that question: it grows to the height it is given, and given infinity it
-        // fell back to its small one. The single view therefore "opened" a tile that stayed the
-        // size of a thumbnail and merely moved to the middle (hand-run of M4, second run, 24a).
-        //
-        // Every row is Auto but the stage's, which takes what is left. That is also what makes the
-        // window's own size mean something: pulled taller, the room goes to the tiles.
-        var panel = new Grid { Margin = new Thickness(16) };
+        _panel = new CampaignPanel(_panelHead, _stock, _scenes, _intake, settings);
 
-        void Row(UIElement child, bool fills = false)
-        {
-            panel.RowDefinitions.Add(new RowDefinition
-            {
-                Height = fills ? new GridLength(1, GridUnitType.Star) : GridLength.Auto,
-            });
+        // Notices and the first-run view across the top, the stage and the panel beneath, the status
+        // line at the foot. The stage's row takes what is left, so pulling the window taller gives
+        // the room to the tiles (hand-run of M4, second run, 24a).
+        var panel = new Grid { Margin = new Thickness(12) };
 
-            Grid.SetRow(child, panel.RowDefinitions.Count - 1);
-            panel.Children.Add(child);
-        }
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        Row(new TextBlock
-        {
-            Text = $"Listening on {address}. Start a display with --host {address.Host}.",
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 12),
-        });
+        Grid.SetRow(_notices, 0);
+        Grid.SetRow(_firstRun, 1);
+        Grid.SetRow(_main, 2);
+        Grid.SetRow(_status, 3);
 
-        Row(Windows());
-        Row(_notices);
-        Row(_firstRun);
-        Row(new TextBlock
-        {
-            Text = "Screens",
-            FontWeight = FontWeights.Bold,
-            Margin = new Thickness(0, 12, 0, 4),
-        });
-        Row(_list);
-        Row(_panelHead);
-        Row(_board, fills: true);
-        Row(StateRow());
-        Row(TouchRow());
-        Row(_scenes);
-        Row(_stage);
-        Row(_status);
+        panel.Children.Add(_notices);
+        panel.Children.Add(_firstRun);
+        panel.Children.Add(_main);
+        panel.Children.Add(_status);
+
+        _status.Margin = new Thickness(0, 6, 0, 0);
 
         Content = panel;
+
+        // The touch switch is told once at startup, not only when it changes: the hub keeps it for
+        // the run and answers devices that connect later out of it (Part 4).
+        _ = _session.SetTouchPointsAsync(settings.Current.ShowTouchPoints);
+
+        // The panel's first place comes from the window's shape - landscape on the right, portrait
+        // at the bottom (DM, 19.10.2026); after that it is the DM's and kept globally (Part 7).
+        Loaded += (_, _) =>
+        {
+            var placement = settings.Current.Panel
+                ?? new PanelPlacement(ActualWidth >= ActualHeight ? PanelSide.Right : PanelSide.Bottom, ActualWidth >= ActualHeight ? 380 : 300);
+
+            Dock(placement.Side, placement.Size);
+        };
 
         // Built with the window and fed from the subscription below - a second stream would take
         // events away from this one, and the device list is half its input (Part 4).
         _guard = new StageGuard(this, session, Environment.MachineName);
         _power = new ControlPower(_logger, Notify);
-
-        // The two selections are one fact seen from two sides, so each follows the other. Both
-        // ends refuse a change that is already made, which is what keeps this from ringing back and
-        // forth (StageBoard.Activate).
-        _list.SelectionChanged += async (_, _) =>
-        {
-            _board.Aim(Selected());
-
-            await _stage.RefreshAsync().ConfigureAwait(true);
-        };
 
         _panelHead.Toggled += (_, _) => Switch(!_board.Single);
 
@@ -207,13 +191,20 @@ internal sealed class MainWindow : Window, IDisposable
         _board.Configuring += (_, screen) => Devices().Reveal(screen);
         _board.Saving += async (_, screen) => await _scenes.SaveAsync(this, screen).ConfigureAwait(true);
 
+        // A drop from outside onto a tile: into the stock, then onto that screen where it was let go.
+        _board.DroppedFromOutside += async (_, dropped) =>
+            await _intake.RunAsync(_intake.Entrances.FromDataObject(dropped.Outside.Data), dropped.Screen, dropped.Outside.At).ConfigureAwait(true);
+
+        _panelHead.MenuAsked += (_, _) => OpenMenu();
+
         // Another campaign, or none: the pictures the stage draws are other files now, the scenes
         // tab shows other scenes, and the head says which one (Part 3, Part 7).
         desk.Changed += (_, _) =>
         {
             pictures.Clear();
             _panelHead.Campaign(desk.OpenLabel);
-            _scenes.Refresh();
+            _panel.Refresh();
+            _ = _stock.CountAsync();
             _ = _board.RefreshAsync(_listening.Token);
         };
 
@@ -221,11 +212,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said).Open(_panelHead);
         _panelHead.Campaign(desk.OpenLabel);
-        _board.ActiveChanged += (_, _) =>
-        {
-            Follow();
-            Remember();
-        };
+        _board.ActiveChanged += (_, _) => Remember();
 
         // Whichever of the two ways switched the view - the button here or the tile's own menu -
         // the answer is written down and the button relabelled in one place.
@@ -328,8 +315,8 @@ internal sealed class MainWindow : Window, IDisposable
                 // The opening picture is NOT enough on its own. Show() returns early when the
                 // screens are unchanged - which is precisely this case - so the board would keep
                 // the stale scene it froze on. Asking the hub outright is what puts the tiles right.
-                await _stage.RefreshAsync().ConfigureAwait(true);
                 await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
+                await _stock.CountAsync().ConfigureAwait(true);
             }
         }
         catch (OperationCanceledException)
@@ -386,8 +373,8 @@ internal sealed class MainWindow : Window, IDisposable
 
                 case SessionEvent.ScenePatched:
                 case SessionEvent.SceneReplaced:
-                    await _stage.RefreshAsync().ConfigureAwait(true);
                     await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
+                    await _stock.CountAsync().ConfigureAwait(true);
                     break;
 
                 default:
@@ -413,54 +400,15 @@ internal sealed class MainWindow : Window, IDisposable
         {
         });
 
-    private ScreenRef? Selected() =>
-        _list.SelectedItem is ScreenEntry entry ? entry.Screen : null;
-
-    /// <summary>Points the list at whichever tile is active, without sending it back again.</summary>
-    private void Follow()
-    {
-        if (_board.Active is not { } active || Selected() == active)
-        {
-            return;
-        }
-
-        _list.SelectedItem = _list.Items
-            .OfType<ScreenEntry>()
-            .FirstOrDefault(entry => entry.Screen == active);
-    }
-
     /// <summary>
-    /// Flattened to a list here, because a grip that sends one image needs a target rather than a
-    /// tree. The tree is what the device window is for, and it draws from the same event.
+    /// The devices and their screens, as the stage needs them: tiles come and go with the screens,
+    /// and every tile hears what concerns it - wish, reasons, battery.
     /// </summary>
     private void Show(IReadOnlyList<DeviceView> devices)
     {
         Welcome(devices.Count == 0);
         _guard?.Knows(devices);
         _power?.Displays(devices.Any(device => device.Connected));
-
-        var entries = devices
-            .SelectMany(device => device.Screens)
-            .Select(view => new ScreenEntry(view))
-            .ToList();
-
-        if (_list.Items.Cast<ScreenEntry>().SequenceEqual(entries))
-        {
-            // The list is the same, but a battery or a connection may have moved.
-            _board.Know(devices);
-            return;
-        }
-
-        var selected = _list.SelectedIndex;
-
-        _list.Items.Clear();
-
-        foreach (var entry in entries)
-        {
-            _list.Items.Add(entry);
-        }
-
-        _list.SelectedIndex = selected >= 0 && selected < _list.Items.Count ? selected : 0;
 
         _board.Show([.. devices.SelectMany(device => device.Screens)]);
         _board.Know(devices);
@@ -501,7 +449,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         var row = new DockPanel { LastChildFill = true };
 
-        DockPanel.SetDock(dismiss, Dock.Right);
+        DockPanel.SetDock(dismiss, System.Windows.Controls.Dock.Right);
         row.Children.Add(dismiss);
         row.Children.Add(message);
 
@@ -570,143 +518,160 @@ internal sealed class MainWindow : Window, IDisposable
         return _devices;
     }
 
-    /// <summary>
-    /// One instance each, reopened rather than duplicated. In M5b both move into the menu in the
-    /// panel head, together with the log panel - the one place everything that is not a grip during
-    /// play is reached from (Part 7).
-    /// </summary>
-    private StackPanel Windows()
+    /// <summary>The network window, reopened rather than duplicated.</summary>
+    private void Network()
     {
-        var devices = new Button { Content = "Devices ...", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var network = new Button { Content = "Network ...", Padding = new Thickness(12, 6, 12, 6) };
-
-        devices.Click += (_, _) => Devices();
-
-        network.Click += (_, _) =>
+        if (_network is { IsLoaded: true })
         {
-            if (_network is { IsLoaded: true })
-            {
-                _ = _network.Activate();
-                return;
-            }
-
-            _network = new NetworkWindow(_address.Port) { Owner = this };
-            _network.Show();
-        };
-
-        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
-
-        row.Children.Add(devices);
-        row.Children.Add(network);
-
-        return row;
-    }
-
-    /// <summary>
-    /// The state selector, and it is not decoration: since the silent start a display puts NO
-    /// window anywhere until the control says so, so without a way back out of
-    /// <see cref="ScreenState.Inactive"/> a screen the DM gave back could never be taken up again
-    /// (Part 3).
-    /// <para>
-    /// It shows the WISH, never what is currently in the way. A finding stands next to it in the
-    /// list and leaves the wish untouched - which is why the selector does not jump about on its
-    /// own the moment somebody moves a window (Part 3, Part 7).
-    /// </para>
-    /// </summary>
-    private StackPanel StateRow()
-    {
-        foreach (var state in Enum.GetValues<ScreenState>())
-        {
-            _state.Items.Add(state);
+            _ = _network.Activate();
+            return;
         }
 
-        var apply = new Button { Content = "Set state", Padding = new Thickness(12, 6, 12, 6) };
-
-        apply.Click += async (_, _) =>
-        {
-            if (_list.SelectedItem is not ScreenEntry entry || _state.SelectedItem is not ScreenState state)
-            {
-                _status.Text = "Pick a screen and a state.";
-                return;
-            }
-
-            // Nothing is refreshed here afterwards: the change comes back through the stream, the
-            // same way it reaches every other subscriber (rule 1).
-            await _session.SetScreenStateAsync(entry.Screen, state).ConfigureAwait(true);
-
-            _status.Text = $"{entry.Label} is now {state}.";
-        };
-
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
-
-        row.Children.Add(_state);
-        row.Children.Add(apply);
-
-        return row;
+        _network = new NetworkWindow(_address.Port) { Owner = this };
+        _network.Show();
     }
 
     /// <summary>
-    /// The one switch for every device: whether the tables report the fingers on them (Part 4,
-    /// Part 7).
-    /// <para>
-    /// It is here and nowhere else - not on the device page and not in the tray window - because
-    /// at the table it changes nothing anybody could see or operate. What the trails SHOW needs
-    /// the thumbnail, so the switch belongs where the picture is; that it also stops the sending
-    /// is a consequence rather than a device's preference (Part 6).
-    /// </para>
-    /// <para>
-    /// Nothing is drawn from it yet: the thumbnail is M4. What it does today is decide whether the
-    /// traffic exists at all, and that is worth having before there is a surface for it - it is
-    /// the rank-4 load every other limit is measured against.
-    /// </para>
+    /// The head's menu (Part 7): clear all and send to all, then - set apart - what has nothing to do
+    /// with play: devices, network, the touch points, where the panel docks. Protocol and settings
+    /// join it with the windows they open (M5b7).
     /// </summary>
-    private CheckBox TouchRow()
+    private void OpenMenu()
     {
-        var wanted = _settings.Current.ShowTouchPoints;
-
-        var box = new CheckBox
+        var menu = new ContextMenu
         {
-            Content = "Show touch points",
-            IsChecked = wanted,
-            Margin = new Thickness(0, 0, 0, 12),
+            PlacementTarget = _panelHead.MenuButton,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
         };
 
-        // Told once at startup as well, not only when it changes: the hub keeps this for the run
-        // and a display that connects afterwards is answered out of it, so a control that never
-        // spoke would leave every table reporting whatever it defaults to.
-        _ = _session.SetTouchPointsAsync(wanted);
+        // Both one action without a question; undo brings them back (Part 7, from M5b6).
+        menu.Items.Add(Item("Clear all", () => _ = _session.ClearAllAsync()));
 
-        void Set(bool reporting)
+        var chosen = _stock.Chosen;
+        var toAll = Item("Send to all", () => _ = _session.SendToAllAsync(chosen));
+
+        toAll.IsEnabled = chosen.Count > 0;
+        menu.Items.Add(toAll);
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Devices ...", () => Devices()));
+        menu.Items.Add(Item("Network ...", Network));
+
+        var touch = new MenuItem { Header = "Show touch points", IsCheckable = true, IsChecked = _settings.Current.ShowTouchPoints };
+
+        touch.Click += (_, _) =>
         {
+            var reporting = touch.IsChecked;
+
             _settings.Update(configuration => configuration with { ShowTouchPoints = reporting });
-
             _ = _session.SetTouchPointsAsync(reporting);
+            _status.Text = reporting ? "Tables report their touch points." : "Tables no longer report their touch points.";
+        };
 
-            _status.Text = reporting
-                ? "Tables report their touch points."
-                : "Tables no longer report their touch points.";
+        menu.Items.Add(touch);
+
+        var docking = new MenuItem { Header = "Dock panel" };
+        var side = _settings.Current.Panel?.Side ?? PanelSide.Right;
+
+        foreach (var edge in Enum.GetValues<PanelSide>())
+        {
+            var item = new MenuItem { Header = edge.ToString(), IsCheckable = true, IsChecked = edge == side };
+
+            item.Click += (_, _) => Dock(edge, _settings.Current.Panel?.Size ?? (edge is PanelSide.Left or PanelSide.Right ? 380 : 300));
+            docking.Items.Add(item);
         }
 
-        box.Checked += (_, _) => Set(true);
-        box.Unchecked += (_, _) => Set(false);
+        menu.Items.Add(docking);
 
-        return box;
+        menu.IsOpen = true;
     }
 
     /// <summary>
-    /// The wish and the finding side by side, never one instead of the other. A screen that is
-    /// not being played on right now still shows the state the DM set - which is the whole reason
-    /// findings are not states (Part 3, Part 7).
+    /// Puts the panel at an edge, at a size, with the line to drag between it and the stage - and
+    /// keeps both, globally (Part 7). At least a row of tiles, at most half the window: the stage
+    /// must not disappear.
     /// </summary>
-    private sealed record ScreenEntry(ScreenView View)
+    private void Dock(PanelSide side, double size)
     {
-        internal ScreenRef Screen => View.Screen;
+        _main.Children.Clear();
+        _main.RowDefinitions.Clear();
+        _main.ColumnDefinitions.Clear();
 
-        internal string Label => View.Info.Label;
+        var across = side is PanelSide.Left or PanelSide.Right;
+        var panelFirst = side is PanelSide.Left or PanelSide.Top;
+        var limit = Math.Max(200, (across ? ActualWidth : ActualHeight) / 2);
+        var length = new GridLength(Math.Clamp(size, 160, limit));
+        var star = new GridLength(1, GridUnitType.Star);
 
-        public override string ToString() =>
-            View.Suppressed is { } reason
-                ? $"{View.Info.Label} - {View.State}, not played on: {reason}"
-                : $"{View.Info.Label} - {View.State}";
+        GridLength[] lengths = panelFirst ? [length, new GridLength(6), star] : [star, new GridLength(6), length];
+        UIElement[] parts = panelFirst ? [_panel, _splitter, _board] : [_board, _splitter, _panel];
+
+        for (var index = 0; index < 3; index++)
+        {
+            if (across)
+            {
+                _main.ColumnDefinitions.Add(new ColumnDefinition
+                {
+                    Width = lengths[index],
+                    MinWidth = index == (panelFirst ? 0 : 2) ? 160 : 0,
+                    MaxWidth = index == (panelFirst ? 0 : 2) ? limit : double.PositiveInfinity,
+                });
+                Grid.SetColumn(parts[index], index);
+                Grid.SetRow(parts[index], 0);
+            }
+            else
+            {
+                _main.RowDefinitions.Add(new RowDefinition
+                {
+                    Height = lengths[index],
+                    MinHeight = index == (panelFirst ? 0 : 2) ? 160 : 0,
+                    MaxHeight = index == (panelFirst ? 0 : 2) ? limit : double.PositiveInfinity,
+                });
+                Grid.SetRow(parts[index], index);
+                Grid.SetColumn(parts[index], 0);
+            }
+
+            _main.Children.Add(parts[index]);
+        }
+
+        _splitter.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _splitter.VerticalAlignment = VerticalAlignment.Stretch;
+        _splitter.ResizeDirection = across ? GridResizeDirection.Columns : GridResizeDirection.Rows;
+
+        _panel.Lying = !across;
+
+        Keep(side);
+    }
+
+    private void Keep(PanelSide side)
+    {
+        var size = _settings.Current.Panel?.Size ?? 380;
+
+        _settings.Update(current => current with
+        {
+            Panel = (current.Panel ?? new PanelPlacement(side, size)) with { Side = side },
+        });
+
+        _splitter.DragCompleted -= Resized;
+        _splitter.DragCompleted += Resized;
+    }
+
+    private void Resized(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        var size = _panel.Lying ? _panel.ActualHeight : _panel.ActualWidth;
+
+        _settings.Update(current => current with
+        {
+            Panel = (current.Panel ?? new PanelPlacement(PanelSide.Right, size)) with { Size = size },
+        });
+    }
+
+    private static MenuItem Item(string header, Action chosen)
+    {
+        var item = new MenuItem { Header = header };
+
+        item.Click += (_, _) => chosen();
+
+        return item;
     }
 }

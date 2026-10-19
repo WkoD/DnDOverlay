@@ -26,8 +26,8 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 > and the players can move them: displays find the control by themselves and are paired by
 > hand, the campaign holds a stock, all four ways in work, the table takes gestures, and the DM
 > sees every screen live and handles it with the same grips; campaigns and scenes can be saved,
-> opened and switched. Still missing are layouts, undo, the stock as a panel of its own and the
-> installers, which are empty — so **nothing is installable yet**; it runs from a build.
+> opened and switched, and the stock stands in a dockable panel. Still missing are layouts, undo
+> and the installers, which are empty — so **nothing is installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
 ## Documentation
@@ -44,9 +44,10 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 
 ## Images
 
-Hand a picture over any of four ways — drop a file or a folder on the window, paste a
-screenshot, paste from a browser, or give an address — and it lands in the campaign and can go
-on a screen. All four go through the same path: two hundred files behave exactly like one, with
+Hand a picture over any of four ways — drop a file, a folder or a link, paste a screenshot,
+paste from a browser, or give an address — and it lands in the campaign. Dropped on the campaign
+panel it goes into the stock; dropped on a screen's tile it also goes onto that screen, where you
+let go. All four go through the same path: two hundred files behave exactly like one, with
 one collected message at the end rather than two hundred dialogs.
 
 **A picture is stored once.** The name is the content: two copies of the same image are one
@@ -183,6 +184,17 @@ the control's own window lying on it, or hidden at the device — shows as **⚠
 right of the head; tap the head to read them. Beside it stands the **battery** of a display PC that
 has one, red from 10 %, with a lightning sign on the cable.
 
+**The campaign panel** holds what you bring: the tabs *Pictures* and *Scenes*, a filter that
+finds a name by any part of it — case and accents do not matter, several words must all match —,
+an order (newest, oldest, by name) and a zoom (− and +, or Ctrl+wheel). A picture's tile carries
+its name, its resolution and marks: *GIF* for an animation, *on 2* when it lies on two screens,
+*missing* when its file is gone. A double tap sends it to the active screen; its menu sends it as
+a picture or as the background to any screen or to all, says where it lies, and shows its file in
+the folder. Ctrl+click and a frame drawn with the mouse pick several, which then go together. The
+panel docks at any edge — *Dock panel* in the menu ☰ —, and the line between it and the stage can
+be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices, the
+network and the touch points.
+
 **Campaigns** keep the stock of one group apart from another's. The control starts with **none
 open**, so it never puts the wrong group's pictures in front of you; the head above the stage says
 so. Adding the first picture begins a new unnamed campaign — its folder exists from that file on,
@@ -199,8 +211,8 @@ the stage says what was found.
 
 **Scenes** keep an arrangement for next time. *Save screen as scene ...* in a screen's menu asks
 for a name — suggested from the screen and the time — and asks before it overwrites one that
-exists. The saved scenes stand under the stage with a preview: a double tap lays one onto the
-active screen, replacing what lies there, and its menu loads it onto any screen, replacing or
+exists. The saved scenes stand in the panel's tab *Scenes* with a preview: a double tap lays one
+onto the active screen, replacing what lies there, and its menu loads it onto any screen, replacing or
 adding, renames, overwrites it with a screen, or deletes it. A scene brings the pictures' current
 names, a background that filled the screen fills the new one, parked pictures go into that
 screen's fan, and a picture the stock no longer has stands as a placeholder — one message says how

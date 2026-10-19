@@ -159,7 +159,45 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// </para>
     /// </summary>
     public WindowPlacement? Window { get; set; }
+
+    /// <summary>
+    /// How the DM has set up the campaign panel - side, size, sort, zoom (Part 7). <b>Global, not per
+    /// monitor arrangement</b>, unlike the stage view: a DM sits in front of the same machine evening
+    /// after evening and gets used to one arrangement. <see langword="null"/> until the first start
+    /// has chosen one from the window's shape.
+    /// </summary>
+    public PanelPlacement? Panel { get; set; }
 }
+
+/// <summary>Which edge of the window the campaign panel lies against (Part 7).</summary>
+public enum PanelSide
+{
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+/// <summary>The order of the panel's tiles - by the written time or by name, each way round (Part 7).</summary>
+public enum PanelSort
+{
+    /// <summary>Newest first - the default: what came in last stands at the top.</summary>
+    Newest,
+    Oldest,
+    NameAscending,
+    NameDescending,
+}
+
+/// <summary>The campaign panel as the DM left it (Part 7).</summary>
+/// <param name="Size">How wide (left, right) or high (top, bottom) it is, in DIP.</param>
+/// <param name="PictureZoom">The tile size of the tab "Pictures", in DIP - each tab keeps its own, because they carry different detail.</param>
+/// <param name="SceneZoom">The tile size of the tab "Scenes".</param>
+public sealed record PanelPlacement(
+    PanelSide Side,
+    double Size,
+    PanelSort Sort = PanelSort.Newest,
+    double PictureZoom = 128,
+    double SceneZoom = 160);
 
 /// <summary>
 /// The address of one screen as <c>control.json</c> writes it: a raw <see cref="Guid"/> and a raw

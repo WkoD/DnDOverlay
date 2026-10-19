@@ -61,7 +61,7 @@ internal sealed class TileMenus(
     /// of reach exactly where most is going on (Part 7).
     /// </summary>
     internal void ForScreen(
-        UIElement over, TilePoint at, SceneState scene, ViewRotation view, bool adjusting, bool single, bool diagnosing)
+        UIElement over, TilePoint at, SceneState scene, ViewRotation view, bool adjusting, bool single, bool diagnosing, PlacementMode placing)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
@@ -83,6 +83,24 @@ internal sealed class TileMenus(
         menu.Items.Add(Entry("Save screen as scene ...", () => Saving?.Invoke(this, EventArgs.Empty)));
 
         menu.Items.Add(Turned(view));
+
+        // How new pictures arrive on this screen - moved here from the M2 scaffold when the panel
+        // took its place (M5b3); the screen's own setting, so it belongs to the screen's menu.
+        var placement = new MenuItem { Header = "Placement" };
+
+        foreach (var mode in Enum.GetValues<PlacementMode>())
+        {
+            var item = new MenuItem { Header = mode.ToString(), IsCheckable = true, IsChecked = placing == mode };
+
+            item.Click += (_, _) => _ = session.ApplyConfigAsync(
+                screen.Device,
+                new ConfigUpdate([new ScreenConfigUpdate(screen.Screen, new ScreenSettings(Placement: mode))]),
+                CancellationToken.None);
+
+            placement.Items.Add(item);
+        }
+
+        menu.Items.Add(placement);
 
         // Ticked while it stands, and reached from the head as well as the free area: the view
         // replaces the thumbnail, so there is no free area left to switch it off from (Part 7).
@@ -144,6 +162,16 @@ internal sealed class TileMenus(
             () => _ = session.ClearBackgroundAsync(screen, CancellationToken.None));
 
         cleared.IsEnabled = scene.Background is not null;
+
+        // The background's animation, held or running - the one grip of the scaffold the tile did
+        // not have yet. Only for a background that moves.
+        if (scene.Background is { Meta.IsAnimated: true } moving)
+        {
+            menu.Items.Add(Entry(
+                moving.AnimationPaused ? "Run background animation" : "Hold background animation",
+                () => _ = session.SetAnimationPausedAsync(screen, null, !moving.AnimationPaused, CancellationToken.None)));
+        }
+
         menu.Items.Add(cleared);
 
         Open(menu, over, at);
