@@ -169,6 +169,12 @@ public sealed partial class App : Application, IDisposable
     private readonly ConcurrentDictionary<ItemId, ConcurrentQueue<(ItemTransform Where, long AtMs)>> _awaiting = new();
 
     /// <summary>
+    /// Where each picture was when this device took hold of it, until the hub has answered that
+    /// grab - see <see cref="LateAnswerToOwnGrab"/>.
+    /// </summary>
+    private readonly ConcurrentDictionary<ItemId, ItemTransform> _grabbedAt = new();
+
+    /// <summary>
     /// What only means something over hours - the numbers <c>3029</c> carries. They are counted
     /// rather than derived, because what is gone leaves no trace to derive from: a gesture that
     /// finished an hour ago is nowhere in the scene, and a connection that dropped and came back
@@ -1215,11 +1221,20 @@ public sealed partial class App : Application, IDisposable
 
             foreach (var op in ops)
             {
+                if (op is TransformItem moved && LateAnswerToOwnGrab(moved, scene, context) is { } depthOnly)
+                {
+                    // Not measured as the answer to the release either: it answers the grab, and
+                    // pairing it with the release is what made the evening's log read 886 DIP.
+                    scene = SceneReducer.Apply(scene, depthOnly, context);
+
+                    continue;
+                }
+
                 scene = SceneReducer.Apply(scene, op, context);
 
-                if (op is TransformItem moved)
+                if (op is TransformItem confirming)
                 {
-                    Confirmed(moved, context, scene);
+                    Confirmed(confirming, context, scene);
                 }
 
                 if (op is RemoveItem removed)
@@ -1228,6 +1243,7 @@ public sealed partial class App : Application, IDisposable
                     // that nothing would ever clear again - its binding report is the one that never
                     // comes (Part 4, conflict rule 4).
                     _throttle.Forget(removed.Item);
+                    _grabbedAt.TryRemove(removed.Item, out _);
                 }
             }
 
@@ -1848,6 +1864,11 @@ public sealed partial class App : Application, IDisposable
             queue.Enqueue((reported.Transform, Environment.TickCount64));
         }
 
+        if (reported.Grabbed && !reported.Binding)
+        {
+            _grabbedAt[reported.Transform.Item] = reported.Transform;
+        }
+
         if (reported.Grabbed || reported.Binding)
         {
             Settle(screen, reported.Transform, toFront: reported.Grabbed);
@@ -1887,6 +1908,67 @@ public sealed partial class App : Application, IDisposable
     /// actually waited for. An operation for an item nobody here moved is a stranger's and passes
     /// without a word.
     /// </summary>
+    /// <summary>
+    /// The hub's answer to this device's own GRAB, arriving after the hand has already let go -
+    /// returned as depth only, with this device's own place kept; <see langword="null"/> for every
+    /// other operation, which is applied as it comes.
+    /// <para>
+    /// <b>Found at a game session (18.10.2026), and it is a picture jumping back.</b> The hub answers
+    /// a grab with the place the picture had when it was taken - it has to, the operation carries
+    /// one - and sends that answer back to the grabbing device, because it carries the binding
+    /// depth. On a quiet link it arrives while the hand is still on the picture and the hold keeps
+    /// the finger's geometry. While the table was loading a 32 MB picture over Wi-Fi it arrived
+    /// 1.6 s late, after the release: the picture sprang back to where it had arrived, and forward
+    /// again when the answer to the release came round.
+    /// </para>
+    /// <para>
+    /// Told apart by what it says, not by where it came from, because a patch carries no sender
+    /// (Guide F9): an operation that names exactly the place this device sent with its grab, for a
+    /// picture whose release is still unanswered. Anything else - the DM moving it, the hub
+    /// clamping it - is a correction and wins, as conflict rule 2 says.
+    /// </para>
+    /// </summary>
+    private TransformItem? LateAnswerToOwnGrab(TransformItem moved, SceneState scene, ScreenContext context)
+    {
+        if (!_grabbedAt.TryGetValue(moved.Item, out var grab) || !SamePlace(moved, grab, context))
+        {
+            // Somebody else's move, or the hub's own clamping: a correction, applied as it is
+            // (conflict rule 2).
+            return null;
+        }
+
+        _ = _grabbedAt.TryRemove(moved.Item, out _);
+
+        // Nothing let go yet: the answer is in time, and the hold keeps the finger's geometry anyway.
+        if (!_awaiting.TryGetValue(moved.Item, out var released) || released.IsEmpty
+            || scene.Items.FirstOrDefault(item => item.ItemId == moved.Item) is not { } mine)
+        {
+            return null;
+        }
+
+        return moved with
+        {
+            CenterX = mine.CenterX,
+            CenterY = mine.CenterY,
+            Scale = mine.Scale,
+            RotationDeg = mine.RotationDeg,
+        };
+    }
+
+    /// <summary>
+    /// Whether an answer carries the very place a report sent - within the half pixel that counts
+    /// as agreement everywhere else here.
+    /// </summary>
+    private static bool SamePlace(TransformItem answer, ItemTransform sent, ScreenContext context)
+    {
+        var dx = (answer.CenterX - sent.CenterX) * context.Size.Width;
+        var dy = (answer.CenterY - sent.CenterY) * context.Size.Height;
+
+        return Math.Sqrt((dx * dx) + (dy * dy)) <= DriftWorthSaying
+            && Math.Abs(answer.Scale - sent.Scale) < 0.0005
+            && Math.Abs(answer.RotationDeg - sent.RotationDeg) < 0.05;
+    }
+
     private void Confirmed(TransformItem moved, ScreenContext context, SceneState scene)
     {
         if (!_awaiting.TryGetValue(moved.Item, out var queue) || !queue.TryDequeue(out var mine))
