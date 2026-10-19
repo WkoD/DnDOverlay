@@ -290,4 +290,25 @@ internal static partial class ControlLog
         Level = LogLevel.Information,
         Message = "Windows is ending the session ({Reason}); settings written.")]
     internal static partial void SessionEnding(ILogger logger, System.Windows.ReasonSessionEnding? reason);
+
+    /// <summary>
+    /// The control holds its machine awake, or lets it sleep again: awake while a display is
+    /// connected, because the table hangs on this hub (Part 7). Written so a Surface that fell
+    /// asleep mid-session can be told from one that was never held.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4018,
+        Level = LogLevel.Information,
+        Message = "Holding this machine awake: {Holding}.")]
+    internal static partial void StandbyHeld(ILogger logger, bool holding);
+
+    /// <summary>
+    /// The control's own battery reached the warning line - the one real battery warning, because
+    /// it takes every display with it (Part 7).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4019,
+        Level = LogLevel.Warning,
+        Message = "This control's battery is at {Percent} % and not on the cable.")]
+    internal static partial void BatteryLow(ILogger logger, int percent);
 }

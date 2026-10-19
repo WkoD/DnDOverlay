@@ -183,6 +183,10 @@ the control's own window lying on it, or hidden at the device — shows as **⚠
 right of the head; tap the head to read them. Beside it stands the **battery** of a display PC that
 has one, red from 10 %, with a lightning sign on the cable.
 
+While a display is connected, the control keeps its own machine from going to sleep — the table
+hangs on it. Its own battery is the one that gets a warning: at 10 % and off the cable, a note
+beside the stage says so, because when it runs out every display loses its control.
+
 | Grip | Finger | Mouse |
 |---|---|---|
 | Select one | tap it | click it |

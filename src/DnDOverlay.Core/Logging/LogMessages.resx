@@ -303,6 +303,15 @@
   <data name="E3044_OfferWithdrawn" xml:space="preserve">
     <value>Withdrew the offer to {Name}.</value>
   </data>
+  <data name="E3045_DiagnosticsRequested" xml:space="preserve">
+    <value>Diagnostics stream to the control: {On}.</value>
+  </data>
+  <data name="E4018_StandbyHeld" xml:space="preserve">
+    <value>Holding this machine awake: {Holding}.</value>
+  </data>
+  <data name="E4019_BatteryLow" xml:space="preserve">
+    <value>This control's battery is at {Percent} % and not on the cable.</value>
+  </data>
   <data name="E3040_PicturesSteppedDown" xml:space="preserve">
     <value>{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.</value>
   </data>

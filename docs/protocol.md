@@ -821,6 +821,7 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3042 | `RescueMarkUp` | Warning |
 | 3043 | `HiddenAtDevice` | Warning |
 | 3044 | `OfferWithdrawn` | Information |
+| 3045 | `DiagnosticsRequested` | Information |
 
 **3029 gained two numbers in M3c**, and the second is the one that says anything: touch
 reports sent, and the points inside them. A count of reports cannot tell a working table
@@ -832,7 +833,7 @@ capped at 32; a resting or a swallowed one contributes exactly one. Until the th
 M4 there is nothing to look at, so this ratio is the whole evidence that the trails are
 collected at all.
 
-**Next free: 3045.**
+**Next free: 3046.**
 
 **3036 and 3037 are not 3033 and 3034 with a number added**, and the separation is deliberate.
 3033 answers "where did that picture go?" and is written by a hand dragging one across; the pair
@@ -887,8 +888,10 @@ into one of them would have made the range names stop meaning anything.
 | 4015 | `SessionStreamRestarted` | Warning | control |
 | 4016 | `StageMemory` | Information | control |
 | 4017 | `SessionEnding` | Information | control |
+| 4018 | `StandbyHeld` | Information | control |
+| 4019 | `BatteryLow` | Warning | control |
 
-**Next free: 4018. 4014 is retired**, never issued in a release and never to be reused: it was the
+**Next free: 4020. 4014 is retired**, never issued in a release and never to be reused: it was the
 control's own frame-budget warning, and the second hand-run of M4 showed every one of its lines to
 be false - a stage holding 16.7 ms warned against a budget of 2.8 ms, because the budget follows a
 cadence that a sparse stream cannot estimate. The reading stays, the judgement went.

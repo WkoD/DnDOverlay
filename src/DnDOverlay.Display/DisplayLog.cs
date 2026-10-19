@@ -537,4 +537,14 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Withdrew the offer to {Name}.")]
     internal static partial void OfferWithdrawn(ILogger logger, string name);
+
+    /// <summary>
+    /// The control switched this device's diagnostics stream on or off - a tile's diagnostic view
+    /// opened or closed (Part 4). The bar at the device runs on regardless; it reads locally.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3045,
+        Level = LogLevel.Information,
+        Message = "Diagnostics stream to the control: {On}.")]
+    internal static partial void DiagnosticsRequested(ILogger logger, bool on);
 }

@@ -1537,6 +1537,13 @@ public sealed partial class App : Application, IDisposable
                 break;
 
             case DiagnosticsRequestMessage request:
+                // Said when it changes, so "switching the view off stops the device sending" can
+                // be read off this device's log (step 37a).
+                if (_diagnosing != request.On)
+                {
+                    DisplayLog.DiagnosticsRequested(_logger, request.On);
+                }
+
                 _diagnosing = request.On;
                 break;
 

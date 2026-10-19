@@ -47,6 +47,7 @@ internal sealed class MainWindow : Window, IDisposable
     private NetworkWindow? _network;
     private NetworkPanel? _welcome;
     private StageGuard? _guard;
+    private ControlPower? _power;
 
     internal MainWindow(
         ISessionApi session,
@@ -173,6 +174,7 @@ internal sealed class MainWindow : Window, IDisposable
         // Built with the window and fed from the subscription below - a second stream would take
         // events away from this one, and the device list is half its input (Part 4).
         _guard = new StageGuard(this, session, Environment.MachineName);
+        _power = new ControlPower(_logger, Notify);
 
         // The two selections are one fact seen from two sides, so each follows the other. Both
         // ends refuse a change that is already made, which is what keeps this from ringing back and
@@ -247,6 +249,7 @@ internal sealed class MainWindow : Window, IDisposable
         _listening.Dispose();
         _welcome?.Dispose();
         _guard?.Dispose();
+        _power?.Dispose();
 
         // Off the collector first, then away: a tick arriving at a disposed watch would be the one
         // fault this line exists to keep out of a shutdown.
@@ -404,6 +407,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         Welcome(devices.Count == 0);
         _guard?.Knows(devices);
+        _power?.Displays(devices.Any(device => device.Connected));
 
         var entries = devices
             .SelectMany(device => device.Screens)
@@ -448,7 +452,8 @@ internal sealed class MainWindow : Window, IDisposable
     /// at the table (Part 6).
     /// </para>
     /// </summary>
-    internal void Notify(string text)
+    /// <returns>How to take the notice away again, for one that stops being true by itself.</returns>
+    internal Action Notify(string text)
     {
         var message = new TextBlock
         {
@@ -483,6 +488,8 @@ internal sealed class MainWindow : Window, IDisposable
         dismiss.Click += (_, _) => _notices.Children.Remove(notice);
 
         _notices.Children.Add(notice);
+
+        return () => _notices.Children.Remove(notice);
     }
 
     /// <summary>
