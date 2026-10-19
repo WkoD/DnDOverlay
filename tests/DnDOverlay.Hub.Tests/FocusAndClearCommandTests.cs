@@ -161,6 +161,22 @@ public sealed class FocusAndClearCommandTests
         Assert.Equal(arrived, (await session.GetSceneAsync(First, Cancellation)).Items.OrderBy(item => item.ZOrder).Select(item => item.ItemId));
     }
 
+    /// <summary>Leaving a campaign clears every screen, inactive ones too - their pictures come from the stock that closes.</summary>
+    [Fact]
+    public async Task Clearing_everywhere_includes_the_inactive_screen()
+    {
+        using var session = Session();
+
+        await session.AddItemsAsync(First, [.. Many(1)], Cancellation);
+        await session.AddItemsAsync(Third, [.. Many(1)], Cancellation);
+        await session.SetScreenStateAsync(Third, ScreenState.Inactive, Cancellation);
+
+        var patch = Assert.Single(await PatchesDuring(session, () => session.ClearEverywhereAsync(Cancellation)));
+
+        Assert.Equal([First, Third], patch.Ops.Select(op => op.Screen).Distinct().OrderBy(screen => screen.Screen.Value, StringComparer.Ordinal));
+        Assert.Empty((await session.GetSceneAsync(Third, Cancellation)).Items);
+    }
+
     [Fact]
     public async Task Clearing_an_empty_table_sends_nothing()
     {

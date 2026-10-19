@@ -48,14 +48,14 @@ internal sealed class MainWindow : Window, IDisposable
     private NetworkPanel? _welcome;
     private StageGuard? _guard;
     private readonly ScenesPanel _scenes;
+    private readonly CampaignDesk _desk;
     private ControlPower? _power;
 
     internal MainWindow(
         ISessionApi session,
         PairingDesk pairing,
         Entrances entrances,
-        AssetStore store,
-        SceneShelf shelf,
+        CampaignDesk desk,
         ControlSettings settings,
         Uri address,
         ProcessLog log)
@@ -65,7 +65,9 @@ internal sealed class MainWindow : Window, IDisposable
         _settings = settings;
         _address = address;
 
-        var pictures = new Pictures(store);
+        var pictures = new Pictures(desk.Stock);
+
+        _desk = desk;
 
         _board = new StageBoard(session, settings, pictures);
 
@@ -78,8 +80,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         _scenes = new ScenesPanel(
             session,
-            store,
-            shelf,
+            desk,
             pictures,
             () => _board.Active,
             () => _board.Screens,
@@ -205,6 +206,21 @@ internal sealed class MainWindow : Window, IDisposable
         // was asked for (Part 7).
         _board.Configuring += (_, screen) => Devices().Reveal(screen);
         _board.Saving += async (_, screen) => await _scenes.SaveAsync(this, screen).ConfigureAwait(true);
+
+        // Another campaign, or none: the pictures the stage draws are other files now, the scenes
+        // tab shows other scenes, and the head says which one (Part 3, Part 7).
+        desk.Changed += (_, _) =>
+        {
+            pictures.Clear();
+            _panelHead.Campaign(desk.OpenLabel);
+            _scenes.Refresh();
+            _ = _board.RefreshAsync(_listening.Token);
+        };
+
+        desk.Reported += (_, words) => Notify(words);
+
+        _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said).Open(_panelHead);
+        _panelHead.Campaign(desk.OpenLabel);
         _board.ActiveChanged += (_, _) =>
         {
             Follow();

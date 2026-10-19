@@ -30,8 +30,7 @@ internal sealed class ScenesPanel : DockPanel
     private const double TileWidth = 150;
 
     private readonly ISessionApi _session;
-    private readonly AssetStore _store;
-    private readonly SceneShelf _shelf;
+    private readonly CampaignDesk _desk;
     private readonly Pictures _pictures;
     private readonly Func<ScreenRef?> _active;
     private readonly Func<IReadOnlyList<ScreenView>> _screens;
@@ -47,8 +46,7 @@ internal sealed class ScenesPanel : DockPanel
 
     internal ScenesPanel(
         ISessionApi session,
-        AssetStore store,
-        SceneShelf shelf,
+        CampaignDesk desk,
         Pictures pictures,
         Func<ScreenRef?> active,
         Func<IReadOnlyList<ScreenView>> screens,
@@ -56,8 +54,7 @@ internal sealed class ScenesPanel : DockPanel
         ILogger logger)
     {
         _session = session;
-        _store = store;
-        _shelf = shelf;
+        _desk = desk;
         _pictures = pictures;
         _active = active;
         _screens = screens;
@@ -89,11 +86,19 @@ internal sealed class ScenesPanel : DockPanel
     {
         _tiles.Children.Clear();
 
-        foreach (var summary in _shelf.Scenes)
+        if (_desk.Open is not { } open)
         {
-            _tiles.Children.Add(Tile(summary));
+            _empty.Text = "No campaign open.";
+            _empty.Visibility = Visibility.Visible;
+            return;
         }
 
+        foreach (var summary in open.Shelf.Scenes)
+        {
+            _tiles.Children.Add(Tile(open.Shelf, summary));
+        }
+
+        _empty.Text = "No scene saved yet. Save one from a screen's menu: \"Save screen as scene ...\".";
         _empty.Visibility = _tiles.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -104,6 +109,25 @@ internal sealed class ScenesPanel : DockPanel
     /// </summary>
     internal async Task SaveAsync(Window owner, ScreenRef screen, string? overwriting = null)
     {
+        if (_desk.Open is null)
+        {
+            _say("No campaign is open - open one, or add pictures to begin one. A scene lives in its campaign.");
+            return;
+        }
+
+        // <b>Saving a scene names the campaign</b> (Part 3): an unnamed one is asked for its name
+        // once, its folder renamed, and then the scene saved. No scene without a home.
+        if (_desk.Open.Unnamed && !NameCampaign(owner))
+        {
+            return;
+        }
+
+        if (_desk.Open is not { } open)
+        {
+            return;
+        }
+
+        var shelf = open.Shelf;
         var view = _screens().FirstOrDefault(known => known.Screen == screen);
         var label = view?.Info.Label ?? screen.Screen.Value;
 
@@ -121,7 +145,7 @@ internal sealed class ScenesPanel : DockPanel
         var scene = await _session.GetSceneAsync(screen, CancellationToken.None).ConfigureAwait(true);
         var origin = view?.Info.Size ?? new PixelSize(1920, 1080);
 
-        var outcome = _shelf.SaveScene(name, origin, scene, overwrite: overwriting is not null);
+        var outcome = shelf.SaveScene(name, origin, scene, overwrite: overwriting is not null);
 
         if (outcome is ShelfOutcome.Taken)
         {
@@ -138,7 +162,7 @@ internal sealed class ScenesPanel : DockPanel
                 return;
             }
 
-            outcome = _shelf.SaveScene(name, origin, scene, overwrite: true);
+            outcome = shelf.SaveScene(name, origin, scene, overwrite: true);
         }
 
         if (outcome is ShelfOutcome.Done)
@@ -149,7 +173,33 @@ internal sealed class ScenesPanel : DockPanel
         }
     }
 
-    private StackPanel Tile(SceneSummary summary)
+    /// <summary>Asks the unnamed campaign for its first name; false when the DM cancelled.</summary>
+    private bool NameCampaign(Window owner)
+    {
+        while (NameDialog.Ask(owner, "Name the campaign", "This campaign has no name yet. A scene needs a named campaign - what is it called?", string.Empty) is { } typed)
+        {
+            switch (_desk.Rename(typed))
+            {
+                case CampaignOutcome.Done:
+                    return true;
+
+                case CampaignOutcome.Taken:
+                    MessageBox.Show(owner, $"A campaign named \"{typed}\" exists already.", "Name the campaign");
+                    break;
+
+                case CampaignOutcome.Busy:
+                    MessageBox.Show(owner, "The folder is in use right now - try again in a moment.", "Name the campaign");
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        return false;
+    }
+
+    private StackPanel Tile(SceneShelf shelf, SceneSummary summary)
     {
         var preview = new SceneThumbnail(_pictures)
         {
@@ -157,7 +207,7 @@ internal sealed class ScenesPanel : DockPanel
             Height = TileWidth / Math.Max(0.1, summary.Origin.AspectRatio),
         };
 
-        if (_shelf.Scene(summary.Name) is { } saved)
+        if (shelf.Scene(summary.Name) is { } saved)
         {
             preview.Show(saved.Scene, ScreenContext.Default(saved.Origin, 96), default);
             preview.InvalidateVisual();
@@ -244,12 +294,12 @@ internal sealed class ScenesPanel : DockPanel
     /// </summary>
     private async Task LoadAsync(string name, ScreenRef screen, SceneLoad mode)
     {
-        if (_shelf.Scene(name) is not { } saved)
+        if (_desk.Open is not { } open || open.Shelf.Scene(name) is not { } saved)
         {
             return;
         }
 
-        var names = _store.Entries.ToDictionary(entry => entry.AssetId, entry => entry.Name, StringComparer.Ordinal);
+        var names = open.Store.Entries.ToDictionary(entry => entry.AssetId, entry => entry.Name, StringComparer.Ordinal);
         var (scene, missing) = SceneNames.Resolve(saved.Scene, asset => names.GetValueOrDefault(asset.Value));
 
         await _session.LoadSceneAsync(screen, scene, mode, CancellationToken.None).ConfigureAwait(true);
@@ -275,7 +325,12 @@ internal sealed class ScenesPanel : DockPanel
             return;
         }
 
-        switch (_shelf.RenameScene(name, typed))
+        if (_desk.Open is not { } open)
+        {
+            return;
+        }
+
+        switch (open.Shelf.RenameScene(name, typed))
         {
             case ShelfOutcome.Done:
                 Refresh();
@@ -300,7 +355,7 @@ internal sealed class ScenesPanel : DockPanel
             MessageBoxImage.Question,
             MessageBoxResult.No);
 
-        if (answer == MessageBoxResult.Yes && _shelf.DeleteScene(name))
+        if (answer == MessageBoxResult.Yes && _desk.Open is { } open && open.Shelf.DeleteScene(name))
         {
             Refresh();
         }

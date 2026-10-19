@@ -29,7 +29,6 @@ public sealed partial class App : Application, IDisposable
     private WebApplication? _host;
     private ConfigurationFile<ControlConfiguration>? _configuration;
     private ProcessLog? _log;
-    private AssetStore? _store;
     private ScreenCatalog? _screens;
     private ControlSettings? _settings;
     private DataRoot _dataRoot;
@@ -94,20 +93,26 @@ public sealed partial class App : Application, IDisposable
         // import from a remote control is simply absent (Part 5). It proves its own effect.
         CoderPolicy.Apply();
 
-        // The real stock replaces the hard-coded stand-in from M1a (checks/M2.md, decision 5).
-        // One unnamed campaign is enough for M2 - naming, switching and the campaign panel are
-        // M5b (Part 10).
-        var store = AssetStore.Open(
-            Path.Combine(_dataRoot.CampaignsDefault, "unbenannt"),
-            new MagickCodec(),
-            TimeProvider.System,
+        // The campaigns, under their base path (Part 3). None is open at the start: the first picture
+        // makes an unnamed one, or the DM opens one with the switcher (M5b).
+        var codec = new MagickCodec();
 
-            // The unpacker is handed in here and nowhere else. Without it a .rptok would be an
-            // unreadable file, and the shortest way to a full stock - the monsters the DM has had
-            // as tokens for years - would not exist (Part 5).
-            containers: new TokenContainer());
+        var library = new CampaignLibrary(
+            _dataRoot.CampaignsDefault,
+            directory => AssetStore.Open(
+                directory,
+                codec,
+                TimeProvider.System,
 
-        _store = store;
+                // The unpacker is handed in here and nowhere else. Without it a .rptok would be an
+                // unreadable file, and the shortest way to a full stock - the monsters the DM has
+                // had as tokens for years - would not exist (Part 5).
+                containers: new TokenContainer()),
+            TimeProvider.System);
+
+        // The one source the hub knows for the whole run; the open campaign changes behind it.
+        CampaignDesk? desk = null;
+        var stock = new OpenStock(() => desk!.EnsureOpen());
 
         var builder = WebApplication.CreateBuilder();
 
@@ -163,7 +168,7 @@ public sealed partial class App : Application, IDisposable
             hub.KnownScreens = loaded.Value.KnownScreens;
         });
 
-        builder.Services.AddSingleton<IAssetSource>(store);
+        builder.Services.AddSingleton<IAssetSource>(stock);
 
         // Registered so the hub can put FORWARDED entries into the same log as our own - one
         // stream out of everybody's lines (Part 8). The hub asks for it optionally and runs
@@ -203,15 +208,13 @@ public sealed partial class App : Application, IDisposable
         screens.Changed += Persist;
         _screens = screens;
 
+        desk = new CampaignDesk(library, stock, session, Dispatcher, logger);
+
         var window = new MainWindow(
             session,
             new PairingDesk(session, secrets, _settings, TimeProvider.System),
-            new Entrances(store, _settings, TimeProvider.System),
-            store,
-
-            // The scenes of the same campaign, read completely on open (Part 3). One campaign until
-            // the campaigns themselves arrive (M5b).
-            SceneShelf.Open(store.Directory, TimeProvider.System),
+            new Entrances(stock, _settings, TimeProvider.System),
+            desk,
             _settings,
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
             _log);

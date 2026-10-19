@@ -318,6 +318,21 @@
   <data name="E4021_SceneLoaded" xml:space="preserve">
     <value>Loaded the scene "{Name}" ({Mode}): {Items} item(s), {Missing} picture(s) missing.</value>
   </data>
+  <data name="E4022_CampaignOpened" xml:space="preserve">
+    <value>Opened the campaign "{Name}": {Pictures} picture(s), {Scenes} scene(s).</value>
+  </data>
+  <data name="E4023_CampaignReconciled" xml:space="preserve">
+    <value>Campaign folder reconciled: {Adopted} taken in, {Duplicates} duplicate(s) removed, {Missing} missing, {Foreign} foreign file(s), inventory rebuilt: {Reconstructed}.</value>
+  </data>
+  <data name="E4024_CampaignRenamed" xml:space="preserve">
+    <value>Renamed the campaign "{Old}" to "{New}".</value>
+  </data>
+  <data name="E4025_CampaignDeleted" xml:space="preserve">
+    <value>Deleted the campaign "{Name}" with its folder.</value>
+  </data>
+  <data name="E4026_CampaignRefused" xml:space="preserve">
+    <value>The campaign "{Name}" could not be opened: {Reason}</value>
+  </data>
   <data name="E3040_PicturesSteppedDown" xml:space="preserve">
     <value>{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.</value>
   </data>

@@ -21,7 +21,7 @@ namespace DnDOverlay.Control;
 /// he may move it, and the tidy-up view deletes from it (Part 3).
 /// </para>
 /// </summary>
-internal sealed class Pictures(AssetStore store)
+internal sealed class Pictures(OpenStock stock)
 {
     private readonly Dictionary<AssetId, BitmapSource?> _loaded = [];
     private readonly Dictionary<AssetId, BitmapSource?> _grey = [];
@@ -47,7 +47,7 @@ internal sealed class Pictures(AssetStore store)
             return known;
         }
 
-        var picture = Load(store.ThumbnailPath(asset));
+        var picture = stock.Current is { } store ? Load(store.ThumbnailPath(asset)) : null;
 
         _loaded[asset] = picture;
 
@@ -72,6 +72,13 @@ internal sealed class Pictures(AssetStore store)
         _grey[asset] = grey;
 
         return grey;
+    }
+
+    /// <summary>Forgets everything - another campaign is open, and its pictures are other files.</summary>
+    internal void Clear()
+    {
+        _loaded.Clear();
+        _grey.Clear();
     }
 
     /// <summary>Forgets one asset, so the next draw reads it again.</summary>

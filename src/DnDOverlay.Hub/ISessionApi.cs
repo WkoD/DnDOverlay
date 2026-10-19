@@ -88,6 +88,13 @@ public interface ISessionApi
     Task ClearAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Clears every screen - inactive ones too - for leaving a campaign (Part 3): the pictures on
+    /// them come from a stock that is about to close, and a display starting afterwards would stand
+    /// in front of nothing but placeholders. One patch.
+    /// </summary>
+    Task ClearEverywhereAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// "Send to all" (Part 7): these pictures onto every played screen, placed as each screen
     /// places arrivals - one patch over all of them, one step in the timeline (Part 4). Returns the
     /// new items per screen.

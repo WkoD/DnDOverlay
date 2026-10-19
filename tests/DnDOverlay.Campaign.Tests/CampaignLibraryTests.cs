@@ -1,0 +1,264 @@
+using System.Text;
+using DnDOverlay.Core;
+
+namespace DnDOverlay.Campaign.Tests;
+
+/// <summary>
+/// Campaigns under a base path and the reconciliation of a folder with its inventory (Part 3):
+/// derived things repaired without a word, primary things reported, nothing deleted unasked.
+/// </summary>
+public sealed class CampaignLibraryTests : IDisposable
+{
+    private readonly string _base =
+        Path.Combine(Path.GetTempPath(), "dndoverlay-campaigns-" + Guid.NewGuid().ToString("N"));
+
+    private readonly FakeImageCodec _codec = new();
+    private readonly FakeTimeProvider _time = new();
+
+    private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_base, recursive: true);
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+    }
+
+    /// <summary>Nothing is created by looking: no base folder, no campaign, until a first picture asks for one.</summary>
+    [Fact]
+    public void Listing_an_empty_base_creates_nothing()
+    {
+        Assert.Empty(Library().List());
+        Assert.False(Directory.Exists(_base));
+    }
+
+    /// <summary>An unnamed campaign that exists is not reused - the next one gets the next number.</summary>
+    [Fact]
+    public void A_new_unnamed_campaign_takes_the_next_number()
+    {
+        var library = Library();
+
+        var first = library.CreateUnnamed();
+        var second = library.CreateUnnamed();
+
+        Assert.Equal("~unbenannt", first.Name);
+        Assert.Equal("~unbenannt 2", second.Name);
+        Assert.True(first.Unnamed);
+    }
+
+    /// <summary>Unnamed ones are told apart by date and count; named ones list by name and nothing else.</summary>
+    [Fact]
+    public async Task The_list_names_campaigns_and_dates_and_counts_only_the_unnamed()
+    {
+        var library = Library();
+        var unnamed = library.CreateUnnamed();
+
+        await Ingest(unnamed.Store, "eins");
+        Directory.CreateDirectory(Path.Combine(_base, "Sturmküste"));
+
+        var list = library.List();
+
+        Assert.Equal("Sturmküste", list[0].Name);
+        Assert.Null(list[0].Pictures);
+        Assert.Equal(1, Assert.Single(list, summary => summary.Unnamed).Pictures);
+    }
+
+    [Fact]
+    public void Renaming_moves_the_folder_and_a_taken_name_is_refused_first()
+    {
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+
+        Directory.CreateDirectory(Path.Combine(_base, "Sturmküste"));
+
+        Assert.Equal(CampaignOutcome.Taken, library.Rename(campaign, "STURMKÜSTE").Outcome);
+        Assert.Equal(CampaignOutcome.BadName, library.Rename(campaign, "Rat 3/4").Outcome);
+
+        var (outcome, renamed) = library.Rename(campaign, "Kerkerwelt");
+
+        Assert.Equal(CampaignOutcome.Done, outcome);
+        Assert.Equal("Kerkerwelt", renamed.Name);
+        Assert.False(renamed.Unnamed);
+        Assert.True(Directory.Exists(Path.Combine(_base, "Kerkerwelt")));
+        Assert.False(Directory.Exists(Path.Combine(_base, "~unbenannt")));
+    }
+
+    [Fact]
+    public void Deleting_takes_the_folder()
+    {
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+
+        library.Delete(campaign);
+
+        Assert.Empty(library.List());
+    }
+
+    /// <summary>A loose picture in the root and one in a folder of the DM's own come in, renamed to their hash and moved; the originals are gone.</summary>
+    [Fact]
+    public async Task Loose_pictures_anywhere_in_the_folder_are_taken_in()
+    {
+        var campaign = Campaign("Sturmküste");
+
+        Directory.CreateDirectory(Path.Combine(campaign, "Meine Bilder"));
+        File.WriteAllBytes(Path.Combine(campaign, "Ork.png"), Bytes("ork"));
+        File.WriteAllBytes(Path.Combine(campaign, "Meine Bilder", "Goblin.png"), Bytes("goblin"));
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(2, report.Adopted);
+        Assert.Equal(["Goblin", "Ork"], opened.Store.Entries.Select(entry => entry.Name).Order(StringComparer.Ordinal));
+        Assert.False(File.Exists(Path.Combine(campaign, "Ork.png")));
+        Assert.Empty(Reconciliation.Survey(opened.Store).Orphans);
+    }
+
+    [Fact]
+    public async Task A_byte_identical_copy_is_removed_rather_than_kept_twice()
+    {
+        var campaign = Campaign("Sturmküste");
+        var library = Library();
+
+        await Ingest(library.Open("Sturmküste").Store, "ork");
+        File.WriteAllBytes(Path.Combine(campaign, "Ork Kopie.png"), Bytes("ork"));
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(1, report.Duplicates);
+        Assert.Single(opened.Store.Entries);
+        Assert.False(File.Exists(Path.Combine(campaign, "Ork Kopie.png")));
+    }
+
+    /// <summary>A file deleted by hand leaves its entry marked, not removed - and taking the same picture in again heals it.</summary>
+    [Fact]
+    public async Task A_missing_file_is_marked_and_heals_when_the_picture_comes_back()
+    {
+        Campaign("Sturmküste");
+        var library = Library();
+        var taken = await Ingest(library.Open("Sturmküste").Store, "ork");
+
+        foreach (var file in Directory.GetFiles(Path.Combine(_base, "Sturmküste", "assets"), taken.Asset.AssetId.Value + ".*"))
+        {
+            File.Delete(file);
+        }
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(["Ork"], report.Missing);
+        Assert.Single(opened.Store.Entries);
+
+        var again = await Ingest(opened.Store, "ork", "Anderer Name");
+
+        Assert.Equal(taken.Asset.AssetId, again.Asset.AssetId);
+        Assert.Equal("Ork", again.Asset.Name);
+        Assert.Empty(opened.Store.Missing);
+    }
+
+    /// <summary>The DM's notes stay untouched and are reported once; operating-system litter is not even mentioned.</summary>
+    [Fact]
+    public async Task Foreign_files_stay_and_litter_is_not_mentioned()
+    {
+        var campaign = Campaign("Sturmküste");
+
+        File.WriteAllBytes(Path.Combine(campaign, "notizen.txt"), FakeImageCodec.Unreadable);
+        File.WriteAllText(Path.Combine(campaign, "Thumbs.db"), "x");
+
+        var (_, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(["notizen.txt"], report.Foreign);
+        Assert.True(File.Exists(Path.Combine(campaign, "notizen.txt")));
+    }
+
+    /// <summary>
+    /// Rebuilt, not refused: an inventory that does not read gives way to one made from the files,
+    /// with names from the scenes - and the unreadable file is set aside, not deleted.
+    /// </summary>
+    [Fact]
+    public async Task An_unreadable_inventory_is_rebuilt_with_names_from_the_scenes()
+    {
+        Campaign("Sturmküste");
+        var library = Library();
+        var first = library.Open("Sturmküste");
+        var taken = await Ingest(first.Store, "ork");
+
+        first.Shelf.SaveScene("Dorf", new PixelSize(1920, 1080), SceneState.Empty with
+        {
+            Items = [Item(taken.Asset.AssetId, "Ork der Szene")],
+        }, overwrite: false);
+
+        File.WriteAllText(Path.Combine(_base, "Sturmküste", "inventory.json"), "{ kaputt");
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.True(report.Reconstructed);
+        Assert.Equal("Ork der Szene", Assert.Single(opened.Store.Entries).Name);
+        Assert.Equal(taken.Asset.AssetId.Value, opened.Store.Entries[0].AssetId);
+        Assert.Single(Directory.GetFiles(Path.Combine(_base, "Sturmküste"), "inventory.json.unreadable-*"));
+    }
+
+    /// <summary>A stock without findings is surveyed by names alone - nothing to adopt, nothing missing, nothing to say.</summary>
+    [Fact]
+    public async Task A_folder_without_findings_reports_nothing()
+    {
+        Campaign("Sturmküste");
+        await Ingest(Library().Open("Sturmküste").Store, "ork");
+
+        var (_, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.True(report.IsEmpty);
+    }
+
+    [Fact]
+    public async Task A_missing_thumbnail_is_made_again_without_a_word()
+    {
+        Campaign("Sturmküste");
+        var taken = await Ingest(Library().Open("Sturmküste").Store, "ork");
+        var opened = Library().Open("Sturmküste");
+        var thumbnail = opened.Store.ThumbnailPath(taken.Asset.AssetId);
+
+        File.Delete(thumbnail);
+
+        var report = await Reconciliation.SettleAsync(opened.Store, opened.Shelf, opened.Findings, cancellationToken: Cancellation);
+
+        Assert.True(File.Exists(thumbnail));
+        Assert.True(report.IsEmpty);
+    }
+
+    private CampaignLibrary Library() =>
+        new(_base, directory => AssetStore.Open(directory, _codec, _time), _time);
+
+    private string Campaign(string name)
+    {
+        var path = Path.Combine(_base, name);
+
+        Directory.CreateDirectory(path);
+
+        return path;
+    }
+
+    private async Task<(OpenCampaign Campaign, CampaignReport Report)> OpenAndSettle(string name)
+    {
+        var opened = Library().Open(name);
+        var report = await Reconciliation.SettleAsync(opened.Store, opened.Shelf, opened.Findings, cancellationToken: Cancellation);
+
+        return (opened, report);
+    }
+
+    private static byte[] Bytes(string seed) => Encoding.UTF8.GetBytes("source:" + seed);
+
+    private static async Task<IngestResult.Taken> Ingest(AssetStore store, string seed, string? name = null) =>
+        Assert.IsType<IngestResult.Taken>(await store.IngestAsync(
+            Bytes(seed), name ?? char.ToUpperInvariant(seed[0]) + seed[1..], Cancellation));
+
+    private static ImageItem Item(AssetId asset, string name) =>
+        new(
+            new ItemId(Guid.NewGuid()), 0.5, 0.5, 0.4, 1, 0, 1, false, false, 1,
+            asset,
+            new AssetMeta(64, 64, "png", 10, false, new string('d', 64)),
+            name,
+            false,
+            false);
+}

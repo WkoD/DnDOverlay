@@ -737,13 +737,17 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
     /// <inheritdoc />
     public Task ClearAllAsync(CancellationToken cancellationToken = default) =>
-        ApplyAcrossAsync(
-            (_, scene, _) =>
-            [
-                .. scene.Items.Count > 0 ? [new ClearItems()] : Array.Empty<PatchOp>(),
-                .. scene.Background is not null ? [new ClearBackground()] : Array.Empty<PatchOp>(),
-            ],
-            cancellationToken);
+        ApplyAcrossAsync(Cleared, cancellationToken);
+
+    /// <inheritdoc />
+    public Task ClearEverywhereAsync(CancellationToken cancellationToken = default) =>
+        ApplyAcrossAsync(Cleared, cancellationToken, includingInactive: true);
+
+    private static IReadOnlyList<PatchOp> Cleared(ScreenRef screen, SceneState scene, ScreenContext context) =>
+    [
+        .. scene.Items.Count > 0 ? [new ClearItems()] : Array.Empty<PatchOp>(),
+        .. scene.Background is not null ? [new ClearBackground()] : Array.Empty<PatchOp>(),
+    ];
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> SendToAllAsync(
@@ -791,7 +795,8 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// </summary>
     private async Task ApplyAcrossAsync(
         Func<ScreenRef, SceneState, ScreenContext, IReadOnlyList<PatchOp>> decide,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includingInactive = false)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -799,7 +804,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
         {
             var ops = new List<ScreenOp>();
 
-            foreach (var view in _screens.Views().Where(view => view.State != ScreenState.Inactive))
+            foreach (var view in _screens.Views().Where(view => includingInactive || view.State != ScreenState.Inactive))
             {
                 var context = _screens.ContextFor(view.Screen);
                 var scene = _scenes.Get(view.Screen);

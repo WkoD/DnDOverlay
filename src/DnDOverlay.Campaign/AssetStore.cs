@@ -85,6 +85,28 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// <summary>When the campaign was created, from the inventory rather than the file system.</summary>
     public DateTimeOffset CreatedAt { get; }
 
+    /// <summary>Whether the inventory could not be read and was set aside - the reconciliation rebuilds it (Part 3).</summary>
+    public bool Reconstructed { get; private init; }
+
+    /// <summary>
+    /// Entries whose file is gone - deleted by hand, a sync not finished. <b>Marked, never removed</b>
+    /// (Part 3): the DM may put the file back, and taking the same picture in again heals the entry
+    /// with every scene reference intact, because the hash is the same.
+    /// </summary>
+    public IReadOnlySet<AssetId> Missing
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.Values
+                    .Where(entry => !File.Exists(FileOf(entry)))
+                    .Select(entry => new AssetId(entry.AssetId))
+                    .ToHashSet();
+            }
+        }
+    }
+
     /// <summary>How many images are in the stock.</summary>
     public int Count
     {
@@ -130,10 +152,25 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         System.IO.Directory.CreateDirectory(Path.Combine(directory, AssetsFolder, ThumbnailFolder));
 
         var path = Path.Combine(directory, InventoryFileName);
-        var document = Read(path) ?? new InventoryDocument { CreatedAt = time.GetUtcNow() };
+        var document = Read(path, out var unreadable);
+        var reconstructed = unreadable;
+
+        if (unreadable)
+        {
+            // <b>Rebuilt, not refused</b> (Part 3): the inventory is an index over the folder, not a
+            // document, so files plus scene references give it back - the reconciliation does that
+            // right after. The unreadable file is set aside rather than deleted: it is the DM's, and
+            // somebody may want to look at what happened to it.
+            File.Move(path, path + ".unreadable-" + time.GetUtcNow().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture), overwrite: true);
+        }
+
+        document ??= new InventoryDocument { CreatedAt = time.GetUtcNow() };
 
         var store = new AssetStore(
-            directory, codec, containers, freeSpace, limits ?? AssetLimits.Default, time, document);
+            directory, codec, containers, freeSpace, limits ?? AssetLimits.Default, time, document)
+        {
+            Reconstructed = reconstructed,
+        };
 
         if (!File.Exists(path))
         {
@@ -288,10 +325,12 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
         lock (_gate)
         {
-            if (_entries.TryGetValue(assetId.Value, out var known))
+            // Already here. Nothing is written and, above all, the name the DM gave it STAYS -
+            // re-importing a file must not rename it (Part 7). Unless its file is gone: then this is
+            // the picture coming back, and it is written again under the entry it always had - the
+            // scenes pointing at it are healed with it (Part 3).
+            if (_entries.TryGetValue(assetId.Value, out var known) && File.Exists(FileOf(known)))
             {
-                // Already here. Nothing is written and, above all, the name the DM gave it STAYS -
-                // re-importing a file must not rename it (Part 7).
                 return new IngestResult.Taken(
                     new AssetRef(assetId, known.Meta, known.Name), AlreadyPresent: true, FormatStanding.Promised);
             }
@@ -367,7 +406,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         {
             // Somebody else may have finished the same image while this one was decoding. Theirs
             // won - the bytes are identical by construction, so the loser drops its work rather
-            // than making a second entry.
+            // than making a second entry. A healed entry lands here too, and keeps its name.
             if (_entries.TryGetValue(assetId.Value, out var raced))
             {
                 return new IngestResult.Taken(
@@ -450,6 +489,126 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         }
     }
 
+    /// <summary>
+    /// Takes a picture that lies in <c>assets\</c> under its hash name but has no entry - a crash
+    /// between writing and recording, or a rebuilt inventory (Part 3). The identity is the file
+    /// name; the file is read once to measure it, the only bytes the reconciliation ever reads.
+    /// </summary>
+    /// <returns>The new entry's reference, or <see langword="null"/> when the file is no picture this build reads.</returns>
+    public AssetRef? AdoptStored(string file, string name, DateTimeOffset addedAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var id = new AssetId(Path.GetFileNameWithoutExtension(file).ToLowerInvariant());
+
+        if (!id.IsWellFormed)
+        {
+            return null;
+        }
+
+        var bytes = File.ReadAllBytes(file);
+        ImageProbe probe;
+
+        try
+        {
+            probe = _codec.Probe(bytes);
+        }
+        catch (ImageRejectedException)
+        {
+            return null;
+        }
+
+        var entry = new InventoryEntry
+        {
+            AssetId = id.Value,
+            AddedAt = addedAt,
+            Extension = Path.GetExtension(file).TrimStart('.').ToLowerInvariant(),
+            PixelWidth = probe.PixelWidth,
+            PixelHeight = probe.PixelHeight,
+            IsAnimated = probe.Frames > 1,
+            Bytes = bytes.LongLength,
+            ContentHash = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+        };
+
+        lock (_gate)
+        {
+            if (_entries.TryGetValue(id.Value, out var known))
+            {
+                return new AssetRef(id, known.Meta, known.Name);
+            }
+
+            entry.Name = FreeName(name);
+            _entries[id.Value] = entry;
+            SaveInventory();
+        }
+
+        return new AssetRef(id, entry.Meta, entry.Name);
+    }
+
+    /// <summary>
+    /// Makes the thumbnails that are missing and removes the ones nobody has - derived files,
+    /// repaired without a word (Part 3). Only pictures WITHOUT a thumbnail are read.
+    /// </summary>
+    /// <returns>How many were made.</returns>
+    public int RepairThumbnails()
+    {
+        var made = 0;
+        var known = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var entry in Entries)
+        {
+            known.Add(entry.AssetId);
+
+            var thumbnail = ThumbnailPath(new AssetId(entry.AssetId));
+            var file = FileOf(entry);
+
+            if (File.Exists(thumbnail) || !File.Exists(file))
+            {
+                continue;
+            }
+
+            try
+            {
+                AtomicFile.WriteContentAddressed(thumbnail, _codec.Thumbnail(File.ReadAllBytes(file), ThumbnailWidth));
+                made++;
+            }
+            catch (ImageRejectedException)
+            {
+                // A picture whose thumbnail cannot be made shows a blank tile; its file is still the DM's.
+            }
+        }
+
+        var folder = Path.Combine(Directory, AssetsFolder, ThumbnailFolder);
+
+        foreach (var stray in System.IO.Directory.EnumerateFiles(folder, "*.png"))
+        {
+            var stem = Path.GetFileNameWithoutExtension(stray);
+            var id = stem.Split('_')[0];
+
+            if (!known.Contains(id))
+            {
+                File.Delete(stray);
+            }
+        }
+
+        return made;
+    }
+
+    /// <summary>Whether this file is where the stock keeps an entry's picture - by name, without opening it.</summary>
+    public bool Keeps(string file)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+
+        var stem = Path.GetFileNameWithoutExtension(file);
+
+        lock (_gate)
+        {
+            return _entries.TryGetValue(stem, out var entry)
+                && string.Equals(Path.GetFullPath(FileOf(entry)), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private string FileOf(InventoryEntry entry) =>
         Path.Combine(Directory, AssetsFolder, entry.AssetId + "." + entry.Extension);
 
@@ -465,8 +624,10 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             Path.Combine(Directory, InventoryFileName), JsonSerializer.SerializeToUtf8Bytes(document, Json));
     }
 
-    private static InventoryDocument? Read(string path)
+    private static InventoryDocument? Read(string path, out bool unreadable)
     {
+        unreadable = false;
+
         if (!File.Exists(path))
         {
             return null;
@@ -478,10 +639,11 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         {
             document = JsonSerializer.Deserialize<InventoryDocument>(File.ReadAllBytes(path), Json);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            throw new CampaignSchemaException(
-                $"The inventory at {path} could not be read: {ex.Message}", ex);
+            unreadable = true;
+
+            return null;
         }
 
         if (document is null)

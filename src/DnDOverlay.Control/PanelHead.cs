@@ -28,13 +28,38 @@ internal sealed class PanelHead : Border
         MinWidth = 130,
     };
 
+    /// <summary>
+    /// The campaign: its name and the way to the others, at the START of the head - it is no grip in
+    /// play but the frame around it (Part 7). With none open it says so and names the two ways on,
+    /// rather than looking empty.
+    /// </summary>
+    private readonly Button _campaign = new()
+    {
+        Padding = new Thickness(10, 3, 10, 3),
+        MinWidth = 180,
+        Margin = new Thickness(0, 0, 8, 0),
+        HorizontalContentAlignment = HorizontalAlignment.Left,
+    };
+
+    private readonly TextBlock _hint = new()
+    {
+        Text = "Open one, or add pictures to begin a new one.",
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(0, 0, 12, 0),
+        Opacity = 0.75,
+    };
+
     internal PanelHead()
     {
         Padding = new Thickness(0, 0, 0, 6);
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
 
+        row.Children.Add(_campaign);
+        row.Children.Add(_hint);
         row.Children.Add(_view);
+
+        _campaign.Click += (_, _) => CampaignAsked?.Invoke(this, EventArgs.Empty);
 
         Child = row;
 
@@ -45,6 +70,16 @@ internal sealed class PanelHead : Border
 
     /// <summary>The DM asked for the other view.</summary>
     internal event EventHandler? Toggled;
+
+    /// <summary>The DM tapped the campaign - the switcher opens.</summary>
+    internal event EventHandler? CampaignAsked;
+
+    /// <summary>Which campaign is open, or <see langword="null"/> for none.</summary>
+    internal void Campaign(string? label)
+    {
+        _campaign.Content = (label ?? "No campaign open") + "  ▾";
+        _hint.Visibility = label is null ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     /// <summary>
     /// What the button offers, which is the other view rather than the current one: a button that

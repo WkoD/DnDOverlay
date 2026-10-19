@@ -25,8 +25,8 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 > **Status: under construction.** Pictures already go from the DM's machine onto the screens
 > and the players can move them: displays find the control by themselves and are paired by
 > hand, the campaign holds a stock, all four ways in work, the table takes gestures, and the DM
-> sees every screen live and handles it with the same grips; scenes can be saved and loaded.
-> Still missing are several campaigns, layouts, undo, the stock as a panel of its own and the
+> sees every screen live and handles it with the same grips; campaigns and scenes can be saved,
+> opened and switched. Still missing are layouts, undo, the stock as a panel of its own and the
 > installers, which are empty — so **nothing is installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
@@ -182,6 +182,20 @@ although you did not ask for it — the device not paired or not connected, the 
 the control's own window lying on it, or hidden at the device — shows as **⚠ 2 reasons** at the
 right of the head; tap the head to read them. Beside it stands the **battery** of a display PC that
 has one, red from 10 %, with a lightning sign on the cable.
+
+**Campaigns** keep the stock of one group apart from another's. The control starts with **none
+open**, so it never puts the wrong group's pictures in front of you; the head above the stage says
+so. Adding the first picture begins a new unnamed campaign — its folder exists from that file on,
+so nothing is lost before it has a name — and saving its first scene asks for one. The button in
+the head lists every campaign and switches: switching clears the table on every screen, because
+those pictures belong to the campaign being closed, and it asks first. *Set up campaign ...*
+renames the open campaign together with its folder, opens the folder, and deletes it — only after
+you type its name. Each campaign is a folder under `%LOCALAPPDATA%\DnDOverlay\campaigns\`, and
+**that folder is the backup and the exchange format**: copy it. On opening, the folder is checked
+against its inventory: pictures laid into it by hand are taken in, a byte-identical copy is
+removed, a picture deleted by hand is marked missing (taking it in again heals it), other files
+are left alone, and an inventory that cannot be read is rebuilt from the folder. One note beside
+the stage says what was found.
 
 **Scenes** keep an arrangement for next time. *Save screen as scene ...* in a screen's menu asks
 for a name — suggested from the screen and the time — and asks before it overwrites one that

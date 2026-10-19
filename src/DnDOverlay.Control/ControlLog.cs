@@ -328,4 +328,39 @@ internal static partial class ControlLog
         Level = LogLevel.Information,
         Message = "Loaded the scene \"{Name}\" ({Mode}): {Items} item(s), {Missing} picture(s) missing.")]
     internal static partial void SceneLoaded(ILogger logger, string name, string mode, int items, int missing);
+
+    /// <summary>A campaign was opened - by the switcher, or newly made by the first picture.</summary>
+    [LoggerMessage(
+        EventId = 4022,
+        Level = LogLevel.Information,
+        Message = "Opened the campaign \"{Name}\": {Pictures} picture(s), {Scenes} scene(s).")]
+    internal static partial void CampaignOpened(ILogger logger, string name, int pictures, int scenes);
+
+    /// <summary>What the reconciliation of the opened folder did (Part 3) - the report beside the stage, written down.</summary>
+    [LoggerMessage(
+        EventId = 4023,
+        Level = LogLevel.Information,
+        Message = "Campaign folder reconciled: {Adopted} taken in, {Duplicates} duplicate(s) removed, {Missing} missing, {Foreign} foreign file(s), inventory rebuilt: {Reconstructed}.")]
+    internal static partial void CampaignReconciled(ILogger logger, int adopted, int duplicates, int missing, int foreign, bool reconstructed);
+
+    /// <summary>The open campaign was renamed, folder and all.</summary>
+    [LoggerMessage(
+        EventId = 4024,
+        Level = LogLevel.Information,
+        Message = "Renamed the campaign \"{Old}\" to \"{New}\".")]
+    internal static partial void CampaignRenamed(ILogger logger, string old, string @new);
+
+    /// <summary>The open campaign was deleted - the one grip that cannot be taken back (Part 7).</summary>
+    [LoggerMessage(
+        EventId = 4025,
+        Level = LogLevel.Warning,
+        Message = "Deleted the campaign \"{Name}\" with its folder.")]
+    internal static partial void CampaignDeleted(ILogger logger, string name);
+
+    /// <summary>A campaign would not open - a newer schema, the one hard no (Part 3).</summary>
+    [LoggerMessage(
+        EventId = 4026,
+        Level = LogLevel.Warning,
+        Message = "The campaign \"{Name}\" could not be opened: {Reason}")]
+    internal static partial void CampaignRefused(ILogger logger, string name, string reason);
 }

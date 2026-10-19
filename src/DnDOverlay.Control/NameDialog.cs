@@ -15,8 +15,11 @@ internal sealed class NameDialog : Window
     private readonly TextBox _name;
     private readonly TextBlock _problem = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
 
-    private NameDialog(Window owner, string title, string prompt, string suggestion)
+    private readonly bool _check;
+
+    private NameDialog(Window owner, string title, string prompt, string suggestion, bool check)
     {
+        _check = check;
         Owner = owner;
         Title = title;
         Width = 460;
@@ -45,7 +48,7 @@ internal sealed class NameDialog : Window
 
         ok.Click += (_, _) =>
         {
-            if (FileNames.Check(_name.Text) is { } problem)
+            if (_check && FileNames.Check(_name.Text) is { } problem)
             {
                 _problem.Text = Explain(problem);
                 return;
@@ -65,9 +68,10 @@ internal sealed class NameDialog : Window
     }
 
     /// <summary>Asks, and answers with the typed name - or nothing when the DM cancelled.</summary>
-    internal static string? Ask(Window owner, string title, string prompt, string suggestion)
+    /// <param name="check">Whether the name must be able to become a file name - not for a typed confirmation.</param>
+    internal static string? Ask(Window owner, string title, string prompt, string suggestion, bool check = true)
     {
-        var dialog = new NameDialog(owner, title, prompt, suggestion);
+        var dialog = new NameDialog(owner, title, prompt, suggestion, check);
 
         return dialog.ShowDialog() == true ? dialog._name.Text : null;
     }
