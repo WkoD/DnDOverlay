@@ -82,16 +82,42 @@ public static class Parking
     /// </summary>
     public static bool OnTheFan(Point at, ScreenContext screen)
     {
+        var band = Band(screen);
+
+        return screen.ParkEdge switch
+        {
+            ParkEdge.Left => at.X <= band.Right,
+            ParkEdge.Top => at.Y <= band.Y + band.Height,
+            ParkEdge.Right => at.X >= band.X,
+            _ => at.Y >= band.Y,
+        };
+    }
+
+    /// <summary>
+    /// The fan's band as a rectangle, normalised: the full length of the park edge, as deep as
+    /// <see cref="OnTheFan"/> reaches.
+    /// <para>
+    /// <b>Drawn as well as asked</b> (game session, 18.10.2026). The band parks a picture let go in
+    /// it even when the fan is empty - and an empty fan is invisible, so at an edge where somebody
+    /// sits, pictures went into the fan that nobody meant to put away. The display now lights this
+    /// rectangle while a hand holds a picture in it. One function for both, or the glow and the
+    /// decision would be two answers to where the band is (Guide G22).
+    /// </para>
+    /// </summary>
+    public static Rect Band(ScreenContext screen)
+    {
         ArgumentNullException.ThrowIfNull(screen);
 
         var alongX = screen.ParkEdge is ParkEdge.Top or ParkEdge.Bottom;
-        var band = Manipulation.Visible(screen, !alongX);
+        var depth = Manipulation.Visible(screen, !alongX);
 
-        var across = alongX ? at.Y : at.X;
-
-        return screen.ParkEdge is ParkEdge.Left or ParkEdge.Top
-            ? across <= band
-            : across >= 1 - band;
+        return screen.ParkEdge switch
+        {
+            ParkEdge.Left => new Rect(0, 0, depth, 1),
+            ParkEdge.Right => new Rect(1 - depth, 0, depth, 1),
+            ParkEdge.Top => new Rect(0, 0, 1, depth),
+            _ => new Rect(0, 1 - depth, 1, depth),
+        };
     }
 
     /// <summary>

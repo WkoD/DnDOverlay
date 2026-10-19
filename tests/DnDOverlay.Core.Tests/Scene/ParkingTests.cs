@@ -539,6 +539,55 @@ public sealed class ParkingTests
     }
 
     /// <summary>
+    /// What the display lights is exactly what parks: the band's rectangle and the decision agree on
+    /// every edge, a hair inside and a hair outside, at both ends of the edge.
+    /// </summary>
+    [Theory]
+    [InlineData(ParkEdge.Left)]
+    [InlineData(ParkEdge.Right)]
+    [InlineData(ParkEdge.Top)]
+    [InlineData(ParkEdge.Bottom)]
+    public void The_drawn_band_is_the_band_that_parks(ParkEdge edge)
+    {
+        var screen = Build.Screen() with { ParkEdge = edge };
+        var band = Parking.Band(screen);
+        const double Hair = 0.001;
+
+        var inwards = edge switch
+        {
+            ParkEdge.Left => new Point(1, 0),
+            ParkEdge.Right => new Point(-1, 0),
+            ParkEdge.Top => new Point(0, 1),
+            _ => new Point(0, -1),
+        };
+
+        // The inner boundary of the band, where it meets the table.
+        var boundary = edge switch
+        {
+            ParkEdge.Left => band.Right,
+            ParkEdge.Right => band.X,
+            ParkEdge.Top => band.Y + band.Height,
+            _ => band.Y,
+        };
+
+        foreach (var along in new[] { 0.02, 0.5, 0.98 })
+        {
+            var inside = inwards.X != 0
+                ? new Point(boundary - (inwards.X * Hair), along)
+                : new Point(along, boundary - (inwards.Y * Hair));
+            var outside = inwards.X != 0
+                ? new Point(boundary + (inwards.X * Hair), along)
+                : new Point(along, boundary + (inwards.Y * Hair));
+
+            Assert.True(Parking.OnTheFan(inside, screen), $"{edge} {along}: inside");
+            Assert.False(Parking.OnTheFan(outside, screen), $"{edge} {along}: outside");
+        }
+
+        // It runs the full length of the edge.
+        Assert.Equal(1, inwards.X != 0 ? band.Height : band.Width);
+    }
+
+    /// <summary>
     /// And every peek is on the screen. A card lies inside the bar, so stepping it clear across the
     /// edge cannot put it past a corner - the one place a parked picture may never be.
     /// </summary>

@@ -65,6 +65,21 @@ internal sealed class OverlayWindow : Window
     private readonly Canvas _stage = new() { Background = null, ClipToBounds = true };
 
     /// <summary>
+    /// The fan's band, lit while a hand holds a picture in it - letting go there parks the picture,
+    /// and an empty fan is otherwise invisible (game session, 18.10.2026). Hit-testable by nothing:
+    /// a glow that took a touch would take it from the table and from MapTool underneath.
+    /// </summary>
+    private readonly Border _band = new()
+    {
+        Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xD7, 0x00)),
+        BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0xD7, 0x00)),
+        IsHitTestVisible = false,
+        Opacity = 0,
+    };
+
+    private bool _glowing;
+
+    /// <summary>
     /// The progress rings, on a layer of their own above the stage. They belong to the ungoverned
     /// layer and not to the scene (Part 7), and here that separation earns its keep twice: the
     /// rings are rebuilt on every render while the pictures beneath them are kept, and a ring can
@@ -196,6 +211,11 @@ internal sealed class OverlayWindow : Window
         var root = new Grid { Background = null };
 
         root.Children.Add(_stage);
+
+        // Above every picture on the table, below the fan's cards and below whatever a hand holds,
+        // so the picture being let go is seen over the glow that says where it will go.
+        Panel.SetZIndex(_band, Parking.FanAbove - 1);
+        _stage.Children.Add(_band);
 
         // Above every picture and below the nameplate, and hit-testable by nothing: a ring that
         // swallowed a touch would take a finger away from the table it is pointing at.
@@ -580,7 +600,7 @@ internal sealed class OverlayWindow : Window
 
         foreach (var gone in _held.Keys.Where(id => scene.Items.All(item => item.ItemId != id)).ToList())
         {
-            _held.Remove(gone);
+            Unhold(gone);
         }
 
         // <b>A gesture that went into the fan is over once the scene says so</b>, whether or not
@@ -592,7 +612,7 @@ internal sealed class OverlayWindow : Window
             .Select(pair => pair.Key)
             .ToList())
         {
-            _held.Remove(settled);
+            Unhold(settled);
         }
 
         var (width, height) = Surface(context);
@@ -1007,6 +1027,53 @@ internal sealed class OverlayWindow : Window
             ? (fan.Card, theirs)
             : (item, mount);
 
+    /// <summary>A hand is gone from a picture: its hold ends, and with it maybe the glow.</summary>
+    private void Unhold(ItemId item)
+    {
+        _held.Remove(item);
+        Glow();
+    }
+
+    /// <summary>
+    /// Lights the fan's band while some hand holds a picture in it, and lets it fade when none does.
+    /// Placed when it comes on, from the same rectangle that decides parking (<see cref="Parking.Band"/>).
+    /// </summary>
+    private void Glow()
+    {
+        var on = _held.Values.Any(hold => hold.OnBand && !hold.Parked);
+
+        if (on == _glowing)
+        {
+            return;
+        }
+
+        _glowing = on;
+
+        if (on && _context is { } context)
+        {
+            var (width, height) = Surface(context);
+            var band = Parking.Band(context);
+
+            Canvas.SetLeft(_band, band.X * width);
+            Canvas.SetTop(_band, band.Y * height);
+            _band.Width = band.Width * width;
+            _band.Height = band.Height * height;
+
+            // The line on the side that faces the table: that is the edge a hand crosses.
+            _band.BorderThickness = context.ParkEdge switch
+            {
+                ParkEdge.Left => new Thickness(0, 0, 3, 0),
+                ParkEdge.Right => new Thickness(3, 0, 0, 0),
+                ParkEdge.Top => new Thickness(0, 0, 0, 3),
+                _ => new Thickness(0, 3, 0, 0),
+            };
+        }
+
+        _band.BeginAnimation(
+            OpacityProperty,
+            new DoubleAnimation(on ? 1 : 0, TimeSpan.FromMilliseconds(on ? 120 : 200)));
+    }
+
     /// <summary>Whether some hand is showing this card or carrying it out of the fan.</summary>
     private bool Shown(ItemId card) => _fans.Values.Any(fanning => fanning.Card == card);
 
@@ -1090,6 +1157,10 @@ internal sealed class OverlayWindow : Window
         hold.Turning = turning;
         hold.Moved += Math.Abs(delta.Translation.X) + Math.Abs(delta.Translation.Y);
 
+        // A glide has no hand: only a finger on the glass can be about to let go there.
+        hold.OnBand = !e.IsInertial && Parking.OnTheFan(Normalised(e.ManipulationOrigin, context), context);
+        Glow();
+
         Place(mount, moved, context);
         Report(item, grabbed: false, binding: false);
 
@@ -1154,7 +1225,7 @@ internal sealed class OverlayWindow : Window
         }
 
         hold.Parked = true;
-        _held.Remove(item);
+        Unhold(item);
 
         Parked?.Invoke(item, true);
         Settled?.Invoke();
@@ -1191,6 +1262,9 @@ internal sealed class OverlayWindow : Window
         var velocity = e.InitialVelocities.LinearVelocity;
 
         hold.Towards = CoreManipulation.Towards(velocity.X * 1000, velocity.Y * 1000, context);
+
+        hold.OnBand = false;
+        Glow();
 
         // <b>Both roads into the fan are read HERE, at the moment the hand left</b> - one by speed,
         // one by place. The place used to be read only after the glide had run itself out, so a
@@ -1276,7 +1350,7 @@ internal sealed class OverlayWindow : Window
             // Where a parked picture lies is the bar's business, and the bar is worked out at both
             // ends from the LIST. A binding transform here would be this gesture answering a
             // question it does not get to answer - and it would win, because it arrives second.
-            _held.Remove(item);
+            Unhold(item);
 
             // And drawn again, which is the half that was missing (hand-run of M3, step 18): the
             // hub's patch for the park usually arrives while the hand is still counted as holding,
@@ -1321,7 +1395,7 @@ internal sealed class OverlayWindow : Window
         // table taking the picture away at the exact moment it was put down.
         Report(item, grabbed: Overtaken(item), binding: true);
 
-        _held.Remove(item);
+        Unhold(item);
     }
 
     /// <summary>
@@ -1420,7 +1494,7 @@ internal sealed class OverlayWindow : Window
 
             Report(item, grabbed: false, binding: true);
 
-            _held.Remove(item);
+            Unhold(item);
             e.Handled = true;
 
             return;
@@ -1478,6 +1552,8 @@ internal sealed class OverlayWindow : Window
         hold.Item = moved;
         hold.Turning = turning;
         hold.Moved += Math.Abs(now.X - _mouseAt.X) + Math.Abs(now.Y - _mouseAt.Y);
+        hold.OnBand = Parking.OnTheFan(Normalised(now, context), context);
+        Glow();
         _mouseAt = now;
 
         Place(mount, moved, context);
@@ -1528,7 +1604,7 @@ internal sealed class OverlayWindow : Window
         Place(mount, hold.Item, context);
         Report(item, grabbed: false, binding: true);
 
-        _held.Remove(item);
+        Unhold(item);
         e.Handled = true;
     }
 
@@ -1594,7 +1670,7 @@ internal sealed class OverlayWindow : Window
         if (!Mouse.Captured?.Equals(mount.Element) ?? true)
         {
             // Nobody is dragging, so the hold existed only for this notch.
-            _held.Remove(item);
+            Unhold(item);
         }
 
         e.Handled = true;
@@ -2231,6 +2307,9 @@ internal sealed class OverlayWindow : Window
         /// </para>
         /// </summary>
         internal bool Parked { get; set; }
+
+        /// <summary>Whether the hand is on the fan's band right now - letting go would park.</summary>
+        internal bool OnBand { get; set; }
 
         internal long Began { get; } = Environment.TickCount64;
 
