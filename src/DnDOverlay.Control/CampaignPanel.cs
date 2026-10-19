@@ -74,7 +74,8 @@ internal sealed class CampaignPanel : Border
         Padding = new Thickness(8);
         Background = SystemColors.ControlBrush;
 
-        _picturesTab.IsChecked = true;
+        _picturesTab.IsChecked = placement?.Tab is not PanelTab.Scenes;
+        _scenesTab.IsChecked = placement?.Tab is PanelTab.Scenes;
         _picturesTab.Click += (_, _) => Show(pictures: true);
         _scenesTab.Click += (_, _) => Show(pictures: false);
 
@@ -175,6 +176,7 @@ internal sealed class CampaignPanel : Border
         _picturesTab.IsChecked = pictures;
         _scenesTab.IsChecked = !pictures;
         Arrange(_lying);
+        Keep();
         Apply();
     }
 
@@ -219,7 +221,7 @@ internal sealed class CampaignPanel : Border
         Apply();
     }
 
-    /// <summary>Sort and zoom are the DM's habits and kept across campaigns (Part 7).</summary>
+    /// <summary>Sort, zoom and the open tab are the DM's habits and kept across campaigns (Part 7).</summary>
     private void Keep() =>
         _settings.Update(current => current with
         {
@@ -228,6 +230,7 @@ internal sealed class CampaignPanel : Border
                 Sort = _sort,
                 PictureZoom = _pictureZoom,
                 SceneZoom = _sceneZoom,
+                Tab = PicturesOpen ? PanelTab.Pictures : PanelTab.Scenes,
             },
         });
 

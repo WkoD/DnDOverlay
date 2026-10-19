@@ -98,6 +98,27 @@ public sealed class ConfigurationFileTests : IDisposable
     }
 
     /// <summary>
+    /// The panel as the DM left it - side, size, order, both zoom steps and the open tab - comes
+    /// back after a restart (steps 40c, 40c1, 40f1). Every value away from its default, or a field
+    /// the file forgot would pass unnoticed.
+    /// </summary>
+    [Fact]
+    public void The_panel_comes_back_as_it_was_left()
+    {
+        var panel = new PanelPlacement(PanelSide.Bottom, 290, PanelSort.NameDescending, 96, 224, PanelTab.Scenes);
+
+        using (var file = Store(TimeProvider.System))
+        {
+            file.Save(new ControlConfiguration { Panel = panel });
+            file.Flush();
+        }
+
+        using var reopened = Store(TimeProvider.System);
+
+        Assert.Equal(panel, reopened.Load(() => new ControlConfiguration()).Value.Panel);
+    }
+
+    /// <summary>
     /// Twenty changes, one file. Without the debounce every keystroke in a settings field would
     /// be its own write - which is why the clock is handed in: this is a test, not a stopwatch.
     /// </summary>
