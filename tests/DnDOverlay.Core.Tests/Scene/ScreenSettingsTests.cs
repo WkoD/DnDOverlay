@@ -170,7 +170,7 @@ public sealed class ScreenSettingsTests
                 var current = typeof(ScreenContext).GetProperty(parameter.Name!)!.GetValue(context);
 
                 return string.Equals(parameter.Name, name, StringComparison.Ordinal)
-                    ? Different(current!)
+                    ? Different(current, parameter.ParameterType)
                     : current;
             })
             .ToArray();
@@ -178,9 +178,14 @@ public sealed class ScreenSettingsTests
         return (ScreenContext)constructor.Invoke(arguments);
     }
 
-    /// <summary>Any value of the same type that is not the one given.</summary>
-    private static object Different(object current) => current switch
+    /// <summary>
+    /// Any value of the same type that is not the one given. A parameter that is absent by default
+    /// - the diagnostic edge, which follows the park edge until somebody sets it - gets the first
+    /// value of its type.
+    /// </summary>
+    private static object Different(object? current, Type type) => current switch
     {
+        null when Nullable.GetUnderlyingType(type) is { IsEnum: true } inner => Enum.GetValues(inner).GetValue(0)!,
         double number => number + 7,
         int number => number + 90,
         bool value => !value,
@@ -188,7 +193,7 @@ public sealed class ScreenSettingsTests
             .Cast<Enum>()
             .First(candidate => !candidate.Equals(value)),
         _ => throw new NotSupportedException(
-            $"a screen parameter of type {current.GetType().Name} has no 'different' value here - "
+            $"a screen parameter of type {type.Name} has no 'different' value here - "
             + "add one, or this parameter is silently not being checked"),
     };
 
@@ -248,6 +253,7 @@ public sealed class ScreenSettingsTests
             ArrivalHighlightSeconds = 11,
             Inertia = false,
             ScrollUpZoomsIn = false,
+            DiagnosticEdge = ParkEdge.Left,
         };
 
         var written = ScreenSettings.Opinion(mine, "Tisch");

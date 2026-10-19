@@ -248,6 +248,18 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private volatile bool _diagnosing;
 
+    /// <summary>Who this device is connected to right now, for the bar - the beacon's name, or the host when it came by address.</summary>
+    private volatile string? _connectedTo;
+
+    /// <summary>The address this device reaches its control from, for the bar.</summary>
+    private volatile string? _ownAddress;
+
+    /// <summary>The round trip the control measured and sent with its last <c>Ping</c>; -1 before one (Part 4).</summary>
+    private long _roundTripMs = -1;
+
+    /// <summary>The name of the control the last search found, kept for the bar.</summary>
+    private string? _heardName;
+
     private long _peakBytes;
 
     /// <summary>
@@ -449,6 +461,9 @@ public sealed partial class App : Application, IDisposable
         // there. Whether anything is SENT is a question about the socket; whether the
         // collector is drained is not.
         _ = Task.Run(() => ReportTouchesAsync(_shutdown.Token), _shutdown.Token);
+
+        // The bar and the diagnostics stream, from one reading a second (Part 4, Part 6).
+        _ = Task.Run(() => MeasureAsync(_shutdown.Token), _shutdown.Token);
 
         // Said once, at the start: without it there is no way to tell whether forced software
         // rendering took - and that is how the first hand-run of 37a ended (checks/M3.md).
@@ -1029,6 +1044,27 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
+    /// The address of this machine on the way to the control - the one a human would compare, on a
+    /// machine with a dock, a Wi-Fi and a Hyper-V adapter (Part 4). Asked of the routing table by
+    /// "connecting" a datagram socket, which sends nothing.
+    /// </summary>
+    private static string? LocalAddressTowards(string host, int port)
+    {
+        try
+        {
+            using var probe = new System.Net.Sockets.Socket(System.Net.Sockets.SocketType.Dgram, System.Net.Sockets.ProtocolType.Udp);
+
+            probe.Connect(host, port);
+
+            return (probe.LocalEndPoint as System.Net.IPEndPoint)?.Address.ToString();
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// One search for a control: this device's own, or - while its takeover window is open - one
     /// calling for orphaned displays (Part 4).
     /// </summary>
@@ -1038,6 +1074,7 @@ public sealed partial class App : Application, IDisposable
         var sighting = await discovery.ListenAsync(bound, _ => _takeover.IsOpen, listening).ConfigureAwait(false);
 
         _answeringFor = sighting is not null && bound is { } own && sighting.Beacon.ControlId != own ? own : null;
+        _heardName = sighting?.Beacon.Name;
 
         return sighting;
     }
@@ -1050,7 +1087,9 @@ public sealed partial class App : Application, IDisposable
         string deviceName)
     {
         var answeringFor = _answeringFor;
+        var heardName = _heardName;
         _answeringFor = null;
+        _heardName = null;
         _diagnosing = false;
 
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
@@ -1120,8 +1159,6 @@ public sealed partial class App : Application, IDisposable
             // connection.
             reporting = Task.Run(() => ReportProgressAsync(queues, connected.Token));
 
-            // And so does the diagnostics stream: it ends with the connection by itself (Part 4).
-            _ = Task.Run(() => DiagnoseAsync(queues, connected.Token));
         }
 
         var pump = Task.Run(() => client.RunAsync(
@@ -1153,8 +1190,16 @@ public sealed partial class App : Application, IDisposable
             // Repeating it costs nothing - the lock only acts when the answer changes.
             _wake!.Connected = true;
 
+            if (message is PingMessage { RoundTripMs: { } measured })
+            {
+                Volatile.Write(ref _roundTripMs, measured);
+            }
+
             if (message is WelcomeMessage)
             {
+                _connectedTo = heardName is null ? target.Host : string.Create(CultureInfo.InvariantCulture, $"{heardName} ({target.Host})");
+                _ownAddress = LocalAddressTowards(target.Host, target.Port);
+
                 // Accepted, at its own control or at the caller's - which is then its own from
                 // here on. Either way the window shuts, and the search for the old one has
                 // nothing left to win.
@@ -1171,6 +1216,9 @@ public sealed partial class App : Application, IDisposable
         {
             _takeover.Lost();
         }
+
+        _connectedTo = null;
+        Volatile.Write(ref _roundTripMs, -1);
 
         // Let go on the way out, not on the way back in: from here the screens may go dark, which
         // is the right answer for a table nobody is playing on any more.
@@ -2186,16 +2234,18 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
-    /// Sends what is being loaded, two to four times a second and <b>only while something is</b>
-    /// (Part 4). It runs for as long as the connection does: the readings travel in the progress
-    /// queue, so a slow socket overwrites them rather than queueing them up.
+    /// One reading a second, for whoever wants it: the diagnostic bar of every screen in
+    /// <c>Diagnostic</c>, and the control while it asks for the stream (Part 4, Part 6). One loop
+    /// for both, and that is the promise rather than a saving - <b>one source, several
+    /// renderings</b>: two readers taking turns at the counter would each get half a CPU baseline,
+    /// and the bar and the tile's view would disagree by exactly that.
+    /// <para>
+    /// For the length of the process, not of a connection: the bar is about this device and runs
+    /// whether or not a control is there - it is most needed when one is not. Nothing is measured
+    /// while nobody looks.
+    /// </para>
     /// </summary>
-    /// <summary>
-    /// The diagnostics stream: one reading a second while the control asks for it, nothing
-    /// otherwise. Transient on the wire - when the socket is slow the queue keeps the newest and
-    /// drops the rest, which is right for numbers that describe only the present (Part 4).
-    /// </summary>
-    private async Task DiagnoseAsync(SendQueues outbox, CancellationToken cancellationToken)
+    private async Task MeasureAsync(CancellationToken cancellationToken)
     {
         using var tick = new PeriodicTimer(DiagnosticsInterval);
 
@@ -2203,7 +2253,10 @@ public sealed partial class App : Application, IDisposable
         {
             while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                if (!_diagnosing)
+                var showing = await Dispatcher.InvokeAsync(
+                    () => _windows.Values.Any(window => window.State == ScreenState.Diagnostic));
+
+                if (!showing && !_diagnosing)
                 {
                     continue;
                 }
@@ -2220,7 +2273,7 @@ public sealed partial class App : Application, IDisposable
                     committed = me.PrivateMemorySize64;
                 }
 
-                _ = outbox.TrySend(new DiagnosticsMessage(new DiagnosticsReading(
+                var reading = new DiagnosticsReading(
                     frames?.Frames ?? 0,
                     frames?.MedianMs,
                     frames?.P95Ms,
@@ -2231,15 +2284,98 @@ public sealed partial class App : Application, IDisposable
                     _cache.Count,
                     _cache.Bytes,
                     committed,
-                    _memoryCap)));
+                    _memoryCap,
+                    frames?.Stalls ?? 0);
+
+                if (_diagnosing)
+                {
+                    _ = _outbox?.TrySend(new DiagnosticsMessage(reading));
+                }
+
+                if (showing)
+                {
+                    var lines = Readout(reading, Power.Battery());
+
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        foreach (var (screen, window) in _windows)
+                        {
+                            var edge = _contexts.TryGetValue(screen, out var context)
+                                ? DiagnosticBar.EdgeOf(context)
+                                : ParkEdge.Left;
+
+                            window.Diagnose(lines, edge);
+                        }
+                    });
+                }
             }
         }
         catch (OperationCanceledException)
         {
-            // The connection is over, and the stream with it.
+            // The process is going away.
         }
     }
 
+    /// <summary>
+    /// What the bar says, in three groups: the connection, the machine, and what went wrong lately
+    /// (Part 6). Everything measured here - nothing of it is asked of the control.
+    /// <para>
+    /// The <b>stalls</b> stand beside the three frame numbers because those hide them: nine stops in
+    /// thirty seconds are half a percent, so median and 95th never move and the maximum shows only
+    /// the worst (hand-run of M3). The battery is a number among numbers here, with the lightning
+    /// sign when on the cable - the battery shape belongs to the control (Part 7).
+    /// </para>
+    /// </summary>
+    private List<string> Readout(DiagnosticsReading reading, BatteryInfo? battery)
+    {
+        var culture = CultureInfo.CurrentCulture;
+        var lines = new List<string>();
+
+        var who = $"{_deviceName} {_ownAddress ?? "?"} · {_device.Value.ToString()[..8]}";
+
+        lines.Add(_connectedTo is { } control
+            ? string.Format(culture, "Connected to {0} · {1} ms · this device {2}", control, Volatile.Read(ref _roundTripMs) is var ms and >= 0 ? ms.ToString(culture) : "?", who)
+            : string.Format(culture, "No control · this device {0}", who));
+
+        var frames = reading.MedianMs is { } median
+            ? string.Format(culture, "Frames {0:0.0} / {1:0.0} / {2:0.0} ms ({3}) · {4} stalls", median, reading.P95Ms, reading.MaxMs, reading.Frames, reading.Stalls)
+            : "Frames: too few to say";
+
+        var power = battery is { } charge
+            ? string.Format(culture, " · battery {0} %{1}", charge.Percent, charge.PluggedIn ? " ⚡" : string.Empty)
+            : string.Empty;
+
+        lines.Add(string.Format(
+            culture,
+            "{0} · CPU {1:0.0} % · loading {2}, waiting {3} · store {4} pictures, {5} MB · memory {6} / {7} MB{8}",
+            frames,
+            reading.CpuPercent,
+            reading.Downloading,
+            reading.Waiting,
+            reading.CachedPictures,
+            reading.CacheBytes / (1024 * 1024),
+            reading.MemoryBytes / (1024 * 1024),
+            reading.MemoryCapBytes / (1024 * 1024),
+            power));
+
+        // The last three warnings and errors from the ring. Information would bury them: the
+        // frame line alone comes every thirty seconds.
+        if (_log is not null)
+        {
+            foreach (var record in _log.Ring.Recent(64).Where(entry => entry.Level >= LogLevel.Warning).TakeLast(3))
+            {
+                lines.Add(string.Format(culture, "{0:HH:mm} {1}", record.At, LogCatalog.Render(record, culture)));
+            }
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// Sends what is being loaded, two to four times a second and <b>only while something is</b>
+    /// (Part 4). It runs for as long as the connection does: the readings travel in the progress
+    /// queue, so a slow socket overwrites them rather than queueing them up.
+    /// </summary>
     private async Task ReportProgressAsync(SendQueues outbox, CancellationToken cancellationToken)
     {
         using var tick = new PeriodicTimer(ProgressInterval);

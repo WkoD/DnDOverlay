@@ -251,4 +251,42 @@ public sealed class FrameTimesTests
         // two together, so a quiet window must answer no to both.
         Assert.True(reading.Missed || !reading.OnlyStopped);
     }
+
+    /// <summary>
+    /// Nine stops in thirty seconds are half a percent of the frames: the median and the 95th
+    /// percentile do not move, the maximum shows only the worst. The count is what says there were
+    /// nine (hand-run of M3, third Pro 4 run).
+    /// </summary>
+    [Fact]
+    public void Stops_the_three_numbers_hide_are_counted()
+    {
+        var times = new FrameTimes();
+        var at = 0L;
+
+        for (var frame = 0; frame < 1800; frame++)
+        {
+            var frameMs = frame % 200 == 100 ? 250 : 16.7;
+
+            at += (long)frameMs;
+            times.Add(at, frameMs);
+        }
+
+        var reading = times.Read(at);
+
+        Assert.NotNull(reading);
+        Assert.Equal(16.7, reading.Value.MedianMs, precision: 6);
+        Assert.Equal(16.7, reading.Value.P95Ms, precision: 6);
+        Assert.Equal(9, reading.Value.Stalls);
+    }
+
+    /// <summary>Exactly a tenth of a second is still a slow frame; only above it is a stop.</summary>
+    [Fact]
+    public void A_frame_of_exactly_a_tenth_is_not_a_stop()
+    {
+        var times = Steady(16.7, 300);
+
+        times.Add(5100, FrameReading.StallMs);
+
+        Assert.Equal(0, times.Read(5100)!.Value.Stalls);
+    }
 }

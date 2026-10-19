@@ -151,6 +151,7 @@ behind your back.
 | `placement` | `Flow` | where a new picture goes: `Flow` fills free places side by side and wraps, `Cascade` stacks with a growing offset from the centre |
 | `defaultRotationDeg` | `0` | the angle a picture arrives at — for a table people sit around |
 | `parkEdge` | `Right` | which edge a parked picture waits at |
+| `diagnosticEdge` | opposite the park edge | where the diagnostic bar lies — never on the park edge; moving the park edge onto it pushes it across |
 
 Every display keeps its own copy of the pictures it has shown, up to **4 GiB** — so moving a
 picture from one screen to another, hiding it and bringing it back, or putting the same map up

@@ -47,7 +47,8 @@ public sealed record FrameWindow(
 /// </summary>
 /// <param name="Frames">How many frames the numbers are made of; zero while there are too few.</param>
 /// <param name="CpuPercent">The process's share of the machine since the previous call.</param>
-public sealed record FrameMoment(int Frames, double? MedianMs, double? P95Ms, double? MaxMs, double CpuPercent);
+/// <param name="Stalls">Frames over a tenth of a second in the same window - see <see cref="FrameReading.Stalls"/>.</param>
+public sealed record FrameMoment(int Frames, double? MedianMs, double? P95Ms, double? MaxMs, double CpuPercent, int Stalls);
 
 /// <summary>
 /// Counts the frames a process actually draws and says what they came to.
@@ -292,7 +293,8 @@ public sealed class FrameWatch : IDisposable
             reading is { } median ? Round(median.MedianMs) : null,
             reading is { } p95 ? Round(p95.P95Ms) : null,
             reading is { } max ? Round(max.MaxMs) : null,
-            Round(_momentCpu.Read()));
+            Round(_momentCpu.Read()),
+            reading?.Stalls ?? 0);
     }
 
     public void Dispose()

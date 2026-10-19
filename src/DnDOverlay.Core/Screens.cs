@@ -194,7 +194,8 @@ public sealed record ScreenSettings(
     double? RotationSnapToleranceDeg = null,
     double? ArrivalHighlightSeconds = null,
     bool? Inertia = null,
-    bool? ScrollUpZoomsIn = null)
+    bool? ScrollUpZoomsIn = null,
+    ParkEdge? DiagnosticEdge = null)
 {
     /// <summary>Nothing changed - the answer when a diff finds no difference.</summary>
     public static readonly ScreenSettings None = new();
@@ -224,7 +225,8 @@ public sealed record ScreenSettings(
         && RotationSnapToleranceDeg is null
         && ArrivalHighlightSeconds is null
         && Inertia is null
-        && ScrollUpZoomsIn is null;
+        && ScrollUpZoomsIn is null
+        && DiagnosticEdge is null;
 
     /// <summary>
     /// The full effective set of a screen, for the baseline in the <c>Hello</c>. Size and DPI are
@@ -250,7 +252,8 @@ public sealed record ScreenSettings(
             RotationSnapToleranceDeg: context.RotationSnapToleranceDeg,
             ArrivalHighlightSeconds: context.ArrivalHighlightSeconds,
             Inertia: context.Inertia,
-            ScrollUpZoomsIn: context.ScrollUpZoomsIn);
+            ScrollUpZoomsIn: context.ScrollUpZoomsIn,
+            DiagnosticEdge: context.DiagnosticEdge);
     }
 
     /// <summary>
@@ -302,6 +305,7 @@ public sealed record ScreenSettings(
             ArrivalHighlightSeconds = ArrivalHighlightSeconds ?? context.ArrivalHighlightSeconds,
             Inertia = Inertia ?? context.Inertia,
             ScrollUpZoomsIn = ScrollUpZoomsIn ?? context.ScrollUpZoomsIn,
+            DiagnosticEdge = DiagnosticEdge ?? context.DiagnosticEdge,
         };
     }
 
@@ -336,7 +340,8 @@ public sealed record ScreenSettings(
             RotationSnapToleranceDeg: newer.RotationSnapToleranceDeg ?? older.RotationSnapToleranceDeg,
             ArrivalHighlightSeconds: newer.ArrivalHighlightSeconds ?? older.ArrivalHighlightSeconds,
             Inertia: newer.Inertia ?? older.Inertia,
-            ScrollUpZoomsIn: newer.ScrollUpZoomsIn ?? older.ScrollUpZoomsIn);
+            ScrollUpZoomsIn: newer.ScrollUpZoomsIn ?? older.ScrollUpZoomsIn,
+            DiagnosticEdge: newer.DiagnosticEdge ?? older.DiagnosticEdge);
     }
 
     /// <summary>
@@ -376,7 +381,8 @@ public sealed record ScreenSettings(
             Inertia: before.Inertia == after.Inertia ? null : after.Inertia,
             ScrollUpZoomsIn: before.ScrollUpZoomsIn == after.ScrollUpZoomsIn
                 ? null
-                : after.ScrollUpZoomsIn);
+                : after.ScrollUpZoomsIn,
+            DiagnosticEdge: before.DiagnosticEdge == after.DiagnosticEdge ? null : after.DiagnosticEdge);
     }
 }
 
@@ -399,14 +405,31 @@ public sealed record ScreenSettings(
 /// Whether the device holds its screens on while it is connected. On by default, and switchable
 /// from afar because the one machine it matters on is the one nobody is sitting at (Part 6).
 /// </param>
+/// <param name="RescueAfterSeconds">
+/// How long without a control before the rescue mark appears, and before this device would answer
+/// a call for orphaned displays - one clock for both (Part 4, Part 6). A minute by default: the
+/// grace of a tool, not of a handover.
+/// </param>
 public sealed record DeviceSettings(
     LogLevel? Level = null,
     LogLevel? ForwardAtLeast = null,
-    bool? KeepAwake = null)
+    bool? KeepAwake = null,
+    int? RescueAfterSeconds = null)
 {
+    /// <summary>The rescue mark's grace when nobody set one (Part 6).</summary>
+    public static readonly TimeSpan DefaultRescueAfter = TimeSpan.FromMinutes(1);
+
     /// <summary>Whether this delta says anything at all. Not serialised - see ScreenSettings.</summary>
     [JsonIgnore]
-    public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null;
+    public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null && RescueAfterSeconds is null;
+
+    /// <summary>
+    /// The grace this delta sets, or the default. Ten seconds at the least: below that every Wi-Fi
+    /// hiccup would put the mark up, and with it the answer to a call.
+    /// </summary>
+    [JsonIgnore]
+    public TimeSpan RescueAfter =>
+        RescueAfterSeconds is { } seconds ? TimeSpan.FromSeconds(Math.Max(10, seconds)) : DefaultRescueAfter;
 
     /// <summary>
     /// Two deltas laid over one another, the newer winning field by field.
@@ -424,7 +447,8 @@ public sealed record DeviceSettings(
         return new DeviceSettings(
             newer.Level ?? older.Level,
             newer.ForwardAtLeast ?? older.ForwardAtLeast,
-            newer.KeepAwake ?? older.KeepAwake);
+            newer.KeepAwake ?? older.KeepAwake,
+            newer.RescueAfterSeconds ?? older.RescueAfterSeconds);
     }
 }
 
@@ -626,7 +650,14 @@ public sealed record ScreenContext(
     /// Wheel up makes a picture larger. Java had it the other way round, which is the one thing
     /// about a wheel that everybody has an opinion on (Part 6).
     /// </summary>
-    bool ScrollUpZoomsIn)
+    bool ScrollUpZoomsIn,
+
+    /// <summary>
+    /// Where the diagnostic bar lies, or <see langword="null"/> to follow the park edge from the
+    /// opposite side - the default (Part 6). Never the park edge itself: <see cref="DiagnosticBar.EdgeOf"/>
+    /// moves it away, so a bar can never lie on the fan.
+    /// </summary>
+    ParkEdge? DiagnosticEdge = null)
 {
     /// <summary>The screen height in DIP - the unit <see cref="MinVisiblePixels"/> is given in.</summary>
     public double HeightInDip => Dpi <= 0 ? Size.Height : Size.Height * 96d / Dpi;

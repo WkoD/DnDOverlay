@@ -151,6 +151,15 @@ internal sealed class OverlayWindow : Window
     private readonly DispatcherTimer _naming;
 
     /// <summary>
+    /// The diagnostic bar (Part 6): over the pictures, under nothing that takes a touch, and
+    /// hit-testable by nothing - a tap on it reaches the picture beneath (step 37d).
+    /// </summary>
+    private readonly Border _diagnostics;
+    private readonly TextBlock _readout;
+    private ParkEdge _diagnosticEdge = ParkEdge.Left;
+    private ScreenState _state = ScreenState.Enabled;
+
+    /// <summary>
     /// Every touch this window has seen go down and not come up, by the identity it is reported
     /// under. It is the second source the touch events cannot give: whether the system still knows
     /// the finger.
@@ -198,6 +207,25 @@ internal sealed class OverlayWindow : Window
             IsHitTestVisible = false,
         };
 
+        _readout = new TextBlock
+        {
+            // Read standing at the table's edge, two metres away: no small print and nothing to
+            // operate (Part 6). Monospaced digits keep the numbers from jittering every second.
+            FontSize = 22,
+            Foreground = Brushes.White,
+            TextWrapping = TextWrapping.Wrap,
+            Typography = { NumeralAlignment = FontNumeralAlignment.Tabular },
+        };
+
+        _diagnostics = new Border
+        {
+            Child = _readout,
+            Background = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0)),
+            Padding = new Thickness(16, 8, 16, 8),
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+        };
+
         _naming = new DispatcherTimer { Interval = ShowNameFor };
         _naming.Tick += (_, _) => Hide(_nameplate);
 
@@ -220,6 +248,7 @@ internal sealed class OverlayWindow : Window
         // Above every picture and below the nameplate, and hit-testable by nothing: a ring that
         // swallowed a touch would take a finger away from the table it is pointing at.
         root.Children.Add(_pointing);
+        root.Children.Add(_diagnostics);
         root.Children.Add(_nameplate);
 
         Title = monitor.Screen.Label;
@@ -266,6 +295,9 @@ internal sealed class OverlayWindow : Window
             // stretching that nothing in the log could explain (37c3). One line, and the next run
             // says which of the two is wrong.
             Surveyed?.Invoke(_stage.ActualWidth, _stage.ActualHeight, _monitor);
+
+            // The bar keeps a tenth of the edge from each corner, so its margins follow the size.
+            PlaceDiagnostics();
 
             SurfaceChanged?.Invoke();
         };
@@ -371,7 +403,73 @@ internal sealed class OverlayWindow : Window
     /// touch gets the same short answer a locked picture gives - a player must not have to guess
     /// which of the two it was (Part 6).
     /// </summary>
-    internal ScreenState State { get; set; } = ScreenState.Enabled;
+    internal ScreenState State
+    {
+        get => _state;
+        set
+        {
+            _state = value;
+
+            // Back to Enabled and the bar is gone at once, nothing else changes (step 37d). It
+            // comes up on the next reading, within a second, when the state is Diagnostic.
+            if (value != ScreenState.Diagnostic)
+            {
+                Diagnose(null, _diagnosticEdge);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows the diagnostic bar with these lines on this edge, or hides it with <see langword="null"/>.
+    /// The edge comes from <see cref="DiagnosticBar.EdgeOf"/>, which never answers with the park edge.
+    /// </summary>
+    internal void Diagnose(IReadOnlyList<string>? lines, ParkEdge edge)
+    {
+        if (lines is null || _state != ScreenState.Diagnostic)
+        {
+            _diagnostics.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _readout.Text = string.Join(Environment.NewLine, lines);
+
+        if (edge != _diagnosticEdge || _diagnostics.Visibility != Visibility.Visible)
+        {
+            _diagnosticEdge = edge;
+            _diagnostics.Visibility = Visibility.Visible;
+            PlaceDiagnostics();
+        }
+    }
+
+    /// <summary>
+    /// Lays the bar along its edge, a tenth of the edge away from each corner - the corners belong to
+    /// Windows and to the rescue mark (Part 6). On a side edge it is turned so the text runs along it.
+    /// </summary>
+    private void PlaceDiagnostics()
+    {
+        var width = _stage.ActualWidth;
+        var height = _stage.ActualHeight;
+        var across = width * DiagnosticBar.CornerShare;
+        var down = height * DiagnosticBar.CornerShare;
+
+        switch (_diagnosticEdge)
+        {
+            case ParkEdge.Top:
+            case ParkEdge.Bottom:
+                _diagnostics.LayoutTransform = Transform.Identity;
+                _diagnostics.HorizontalAlignment = HorizontalAlignment.Stretch;
+                _diagnostics.VerticalAlignment = _diagnosticEdge == ParkEdge.Top ? VerticalAlignment.Top : VerticalAlignment.Bottom;
+                _diagnostics.Margin = new Thickness(across, 0, across, 0);
+                break;
+
+            default:
+                _diagnostics.LayoutTransform = new RotateTransform(_diagnosticEdge == ParkEdge.Left ? 90 : -90);
+                _diagnostics.HorizontalAlignment = _diagnosticEdge == ParkEdge.Left ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+                _diagnostics.VerticalAlignment = VerticalAlignment.Stretch;
+                _diagnostics.Margin = new Thickness(0, down, 0, down);
+                break;
+        }
+    }
 
     /// <summary>
     /// Whether a hand is on something here. The load path asks it before every picture: while

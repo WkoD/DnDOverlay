@@ -75,8 +75,18 @@ The control puts the halves together in `ScreenView`: the full `ScreenRef`, the 
 | `Disabled` | As `Enabled`, but the screen takes no gestures — "frozen" |
 | `Inactive` | The screen exists in Windows, and DnDOverlay deliberately puts no window on it |
 
-The four states are stored in `control.json` and nowhere else; `display.json` holds none. The bar
-of `Diagnostic` is built with M5a; the value exists already.
+The four states are stored in `control.json` and nowhere else; `display.json` holds none.
+
+**`Diagnostic` puts a bar over the pictures** that stays while the table is played, because whoever
+wants to know why the table is sluggish needs the numbers while the load is on. It takes no touch:
+a tap on it reaches the picture beneath. It lies on an edge of its own, set per screen and **never
+the park edge** — unset, it lies opposite the fan, and a park edge moved onto it pushes it across;
+it keeps a tenth of the edge from each corner, like the fan, because the corners belong to Windows
+and to the rescue mark. What it shows is measured at the device, once a second: the connection and
+its round trip, this device's name, address and identifier, the frame times of the last thirty
+seconds with the stalls over a tenth of a second that those numbers hide, CPU share, pictures
+loading and waiting, the store and the committed memory against its cap, the battery, and the last
+three warnings. It is the same reading the control's diagnostic view receives.
 
 **There is no blackout.** A fifth state, a black curtain over everything, was planned and struck
 before it was built: `Inactive` takes the overlay away, and that was what was wanted of it. Its

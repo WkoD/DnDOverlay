@@ -11,13 +11,25 @@ namespace DnDOverlay.Core;
 /// refresh, so the quickest ticks in a window ARE the hardware's cadence. Reading it from the
 /// driver would be a second source that can disagree with the frames actually drawn.
 /// </param>
+/// <param name="Stalls">
+/// How many frames of the window took longer than <see cref="StallMs"/>. The three numbers hide them:
+/// nine stalls in thirty seconds are half a percent, so the median and the 95th percentile never
+/// move, and the maximum shows only the worst of them (hand-run of M3, third Pro 4 run).
+/// </param>
 public readonly record struct FrameReading(
     double MedianMs,
     double P95Ms,
     double MaxMs,
     double CadenceMs,
-    int Frames)
+    int Frames,
+    int Stalls = 0)
 {
+    /// <summary>
+    /// A frame that long is a stop, not a slow frame - a tenth of a second is where a movement under
+    /// the finger stops being a movement (the same flat line the maximum is judged against).
+    /// </summary>
+    public const double StallMs = 100;
+
     /// <summary>
     /// What the median has to stay under: the screen's frame interval plus a millisecond (M0,
     /// step 7).
@@ -170,7 +182,8 @@ public sealed class FrameTimes
             P95Ms: At(sorted, 0.95),
             MaxMs: sorted[^1],
             CadenceMs: At(sorted, 0.05),
-            Frames: sorted.Count);
+            Frames: sorted.Count,
+            Stalls: sorted.Count(frame => frame > FrameReading.StallMs));
     }
 
     /// <summary>Drops everything older than the window - the queue is in time order by construction.</summary>

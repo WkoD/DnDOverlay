@@ -49,6 +49,7 @@ public sealed record DiagnosticsMessage(DiagnosticsReading Reading) : ProtocolMe
 /// <param name="CacheBytes">What the store on disk occupies.</param>
 /// <param name="MemoryBytes">Committed memory of the process - the number the memory cap is held against.</param>
 /// <param name="MemoryCapBytes">The cap itself, so the number above can be read (Part 6).</param>
+/// <param name="Stalls">Frames over a tenth of a second in the same thirty seconds - see <see cref="FrameReading.Stalls"/>.</param>
 public sealed record DiagnosticsReading(
     int Frames,
     double? MedianMs,
@@ -60,4 +61,5 @@ public sealed record DiagnosticsReading(
     int CachedPictures,
     long CacheBytes,
     long MemoryBytes,
-    long MemoryCapBytes);
+    long MemoryCapBytes,
+    int Stalls = 0);
