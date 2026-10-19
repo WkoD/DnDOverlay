@@ -8,8 +8,8 @@ namespace DnDOverlay.Control;
 /// on it (Part 7).
 /// <para>
 /// <b>A strip with one button rather than a button with a strip</b>, and that is the decision in
-/// it. Part 7 puts the view switch into the head of the campaign panel, beside undo and the
-/// blackout, and gives the reason: that head is the one place that stays visible whatever tab is
+/// it. Part 7 puts the view switch into the head of the campaign panel, beside undo, and gives
+/// the reason: that head is the one place that stays visible whatever tab is
 /// open and however far the panel is retracted. The panel itself is M5b - but the property that
 /// earns the place is already true of the strip, so the strip is built now and filled later.
 /// </para>

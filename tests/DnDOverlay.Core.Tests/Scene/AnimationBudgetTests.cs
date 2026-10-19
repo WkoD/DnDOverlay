@@ -174,8 +174,8 @@ public sealed class AnimationBudgetTests
     }
 
     /// <summary>
-    /// Blackout stops the timers (Part 6). It is expressed as a ceiling of zero rather than as a
-    /// case of its own - the caller says how much may run, and none is a number.
+    /// A ceiling of zero is a ceiling like any other - the caller says how much may run, and none
+    /// is a number, not a case of its own.
     /// </summary>
     [Fact]
     public void A_ceiling_of_nothing_runs_nothing()

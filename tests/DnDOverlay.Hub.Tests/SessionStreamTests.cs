@@ -206,11 +206,11 @@ public sealed class SessionStreamTests
 
         await using var stream = await ListenAsync(session);
 
-        await session.SetScreenStateAsync(new ScreenRef(Device, Screen), ScreenState.Blackout, TestContext.Current.CancellationToken);
+        await session.SetScreenStateAsync(new ScreenRef(Device, Screen), ScreenState.Disabled, TestContext.Current.CancellationToken);
 
         var change = await NextAsync<SessionEvent.DevicesChanged>(stream);
 
-        Assert.Equal(ScreenState.Blackout, change.Devices.Single().Screens.Single().State);
+        Assert.Equal(ScreenState.Disabled, change.Devices.Single().Screens.Single().State);
     }
 
     /// <summary>

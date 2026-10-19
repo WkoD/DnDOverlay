@@ -90,13 +90,13 @@ public sealed class ScreenInventoryTests
         var target = new ScreenRef(Device, Screen);
 
         catalog.Report(Device, [Info(Screen)], reported: null);
-        catalog.SetState(target, ScreenState.Blackout);
+        catalog.SetState(target, ScreenState.Disabled);
         catalog.Change(target, new ScreenSettings(ParkEdge: ParkEdge.Top));
 
         catalog.Report(Device, [], reported: null);
 
         Assert.Contains(target, catalog.Known);
-        Assert.Equal(ScreenState.Blackout, catalog.ViewOf(target)!.State);
+        Assert.Equal(ScreenState.Disabled, catalog.ViewOf(target)!.State);
         Assert.Equal(ParkEdge.Top, catalog.ContextFor(target).ParkEdge);
     }
 
@@ -114,10 +114,10 @@ public sealed class ScreenInventoryTests
         catalog.Report(Device, [Info(Screen)], reported: null);
         catalog.Report(Twin, [Info(Screen)], reported: null);
 
-        catalog.SetState(mine, ScreenState.Blackout);
+        catalog.SetState(mine, ScreenState.Disabled);
         catalog.Change(theirs, new ScreenSettings(ParkEdge: ParkEdge.Left));
 
-        Assert.Equal(ScreenState.Blackout, catalog.ViewOf(mine)!.State);
+        Assert.Equal(ScreenState.Disabled, catalog.ViewOf(mine)!.State);
         Assert.Equal(ScreenState.Enabled, catalog.ViewOf(theirs)!.State);
         Assert.Equal(ParkEdge.Right, catalog.ContextFor(mine).ParkEdge);
         Assert.Equal(ParkEdge.Left, catalog.ContextFor(theirs).ParkEdge);

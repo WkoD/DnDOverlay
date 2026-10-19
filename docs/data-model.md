@@ -66,18 +66,23 @@ eventually; an architecture test keeps `ScreenInfo` free of one.
 The control puts the halves together in `ScreenView`: the full `ScreenRef`, the reported
 `ScreenInfo`, the wished `ScreenState`, and whatever is in the way right now.
 
-### Five states, all of them wishes
+### Four states, all of them wishes
 
 | `ScreenState` | What holds |
 |---|---|
 | `Enabled` | An overlay window lies on the screen, gestures work |
 | `Diagnostic` | As `Enabled`, plus diagnostic data over the pictures |
 | `Disabled` | As `Enabled`, but the screen takes no gestures — "frozen" |
-| `Blackout` | A black curtain over everything, no input |
 | `Inactive` | The screen exists in Windows, and DnDOverlay deliberately puts no window on it |
 
-The five states are stored in `control.json` and nowhere else; `display.json` holds none. The
-curtain of `Blackout` and the bar of `Diagnostic` are built with M5a; the values exist already.
+The four states are stored in `control.json` and nowhere else; `display.json` holds none. The bar
+of `Diagnostic` is built with M5a; the value exists already.
+
+**There is no blackout.** A fifth state, a black curtain over everything, was planned and struck
+before it was built: `Inactive` takes the overlay away, and that was what was wanted of it. Its
+number is retired and never given out again, and a file or a message that still says `Blackout`
+is read as `Inactive` (`ScreenStateJson`) — the scaffold used to offer it, so it can stand in a
+`control.json` in use, and a file that does not read is set aside as damaged.
 
 **`Disabled` freezes the table** — "hold on, don't touch anything". Everything that starts at the
 table is refused; from the control everything works as before, the same split as the lock on a
@@ -151,8 +156,7 @@ starting points, that is the wanted behaviour.
 | `ItemsVisible`, `BackgroundVisible` | the two layer switches, independent in all four combinations |
 | `FocusItems` | reserved; focus arrives with M5b |
 
-The screen state is not part of the scene — `Blackout` is a state of the screen, not of what lies
-on it.
+The screen state is not part of the scene: it belongs to the screen, not to what lies on it.
 
 ### Items
 

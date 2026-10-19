@@ -227,7 +227,7 @@ work.
 | | What it is | Who owns it | Where it lives |
 |---|---|---|---|
 | **Facts** — size, DPI, label | what the device reports | the device | `Hello` · `ScreensChanged` |
-| **Wish** — one of five states | what the DM asked for | the **control**, always | `control.json` |
+| **Wish** — one of four states | what the DM asked for | the **control**, always | `control.json` |
 | **Finding** — unavailable · control window · hidden at the device | what is in the way right now | derived, never stored | transient |
 | **Settings** — the display parameters | either side may set them | both, reconciled | `control.json` **and** `display.json` |
 

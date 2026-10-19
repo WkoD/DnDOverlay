@@ -106,9 +106,8 @@ public static class Manipulation
     /// exists cannot be the one that gets forgotten when it starts being filled.
     /// </para>
     /// <para>
-    /// The rescue marker is expressly not subject to this and lies above even a blackout (Part 6):
-    /// it is the way out of a table that has stopped answering, so the one condition it must not
-    /// have is "everything else works".
+    /// The rescue marker is expressly not subject to this (Part 6): it is the way out of a table that
+    /// has stopped answering, so the one condition it must not have is "everything else works".
     /// </para>
     /// </summary>
     public static bool AcceptsGestures(SceneState scene, SceneItem item, ScreenState state)
@@ -116,7 +115,7 @@ public static class Manipulation
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(item);
 
-        return state is not (ScreenState.Disabled or ScreenState.Blackout or ScreenState.Inactive)
+        return state is not (ScreenState.Disabled or ScreenState.Inactive)
             && scene.FocusItems.Count == 0
             && !item.Locked;
     }

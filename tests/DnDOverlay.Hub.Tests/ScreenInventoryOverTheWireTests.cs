@@ -111,12 +111,12 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
         var session = _app.Services.GetRequiredService<ISessionApi>();
         var target = new ScreenRef(Device, First);
 
-        await session.SetScreenStateAsync(target, ScreenState.Blackout, cancellationToken);
+        await session.SetScreenStateAsync(target, ScreenState.Disabled, cancellationToken);
 
         var update = await ReceiveAsync<ConfigUpdateMessage>(socket, cancellationToken);
         var screen = Assert.Single(update.Update.Screens);
 
-        Assert.Equal(ScreenState.Blackout, screen.Command!.State);
+        Assert.Equal(ScreenState.Disabled, screen.Command!.State);
 
         // And a finding travels next to it without touching the wish.
         await session.SuppressAsync(target, SuppressReason.ControlWindow, cancellationToken);
@@ -124,8 +124,8 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
         var suppressed = Assert.Single((await ReceiveAsync<ConfigUpdateMessage>(socket, cancellationToken)).Update.Screens);
 
         Assert.Equal(SuppressReason.ControlWindow, suppressed.Command!.Suppress);
-        Assert.Equal(ScreenState.Blackout, suppressed.Command.State);
-        Assert.Equal(ScreenState.Blackout, session.Screens.Single(view => view.Screen == target).State);
+        Assert.Equal(ScreenState.Disabled, suppressed.Command.State);
+        Assert.Equal(ScreenState.Disabled, session.Screens.Single(view => view.Screen == target).State);
     }
 
     /// <summary>
@@ -154,11 +154,11 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
 
         // What the bystander must NOT have got is proven without waiting for a silence: give it
         // something it definitely will get, and assert that this is the next thing to arrive.
-        await session.SetScreenStateAsync(new ScreenRef(Bystander, First), ScreenState.Blackout, cancellationToken);
+        await session.SetScreenStateAsync(new ScreenRef(Bystander, First), ScreenState.Disabled, cancellationToken);
 
         var next = await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
 
-        Assert.Equal(ScreenState.Blackout, Assert.Single(next.Update.Screens).Command!.State);
+        Assert.Equal(ScreenState.Disabled, Assert.Single(next.Update.Screens).Command!.State);
     }
 
     /// <summary>
@@ -190,11 +190,11 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
 
         // What the bystander must NOT have got is proven without waiting for a silence: give it
         // something it definitely will get, and assert that this is the next thing to arrive.
-        await session.SetScreenStateAsync(new ScreenRef(Bystander, First), ScreenState.Blackout, cancellationToken);
+        await session.SetScreenStateAsync(new ScreenRef(Bystander, First), ScreenState.Disabled, cancellationToken);
 
         var next = await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
 
-        Assert.Equal(ScreenState.Blackout, Assert.Single(next.Update.Screens).Command!.State);
+        Assert.Equal(ScreenState.Disabled, Assert.Single(next.Update.Screens).Command!.State);
     }
 
     /// <summary>

@@ -165,7 +165,8 @@ public sealed record BackgroundItem(
 
 /// <summary>
 /// The whole of one screen. The hub keeps one of these per <see cref="ScreenRef"/> - per screen,
-/// not per device - and blackout is deliberately not in here: it is a screen state (Part 3).
+/// not per device - and the screen's state is deliberately not in here: it belongs to the screen,
+/// not to what lies on it (Part 3).
 /// <para>
 /// Equality is structural over the collections. Records compare list members by reference, and
 /// half a dozen promises in Part 11 are phrased as "twice the same result" or "field-identical";

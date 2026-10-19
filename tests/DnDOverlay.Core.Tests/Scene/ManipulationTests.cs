@@ -591,7 +591,6 @@ public sealed class ManipulationTests
 
     [Theory]
     [InlineData(ScreenState.Disabled)]
-    [InlineData(ScreenState.Blackout)]
     [InlineData(ScreenState.Inactive)]
     public void A_screen_that_is_not_playing_takes_no_gesture(ScreenState state)
     {

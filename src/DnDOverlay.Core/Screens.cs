@@ -3,7 +3,8 @@ using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Core;
 
-/// <summary>The five states a screen can be in - all of them the DM's wish (Part 3).</summary>
+/// <summary>The four states a screen can be in - all of them the DM's wish (Part 3).</summary>
+[JsonConverter(typeof(ScreenStateJson))]
 public enum ScreenState
 {
     /// <summary>An overlay lies on the screen and gestures work.</summary>
@@ -15,11 +16,57 @@ public enum ScreenState
     /// <summary>Like <see cref="Enabled"/>, but the screen accepts no gestures - "frozen".</summary>
     Disabled = 2,
 
-    /// <summary>A black curtain over everything, no input.</summary>
-    Blackout = 3,
+    // 3 was Blackout - a black curtain over everything - and is retired: struck by the DM on
+    // 19.10.2026, because Inactive takes the overlay away and that is what was wanted of it. The
+    // number is never given out again (rule 7); ScreenStateJson reads the old name as Inactive.
 
     /// <summary>The screen exists in Windows and we deliberately put no window on it.</summary>
     Inactive = 4,
+}
+
+/// <summary>
+/// Reads and writes <see cref="ScreenState"/> by name, as the rest of both JSON contexts does - and
+/// reads the retired <c>Blackout</c> as <see cref="ScreenState.Inactive"/>.
+/// <para>
+/// <b>Why a converter of its own and not just the removed member:</b> until 19.10.2026 the
+/// control's scaffold offered every value of the enum, so a <c>control.json</c> in use can say
+/// <c>"Blackout"</c>. The string converter would refuse it, and a file that does not read is set
+/// aside as damaged - taking the paired devices and every screen wish with it, for a value that
+/// only ever meant "show nothing here". Inactive is what replaces it, so that is what it reads as.
+/// Its old number, 3, is read the same way.
+/// </para>
+/// </summary>
+public sealed class ScreenStateJson : JsonConverter<ScreenState>
+{
+    private const string Retired = "Blackout";
+
+    public override ScreenState Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+    {
+        if (reader.TokenType == System.Text.Json.JsonTokenType.Number && reader.TryGetInt32(out var number))
+        {
+            return number == 3 ? ScreenState.Inactive
+                : Enum.IsDefined((ScreenState)number) ? (ScreenState)number
+                : throw new System.Text.Json.JsonException($"No screen state {number}.");
+        }
+
+        var name = reader.GetString();
+
+        if (string.Equals(name, Retired, StringComparison.OrdinalIgnoreCase))
+        {
+            return ScreenState.Inactive;
+        }
+
+        return Enum.TryParse<ScreenState>(name, ignoreCase: true, out var state) && Enum.IsDefined(state)
+            ? state
+            : throw new System.Text.Json.JsonException($"No screen state '{name}'.");
+    }
+
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, ScreenState value, System.Text.Json.JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteStringValue(value.ToString());
+    }
 }
 
 /// <summary>Where parked images line up. Configurable per screen, because a table has no natural top edge.</summary>
