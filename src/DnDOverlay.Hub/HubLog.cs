@@ -477,4 +477,14 @@ internal static partial class HubLog
         Level = LogLevel.Information,
         Message = "Calling for orphaned displays for {Duration}.")]
     internal static partial void CallingOrphans(ILogger logger, TimeSpan duration);
+
+    /// <summary>
+    /// A device sends diagnostics readings faster than the ceiling allows; the rest are dropped.
+    /// Written once per connection, for the same reason as the touch ceiling (1053).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1057,
+        Level = LogLevel.Warning,
+        Message = "{DeviceName} is sending more than {Limit} diagnostics readings a second; the rest are refused.")]
+    internal static partial void DiagnosticsRateExceeded(ILogger logger, string deviceName, int limit);
 }

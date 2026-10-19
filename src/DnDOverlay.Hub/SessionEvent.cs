@@ -154,6 +154,28 @@ public abstract record SessionEvent
     /// two tables were connected (Part 4).
     /// </para>
     /// </summary>
+    /// <summary>
+    /// One device's diagnostics reading, on its way to the tile's diagnostic view (Part 7). Only
+    /// while somebody asked for it, and transient like the touch points: a reading that waited is
+    /// worthless.
+    /// </summary>
+    public sealed record Diagnostics(DeviceId Device, DiagnosticsReading Reading)
+        : SessionEvent, IReplacing<SessionEvent>
+    {
+        /// <inheritdoc />
+        public override SendClass SendClass => SendClass.Transient;
+
+        /// <summary>One slot per device: two tables have two independent readings.</summary>
+        public string Slot => string.Create(
+            System.Globalization.CultureInfo.InvariantCulture, $"diagnostics:{Device.Value}");
+
+        /// <summary>The newer reading says everything the older one did.</summary>
+        public SessionEvent Over(SessionEvent waiting, int gapMs) => this;
+
+        /// <summary>A reading carries no ages, so a wait moves nothing in it.</summary>
+        public SessionEvent? Sent(int waitedMs) => this;
+    }
+
     public sealed record TouchPoints(ScreenRef Screen, IReadOnlyList<TouchTrail> Touches)
         : SessionEvent, IReplacing<SessionEvent>
     {

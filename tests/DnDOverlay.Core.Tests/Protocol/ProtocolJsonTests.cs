@@ -106,6 +106,11 @@ public sealed class ProtocolJsonTests
         // Off-centre on both axes, because a point at 0.5, 0.5 survives a swapped pair of
         // coordinates as well (Guide C14).
         new SpotlightPulseMessage(Screen.Screen, 0.25, 0.75),
+        new DiagnosticsRequestMessage(On: true),
+        new DiagnosticsMessage(new DiagnosticsReading(1800, 16.7, 33.3, 98.2, 4.5, 2, 3, 31, 512L << 20, 418L << 20, 1L << 30)),
+
+        // Too few frames to say anything: the three numbers are absent rather than zero.
+        new DiagnosticsMessage(new DiagnosticsReading(0, null, null, null, 0, 0, 0, 0, 0, 0, 0)),
 
         // The five that had gone over real sockets in the seam tests and through no round trip of
         // their own - which is how they stayed off this list without anybody noticing.
@@ -183,6 +188,8 @@ public sealed class ProtocolJsonTests
     [InlineData("Ping")]
     [InlineData("Pong")]
     [InlineData("LogEntry")]
+    [InlineData("DiagnosticsRequest")]
+    [InlineData("Diagnostics")]
     public void The_wire_names_are_the_ones_the_plan_promises(string wireName)
     {
         var payloads = Messages

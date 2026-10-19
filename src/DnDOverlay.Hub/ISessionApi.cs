@@ -45,6 +45,17 @@ public interface ISessionApi
     Task CallOrphansAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Switches a device's diagnostics stream on or off - the reading behind a tile's diagnostic
+    /// view, about once a second (Part 4, Part 7). The wish is kept while the control runs and goes
+    /// out again when the device reconnects, so a view that stays open does not go blank after a
+    /// Wi-Fi hiccup; the device itself forgets it with every connection.
+    /// </summary>
+    Task RequestDiagnosticsAsync(DeviceId device, bool wanted, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether diagnostics are wanted from this device right now.</summary>
+    bool DiagnosticsRequested(DeviceId device);
+
+    /// <summary>
     /// Puts an image on a screen. Placement, the width cap and the <c>ZOrder</c> happen HERE,
     /// not in the caller: placement means reading the state and writing it in the same breath,
     /// and two callers doing it at once would lay two images in the same slot (Part 3).

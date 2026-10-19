@@ -215,6 +215,35 @@ public sealed class SessionStreamOverTheWireTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A diagnostics reading reaches a surface named by the CONNECTION, like the progress above, and
+    /// travels as transient: a subscriber that falls behind gets the newest and nothing stale
+    /// (Part 4).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_diagnostics_reading_reaches_a_surface_and_travels_as_transient()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var stream = await ListenAsync(cancellationToken);
+
+        using var socket = await ConnectAsync(Carrying, [Info(First)], cancellationToken);
+
+        var sent = new DiagnosticsReading(1800, 16.7, 33.3, 98.2, 4.5, 2, 3, 31, 512L << 20, 418L << 20, 1L << 30);
+
+        await socket.SendAsync(
+            ProtocolJson.Serialise(new DiagnosticsMessage(sent)),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            cancellationToken);
+
+        var reading = await NextAsync<SessionEvent.Diagnostics>(stream);
+
+        Assert.Equal(Carrying, reading.Device);
+        Assert.Equal(SendClass.Transient, reading.SendClass);
+        Assert.Equal(sent, reading.Reading);
+    }
+
+    /// <summary>
     /// The battery arrives on the heartbeat's answer and stands in the device tree - and goes with
     /// the connection, because a percentage remembered from before the socket closed would read as
     /// current and would not be (Part 4, Part 7).

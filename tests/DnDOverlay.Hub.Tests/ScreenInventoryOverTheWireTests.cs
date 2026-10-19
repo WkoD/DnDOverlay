@@ -198,6 +198,41 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The diagnostics stream is asked of the device it concerns, and asked again when that device
+    /// comes back: the device forgets the wish with its connection, the control keeps it, so a
+    /// diagnostic view that stays open does not go blank after a Wi-Fi hiccup (Part 4).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task Diagnostics_are_asked_of_the_device_and_asked_again_after_it_reconnects()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+        var connections = _app.Services.GetRequiredService<DisplayConnections>();
+
+        var first = await ConnectAsync(Asked, [Info(First)], cancellationToken);
+
+        await ReceiveAsync<ConfigUpdateMessage>(first, cancellationToken);
+        await session.RequestDiagnosticsAsync(Asked, wanted: true, cancellationToken);
+
+        Assert.True((await ReceiveAsync<DiagnosticsRequestMessage>(first, cancellationToken)).On);
+
+        first.Abort();
+        first.Dispose();
+
+        await WaitUntilAsync(() => !connections.TryGet(Asked, out _), cancellationToken);
+
+        using var again = await ConnectAsync(Asked, [Info(First)], cancellationToken);
+
+        Assert.True((await ReceiveAsync<DiagnosticsRequestMessage>(again, cancellationToken)).On);
+
+        // And off, which is just as much a statement and goes the same way.
+        await session.RequestDiagnosticsAsync(Asked, wanted: false, cancellationToken);
+
+        Assert.False((await ReceiveAsync<DiagnosticsRequestMessage>(again, cancellationToken)).On);
+        Assert.False(session.DiagnosticsRequested(Asked));
+    }
+
+    /// <summary>
     /// A device that is switched off is simply not asked. Unlike a setting - which is kept and goes
     /// out with the next connection - an identification is only ever worth anything now.
     /// </summary>

@@ -51,6 +51,8 @@ does not exist here, and the address is typed into a browser by a person standin
 | `ItemTransformed` | display → control | one item's new place, size and angle as an **intention**, with the revision the display had when the hand took hold, and whether this is the first report of the gesture |
 | `ItemParked` | display → control | a player put an item into the fan along the park edge, or took one back out of it |
 | `TouchPoints` | display → control | every finger on **one screen**, normalised: per touch an identity and the path it has taken since the last send, each point carrying its own age. An empty list says the last finger has lifted |
+| `DiagnosticsRequest` | control → display | on or off: whether the device sends its diagnostics stream |
+| `Diagnostics` | display → control | about once a second while asked for: frame time over thirty seconds (frames, median, 95th percentile, maximum), the process's CPU share, pictures loading and waiting, the store on disk, committed memory and its cap |
 
 `IdentifyScreens` carries no payload on purpose: the device knows its own screens and what each of
 them is called, and a list of names from the control would be a second copy that could disagree
@@ -76,6 +78,17 @@ The one thing the hub does hand out is the fan's **order** — a number per park
 card lies at the near end. It is a field of its own rather than the revision it happens to equal
 today, because a later change to a parked item would otherwise reshuffle the fan without anybody
 asking.
+
+**`Diagnostics` is requested, not sent.** Four devices with two screens each sending telemetry all
+evening would be rank-4 traffic without a reader, so the control switches it on while a tile of
+that device is on its diagnostic view and off again. It is **transient with a slot of one**, like
+the touch points: a frame time from a moment ago is worthless — which is also why it is not on the
+`Pong`, which is a sign of life and never dropped. The device forgets the request with every
+connection, so a stream never outlives its reader; the control keeps the wish while it runs and
+sends it again when the device comes back, so an open view does not go blank after a Wi-Fi hiccup.
+The frame numbers come from the same counter as the display's log line, rounded once at the
+counter, so the view cannot disagree with it. The hub takes ten readings a second per device and
+refuses the rest (1057).
 
 `Welcome` carries a **path**, never an absolute URL and never host and port. Those come from the
 socket the message arrived on. A remembered base URL is a trap: when the machine moves between
@@ -661,6 +674,7 @@ the same application that draws.
 | 1054 | `AnsweringOrphanCall` | Warning | transport |
 | 1055 | `CallingOrphans` | Information | hub |
 | 1056 | `OwnControlBack` | Information | display |
+| 1057 | `DiagnosticsRateExceeded` | Warning | hub |
 
 **1049 is the line that exists because its absence was the fault.** The loop that looks for a
 control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
@@ -689,12 +703,12 @@ ends and the ordinary reconnect puts the truth back. **The third case, a socket 
 write outright, gets no line here**: the receive side already reports the end, and two lines for
 one event would be noise exactly when the log is being read.
 
-**Next free: 1057.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**Next free: 1058.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041 with the call for
 orphaned displays at 1054–1056, the reconnect
 loop's backoff 1042 (written by `ConnectionLoop` in transport since M5a; the number stayed when
 the line moved), the send side 1043–1045 with its counterparts at 1051–1052, and log forwarding 1046–1047 with
-the touch rate beside it at 1053.
+the touch rate beside it at 1053 and the diagnostics rate at 1057.
 **1050 belongs to discovery without adjoining it** — a number is never moved to keep a range tidy,
 because the number is the contract and the tidiness is not.
 

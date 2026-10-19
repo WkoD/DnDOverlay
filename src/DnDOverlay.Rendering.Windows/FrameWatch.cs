@@ -41,6 +41,15 @@ public sealed record FrameWindow(
     string Missing);
 
 /// <summary>
+/// The frames of the last thirty seconds as they stand right now, rounded like
+/// <see cref="FrameWindow"/> - for the diagnostics stream, which asks about once a second rather
+/// than once a window (Part 4).
+/// </summary>
+/// <param name="Frames">How many frames the numbers are made of; zero while there are too few.</param>
+/// <param name="CpuPercent">The process's share of the machine since the previous call.</param>
+public sealed record FrameMoment(int Frames, double? MedianMs, double? P95Ms, double? MaxMs, double CpuPercent);
+
+/// <summary>
 /// Counts the frames a process actually draws and says what they came to.
 /// <para>
 /// <b>The source, and until M5a also the only way to read it</b> (Part 10): the numbers are needed
@@ -96,9 +105,14 @@ public sealed class FrameWatch : IDisposable
 
     private TimeSpan _lastRender;
     private long _lastReportMs;
-    private TimeSpan _lastCpu;
-    private long _lastCpuAtMs;
-    private double _cpuPercent;
+
+    /// <summary>
+    /// Two baselines for the CPU share, because there are two readers at two paces: the log line
+    /// every thirty seconds and the diagnostics stream every second. One shared baseline would make
+    /// the log line say what the last second cost instead of what the window did.
+    /// </summary>
+    private readonly CpuShare _windowCpu;
+    private readonly CpuShare _momentCpu;
 
     /// <summary>Whether the stretch about to be reported is the first of this run.</summary>
     private bool _first = true;
@@ -138,7 +152,8 @@ public sealed class FrameWatch : IDisposable
         _report = report;
         _warn = warn;
         _hooked = hooked;
-        _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
+        _windowCpu = new CpuShare(_clock);
+        _momentCpu = new CpuShare(_clock);
 
         if (hooked)
         {
@@ -263,6 +278,23 @@ public sealed class FrameWatch : IDisposable
     /// </summary>
     public void Rested() => _lastRender = TimeSpan.Zero;
 
+    /// <summary>
+    /// The thirty seconds up to the last frame, read now - the same counter the log line and the bar
+    /// read, so the diagnostic view cannot disagree with them (Part 1). Called on the thread that
+    /// draws, like everything else here.
+    /// </summary>
+    public FrameMoment Now()
+    {
+        var reading = _frames.Read((long)_lastRender.TotalMilliseconds);
+
+        return new FrameMoment(
+            reading?.Frames ?? 0,
+            reading is { } median ? Round(median.MedianMs) : null,
+            reading is { } p95 ? Round(p95.P95Ms) : null,
+            reading is { } max ? Round(max.MaxMs) : null,
+            Round(_momentCpu.Read()));
+    }
+
     public void Dispose()
     {
         if (_hooked)
@@ -296,7 +328,7 @@ public sealed class FrameWatch : IDisposable
             P95Ms: Round(reading.P95Ms),
             MaxMs: Round(reading.MaxMs),
             CadenceMs: Round(reading.CadenceMs),
-            CpuPercent: Round(CpuPercent()),
+            CpuPercent: Round(_windowCpu.Read()),
             GcMs: Round((pause - _lastGcPause).TotalMilliseconds),
             Sweeps: gen2 - _lastGen2,
             DrawMs: Round(_drawMs),
@@ -354,27 +386,42 @@ public sealed class FrameWatch : IDisposable
     }
 
     /// <summary>
-    /// How much of one core this process has used since the last reading. Across all cores, because
-    /// the question is what the machine is spending on us and a percentage per core would read as
-    /// "12 %" on a machine that is fully occupied by us.
+    /// How much of the machine this process has used since the last reading. Across all cores,
+    /// because the question is what the machine is spending on us and a percentage per core would
+    /// read as "12 %" on a machine that is fully occupied by us.
     /// </summary>
-    private double CpuPercent()
+    private sealed class CpuShare
     {
-        var elapsedMs = _clock.ElapsedMilliseconds - _lastCpuAtMs;
+        private readonly Stopwatch _clock;
+        private TimeSpan _lastCpu;
+        private long _lastAtMs;
+        private double _percent;
 
-        if (elapsedMs <= 0)
+        internal CpuShare(Stopwatch clock)
         {
-            return _cpuPercent;
+            _clock = clock;
+            _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
+            _lastAtMs = clock.ElapsedMilliseconds;
         }
 
-        var cpu = Process.GetCurrentProcess().TotalProcessorTime;
-        var used = (cpu - _lastCpu).TotalMilliseconds;
+        internal double Read()
+        {
+            var elapsedMs = _clock.ElapsedMilliseconds - _lastAtMs;
 
-        _lastCpu = cpu;
-        _lastCpuAtMs = _clock.ElapsedMilliseconds;
-        _cpuPercent = used / elapsedMs / Environment.ProcessorCount * 100;
+            if (elapsedMs <= 0)
+            {
+                return _percent;
+            }
 
-        return _cpuPercent;
+            var cpu = Process.GetCurrentProcess().TotalProcessorTime;
+            var used = (cpu - _lastCpu).TotalMilliseconds;
+
+            _lastCpu = cpu;
+            _lastAtMs = _clock.ElapsedMilliseconds;
+            _percent = used / elapsedMs / Environment.ProcessorCount * 100;
+
+            return _percent;
+        }
     }
 
     /// <summary>

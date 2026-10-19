@@ -36,6 +36,8 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(ItemParkedMessage), "ItemParked")]
 [JsonDerivedType(typeof(TouchPointsMessage), "TouchPoints")]
 [JsonDerivedType(typeof(SpotlightPulseMessage), "SpotlightPulse")]
+[JsonDerivedType(typeof(DiagnosticsRequestMessage), "DiagnosticsRequest")]
+[JsonDerivedType(typeof(DiagnosticsMessage), "Diagnostics")]
 public abstract record ProtocolMessage;
 
 /// <summary>

@@ -220,4 +220,34 @@ public sealed class AssetProgressTrackerTests
 
     private static AssetLoad Single(AssetProgressTracker tracker) =>
         Assert.Single(tracker.Reading()!.Loads);
+
+    /// <summary>
+    /// The two numbers of the diagnostics reading: on its way and still on the list. Checking and
+    /// decoding count as on its way - the picture is not on the table yet - and finished or failed
+    /// ones count as neither.
+    /// </summary>
+    [Fact]
+    public void The_diagnostics_count_what_is_running_and_what_is_waiting()
+    {
+        var tracker = new AssetProgressTracker();
+        var third = new AssetId(new string('c', 64));
+        var fourth = new AssetId(new string('d', 64));
+
+        tracker.Started(Picture);
+        tracker.Started(Other);
+        tracker.Started(third);
+        tracker.Started(fourth);
+
+        Assert.Equal((0, 4), tracker.Counts());
+
+        tracker.Fetching(Picture);
+        tracker.Decoding(Other);
+        tracker.Failed(third);
+
+        Assert.Equal((2, 1), tracker.Counts());
+
+        tracker.Done(Picture);
+
+        Assert.Equal((1, 1), tracker.Counts());
+    }
 }

@@ -150,6 +150,22 @@ public sealed class AssetProgressTracker
         }
     }
 
+    /// <summary>
+    /// How many pictures are on their way and how many are still on the list - the two numbers of
+    /// the diagnostics reading (Part 4). Finished and failed ones count as neither.
+    /// </summary>
+    public (int Running, int Waiting) Counts()
+    {
+        lock (_gate)
+        {
+            var waiting = _loads.Values.Count(load => load.State is AssetLoadState.Waiting);
+            var running = _loads.Values.Count(load =>
+                load.State is AssetLoadState.Loading or AssetLoadState.Verifying or AssetLoadState.Decoding);
+
+            return (running, waiting);
+        }
+    }
+
     private void Advance(AssetId asset, AssetLoadState state)
     {
         lock (_gate)

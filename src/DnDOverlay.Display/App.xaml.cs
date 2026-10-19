@@ -106,6 +106,9 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>About once a second, as Part 4 sets the diagnostics stream.</summary>
+    private static readonly TimeSpan DiagnosticsInterval = TimeSpan.FromSeconds(1);
+
     /// <summary>
     /// How often the fingers on this table are reported. Ten a second (Part 4): fast enough that a
     /// line traced across the map arrives as a line, slow enough that four people pointing is a
@@ -235,6 +238,12 @@ public sealed partial class App : Application, IDisposable
     /// the preferred host never goes through a search and so always reads null.
     /// </summary>
     private Guid? _answeringFor;
+
+    /// <summary>
+    /// Whether the control asked for the diagnostics stream on THIS connection. Every connection
+    /// starts without it; a control that still wants it says so again (Part 4).
+    /// </summary>
+    private volatile bool _diagnosing;
 
     private long _peakBytes;
 
@@ -1016,6 +1025,7 @@ public sealed partial class App : Application, IDisposable
     {
         var answeringFor = _answeringFor;
         _answeringFor = null;
+        _diagnosing = false;
 
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {
@@ -1083,6 +1093,9 @@ public sealed partial class App : Application, IDisposable
             // Same lifetime as the forwarder, and for the same reason: it belongs to THIS
             // connection.
             reporting = Task.Run(() => ReportProgressAsync(queues, connected.Token));
+
+            // And so does the diagnostics stream: it ends with the connection by itself (Part 4).
+            _ = Task.Run(() => DiagnoseAsync(queues, connected.Token));
         }
 
         var pump = Task.Run(() => client.RunAsync(
@@ -1270,6 +1283,10 @@ public sealed partial class App : Application, IDisposable
 
             case IdentifyScreensMessage:
                 await Dispatcher.InvokeAsync(Identify);
+                break;
+
+            case DiagnosticsRequestMessage request:
+                _diagnosing = request.On;
                 break;
 
             case SpotlightPulseMessage pulse:
@@ -2147,6 +2164,56 @@ public sealed partial class App : Application, IDisposable
     /// (Part 4). It runs for as long as the connection does: the readings travel in the progress
     /// queue, so a slow socket overwrites them rather than queueing them up.
     /// </summary>
+    /// <summary>
+    /// The diagnostics stream: one reading a second while the control asks for it, nothing
+    /// otherwise. Transient on the wire - when the socket is slow the queue keeps the newest and
+    /// drops the rest, which is right for numbers that describe only the present (Part 4).
+    /// </summary>
+    private async Task DiagnoseAsync(SendQueues outbox, CancellationToken cancellationToken)
+    {
+        using var tick = new PeriodicTimer(DiagnosticsInterval);
+
+        try
+        {
+            while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (!_diagnosing)
+                {
+                    continue;
+                }
+
+                // On the thread that draws: the counter is fed there, and reading it anywhere else
+                // would race the frame being added.
+                var frames = await Dispatcher.InvokeAsync(() => _frames?.Now());
+                var (running, waiting) = _progress.Counts();
+
+                long committed;
+
+                using (var me = Process.GetCurrentProcess())
+                {
+                    committed = me.PrivateMemorySize64;
+                }
+
+                _ = outbox.TrySend(new DiagnosticsMessage(new DiagnosticsReading(
+                    frames?.Frames ?? 0,
+                    frames?.MedianMs,
+                    frames?.P95Ms,
+                    frames?.MaxMs,
+                    frames?.CpuPercent ?? 0,
+                    running,
+                    waiting,
+                    _cache.Count,
+                    _cache.Bytes,
+                    committed,
+                    _memoryCap)));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The connection is over, and the stream with it.
+        }
+    }
+
     private async Task ReportProgressAsync(SendQueues outbox, CancellationToken cancellationToken)
     {
         using var tick = new PeriodicTimer(ProgressInterval);

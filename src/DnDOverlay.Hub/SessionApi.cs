@@ -25,6 +25,9 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// <summary>The call for orphaned displays, shared with the beacon that carries it.</summary>
     private readonly OrphanCall _orphans;
 
+    /// <summary>The devices whose diagnostics stream is wanted - see <see cref="RequestDiagnosticsAsync"/>.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<DeviceId, byte> _diagnosing = new();
+
 
     public SessionApi(
         SceneStore scenes,
@@ -638,6 +641,30 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return [new SetBackground(Manipulation.HoldAtEdge(background with { RotationDeg = turned }, context))];
             },
             cancellationToken);
+
+    /// <inheritdoc />
+    public Task RequestDiagnosticsAsync(DeviceId device, bool wanted, CancellationToken cancellationToken = default)
+    {
+        if (wanted)
+        {
+            _diagnosing[device] = 0;
+        }
+        else
+        {
+            _diagnosing.TryRemove(device, out _);
+        }
+
+        // A device that is not here gets it with its next connection, from the wish above.
+        if (_connections.TryGet(device, out var connection))
+        {
+            _ = connection.TrySend(new DiagnosticsRequestMessage(wanted));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public bool DiagnosticsRequested(DeviceId device) => _diagnosing.ContainsKey(device);
 
     /// <inheritdoc />
     public Task CallOrphansAsync(CancellationToken cancellationToken = default)
