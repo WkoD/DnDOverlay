@@ -164,6 +164,32 @@ internal sealed class StageBoard : Panel
     }
 
     /// <summary>
+    /// A reading from one device, for every tile of it that shows its diagnostic view. Rank 4: never
+    /// kept here, the next one replaces it.
+    /// </summary>
+    internal void Diagnosed(DeviceId device, DiagnosticsReading reading)
+    {
+        foreach (var (screen, tile) in _tiles)
+        {
+            if (screen.Device == device)
+            {
+                tile.Reading(reading);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Asks a device for its readings while at least one of its tiles shows the diagnostic view, and
+    /// stops when the last one closes - the stream is per device, the view per screen (Part 4).
+    /// </summary>
+    private void Wanted(DeviceId device)
+    {
+        var wanted = _tiles.Any(pair => pair.Key.Device == device && pair.Value.Diagnosed);
+
+        _ = _session.RequestDiagnosticsAsync(device, wanted, CancellationToken.None);
+    }
+
+    /// <summary>
     /// What every tile needs beyond its scene: the wish, the reasons and the battery (Part 7). Called
     /// on every device event and not only when the list of screens changes - a battery that falls or
     /// a device that leaves changes no list.
@@ -220,6 +246,7 @@ internal sealed class StageBoard : Panel
             tile.Configuring += (_, _) => Configuring?.Invoke(this, view.Screen);
             tile.Carried += (_, carried) => Carry(view.Screen, carried);
             tile.Turning += (_, turned) => Turn(view.Screen, turned);
+            tile.Diagnosing += (_, _) => Wanted(view.Screen.Device);
 
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);
             tile.PreviewTouchDown += (_, _) => Activate(view.Screen);
@@ -266,8 +293,16 @@ internal sealed class StageBoard : Panel
 
         foreach (var gone in _tiles.Keys.Where(screen => !screens.Any(view => view.Screen == screen)).ToList())
         {
+            var diagnosed = _tiles[gone].Diagnosed;
+
             Children.Remove(_tiles[gone]);
             _tiles.Remove(gone);
+
+            // A tile that leaves with its view open must not leave the device streaming for nobody.
+            if (diagnosed)
+            {
+                Wanted(gone.Device);
+            }
         }
 
         if (Active is not { } active || !_tiles.ContainsKey(active))

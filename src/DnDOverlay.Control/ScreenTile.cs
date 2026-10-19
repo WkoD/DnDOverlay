@@ -68,6 +68,24 @@ internal sealed class ScreenTile : Border
     private TilePoint? _tapFrom;
     private bool _menuRang;
 
+    /// <summary>
+    /// The diagnostic view (Part 7): it takes the thumbnail's place with this screen's connection
+    /// data and the device's reading, for as long as it stands.
+    /// </summary>
+    private readonly TextBlock _diagnosis = new()
+    {
+        Margin = new Thickness(8),
+        TextWrapping = TextWrapping.Wrap,
+        FontFamily = new FontFamily("Consolas"),
+    };
+
+    private readonly Border _diagnosisPane;
+    private DeviceView? _device;
+    private DiagnosticsReading? _reading;
+
+    /// <summary>The size the thumbnail had in the overview, which the pane keeps there.</summary>
+    private Size _paneSize;
+
     private readonly Border _frame;
 
     private bool _setting;
@@ -136,6 +154,8 @@ internal sealed class ScreenTile : Border
         panel.Children.Add(layers);
 
         Child = panel;
+
+        _diagnosisPane = new Border { Child = _diagnosis, Background = Brushes.WhiteSmoke };
 
         // Over the thumbnail, pushing nothing away: the DM opens it himself and the next tap closes
         // it, and moving the thumbnail would break the grid in the overview (Part 7).
@@ -214,6 +234,7 @@ internal sealed class ScreenTile : Border
         _menus.Configuring += (_, _) => Configuring?.Invoke(this, EventArgs.Empty);
         _menus.Turning += (_, view) => Turning?.Invoke(this, view);
         _menus.Adjusting += (_, adjusting) => _face.Adjusting = adjusting;
+        _menus.Diagnosing += (_, on) => Diagnose(on);
 
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
@@ -243,6 +264,12 @@ internal sealed class ScreenTile : Border
     /// <summary>The DM turned the view of this screen.</summary>
     internal event EventHandler<ViewRotation>? Turning;
 
+    /// <summary>The diagnostic view of this tile went on or off - the board asks the device for its readings.</summary>
+    internal event EventHandler<bool>? Diagnosing;
+
+    /// <summary>Whether this tile shows its diagnostic view instead of the thumbnail.</summary>
+    internal bool Diagnosed { get; private set; }
+
     /// <summary>
     /// The head, and the one place a tile may be dragged by (Part 7). The tile's face is taken -
     /// items lie on it and the selection frame is drawn from it - while the head is the one strip
@@ -264,6 +291,12 @@ internal sealed class ScreenTile : Border
 
             // Not remembered: a change of view closes the list (Part 7).
             CloseReasons();
+
+            if (Diagnosed)
+            {
+                _diagnosisPane.Width = value ? double.NaN : _paneSize.Width;
+                _diagnosisPane.Height = value ? double.NaN : _paneSize.Height;
+            }
             _face.Opened = value;
             _frame.VerticalAlignment = value ? VerticalAlignment.Stretch : VerticalAlignment.Top;
             _frame.HorizontalAlignment = value ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
@@ -321,6 +354,13 @@ internal sealed class ScreenTile : Border
         _head.Inactive = view.State == ScreenState.Inactive;
         _head.Battery(device is { Connected: true } ? device.Battery : null);
 
+        _device = device;
+
+        if (Diagnosed)
+        {
+            Describe();
+        }
+
         var why = ScreenReasons.Of(view, device);
 
         if (!why.SequenceEqual(_why))
@@ -373,7 +413,95 @@ internal sealed class ScreenTile : Border
             return;
         }
 
-        _menus.ForScreen(over, at, _scene, _view, _face.Adjusting, Opened);
+        _menus.ForScreen(over, at, _scene, _view, _face.Adjusting, Opened, Diagnosed);
+    }
+
+    /// <summary>A reading from this screen's device, for the diagnostic view.</summary>
+    internal void Reading(DiagnosticsReading reading)
+    {
+        _reading = reading;
+
+        if (Diagnosed)
+        {
+            Describe();
+        }
+    }
+
+    /// <summary>
+    /// Puts the diagnostic view in the thumbnail's place, or the thumbnail back. The tile keeps its
+    /// size either way - the pane takes exactly the room the thumbnail had - so the grid of the
+    /// overview does not move (Part 7).
+    /// </summary>
+    private void Diagnose(bool on)
+    {
+        if (on == Diagnosed)
+        {
+            return;
+        }
+
+        Diagnosed = on;
+        CloseReasons();
+
+        if (on)
+        {
+            _reading = null;
+            _paneSize = new Size(_face.ActualWidth, _face.ActualHeight);
+            _diagnosisPane.Width = Opened ? double.NaN : _paneSize.Width;
+            _diagnosisPane.Height = Opened ? double.NaN : _paneSize.Height;
+            _frame.Child = _diagnosisPane;
+            Describe();
+        }
+        else
+        {
+            _frame.Child = _face;
+        }
+
+        Diagnosing?.Invoke(this, on);
+    }
+
+    /// <summary>
+    /// What the view says: the same numbers as the bar at the device, from the same reading, plus
+    /// what only the control has - the round trip it measured, the device's address and version.
+    /// </summary>
+    private void Describe()
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        var lines = new List<string>();
+
+        if (_device is not { Connected: true } device)
+        {
+            _diagnosis.Text = "Device not connected.";
+            return;
+        }
+
+        lines.Add(string.Format(
+            culture,
+            "{0} · {1} · version {2} · {3}",
+            device.Name,
+            device.Address ?? "?",
+            device.AppVersion ?? "?",
+            device.RoundTrip is { } trip ? string.Create(culture, $"{trip.TotalMilliseconds:0} ms") : "? ms"));
+
+        if (_reading is not { } reading)
+        {
+            lines.Add("Waiting for the first reading ...");
+        }
+        else
+        {
+            lines.Add(reading.MedianMs is { } median
+                ? string.Format(culture, "Frames {0:0.0} / {1:0.0} / {2:0.0} ms ({3}) · {4} stalls", median, reading.P95Ms, reading.MaxMs, reading.Frames, reading.Stalls)
+                : "Frames: too few to say");
+            lines.Add(string.Format(culture, "CPU {0:0.0} % · loading {1}, waiting {2}", reading.CpuPercent, reading.Downloading, reading.Waiting));
+            lines.Add(string.Format(
+                culture,
+                "Store {0} pictures, {1} MB · memory {2} / {3} MB",
+                reading.CachedPictures,
+                reading.CacheBytes / (1024 * 1024),
+                reading.MemoryBytes / (1024 * 1024),
+                reading.MemoryCapBytes / (1024 * 1024)));
+        }
+
+        _diagnosis.Text = string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>The four states in the selector's words - the enum's names are for files, not for people.</summary>

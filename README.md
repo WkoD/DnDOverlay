@@ -202,7 +202,9 @@ part of one — turns it to face you or to a fixed **0°, 90°, 180° or 270°**
 an animation, shows the name, selects everything on the screen or in the fan, copies and moves
 to another screen, and, set apart at the bottom, removes. A screen's menu, on free area or on the
 tile's head, opens the single view, sets up the screen, turns the view of it by a quarter for a
-DM who sits at the side, and handles the background: **Customize** lets you move, zoom and turn
+DM who sits at the side, shows the **diagnostic view** — the device's frame times, CPU, loads,
+store and memory, the same numbers as the bar at the table, in place of the thumbnail — and
+handles the background: **Customize** lets you move, zoom and turn
 it with the same grips as a picture, while the pictures above it turn see-through; **Fill
 screen** and **Fit whole on screen** put it back into the two obvious positions, keeping a
 quarter turn; and it turns by the quarter like a picture — filled or fitted, it stays so.

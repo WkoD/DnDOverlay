@@ -346,6 +346,11 @@ internal sealed class MainWindow : Window, IDisposable
                     _board.Touching(touching.Screen, touching.Touches);
                     break;
 
+                // Rank 4 as well, and only while a tile asked for it (Part 4).
+                case SessionEvent.Diagnostics reading:
+                    _board.Diagnosed(reading.Device, reading.Reading);
+                    break;
+
                 case SessionEvent.ScenePatched:
                 case SessionEvent.SceneReplaced:
                     await _stage.RefreshAsync().ConfigureAwait(true);

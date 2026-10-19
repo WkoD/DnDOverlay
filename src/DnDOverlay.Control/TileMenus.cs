@@ -49,13 +49,16 @@ internal sealed class TileMenus(
     /// <summary>The DM switched the background mode on or off.</summary>
     internal event EventHandler<bool>? Adjusting;
 
+    /// <summary>The DM switched the diagnostic view of this screen on or off.</summary>
+    internal event EventHandler<bool>? Diagnosing;
+
     /// <summary>
     /// The screen's own menu. Reached on free tile area <b>and on the head</b> - the second place
     /// is not convenience: on a full screen there is no free area left, and the menu would be out
     /// of reach exactly where most is going on (Part 7).
     /// </summary>
     internal void ForScreen(
-        UIElement over, TilePoint at, SceneState scene, ViewRotation view, bool adjusting, bool single)
+        UIElement over, TilePoint at, SceneState scene, ViewRotation view, bool adjusting, bool single, bool diagnosing)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
@@ -73,6 +76,13 @@ internal sealed class TileMenus(
             () => _ = session.IdentifyScreensAsync(screen.Device, CancellationToken.None)));
 
         menu.Items.Add(Turned(view));
+
+        // Ticked while it stands, and reached from the head as well as the free area: the view
+        // replaces the thumbnail, so there is no free area left to switch it off from (Part 7).
+        var diagnosis = new MenuItem { Header = "Diagnostic view", IsCheckable = true, IsChecked = diagnosing };
+
+        diagnosis.Click += (_, _) => Diagnosing?.Invoke(this, !diagnosing);
+        menu.Items.Add(diagnosis);
 
         menu.Items.Add(new Separator());
 
