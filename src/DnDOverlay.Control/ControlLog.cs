@@ -280,4 +280,14 @@ internal static partial class ControlLog
         int pictures,
         int greyed,
         int tiles);
+
+    /// <summary>
+    /// Windows is ending the session and the control wrote what was outstanding. Written so a
+    /// change that is missing after a shutdown can be told from one that was never made (step 38c).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4017,
+        Level = LogLevel.Information,
+        Message = "Windows is ending the session ({Reason}); settings written.")]
+    internal static partial void SessionEnding(ILogger logger, System.Windows.ReasonSessionEnding? reason);
 }

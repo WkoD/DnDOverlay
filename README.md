@@ -155,8 +155,9 @@ behind your back.
 Every display keeps its own copy of the pictures it has shown, up to **4 GiB** — so moving a
 picture from one screen to another, hiding it and bringing it back, or putting the same map up
 twice in an evening costs no transfer at all. Only a picture that was evicted to make room is
-fetched again. **The copy ends with the display**: closing it empties the store, so the next
-evening transfers again and no picture stays on a display PC that is not in use. Only after a
+fetched again. **The copy ends with the display**: closing it empties the store, and so does
+switching the PC off or logging off, so the next evening transfers again and no picture stays on a
+display PC that is not in use. Settings changed just before a shutdown are written first. Only after a
 crash is the store found again — then the first scenes keep what they need and the rest goes, and
 if no control comes within five minutes, all of it goes. Pictures arrive **three at a time**: twenty at once are twenty pictures that are
 all slow, and after ten seconds none of them is there.

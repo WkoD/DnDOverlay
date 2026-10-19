@@ -276,10 +276,32 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
+    /// <summary>
+    /// Windows is logging off or shutting down: what is still waiting out its debounce goes to disk
+    /// now (Part 6). Not left to <see cref="OnExit"/>, which runs after the dispatcher has wound
+    /// down and may not get its turn before Windows ends the process - and the one change lost would
+    /// be the last one, typically a screen renamed just before switching off (step 38c).
+    /// <para>
+    /// No question to the user and no <c>ShutdownBlockReasonCreate</c>: the stock is written through
+    /// as it is filled, so there is nothing unsaved that Windows could wipe away.
+    /// </para>
+    /// </summary>
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        _settings?.Flush();
+
+        if (_host?.Services.GetService<ILogger<App>>() is { } logger)
+        {
+            ControlLog.SessionEnding(logger, e?.ReasonSessionEnding);
+        }
+
+        base.OnSessionEnding(e);
+    }
+
     protected override async void OnExit(ExitEventArgs e)
     {
-        // Anything outstanding goes to disk before the process does. SessionEnding gets the
-        // same treatment in M6, when the tray and the close dialog arrive (Part 6).
+        // Anything outstanding goes to disk before the process does - the ordinary end. The end of
+        // a Windows session writes earlier, in OnSessionEnding.
         Dispose();
 
         if (_host is not null)

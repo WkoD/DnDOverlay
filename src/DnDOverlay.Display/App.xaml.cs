@@ -232,6 +232,9 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private readonly TakeoverWindow _takeover = new(TimeProvider.System);
 
+    /// <summary>Whether the store has been emptied for the end of this process - see <see cref="Empty"/>.</summary>
+    private int _emptied;
+
     /// <summary>
     /// The control the last search's sighting answered a call FROM INSTEAD OF, or null when the
     /// sighting was this device's own control. Set by the search, taken by the next connection -
@@ -868,6 +871,27 @@ public sealed partial class App : Application, IDisposable
         DisplayLog.OverlayClosed(_logger, screen);
     }
 
+    /// <summary>
+    /// Windows is logging off or shutting down - typically the display PC switched off right after a
+    /// screen was renamed (Part 6, step 38c). The settings go to disk at once, past their debounce,
+    /// and the store is emptied here rather than left to <see cref="OnExit"/>, which may not get its
+    /// turn before Windows ends the process. Both are what every end does anyway (Part 5, rule 1);
+    /// this only does them early enough.
+    /// </summary>
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        _configuration?.Flush();
+
+        if (_logger is not null)
+        {
+            DisplayLog.SessionEnding(_logger, e?.ReasonSessionEnding);
+        }
+
+        Empty("on session end");
+
+        base.OnSessionEnding(e);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         Empty("on exit");
@@ -905,7 +929,9 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void Empty(string occasion)
     {
-        if (_cache is null)
+        // Once per process: the end of a Windows session empties early, and the exit that follows
+        // would otherwise write a second line about a store that is already empty.
+        if (_cache is null || Interlocked.Exchange(ref _emptied, 1) == 1)
         {
             return;
         }

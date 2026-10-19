@@ -497,4 +497,14 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Own control {Name} at {Address} is back; dropping the answer to the call for orphaned displays.")]
     internal static partial void OwnControlBack(ILogger logger, string name, System.Net.IPAddress address);
+
+    /// <summary>
+    /// Windows is ending the session; the settings were written and the store is being emptied.
+    /// Written so a name missing after a shutdown can be told from one that was never set (step 38c).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3041,
+        Level = LogLevel.Information,
+        Message = "Windows is ending the session ({Reason}); settings written.")]
+    internal static partial void SessionEnding(ILogger logger, System.Windows.ReasonSessionEnding? reason);
 }
