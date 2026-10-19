@@ -475,4 +475,15 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Picture store emptied {Occasion}: {Count} picture(s) removed, {Left} left.")]
     internal static partial void StockEmptied(ILogger logger, string occasion, int count, int left);
+
+    /// <summary>
+    /// Memory ran short and pictures went to their thumbnails - the fan from three quarters of the
+    /// cap, the table from the cap (Part 6). A picture that goes soft at the table has to have a line
+    /// that says why, or it reads as a broken decode.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3040,
+        Level = LogLevel.Information,
+        Message = "{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.")]
+    internal static partial void PicturesSteppedDown(ILogger logger, int count, long usedMb, long capMb);
 }

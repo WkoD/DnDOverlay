@@ -58,6 +58,37 @@ public sealed partial class App : Application, IDisposable
     private readonly ConcurrentDictionary<AssetId, ImageSource> _images = new();
 
     /// <summary>
+    /// Pictures memory pressure has put down to their thumbnails. Marked, so the drawing does not
+    /// sharpen them straight back up - it asks for a sharper decode whenever a picture is drawn
+    /// larger than its bitmap, and a stepped-down one always is. A hand taking it, or the DM
+    /// fetching it out of the fan, brings it back (Part 6).
+    /// </summary>
+    private readonly ConcurrentDictionary<AssetId, byte> _steppedDown = new();
+
+    /// <summary>When a picture was last touched or arrived, as a running count - its age for the memory rule.</summary>
+    private readonly ConcurrentDictionary<AssetId, long> _touchedAt = new();
+
+    private long _touches;
+
+    /// <summary>One relief at a time; a second asked meanwhile has nothing to add.</summary>
+    private readonly Lock _relieving = new();
+
+    /// <summary>
+    /// What the last step-downs should save but the process does not show yet: a bitmap's memory
+    /// returns only when the collector has run. Counted against the measurement until the next full
+    /// sweep, or every decode in between would step down more pictures than the shortfall needs.
+    /// </summary>
+    private long _pendingRelief;
+
+    private int _reliefSweeps = -1;
+
+    /// <summary>The memory cap of this machine (Part 6) - the ceiling, or a quarter of what it has.</summary>
+    private readonly long _memoryCap = MemoryPressure.Cap(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes);
+
+    /// <summary>What a picture costs once stepped down: a 256-pixel thumbnail, at most square.</summary>
+    private const long ThumbnailBitmapBytes = 256L * 256 * 4;
+
+    /// <summary>
     /// The delivered bytes of the pictures that MOVE, and only of those.
     /// <para>
     /// Measured rather than foreseen: the animation reads a GIF's frames a second time, from the
@@ -1287,6 +1318,11 @@ public sealed partial class App : Application, IDisposable
 
                 scene = SceneReducer.Apply(scene, op, context);
 
+                if (op is ParkItem { Parked: false } unparked)
+                {
+                    BringBack(group.Key.Screen, scene, unparked.Item);
+                }
+
                 if (op is TransformItem confirming)
                 {
                     Confirmed(confirming, context, scene);
@@ -1608,6 +1644,12 @@ public sealed partial class App : Application, IDisposable
 
             if (!arrived.IsThumbnail)
             {
+                // A picture that has just arrived is the newest on the table, not the oldest: it
+                // counts as touched, or the memory rule would soften exactly the picture the DM
+                // just sent.
+                _touchedAt[arrived.Asset] = Interlocked.Increment(ref _touches);
+                _ = _steppedDown.TryRemove(arrived.Asset, out _);
+
                 // Only the full picture ends the load. Reporting done on the thumbnail would fill
                 // the ring while the picture on the table was still the blurred one.
                 _progress.Done(arrived.Asset);
@@ -1619,6 +1661,8 @@ public sealed partial class App : Application, IDisposable
 
                 DisplayLog.AssetDecoded(
                     _logger, name, arrived.Asset, decoded.PixelWidth, decoded.PixelHeight, spent);
+
+                Relieve();
             }
         }
         // A picture that arrives unreadable stays missing and the rest of the scene is drawn.
@@ -1651,6 +1695,172 @@ public sealed partial class App : Application, IDisposable
     /// lies there is still needed (Part 3).
     /// </para>
     /// </summary>
+    /// <summary>A hand took an item: its picture is the newest touched, and back at full sharpness if pressure had put it down.</summary>
+    private void Touched(ScreenId screen, ItemId item)
+    {
+        if (!_scenes.TryGetValue(new ScreenRef(_device, screen), out var scene))
+        {
+            return;
+        }
+
+        if (scene.Items.OfType<ImageItem>().FirstOrDefault(one => one.ItemId == item) is { } image)
+        {
+            _touchedAt[image.AssetId] = Interlocked.Increment(ref _touches);
+        }
+
+        BringBack(screen, scene, item);
+    }
+
+    /// <summary>
+    /// Takes a stepped-down picture back up to its base step - "fetching back a picture that pressure
+    /// put down" is one of the four occasions Part 6 allows a new decode for. Off the UI thread, like
+    /// every sharpening; the picture stays where it is and goes sharp when the decode is done.
+    /// </summary>
+    private void BringBack(ScreenId screen, SceneState scene, ItemId item)
+    {
+        if (scene.Items.OfType<ImageItem>().FirstOrDefault(one => one.ItemId == item) is not { } image
+            || !_steppedDown.TryRemove(image.AssetId, out _)
+            || !_contexts.TryGetValue(screen, out var context)
+            || !_images.TryGetValue(image.AssetId, out var current)
+            || current is not BitmapSource bitmap)
+        {
+            return;
+        }
+
+        var edge = Math.Max(context.Size.Width, context.Size.Height);
+        var step = DecodeSteps.Base(edge, image.Meta.PixelWidth, image.Meta.PixelHeight);
+
+        if (_sharpening.TryAdd(image.AssetId, 0))
+        {
+            _ = Task.Run(() => SharpenAsync(screen, image.AssetId, bitmap.PixelWidth, step), _shutdown.Token);
+        }
+    }
+
+    /// <summary>
+    /// Measures the process against the memory cap and, if it is over a line, steps pictures down to
+    /// their thumbnails in the order <see cref="MemoryPressure"/> gives - the fan first, the table at
+    /// the cap, never what a hand is on, never the background. Called after every decode that made a
+    /// picture larger, which is the only moment memory grows by a picture's worth.
+    /// </summary>
+    private void Relieve()
+    {
+        if (!_relieving.TryEnter())
+        {
+            return;
+        }
+
+        try
+        {
+            var sweeps = GC.CollectionCount(2);
+
+            if (sweeps != _reliefSweeps)
+            {
+                _reliefSweeps = sweeps;
+                _pendingRelief = 0;
+            }
+
+            long committed;
+
+            using (var me = Process.GetCurrentProcess())
+            {
+                committed = me.PrivateMemorySize64;
+            }
+
+            var measured = committed - _pendingRelief;
+
+            if (measured <= (long)(_memoryCap * MemoryPressure.FanShare))
+            {
+                return;
+            }
+
+            // The holds live on the UI thread. One short question there, and only under pressure.
+            var held = Dispatcher.Invoke(() => _windows.Values.SelectMany(window => window.HeldItems).ToHashSet());
+            var steps = MemoryPressure.StepDown(measured, _memoryCap, Candidates(held), ThumbnailBitmapBytes);
+            var stepped = 0;
+
+            foreach (var asset in steps)
+            {
+                if (!_cache.TryGetThumbnail(asset, out var thumbnail)
+                    || !_images.TryGetValue(asset, out var before)
+                    || before is not BitmapSource large)
+                {
+                    continue;
+                }
+
+                _images[asset] = PictureDecoder.Decode(thumbnail, 0);
+                _steppedDown[asset] = 0;
+                _pendingRelief += Math.Max(0, ((long)large.PixelWidth * large.PixelHeight * 4) - ThumbnailBitmapBytes);
+                stepped++;
+            }
+
+            if (stepped == 0)
+            {
+                return;
+            }
+
+            DisplayLog.PicturesSteppedDown(_logger, stepped, measured / (1024 * 1024), _memoryCap / (1024 * 1024));
+
+            foreach (var screen in _scenes.Keys.Where(key => key.Device == _device).ToList())
+            {
+                _ = Dispatcher.InvokeAsync(() => Draw(screen));
+            }
+        }
+        catch (NotSupportedException)
+        {
+            // A thumbnail that does not decode leaves its picture as it was; the next relief may
+            // pick another.
+        }
+        catch (OperationCanceledException)
+        {
+            // The dispatcher is going away with the application; there is nothing left to relieve.
+        }
+        finally
+        {
+            _relieving.Exit();
+        }
+    }
+
+    /// <summary>
+    /// Every decoded picture the memory rule may step down: not one already down, not one that
+    /// moves (its frames are built from bytes), not one any background shows.
+    /// </summary>
+    private List<DecodedPicture> Candidates(HashSet<ItemId> held)
+    {
+        var mine = _scenes.Where(pair => pair.Key.Device == _device).Select(pair => pair.Value).ToList();
+        var backgrounds = mine.Where(scene => scene.Background is not null).Select(scene => scene.Background!.AssetId).ToHashSet();
+        var items = mine.SelectMany(scene => scene.Items.OfType<ImageItem>()).ToList();
+        var pictures = new List<DecodedPicture>();
+
+        foreach (var (asset, image) in _images)
+        {
+            if (image is not BitmapSource bitmap
+                || _steppedDown.ContainsKey(asset)
+                || _moving.ContainsKey(asset)
+                || backgrounds.Contains(asset))
+            {
+                continue;
+            }
+
+            var showing = items.Where(item => item.AssetId == asset).ToList();
+
+            if (showing.Count == 0)
+            {
+                continue;
+            }
+
+            var parked = showing.All(item => item.Parked);
+
+            pictures.Add(new DecodedPicture(
+                asset,
+                (long)bitmap.PixelWidth * bitmap.PixelHeight * 4,
+                parked,
+                parked ? showing.Min(item => item.ZOrder) : _touchedAt.GetValueOrDefault(asset),
+                showing.Any(item => held.Contains(item.ItemId))));
+        }
+
+        return pictures;
+    }
+
     private void LetGoOfWhatNoSceneNeeds()
     {
         var wanted = SceneAssets.InUse(_scenes.Values);
@@ -1659,6 +1869,8 @@ public sealed partial class App : Application, IDisposable
         {
             _images.TryRemove(asset, out _);
             _moving.TryRemove(asset, out _);
+            _steppedDown.TryRemove(asset, out _);
+            _touchedAt.TryRemove(asset, out _);
         }
 
         // The file may stay - the store keeps what it has room for, because a picture that comes
@@ -1924,6 +2136,11 @@ public sealed partial class App : Application, IDisposable
             _grabbedAt[reported.Transform.Item] = reported.Transform;
         }
 
+        if (reported.Grabbed)
+        {
+            Touched(screen, reported.Transform.Item);
+        }
+
         if (reported.Grabbed || reported.Binding)
         {
             Settle(screen, reported.Transform, toFront: reported.Grabbed);
@@ -2131,6 +2348,7 @@ public sealed partial class App : Application, IDisposable
         // Asked from the drawing, so this runs on the UI THREAD - and nothing here may cost
         // anything. Everything that does is below, on a thread nobody is waiting on.
         if (_moving.ContainsKey(asset)
+            || _steppedDown.ContainsKey(asset)
             || !_images.TryGetValue(asset, out var current)
             || current is not BitmapSource bitmap
             || DecodeSteps.Next(bitmap.PixelWidth, needed, SourceWidth(asset)) is not { } step)
@@ -2200,6 +2418,8 @@ public sealed partial class App : Application, IDisposable
             var name = NameOf(asset);
 
             DisplayLog.PictureSharpened(_logger, name, before, step);
+
+            Relieve();
 
             await Dispatcher.InvokeAsync(() => Draw(new ScreenRef(_device, screen))).Task
                 .ConfigureAwait(false);

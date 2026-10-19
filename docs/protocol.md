@@ -775,6 +775,7 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3037 | `ItemsCopied` | Information |
 | 3038 | `StockSettled` | Information |
 | 3039 | `StockEmptied` | Information |
+| 3040 | `PicturesSteppedDown` | Information |
 
 **3029 gained two numbers in M3c**, and the second is the one that says anything: touch
 reports sent, and the points inside them. A count of reports cannot tell a working table
@@ -786,7 +787,7 @@ capped at 32; a resting or a swallowed one contributes exactly one. Until the th
 M4 there is nothing to look at, so this ratio is the whole evidence that the trails are
 collected at all.
 
-**Next free: 3040.**
+**Next free: 3041.**
 
 **3036 and 3037 are not 3033 and 3034 with a number added**, and the separation is deliberate.
 3033 answers "where did that picture go?" and is written by a hand dragging one across; the pair
@@ -811,7 +812,7 @@ are worth the same line, and the second one more than the first: from the room, 
 *told* to let go looks exactly like one that failed to hold on.
 
 Of these, 3007–3014, 3021–3022 and 3033–3037 are written by the **hub** and 3001–3006,
-3015–3020, 3023–3032 and 3038–3039 by the **display** — the range
+3015–3020, 3023–3032 and 3038–3040 by the **display** — the range
 follows the subject of the sentence, never the assembly it is written in. Only one of the three
 inventory findings is a warning, and that is the point of telling them apart: a missing screen
 loses nothing, a new one is a fact, and a screen whose **metrics changed** has had its images

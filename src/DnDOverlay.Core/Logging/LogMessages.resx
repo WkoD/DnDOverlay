@@ -276,6 +276,9 @@
   <data name="E3031_TouchReporting" xml:space="preserve">
     <value>Touch points from this table are {Reporting}.</value>
   </data>
+  <data name="E3040_PicturesSteppedDown" xml:space="preserve">
+    <value>{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.</value>
+  </data>
   <data name="E3038_StockSettled" xml:space="preserve">
     <value>Picture store from an earlier run: {Adopted} found, {Discarded} discarded.</value>
   </data>

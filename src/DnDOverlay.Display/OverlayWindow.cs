@@ -379,6 +379,9 @@ internal sealed class OverlayWindow : Window
     /// </summary>
     internal bool Holding => _held.Count > 0;
 
+    /// <summary>The items a hand is on right now. Asked on the UI thread, where the holds live.</summary>
+    internal IReadOnlyCollection<ItemId> HeldItems => [.. _held.Keys];
+
     /// <summary>
     /// What one report of a running gesture carries. A record rather than four arguments, because
     /// three of them are booleans and a call site with three booleans in a row is a place to make a
