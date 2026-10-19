@@ -47,6 +47,7 @@ internal sealed class MainWindow : Window, IDisposable
     private NetworkWindow? _network;
     private NetworkPanel? _welcome;
     private StageGuard? _guard;
+    private readonly ScenesPanel _scenes;
     private ControlPower? _power;
 
     internal MainWindow(
@@ -54,6 +55,7 @@ internal sealed class MainWindow : Window, IDisposable
         PairingDesk pairing,
         Entrances entrances,
         AssetStore store,
+        SceneShelf shelf,
         ControlSettings settings,
         Uri address,
         ProcessLog log)
@@ -73,6 +75,16 @@ internal sealed class MainWindow : Window, IDisposable
         // have selected. Two answers to "which screen?" on one surface is one too many, and at the
         // table it was the first thing to trip over (hand-run of M4, 24a).
         _stage = new StagePanel(session, entrances, () => _board.Active, _status, _logger);
+
+        _scenes = new ScenesPanel(
+            session,
+            store,
+            shelf,
+            pictures,
+            () => _board.Active,
+            () => _board.Screens,
+            said => _status.Text = said,
+            _logger);
 
         // The counter the control never had. It does NOT hold the render hook - Redraw drives it,
         // and only while the stage is actually drawing, because a permanent subscription would keep
@@ -166,6 +178,7 @@ internal sealed class MainWindow : Window, IDisposable
         Row(_board, fills: true);
         Row(StateRow());
         Row(TouchRow());
+        Row(_scenes);
         Row(_stage);
         Row(_status);
 
@@ -191,6 +204,7 @@ internal sealed class MainWindow : Window, IDisposable
         // "Set up screen ..." from a tile menu lands in the window that exists, on the screen it
         // was asked for (Part 7).
         _board.Configuring += (_, screen) => Devices().Reveal(screen);
+        _board.Saving += async (_, screen) => await _scenes.SaveAsync(this, screen).ConfigureAwait(true);
         _board.ActiveChanged += (_, _) =>
         {
             Follow();

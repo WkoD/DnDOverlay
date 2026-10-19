@@ -235,6 +235,7 @@ internal sealed class ScreenTile : Border
         _menus.Turning += (_, view) => Turning?.Invoke(this, view);
         _menus.Adjusting += (_, adjusting) => _face.Adjusting = adjusting;
         _menus.Diagnosing += (_, on) => Diagnose(on);
+        _menus.Saving += (_, _) => Saving?.Invoke(this, EventArgs.Empty);
 
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
@@ -263,6 +264,9 @@ internal sealed class ScreenTile : Border
 
     /// <summary>The DM turned the view of this screen.</summary>
     internal event EventHandler<ViewRotation>? Turning;
+
+    /// <summary>The DM asked to save this screen as a scene.</summary>
+    internal event EventHandler? Saving;
 
     /// <summary>The diagnostic view of this tile went on or off - the board asks the device for its readings.</summary>
     internal event EventHandler<bool>? Diagnosing;

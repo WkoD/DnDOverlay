@@ -311,4 +311,21 @@ internal static partial class ControlLog
         Level = LogLevel.Warning,
         Message = "This control's battery is at {Percent} % and not on the cable.")]
     internal static partial void BatteryLow(ILogger logger, int percent);
+
+    /// <summary>A screen was saved as a scene - the way scenes come into being (Part 7).</summary>
+    [LoggerMessage(
+        EventId = 4020,
+        Level = LogLevel.Information,
+        Message = "Saved the scene \"{Name}\" with {Items} item(s).")]
+    internal static partial void SceneSaved(ILogger logger, string name, int items);
+
+    /// <summary>
+    /// A scene was loaded onto a screen. The count of missing pictures is the one summary Part 3
+    /// asks for, written as well as said, so a gap at the table can be traced to its scene.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4021,
+        Level = LogLevel.Information,
+        Message = "Loaded the scene \"{Name}\" ({Mode}): {Items} item(s), {Missing} picture(s) missing.")]
+    internal static partial void SceneLoaded(ILogger logger, string name, string mode, int items, int missing);
 }

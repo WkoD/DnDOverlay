@@ -70,6 +70,16 @@ public interface ISessionApi
     Task ClearItemsAsync(ScreenRef screen, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Puts a saved scene onto a screen - replacing what lies there or adding to it - as one patch
+    /// and one step (Part 3). The control has read it from the campaign and resolved the names
+    /// afresh (siting question 4); this computes against the target: new ids, depths, capping, the
+    /// target's fan, a fitted background fitted again. No question is asked, even when replacing a
+    /// full screen: undo brings the arrangement back. Returns the new items in their saved order.
+    /// </summary>
+    Task<IReadOnlyList<ItemId>> LoadSceneAsync(
+        ScreenRef screen, SceneState scene, SceneLoad mode, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// "Clear all" (Part 7): items AND background off every played screen - every screen whose
     /// wish is not <see cref="ScreenState.Inactive"/>, because a screen being prepared in the
     /// background is not part of the table. One patch over all of them, or a screen would stand

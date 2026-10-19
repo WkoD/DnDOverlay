@@ -896,8 +896,10 @@ into one of them would have made the range names stop meaning anything.
 | 4017 | `SessionEnding` | Information | control |
 | 4018 | `StandbyHeld` | Information | control |
 | 4019 | `BatteryLow` | Warning | control |
+| 4020 | `SceneSaved` | Information | control |
+| 4021 | `SceneLoaded` | Information | control |
 
-**Next free: 4020. 4014 is retired**, never issued in a release and never to be reused: it was the
+**Next free: 4022. 4014 is retired**, never issued in a release and never to be reused: it was the
 control's own frame-budget warning, and the second hand-run of M4 showed every one of its lines to
 be false - a stage holding 16.7 ms warned against a budget of 2.8 ms, because the budget follows a
 cadence that a sparse stream cannot estimate. The reading stays, the judgement went.

@@ -183,6 +183,15 @@ the control's own window lying on it, or hidden at the device — shows as **⚠
 right of the head; tap the head to read them. Beside it stands the **battery** of a display PC that
 has one, red from 10 %, with a lightning sign on the cable.
 
+**Scenes** keep an arrangement for next time. *Save screen as scene ...* in a screen's menu asks
+for a name — suggested from the screen and the time — and asks before it overwrites one that
+exists. The saved scenes stand under the stage with a preview: a double tap lays one onto the
+active screen, replacing what lies there, and its menu loads it onto any screen, replacing or
+adding, renames, overwrites it with a screen, or deletes it. A scene brings the pictures' current
+names, a background that filled the screen fills the new one, parked pictures go into that
+screen's fan, and a picture the stock no longer has stands as a placeholder — one message says how
+many. Scenes are files in the campaign folder (`scenes\<name>.json`), named as they are called.
+
 While a display is connected, the control keeps its own machine from going to sleep — the table
 hangs on it. Its own battery is the one that gets a warning: at 10 % and off the cable, a note
 beside the stage says so, because when it runs out every display loses its control.

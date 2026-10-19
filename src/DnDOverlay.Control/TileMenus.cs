@@ -52,6 +52,9 @@ internal sealed class TileMenus(
     /// <summary>The DM switched the diagnostic view of this screen on or off.</summary>
     internal event EventHandler<bool>? Diagnosing;
 
+    /// <summary>The DM asked to save this screen as a scene.</summary>
+    internal event EventHandler? Saving;
+
     /// <summary>
     /// The screen's own menu. Reached on free tile area <b>and on the head</b> - the second place
     /// is not convenience: on a full screen there is no free area left, and the menu would be out
@@ -74,6 +77,10 @@ internal sealed class TileMenus(
         menu.Items.Add(Entry(
             "Identify screens",
             () => _ = session.IdentifyScreensAsync(screen.Device, CancellationToken.None)));
+
+        // Saved where the arrangement came into being; LOADED only from the tab "Scenes", where one
+        // sees what one loads (Part 7).
+        menu.Items.Add(Entry("Save screen as scene ...", () => Saving?.Invoke(this, EventArgs.Empty)));
 
         menu.Items.Add(Turned(view));
 

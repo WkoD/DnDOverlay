@@ -208,6 +208,10 @@ public sealed partial class App : Application, IDisposable
             new PairingDesk(session, secrets, _settings, TimeProvider.System),
             new Entrances(store, _settings, TimeProvider.System),
             store,
+
+            // The scenes of the same campaign, read completely on open (Part 3). One campaign until
+            // the campaigns themselves arrive (M5b).
+            SceneShelf.Open(store.Directory, TimeProvider.System),
             _settings,
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
             _log);

@@ -136,6 +136,31 @@ public sealed class FocusAndClearCommandTests
         Assert.Empty((await session.GetSceneAsync(Third, Cancellation)).Items);
     }
 
+    /// <summary>
+    /// A scene replacing a full screen is one patch - cleared and laid together, so no empty
+    /// screen is seen between - and the items it lays are new, in the saved order.
+    /// </summary>
+    [Fact]
+    public async Task Loading_a_scene_over_a_full_screen_is_one_patch_with_new_items()
+    {
+        using var session = Session();
+        var lying = await session.AddItemsAsync(First, [.. Many(2)], Cancellation);
+        var saved = await session.GetSceneAsync(First, Cancellation);
+
+        IReadOnlyList<ItemId> arrived = [];
+
+        var patches = await PatchesDuring(
+            session,
+            async () => arrived = await session.LoadSceneAsync(First, saved, SceneLoad.Replace, Cancellation));
+
+        var patch = Assert.Single(patches);
+
+        Assert.IsType<ClearItems>(patch.Ops[0].Op);
+        Assert.Equal(2, arrived.Count);
+        Assert.Empty(arrived.Intersect(lying));
+        Assert.Equal(arrived, (await session.GetSceneAsync(First, Cancellation)).Items.OrderBy(item => item.ZOrder).Select(item => item.ItemId));
+    }
+
     [Fact]
     public async Task Clearing_an_empty_table_sends_nothing()
     {

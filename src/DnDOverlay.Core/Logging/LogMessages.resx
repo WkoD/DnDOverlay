@@ -312,6 +312,12 @@
   <data name="E4019_BatteryLow" xml:space="preserve">
     <value>This control's battery is at {Percent} % and not on the cable.</value>
   </data>
+  <data name="E4020_SceneSaved" xml:space="preserve">
+    <value>Saved the scene "{Name}" with {Items} item(s).</value>
+  </data>
+  <data name="E4021_SceneLoaded" xml:space="preserve">
+    <value>Loaded the scene "{Name}" ({Mode}): {Items} item(s), {Missing} picture(s) missing.</value>
+  </data>
   <data name="E3040_PicturesSteppedDown" xml:space="preserve">
     <value>{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.</value>
   </data>

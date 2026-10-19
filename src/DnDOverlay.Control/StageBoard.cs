@@ -163,6 +163,12 @@ internal sealed class StageBoard : Panel
         }
     }
 
+    /// <summary>A tile's menu asked to save that screen as a scene.</summary>
+    internal event EventHandler<ScreenRef>? Saving;
+
+    /// <summary>The screens as the board knows them, for the lists of target screens in other menus.</summary>
+    internal IReadOnlyList<ScreenView> Screens => _screens;
+
     /// <summary>
     /// A reading from one device, for every tile of it that shows its diagnostic view. Rank 4: never
     /// kept here, the next one replaces it.
@@ -247,6 +253,7 @@ internal sealed class StageBoard : Panel
             tile.Carried += (_, carried) => Carry(view.Screen, carried);
             tile.Turning += (_, turned) => Turn(view.Screen, turned);
             tile.Diagnosing += (_, _) => Wanted(view.Screen.Device);
+            tile.Saving += (_, _) => Saving?.Invoke(this, view.Screen);
 
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);
             tile.PreviewTouchDown += (_, _) => Activate(view.Screen);

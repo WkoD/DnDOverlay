@@ -709,6 +709,29 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ItemId>> LoadSceneAsync(
+        ScreenRef screen, SceneState scene, SceneLoad mode, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        IReadOnlyList<ItemId> arrived = [];
+
+        await ApplyAsync(
+            screen,
+            (target, context) =>
+            {
+                var ops = SceneLoading.Ops(scene, target, context, mode, _scenes.NextRevision);
+
+                arrived = [.. ops.OfType<AddItem>().Select(add => add.Item.ItemId)];
+
+                return ops;
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return arrived;
+    }
+
+    /// <inheritdoc />
     public Task ClearItemsAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
         ApplyAsync(screen, (scene, _) => scene.Items.Count == 0 ? [] : [new ClearItems()], cancellationToken);
 
