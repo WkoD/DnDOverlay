@@ -407,6 +407,8 @@ internal sealed class MainWindow : Window, IDisposable
 
         if (_list.Items.Cast<ScreenEntry>().SequenceEqual(entries))
         {
+            // The list is the same, but a battery or a connection may have moved.
+            _board.Know(devices);
             return;
         }
 
@@ -422,6 +424,7 @@ internal sealed class MainWindow : Window, IDisposable
         _list.SelectedIndex = selected >= 0 && selected < _list.Items.Count ? selected : 0;
 
         _board.Show([.. devices.SelectMany(device => device.Screens)]);
+        _board.Know(devices);
 
         _ = _board.RefreshAsync(_listening.Token);
     }

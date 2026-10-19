@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using BatteryInfo = DnDOverlay.Core.BatteryInfo;
 
 namespace DnDOverlay.Control;
 
@@ -24,10 +25,11 @@ namespace DnDOverlay.Control;
 /// pieces of text in reading order have nothing to choose.
 /// </para>
 /// <para>
-/// <b>The reserved field on the right is gone with it.</b> It was held free for the reasons mark
-/// and the battery from M5a, and holding it was what made the strip run out of room early. When
-/// those arrive they are things one presses or reads at a glance, and then the head needs a real
-/// layout decision rather than a number kept warm for a year (Teil 7 nachzuziehen).
+/// <b>Since M5a the right edge holds the battery and the reasons mark</b> (DM, 19.10.2026: both on
+/// the right). They are things one reads at a glance or presses, so they get a fixed place, and the
+/// name and resolution run up to them and are cut off there. They take only the room they need:
+/// a device without a battery and a screen without reasons leave the whole width to the text, and
+/// nothing of the earlier reserved field comes back.
 /// </para>
 /// </summary>
 internal sealed class TileHead : Panel
@@ -48,6 +50,19 @@ internal sealed class TileHead : Panel
         TextTrimming = TextTrimming.None,
     };
 
+    private readonly BatteryGauge _battery = new() { Margin = new Thickness(Gap, 0, 0, 0) };
+
+    private readonly TextBlock _mark = new()
+    {
+        FontWeight = FontWeights.SemiBold,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(Gap, 0, 0, 0),
+        Visibility = Visibility.Collapsed,
+    };
+
+    /// <summary>The name and resolution, cut off where the right-hand things begin.</summary>
+    private readonly Canvas _text = new() { ClipToBounds = true };
+
     internal TileHead()
     {
         // The whole strip answers, not only the words on it. A panel without a background is
@@ -58,8 +73,46 @@ internal sealed class TileHead : Panel
         // What does not fit is cut off here rather than argued about above.
         ClipToBounds = true;
 
-        Children.Add(_name);
-        Children.Add(_resolution);
+        _text.Children.Add(_name);
+        _text.Children.Add(_resolution);
+
+        Children.Add(_text);
+        Children.Add(_battery);
+        Children.Add(_mark);
+    }
+
+    /// <summary>
+    /// The colour of the head: grey when nothing of ours lies on the table, ordinary otherwise
+    /// (Part 7). It answers "do we show anything there?" across four tiles without reading, which is
+    /// why frozen and diagnostic keep the ordinary head - they still show pictures.
+    /// </summary>
+    internal bool Inactive
+    {
+        set => Background = value ? HeadGrey : Brushes.Transparent;
+    }
+
+    private static readonly Brush HeadGrey = Frozen(Color.FromRgb(0xC4, 0xC4, 0xC4));
+
+    /// <summary>The battery of this screen's device, or nothing.</summary>
+    internal void Battery(BatteryInfo? battery)
+    {
+        _battery.Show(battery);
+        InvalidateMeasure();
+    }
+
+    /// <summary>The reasons mark - "⚠ 2 reasons ▾" - or an empty field when there are none.</summary>
+    internal void Reasons(string? mark)
+    {
+        _mark.Text = mark is null ? string.Empty : mark + " ▾";
+        _mark.Visibility = mark is null ? Visibility.Collapsed : Visibility.Visible;
+        InvalidateMeasure();
+    }
+
+    private static SolidColorBrush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
     }
 
     /// <summary>
@@ -84,8 +137,14 @@ internal sealed class TileHead : Panel
 
         _name.Measure(endless);
         _resolution.Measure(endless);
+        _battery.Measure(endless);
+        _mark.Measure(endless);
 
-        var height = Math.Max(_name.DesiredSize.Height, _resolution.DesiredSize.Height);
+        var height = Math.Max(
+            Math.Max(_name.DesiredSize.Height, _resolution.DesiredSize.Height),
+            Math.Max(_battery.DesiredSize.Height, _mark.DesiredSize.Height));
+
+        _text.Measure(new Size(double.PositiveInfinity, height));
 
         return new Size(
             double.IsInfinity(availableSize.Width) ? Wanted() : availableSize.Width,
@@ -99,15 +158,32 @@ internal sealed class TileHead : Panel
         // neither is dropped: the panel clips, so a strip too narrow for both simply shows as much
         // as it has room for - which is what the DM asked for and what a reader expects of a line
         // of text in a box that got smaller.
+        // The right-hand things first, at their own width against the right edge; the text gets
+        // what is left and is clipped there.
+        var mark = _mark.Visibility == Visibility.Visible ? _mark.DesiredSize.Width : 0;
+        var battery = _battery.Visibility == Visibility.Visible ? _battery.DesiredSize.Width : 0;
+        var right = finalSize.Width - mark;
+
+        _mark.Arrange(new Rect(right, 0, mark, finalSize.Height));
+
+        right -= battery;
+        _battery.Arrange(new Rect(right, 0, battery, finalSize.Height));
+
+        _text.Arrange(new Rect(0, 0, Math.Max(0, right), finalSize.Height));
+
         var name = _name.DesiredSize.Width;
 
-        _name.Arrange(new Rect(0, 0, name, finalSize.Height));
-        _resolution.Arrange(new Rect(
-            name + Gap, 0, Math.Max(0, _resolution.DesiredSize.Width), finalSize.Height));
+        Canvas.SetLeft(_name, 0);
+        Canvas.SetLeft(_resolution, name + Gap);
+        _name.Height = finalSize.Height;
+        _resolution.Height = finalSize.Height;
 
         return finalSize;
     }
 
-    /// <summary>What the head would like if nobody says how much room there is: both, side by side.</summary>
-    private double Wanted() => _name.DesiredSize.Width + Gap + _resolution.DesiredSize.Width;
+    /// <summary>What the head would like if nobody says how much room there is: everything, side by side.</summary>
+    private double Wanted() =>
+        _name.DesiredSize.Width + Gap + _resolution.DesiredSize.Width
+        + (_battery.Visibility == Visibility.Visible ? _battery.DesiredSize.Width : 0)
+        + (_mark.Visibility == Visibility.Visible ? _mark.DesiredSize.Width : 0);
 }

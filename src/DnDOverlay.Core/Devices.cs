@@ -84,4 +84,16 @@ public sealed record DeviceView(
 /// be an alarm while the device is charging - "18 % and falling" is a different message from
 /// "18 % and rising" (Part 7).
 /// </param>
-public sealed record BatteryInfo(int Percent, bool PluggedIn);
+public sealed record BatteryInfo(int Percent, bool PluggedIn)
+{
+    /// <summary>
+    /// From here down the fill is red - the last confirmation, not the first message: the DM sees
+    /// it fall from 60 to 40 to 20 and acts when it suits him (Part 7). It is also where the control
+    /// warns about its own battery, the one real warning (DM, 19.10.2026).
+    /// </summary>
+    public const int LowPercent = 10;
+
+    /// <summary>Whether this reads as low - at or under <see cref="LowPercent"/>, on the cable or not.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Low => Percent <= LowPercent;
+}

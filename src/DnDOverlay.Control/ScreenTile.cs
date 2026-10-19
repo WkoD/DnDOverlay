@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
@@ -20,10 +21,9 @@ namespace DnDOverlay.Control;
 /// coloured.
 /// </para>
 /// <para>
-/// <b>The row of buttons is deliberately incomplete in M4.</b> The state selector is M5a, the focus
-/// M5b, the underlay M5b - four of the eight controls Part 7 draws have no builder here, and a
-/// disabled button standing in for them would be a promise rather than an order of work
-/// (checks/M4.md). What has a caller is here; the rest arrives with what it does.
+/// <b>The row of buttons is still incomplete.</b> The state selector came with M5a; the focus and
+/// the underlay are M5b, and a disabled button standing in for them would be a promise rather than
+/// an order of work (checks/M4.md). What has a caller is here; the rest arrives with what it does.
 /// </para>
 /// </summary>
 internal sealed class ScreenTile : Border
@@ -47,6 +47,26 @@ internal sealed class ScreenTile : Border
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 12, 0) };
     private readonly CheckBox _background = new() { Content = "Background", Margin = new Thickness(0, 0, 12, 0) };
     private readonly Button _unlock = new() { Content = "Unlock all", Padding = new Thickness(8, 2, 8, 2) };
+
+    /// <summary>
+    /// The state selector (Part 7): the WISH, permanently labelled - not what gets in the way, which
+    /// stands in the head. Without the standing label "frozen" would be the one state only found by
+    /// trying, because it covers nothing and colours no head.
+    /// </summary>
+    private readonly ComboBox _state = new()
+    {
+        MinWidth = 120,
+        Margin = new Thickness(0, 0, 8, 0),
+        ItemsSource = States,
+    };
+
+    /// <summary>The reasons, laid over the thumbnail when the head is tapped (Part 7).</summary>
+    private readonly Popup _reasons;
+    private readonly StackPanel _reasonLines = new();
+    private IReadOnlyList<ScreenReason> _why = [];
+
+    private TilePoint? _tapFrom;
+    private bool _menuRang;
 
     private readonly Border _frame;
 
@@ -78,6 +98,7 @@ internal sealed class ScreenTile : Border
 
         var grips = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
 
+        grips.Children.Add(_state);
         grips.Children.Add(_unlock);
 
         _frame = new Border
@@ -116,6 +137,53 @@ internal sealed class ScreenTile : Border
 
         Child = panel;
 
+        // Over the thumbnail, pushing nothing away: the DM opens it himself and the next tap closes
+        // it, and moving the thumbnail would break the grid in the overview (Part 7).
+        _reasons = new Popup
+        {
+            PlacementTarget = _frame,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+            AllowsTransparency = true,
+            StaysOpen = true,
+            Child = new Border
+            {
+                Child = _reasonLines,
+                Background = new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = Brushes.DimGray,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8, 6, 8, 6),
+            },
+        };
+
+        _state.SelectionChanged += async (_, _) => await ChooseAsync().ConfigureAwait(true);
+
+        // A tap on the head opens the reasons, a long press the screen menu, a movement the drag -
+        // three grips on one strip, told apart by the one tolerance Press holds (Part 7). The whole
+        // line answers, not only the arrow: on the Surface the arrow alone is too small.
+        _head.PreviewMouseLeftButtonDown += (_, down) =>
+        {
+            if (down.StylusDevice is null)
+            {
+                _tapFrom = down.GetPosition(_head);
+            }
+        };
+
+        _head.PreviewMouseLeftButtonUp += (_, up) =>
+        {
+            if (up.StylusDevice is null)
+            {
+                Tapped(up.GetPosition(_head));
+            }
+        };
+
+        _head.PreviewTouchDown += (_, down) =>
+        {
+            _tapFrom = down.GetTouchPoint(_head).Position;
+            _menuRang = false;
+        };
+
+        _head.PreviewTouchUp += (_, up) => Tapped(up.GetTouchPoint(_head).Position);
+
         _face.Asked += (_, asked) => Menu(_face, asked.At, asked.Where, asked.Item);
         _face.Carried += (_, carried) => Carried?.Invoke(this, carried);
 
@@ -126,7 +194,11 @@ internal sealed class ScreenTile : Border
         {
             var at = down.GetTouchPoint(_head).Position;
 
-            _pressed.Down(at, () => Menu(_head, at, where: null, item: null));
+            _pressed.Down(at, () =>
+            {
+                _menuRang = true;
+                Menu(_head, at, where: null, item: null);
+            });
         };
 
         _head.PreviewTouchMove += (_, over) => _pressed.Moved(over.GetTouchPoint(_head).Position);
@@ -189,6 +261,9 @@ internal sealed class ScreenTile : Border
         set
         {
             field = value;
+
+            // Not remembered: a change of view closes the list (Part 7).
+            CloseReasons();
             _face.Opened = value;
             _frame.VerticalAlignment = value ? VerticalAlignment.Stretch : VerticalAlignment.Top;
             _frame.HorizontalAlignment = value ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
@@ -230,6 +305,41 @@ internal sealed class ScreenTile : Border
     }
 
     /// <summary>
+    /// What the hub knows about this screen and its device beyond the scene: the wish for the
+    /// selector, the reasons for the mark, the battery for the head. Asked on every device event, so
+    /// a battery that moves or a device that leaves shows at once.
+    /// </summary>
+    /// <param name="device">The screen's device, or <see langword="null"/> when it is not paired.</param>
+    internal void Know(ScreenView view, DeviceView? device)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+
+        _setting = true;
+        _state.SelectedItem = States.FirstOrDefault(choice => choice.State == view.State);
+        _setting = false;
+
+        _head.Inactive = view.State == ScreenState.Inactive;
+        _head.Battery(device is { Connected: true } ? device.Battery : null);
+
+        var why = ScreenReasons.Of(view, device);
+
+        if (!why.SequenceEqual(_why))
+        {
+            _why = why;
+            _head.Reasons(ScreenReasons.Mark(why));
+
+            if (why.Count == 0)
+            {
+                CloseReasons();
+            }
+            else if (_reasons.IsOpen)
+            {
+                FillReasons();
+            }
+        }
+    }
+
+    /// <summary>
     /// What the device of this screen is loading. Straight through to the layer that draws it -
     /// nothing is bundled on the way, which is the whole reason that layer exists.
     /// </summary>
@@ -264,6 +374,126 @@ internal sealed class ScreenTile : Border
         }
 
         _menus.ForScreen(over, at, _scene, _view, _face.Adjusting, Opened);
+    }
+
+    /// <summary>The four states in the selector's words - the enum's names are for files, not for people.</summary>
+    private static readonly IReadOnlyList<StateChoice> States =
+    [
+        new(ScreenState.Enabled, "Active"),
+        new(ScreenState.Disabled, "Frozen"),
+        new(ScreenState.Diagnostic, "Diagnostic"),
+        new(ScreenState.Inactive, "Inactive"),
+    ];
+
+    private sealed record StateChoice(ScreenState State, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private async Task ChooseAsync()
+    {
+        if (_setting || _state.SelectedItem is not StateChoice choice)
+        {
+            return;
+        }
+
+        await _session.SetScreenStateAsync(Screen, choice.State, CancellationToken.None).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// A press on the head that came up where it went down and did not ring the menu clock is a
+    /// tap, and a tap toggles the reasons - with none, there is nothing to open.
+    /// </summary>
+    private void Tapped(TilePoint at)
+    {
+        var from = _tapFrom;
+
+        _tapFrom = null;
+
+        if (from is not { } start
+            || _menuRang
+            || Math.Abs(at.X - start.X) + Math.Abs(at.Y - start.Y) > Press.Tolerance)
+        {
+            _menuRang = false;
+            return;
+        }
+
+        if (_reasons.IsOpen)
+        {
+            CloseReasons();
+        }
+        else if (_why.Count > 0)
+        {
+            FillReasons();
+            _reasons.Width = Math.Max(160, _frame.ActualWidth);
+            _reasons.IsOpen = true;
+
+            // A tap anywhere else closes it again. Watched on the window, because the list lies in
+            // a popup of its own and the tile does not see a tap on its neighbour.
+            if (Window.GetWindow(this) is { } window)
+            {
+                window.PreviewMouseDown += Elsewhere;
+                window.PreviewTouchDown += Elsewhere;
+                _watching = window;
+            }
+        }
+    }
+
+    private Window? _watching;
+
+    private void Elsewhere(object? sender, System.Windows.Input.InputEventArgs e)
+    {
+        // The head toggles by itself; anywhere else closes.
+        if (e.OriginalSource is DependencyObject hit && IsWithin(hit, _head))
+        {
+            return;
+        }
+
+        CloseReasons();
+    }
+
+    private static bool IsWithin(DependencyObject hit, DependencyObject container)
+    {
+        for (var at = hit; at is not null; at = VisualTreeHelper.GetParent(at) ?? LogicalTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, container))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void CloseReasons()
+    {
+        if (_reasons is not null)
+        {
+            _reasons.IsOpen = false;
+        }
+
+        if (_watching is { } window)
+        {
+            window.PreviewMouseDown -= Elsewhere;
+            window.PreviewTouchDown -= Elsewhere;
+            _watching = null;
+        }
+    }
+
+    /// <summary>One reason a line, in the order of the rule - and with one it is the same list of one line.</summary>
+    private void FillReasons()
+    {
+        _reasonLines.Children.Clear();
+
+        foreach (var reason in _why)
+        {
+            _reasonLines.Children.Add(new TextBlock
+            {
+                Text = ScreenReasons.Words(reason),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 2, 0, 2),
+            });
+        }
     }
 
     private async Task ToggleAsync(bool images)

@@ -175,6 +175,14 @@ order you drag them into by their head, and each one opens on its own as a large
 Whatever you do on a tile happens at the table at once; a picture still on its way there shows
 it by **filling with colour from the bottom up** as it arrives.
 
+Under each tile, the **state selector** says how you want that screen: *Active*, *Frozen* (the
+table takes no gestures), *Diagnostic* (a bar of numbers over the pictures at the table) or
+*Inactive* (no overlay; the head turns grey). It always shows your wish. What keeps a screen dark
+although you did not ask for it — the device not paired or not connected, the screen unplugged,
+the control's own window lying on it, or hidden at the device — shows as **⚠ 2 reasons** at the
+right of the head; tap the head to read them. Beside it stands the **battery** of a display PC that
+has one, red from 10 %, with a lightning sign on the cable.
+
 | Grip | Finger | Mouse |
 |---|---|---|
 | Select one | tap it | click it |

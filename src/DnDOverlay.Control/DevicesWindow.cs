@@ -177,9 +177,18 @@ internal sealed class DevicesWindow : Window, IDisposable
         {
             // The device rides along on both levels, so selecting a screen answers "which device"
             // as well as selecting the device does - the grips below act on the machine.
+            // The battery beside the device's line, the same gauge as on its tiles (Part 7). Only
+            // while it is connected - a percentage from before it left would read as current.
+            var header = new StackPanel { Orientation = Orientation.Horizontal };
+            var gauge = new BatteryGauge { Margin = new Thickness(8, 0, 0, 0) };
+
+            header.Children.Add(new TextBlock { Text = Describe(device), VerticalAlignment = VerticalAlignment.Center });
+            header.Children.Add(gauge);
+            gauge.Show(device.Connected ? device.Battery : null);
+
             var node = new TreeViewItem
             {
-                Header = Describe(device),
+                Header = header,
                 IsExpanded = true,
                 Tag = device,
             };

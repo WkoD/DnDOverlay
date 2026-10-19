@@ -164,6 +164,28 @@ internal sealed class StageBoard : Panel
     }
 
     /// <summary>
+    /// What every tile needs beyond its scene: the wish, the reasons and the battery (Part 7). Called
+    /// on every device event and not only when the list of screens changes - a battery that falls or
+    /// a device that leaves changes no list.
+    /// </summary>
+    internal void Know(IReadOnlyList<DeviceView> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+
+        foreach (var (screen, tile) in _tiles)
+        {
+            var device = devices.FirstOrDefault(known => known.Device == screen.Device);
+            var view = device?.Screens.FirstOrDefault(known => known.Screen == screen)
+                ?? _screens.FirstOrDefault(known => known.Screen == screen);
+
+            if (view is not null)
+            {
+                tile.Know(view, device);
+            }
+        }
+    }
+
+    /// <summary>
     /// The screens as the hub knows them. Tiles come and go with them - a screen that is unplugged
     /// keeps its scene in the hub, but there is nothing to show it on until it is back.
     /// </summary>
