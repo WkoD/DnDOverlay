@@ -138,6 +138,10 @@ Five things make the gestures survive an evening rather than merely work:
 - **A picture you are holding stays under your hand**, whatever else arrives on the screen
   meanwhile.
 
+A picture that is not there yet already has its place: a **dashed frame with its name**, where it
+lies, as large and as turned as it will be, and it can be moved like any other. A picture that
+could not be loaded at all keeps the frame, with the reason underneath.
+
 Each screen carries its own parameters, and what you set at the table is never rearranged
 behind your back.
 

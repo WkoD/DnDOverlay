@@ -58,6 +58,12 @@ public sealed partial class App : Application, IDisposable
     private readonly ConcurrentDictionary<AssetId, ImageSource> _images = new();
 
     /// <summary>
+    /// Pictures whose load ended for good, with the reason the placeholder shows (Part 7). Taken
+    /// out again when the picture does arrive after all - a later scene or a retry can bring it.
+    /// </summary>
+    private readonly ConcurrentDictionary<AssetId, string> _failed = new();
+
+    /// <summary>
     /// Pictures memory pressure has put down to their thumbnails. Marked, so the drawing does not
     /// sharpen them straight back up - it asks for a sharper decode whenever a picture is drawn
     /// larger than its bitmap, and a stepped-down one always is. A hand taking it, or the DM
@@ -1746,6 +1752,13 @@ public sealed partial class App : Application, IDisposable
             var name = NameOf(failure.Asset);
 
             DisplayLog.AssetFailed(_logger, name, failure.Asset, failure.Detail);
+
+            _failed[failure.Asset] = "could not be loaded";
+        }
+
+        if (run.Failed.Count > 0)
+        {
+            await Dispatcher.InvokeAsync(DrawEverywhere);
         }
     }
 
@@ -1803,6 +1816,7 @@ public sealed partial class App : Application, IDisposable
             var decoded = PictureDecoder.Decode(arrived.Bytes, arrived.IsThumbnail ? 0 : pixelWidth);
 
             _images[arrived.Asset] = decoded;
+            _ = _failed.TryRemove(arrived.Asset, out _);
 
             // Kept only for what moves, and only from the full picture - a thumbnail of an
             // animation is a still, and animating it would show the wrong thing sharply.
@@ -1846,6 +1860,13 @@ public sealed partial class App : Application, IDisposable
             var name = NameOf(arrived.Asset);
 
             DisplayLog.AssetFailed(_logger, name, arrived.Asset, exception.Message);
+
+            // Only when nothing at all is on the table for it: an unreadable full picture over a
+            // thumbnail that is already standing leaves the thumbnail, which is better than a frame.
+            if (!_images.ContainsKey(arrived.Asset))
+            {
+                _failed[arrived.Asset] = "could not be read";
+            }
         }
     }
 
@@ -2818,6 +2839,15 @@ public sealed partial class App : Application, IDisposable
     /// a control restart would lose it (Part 3).
     /// </para>
     /// </summary>
+    /// <summary>Draws every screen of this device again - after something changed that all of them may show.</summary>
+    private void DrawEverywhere()
+    {
+        foreach (var screen in _windows.Keys.ToList())
+        {
+            Draw(new ScreenRef(_device, screen));
+        }
+    }
+
     private void Draw(ScreenRef screen)
     {
         if (!_windows.TryGetValue(screen.Screen, out var window)
@@ -2838,7 +2868,8 @@ public sealed partial class App : Application, IDisposable
             context,
             _images,
             _moving,
-            Loading());
+            Loading(),
+            _failed);
 
         _frames?.Drew(Stopwatch.GetElapsedTime(clock).TotalMilliseconds);
     }

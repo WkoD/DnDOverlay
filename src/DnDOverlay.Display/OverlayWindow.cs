@@ -159,6 +159,9 @@ internal sealed class OverlayWindow : Window
     private ParkEdge _diagnosticEdge = ParkEdge.Left;
     private ScreenState _state = ScreenState.Enabled;
 
+    /// <summary>The frames standing in for pictures that are not here - see <see cref="Placeholder"/>.</summary>
+    private readonly Dictionary<(AssetId Asset, string Name, string? Reason), ImageSource> _placeholders = [];
+
     /// <summary>
     /// Every touch this window has seen go down and not come up, by the identity it is reported
     /// under. It is the second source the touch events cannot give: whether the system still knows
@@ -677,12 +680,16 @@ internal sealed class OverlayWindow : Window
     /// where it can be asserted.
     /// </para>
     /// </summary>
+    /// <param name="failed">
+    /// Pictures whose load ended for good, with the reason - their placeholder says it (Part 7).
+    /// </param>
     internal void Render(
         SceneState scene,
         ScreenContext context,
         IReadOnlyDictionary<AssetId, ImageSource> images,
         IReadOnlyDictionary<AssetId, byte[]> moving,
-        IReadOnlyDictionary<AssetId, double> loading)
+        IReadOnlyDictionary<AssetId, double> loading,
+        IReadOnlyDictionary<AssetId, string> failed)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(context);
@@ -738,6 +745,13 @@ internal sealed class OverlayWindow : Window
         // something is happening is the pictures arriving one after another.
         var ringing = scene.ItemsVisible && loading.Count <= AnimationBudget.ItemsPerScreen;
 
+        // The same budget for the frames of pictures still on their way, and for the same reason: a
+        // scene of seven hundred arriving at once would build seven hundred frames in one pass, and
+        // the thumbnails that replace them are a few kilobytes and come at once anyway (Part 5). A
+        // picture that failed for good always gets its frame - that one is not coming.
+        var framing = scene.Items.Count(item => item is ImageItem image && !images.ContainsKey(image.AssetId))
+            <= AnimationBudget.ItemsPerScreen;
+
         // Which pictures may move is decided over the scene, in Core, before anything is built -
         // a continuous animation on a software-rendered transparent overlay is the most expensive
         // case this application has (Part 6).
@@ -755,9 +769,27 @@ internal sealed class OverlayWindow : Window
         {
             foreach (var item in scene.Items)
             {
-                if (item is not ImageItem image || !images.TryGetValue(image.AssetId, out var source))
+                if (item is not ImageItem image)
                 {
                     continue;
+                }
+
+                // <b>A picture that is not here yet still has its place</b> (Part 5, Part 7): a frame
+                // with its name, where it lies, as large and as turned as it will be. It is an item
+                // like any other - it can be pushed, parked and locked, and the ring rides on it -
+                // because the DM sets up while pictures are still on their way, and a table that
+                // shows nothing there invites a second picture onto the same spot. A load that
+                // failed for good says why, in a second line.
+                if (!images.TryGetValue(image.AssetId, out var source))
+                {
+                    var reason = failed.GetValueOrDefault(image.AssetId);
+
+                    if (reason is null && !framing)
+                    {
+                        continue;
+                    }
+
+                    source = Placeholder(image, reason);
                 }
 
                 standing.Add(image.ItemId);
@@ -852,6 +884,87 @@ internal sealed class OverlayWindow : Window
             MoreToShow?.Invoke();
         }
     }
+
+    /// <summary>
+    /// The frame that stands in for a picture that is not here, drawn once per picture, name and
+    /// reason - a drawing rather than a bitmap, so it costs no decode and is sharp at any size.
+    /// </summary>
+    private ImageSource Placeholder(ImageItem image, string? reason)
+    {
+        var key = (image.AssetId, image.Name, reason);
+
+        if (_placeholders.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        // A handful are in use at any moment; the cache only has to stop rebuilding them on every
+        // pass, not to keep every name a picture ever had.
+        if (_placeholders.Count > 256)
+        {
+            _placeholders.Clear();
+        }
+
+        // In the picture's own shape, so the frame fills exactly the place the picture will.
+        var width = 1000d;
+        var height = image.Meta.PixelWidth > 0 && image.Meta.PixelHeight > 0
+            ? width * image.Meta.PixelHeight / image.Meta.PixelWidth
+            : width / Math.Max(0.01, image.AspectRatio);
+        var shorter = Math.Min(width, height);
+
+        var drawing = new DrawingGroup();
+
+        using (var pen = drawing.Open())
+        {
+            var border = new Pen(Brushes.White, shorter * 0.012) { DashStyle = DashStyles.Dash };
+
+            pen.DrawRectangle(
+                new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)),
+                border,
+                new System.Windows.Rect(0, 0, width, height));
+
+            var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            var name = Text(image.Name, shorter * 0.09, Brushes.White, width * 0.9, pixelsPerDip);
+            var why = reason is null
+                ? null
+                : Text(reason, shorter * 0.055, Brushes.Gainsboro, width * 0.9, pixelsPerDip);
+
+            var block = name.Height + (why is null ? 0 : why.Height + (shorter * 0.03));
+            var top = (height - block) / 2;
+
+            pen.DrawText(name, new System.Windows.Point((width - name.Width) / 2, top));
+
+            if (why is not null)
+            {
+                pen.DrawText(why, new System.Windows.Point((width - why.Width) / 2, top + name.Height + (shorter * 0.03)));
+            }
+        }
+
+        drawing.Freeze();
+
+        var placeholder = new DrawingImage(drawing);
+        placeholder.Freeze();
+
+        _placeholders[key] = placeholder;
+
+        return placeholder;
+    }
+
+    private static FormattedText Text(string text, double size, Brush brush, double maxWidth, double pixelsPerDip) =>
+        new(
+            text,
+            System.Globalization.CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight,
+            new Typeface("Segoe UI"),
+            Math.Max(1, size),
+            brush,
+            pixelsPerDip)
+        {
+            MaxTextWidth = maxWidth,
+            TextAlignment = TextAlignment.Center,
+            MaxLineCount = 3,
+            Trimming = TextTrimming.CharacterEllipsis,
+        };
 
     /// <summary>
     /// Asks for a sharper decode when an item is being drawn larger than the bitmap it has.
