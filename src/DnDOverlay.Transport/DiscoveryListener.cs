@@ -48,8 +48,18 @@ public sealed class DiscoveryListener
     /// paired display discards foreign beacons: the address is no good for telling controls apart
     /// - it changes - and a second control in the same network is no invention (Part 4).
     /// </param>
-    public async Task<Sighting?> ListenAsync(Guid? boundTo, CancellationToken cancellationToken)
+    public Task<Sighting?> ListenAsync(Guid? boundTo, CancellationToken cancellationToken) =>
+        ListenAsync(boundTo, answersCall: static () => false, cancellationToken);
+
+    /// <summary>
+    /// As above, and a beacon of ANOTHER control is taken too when it carries the call for orphaned
+    /// displays and <paramref name="answersCall"/> says this display would answer - its takeover
+    /// window is open (Part 4). Asked per beacon, because the window opens while the search runs.
+    /// </summary>
+    public async Task<Sighting?> ListenAsync(Guid? boundTo, Func<bool> answersCall, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(answersCall);
+
         using var socket = new UdpClient();
 
         try
@@ -75,6 +85,16 @@ public sealed class DiscoveryListener
 
                 if (boundTo is { } control && beacon.ControlId != control)
                 {
+                    if (beacon.CallingOrphans && answersCall())
+                    {
+                        // An ordinary Hello goes to the caller, and its unknown-token rule makes a
+                        // pairing request of it - no message of its own, no second procedure. Loud
+                        // on purpose: a display offering itself to another control is never routine.
+                        TransportLog.AnsweringOrphanCall(_logger, beacon.Name, datagram.RemoteEndPoint.Address, control);
+
+                        return new Sighting(beacon, datagram.RemoteEndPoint.Address);
+                    }
+
                     // The first sighting of each strange control is said out loud, the repeats are
                     // not. Without the first, a control whose configuration was replaced is
                     // invisible to this device for ever and nothing anywhere says why (1048); with

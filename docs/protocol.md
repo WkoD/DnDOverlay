@@ -143,10 +143,12 @@ sent from inside that call, so it cannot leave before the file exists.
 
 ### Finding each other
 
-The control announces itself on **UDP 47800** every two seconds. The beacon carries exactly four
-things — control identifier, display name, port, protocol version — and nothing else: it is
-unauthenticated and readable by everyone on the network, so device lists, versions of paired
-machines and screen names belong behind the pairing.
+The control announces itself on **UDP 47800** every two seconds. The beacon carries exactly five
+things — control identifier, display name, port, protocol version, and whether it is calling for
+orphaned displays — and nothing else: it is unauthenticated and readable by everyone on the
+network, so device lists, versions of paired machines and screen names belong behind the pairing.
+The fifth came in M5a with a default, so an older display reads past it and an older control's
+beacon reads as not calling.
 
 | | |
 |---|---|
@@ -188,10 +190,24 @@ stop producing the situation, and it comes in two halves:
   `schemaVersion`, or out of the bytes of a damaged one. Then the displays find it again by
   themselves and arrive as pairing requests, because their tokens went with the file. Only the
   identity is recovered, never the content.
-- **Where it is gone for good**, a display can still be called for — see *Wenn das Control nicht
-  wiederkommt* in the plan: a control asks for orphaned devices, and a display answers only if it
-  lost its own ungracefully and has been without one for longer than the rescue mark's deadline.
-  Nothing happens without somebody pressing something.
+- **Where it is gone for good, the control calls for orphaned displays.** *Search for orphaned
+  devices* in the Devices window sets the call in the beacon for two minutes (1055). A paired
+  display takes a foreign beacon that carries it **only while its takeover window is open**, and
+  answers with its ordinary `Hello` (1054) — no message of its own: the unknown token makes a
+  pairing request of it, and the DM decides at the control as for any other.
+
+  | The window is open when | Because |
+  |---|---|
+  | the display was connected — welcomed — in this run | otherwise the ordinary state of an autostarting display, which has no control most of the time, would be open |
+  | that connection ended **without `GoIdle`** | `GoIdle` is the orderly goodbye and shuts the window outright |
+  | it ended at least **a minute** ago, the rescue mark's grace period | a Wi-Fi hiccup must not make a display answerable; the minute counts from the first loss, not from each failed retry |
+
+  **The old control wins for as long as nothing was accepted.** While a display stands as a
+  request at the caller's, it goes on listening for its own control and drops the request the
+  moment that one is heard (1056). **Nothing happens without somebody pressing something**: a
+  pure time rule would offer the displays of one control to a second, legitimate one after a
+  minute. `GoIdle` itself is not sent before M6, so until then every connection that is lost
+  counts as ungraceful.
 
 Either way it is readable rather than silent: the display says the first sighting of each strange
 control out loud (1048), and the control says at startup whether its identity survived (4010) or
@@ -635,6 +651,9 @@ the same application that draws.
 | 1051 | `SendQueueFull` | Warning | transport |
 | 1052 | `SendTimedOut` | Warning | transport |
 | 1053 | `TouchRateExceeded` | Warning | hub |
+| 1054 | `AnsweringOrphanCall` | Warning | transport |
+| 1055 | `CallingOrphans` | Information | hub |
+| 1056 | `OwnControlBack` | Information | display |
 
 **1049 is the line that exists because its absence was the fault.** The loop that looks for a
 control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
@@ -663,8 +682,9 @@ ends and the ordinary reconnect puts the truth back. **The third case, a socket 
 write outright, gets no line here**: the receive side already reports the end, and two lines for
 one event would be noise exactly when the log is being read.
 
-**Next free: 1054.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
-free at the end of transport's, pairing has 1020–1037, discovery 1038–1041, the reconnect
+**Next free: 1057.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+free at the end of transport's, pairing has 1020–1037, discovery 1038–1041 with the call for
+orphaned displays at 1054–1056, the reconnect
 loop's backoff 1042 (written by `ConnectionLoop` in transport since M5a; the number stayed when
 the line moved), the send side 1043–1045 with its counterparts at 1051–1052, and log forwarding 1046–1047 with
 the touch rate beside it at 1053.

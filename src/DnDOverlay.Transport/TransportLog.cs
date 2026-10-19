@@ -135,4 +135,15 @@ internal static partial class TransportLog
         Level = LogLevel.Information,
         Message = "Trying again in {Delay}.")]
     internal static partial void RetryingIn(ILogger logger, TimeSpan delay);
+
+    /// <summary>
+    /// This display lost its control without a goodbye more than a minute ago, and is answering
+    /// another control's call for orphaned displays (Part 4). A warning, because that is a takeover
+    /// on its way - the DM at the other control still has to allow it.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1054,
+        Level = LogLevel.Warning,
+        Message = "Answering the call for orphaned displays from {Name} at {Address}; this display was bound to control {BoundTo}.")]
+    internal static partial void AnsweringOrphanCall(ILogger logger, string name, System.Net.IPAddress address, Guid boundTo);
 }

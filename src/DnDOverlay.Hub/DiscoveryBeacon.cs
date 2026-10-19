@@ -21,6 +21,7 @@ public sealed class DiscoveryBeacon : BackgroundService
     private readonly IOptions<HubOptions> _options;
     private readonly TimeProvider _time;
     private readonly ILogger<DiscoveryBeacon> _logger;
+    private readonly OrphanCall _orphans;
 
     /// <summary>
     /// What the last round went out to, so a change can be said out loud and a repetition cannot.
@@ -31,28 +32,31 @@ public sealed class DiscoveryBeacon : BackgroundService
     /// </summary>
     private string? _lastTargets;
 
-    public DiscoveryBeacon(IOptions<HubOptions> options, TimeProvider time, ILogger<DiscoveryBeacon> logger)
+    public DiscoveryBeacon(
+        IOptions<HubOptions> options, TimeProvider time, ILogger<DiscoveryBeacon> logger, OrphanCall orphans)
     {
         _options = options;
         _time = time;
         _logger = logger;
+        _orphans = orphans;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var beacon = DiscoveryJson.Serialise(new Beacon(
-            _options.Value.ControlId,
-            Environment.MachineName,
-            _options.Value.Port,
-            Protocol.Version));
-
         HubLog.BeaconStarted(_logger, Protocol.DiscoveryPort);
 
         using var ticks = new PeriodicTimer(Protocol.BeaconInterval, _time);
 
         do
         {
-            Announce(beacon);
+            // Built every round rather than once: the call for orphaned displays comes and goes
+            // while the beacon runs, and a datagram is a hundred bytes.
+            Announce(DiscoveryJson.Serialise(new Beacon(
+                _options.Value.ControlId,
+                Environment.MachineName,
+                _options.Value.Port,
+                Protocol.Version,
+                _orphans.Calling)));
         }
         while (await Safely(ticks, stoppingToken).ConfigureAwait(false));
 

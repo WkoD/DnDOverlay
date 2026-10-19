@@ -161,6 +161,15 @@
   <data name="E1053_TouchRateExceeded" xml:space="preserve">
     <value>{DeviceName} is sending more than {Limit} touch reports a second; the rest are refused.</value>
   </data>
+  <data name="E1054_AnsweringOrphanCall" xml:space="preserve">
+    <value>Answering the call for orphaned displays from {Name} at {Address}; this display was bound to control {BoundTo}.</value>
+  </data>
+  <data name="E1055_CallingOrphans" xml:space="preserve">
+    <value>Calling for orphaned displays for {Duration}.</value>
+  </data>
+  <data name="E1056_OwnControlBack" xml:space="preserve">
+    <value>Own control {Name} at {Address} is back; dropping the answer to the call for orphaned displays.</value>
+  </data>
   <data name="E1051_SendQueueFull" xml:space="preserve">
     <value>The control at {HubUri} is not taking messages ({Queued} queued, {Bytes} bytes); closing and reconnecting.</value>
   </data>

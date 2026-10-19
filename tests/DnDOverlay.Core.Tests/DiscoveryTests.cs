@@ -7,7 +7,7 @@ using Wire = DnDOverlay.Core.Protocol.Protocol;
 namespace DnDOverlay.Core.Tests;
 
 /// <summary>
-/// The beacon: four things, and a reader that never falls over.
+/// The beacon: five things, and a reader that never falls over.
 /// <para>
 /// This one is fed by the open network - anybody may send anything to that port - so the parser
 /// is the last place that should be lenient, and the first that must not throw (Part 4).
@@ -31,12 +31,13 @@ public sealed class DiscoveryTests
     /// (Part 4).
     /// </summary>
     [Fact]
-    public void A_beacon_says_four_things_and_no_more()
+    public void A_beacon_says_five_things_and_no_more()
     {
         var json = Encoding.UTF8.GetString(
             DiscoveryJson.Serialise(new Beacon(Guid.NewGuid(), "DM-SURFACE", 47800, Wire.Version)));
 
-        Assert.Equal(4, typeof(Beacon).GetProperties().Length);
+        Assert.Equal(5, typeof(Beacon).GetProperties().Length);
+        Assert.Contains("callingOrphans", json, StringComparison.Ordinal);
         Assert.Contains("controlId", json, StringComparison.Ordinal);
         Assert.Contains("name", json, StringComparison.Ordinal);
         Assert.Contains("port", json, StringComparison.Ordinal);
@@ -84,6 +85,31 @@ public sealed class DiscoveryTests
     /// A beacon from a newer build carries fields this one does not know. Ignoring them is what
     /// lets an older display find a newer control at all (rule 7).
     /// </summary>
+    /// <summary>
+    /// The fifth thing came later (M5a), so a control from before it says nothing about the call -
+    /// and that has to read as not calling, never as an error and never as a call.
+    /// </summary>
+    [Fact]
+    public void A_beacon_from_before_the_call_is_not_calling()
+    {
+        var json = $$"""
+            {"controlId":"{{Guid.NewGuid()}}","name":"DM-SURFACE","port":47800,"protocolVersion":1}
+            """;
+
+        var beacon = DiscoveryJson.Parse(Encoding.UTF8.GetBytes(json));
+
+        Assert.NotNull(beacon);
+        Assert.False(beacon.CallingOrphans);
+    }
+
+    [Fact]
+    public void The_call_survives_the_wire()
+    {
+        var beacon = new Beacon(Guid.NewGuid(), "DM-SURFACE", 47800, Wire.Version, CallingOrphans: true);
+
+        Assert.True(DiscoveryJson.Parse(DiscoveryJson.Serialise(beacon))?.CallingOrphans);
+    }
+
     [Fact]
     public void A_beacon_from_a_newer_build_is_still_a_beacon()
     {

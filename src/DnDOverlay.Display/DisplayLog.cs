@@ -486,4 +486,15 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.")]
     internal static partial void PicturesSteppedDown(ILogger logger, int count, long usedMb, long capMb);
+
+    /// <summary>
+    /// This device answered a call for orphaned displays, and while it stood as a request at the
+    /// caller's, its own control spoke again. The request is dropped and the device goes home - the
+    /// old control wins for as long as nothing was accepted (Part 4).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1056,
+        Level = LogLevel.Information,
+        Message = "Own control {Name} at {Address} is back; dropping the answer to the call for orphaned displays.")]
+    internal static partial void OwnControlBack(ILogger logger, string name, System.Net.IPAddress address);
 }

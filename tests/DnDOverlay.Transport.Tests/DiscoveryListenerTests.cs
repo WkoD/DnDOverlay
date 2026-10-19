@@ -119,6 +119,72 @@ public sealed class DiscoveryListenerTests
     }
 
     /// <summary>
+    /// A foreign control calling for orphaned displays is taken - but only while this display's
+    /// takeover window is open, and the window is asked per beacon, so it may open while the
+    /// search runs (Part 4).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_call_for_orphans_is_answered_once_the_window_opens()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mine = Guid.NewGuid();
+        var caller = Guid.NewGuid();
+        var log = new Captured();
+        var listener = new DiscoveryListener(log);
+        var open = false;
+
+        var listening = listener.ListenAsync(boundTo: mine, () => Volatile.Read(ref open), cancellationToken);
+
+        using (var sender = Sender())
+        {
+            var datagram = DiscoveryJson.Serialise(new Beacon(caller, "NEW-CONTROL", 47800, Protocol.Version, CallingOrphans: true));
+
+            // Heard and walked past while the window is shut: named as a stranger, not taken.
+            while (log.Count(1048, caller) == 0)
+            {
+                await sender.SendAsync(datagram, Target(), cancellationToken);
+                await Task.Delay(25, cancellationToken);
+            }
+
+            Assert.False(listening.IsCompleted);
+        }
+
+        Volatile.Write(ref open, true);
+
+        var sighting = await Announce(
+            listening,
+            new Beacon(caller, "NEW-CONTROL", 47800, Protocol.Version, CallingOrphans: true),
+            cancellationToken);
+
+        Assert.NotNull(sighting);
+        Assert.Equal(caller, sighting.Beacon.ControlId);
+        Assert.Equal(1, log.Count(1054, mine));
+    }
+
+    /// <summary>
+    /// An open window is not an invitation to everybody: a second legitimate control that is not
+    /// calling stays a stranger. That is the accident a pure time rule would have had.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task An_open_window_does_not_take_a_control_that_is_not_calling()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mine = Guid.NewGuid();
+        var listener = new DiscoveryListener(NullLogger<DiscoveryListener>.Instance);
+
+        var listening = listener.ListenAsync(boundTo: mine, () => true, cancellationToken);
+
+        var sighting = await Announce(
+            listening,
+            new Beacon(Guid.NewGuid(), "SOMEBODY-ELSE", 47800, Protocol.Version),
+            new Beacon(mine, "DM-SURFACE", 47800, Protocol.Version),
+            cancellationToken);
+
+        Assert.NotNull(sighting);
+        Assert.Equal(mine, sighting.Beacon.ControlId);
+    }
+
+    /// <summary>
     /// Noise on that port is the normal state of a home network, and it must not end the search:
     /// a listener that gave up on the first stray datagram would be a listener that never finds
     /// anything.

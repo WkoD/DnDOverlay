@@ -80,6 +80,7 @@ internal sealed class DevicesWindow : Window, IDisposable
             Margin = new Thickness(0, 0, 0, 8),
         });
         panel.Children.Add(Gate());
+        panel.Children.Add(Orphans());
         panel.Children.Add(_status);
 
         Content = new ScrollViewer
@@ -460,6 +461,31 @@ internal sealed class DevicesWindow : Window, IDisposable
         };
 
         return box;
+    }
+
+    /// <summary>
+    /// The call for orphaned displays, for a control whose identity is gone: two minutes in the
+    /// beacon, and displays that lost their control without a goodbye more than a minute ago
+    /// answer and stand above as requests (Part 4). Pressing again starts the two minutes anew.
+    /// </summary>
+    private Button Orphans()
+    {
+        var button = new Button
+        {
+            Content = "Search for orphaned devices",
+            Padding = new Thickness(12, 6, 12, 6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+
+        button.Click += async (_, _) =>
+        {
+            await _session.CallOrphansAsync(_listening.Token).ConfigureAwait(true);
+            _status.Text = "Calling for two minutes. Displays that lost their control more than a minute ago "
+                           + "appear under Waiting for a decision.";
+        };
+
+        return button;
     }
 
     private static TextBlock Heading(string text, bool first = false) =>

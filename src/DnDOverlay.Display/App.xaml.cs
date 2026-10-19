@@ -222,6 +222,20 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private int _gestures;
     private int _connections;
+
+    /// <summary>
+    /// Whether a call for orphaned displays would be answered right now (Part 4). Opened by a
+    /// connection to this device's own control that ended without a goodbye, a minute ago or more.
+    /// </summary>
+    private readonly TakeoverWindow _takeover = new(TimeProvider.System);
+
+    /// <summary>
+    /// The control the last search's sighting answered a call FROM INSTEAD OF, or null when the
+    /// sighting was this device's own control. Set by the search, taken by the next connection -
+    /// the preferred host never goes through a search and so always reads null.
+    /// </summary>
+    private Guid? _answeringFor;
+
     private long _peakBytes;
 
     /// <summary>
@@ -974,14 +988,35 @@ public sealed partial class App : Application, IDisposable
 
             // Read on every search, not once: after a pairing this device is bound to a control it
             // did not know when the loop started.
-            listening => discovery.ListenAsync(_settings.ControlId, listening),
-            (target, _) => ConnectAsync(client, target, deviceName),
+            listening => SearchAsync(discovery, listening),
+            (target, _) => ConnectAsync(client, discovery, target, deviceName),
             _shutdown.Token);
     }
 
-    /// <summary>Runs one connection to the end, and says what it amounted to.</summary>
-    private async Task<Attempt> ConnectAsync(DisplayClient client, HubAddress target, string deviceName)
+    /// <summary>
+    /// One search for a control: this device's own, or - while its takeover window is open - one
+    /// calling for orphaned displays (Part 4).
+    /// </summary>
+    private async Task<Sighting?> SearchAsync(DiscoveryListener discovery, CancellationToken listening)
     {
+        var bound = _settings.ControlId;
+        var sighting = await discovery.ListenAsync(bound, () => _takeover.IsOpen, listening).ConfigureAwait(false);
+
+        _answeringFor = sighting is not null && bound is { } own && sighting.Beacon.ControlId != own ? own : null;
+
+        return sighting;
+    }
+
+    /// <summary>Runs one connection to the end, and says what it amounted to.</summary>
+    private async Task<Attempt> ConnectAsync(
+        DisplayClient client,
+        DiscoveryListener discovery,
+        HubAddress target,
+        string deviceName)
+    {
+        var answeringFor = _answeringFor;
+        _answeringFor = null;
+
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {
             SingleReader = true,
@@ -1003,6 +1038,31 @@ public sealed partial class App : Application, IDisposable
         // the reconnect: RunAsync never comes round again, and the device sits with its overlays
         // and never looks for a control any more.
         using var connected = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
+
+        // The socket's own lifetime, separate from the application's, for the one case that ends
+        // it from here: this device's own control coming back while it stands as a request at a
+        // stranger's.
+        using var abandon = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
+        var welcomed = 0;
+
+        // <b>The old control wins for as long as nothing has been accepted</b> (Part 4). An answer
+        // to a call is only a request at the caller's; while it waits, this device goes on
+        // listening for its own control and drops the request the moment that one is heard. A
+        // request dies with its connection and leaves nothing behind - the hub's rule, not a new one.
+        var ownSearch = answeringFor is { } own
+            ? Task.Run(
+                async () =>
+                {
+                    var back = await discovery.ListenAsync(own, connected.Token).ConfigureAwait(false);
+
+                    if (back is not null && Volatile.Read(ref welcomed) == 0)
+                    {
+                        DisplayLog.OwnControlBack(_logger, back.Beacon.Name, back.Address);
+                        await abandon.CancelAsync().ConfigureAwait(false);
+                    }
+                },
+                CancellationToken.None)
+            : Task.CompletedTask;
 
         Task forwarding = Task.CompletedTask;
         Task reporting = Task.CompletedTask;
@@ -1031,7 +1091,7 @@ public sealed partial class App : Application, IDisposable
             inbox.Writer,
             DisplayOptions.SendLimits,
             Ready,
-            _shutdown.Token));
+            abandon.Token));
 
         var attempt = Attempt.Fruitless;
 
@@ -1054,7 +1114,23 @@ public sealed partial class App : Application, IDisposable
             // Repeating it costs nothing - the lock only acts when the answer changes.
             _wake!.Connected = true;
 
+            if (message is WelcomeMessage)
+            {
+                // Accepted, at its own control or at the caller's - which is then its own from
+                // here on. Either way the window shuts, and the search for the old one has
+                // nothing left to win.
+                Volatile.Write(ref welcomed, 1);
+                _takeover.Connected();
+            }
+
             await HandleAsync(message).ConfigureAwait(false);
+        }
+
+        // Only a connection that was accepted opens the window when it ends. A request that stood
+        // at a stranger's, or a refusal, was never this device's control going missing.
+        if (welcomed == 1)
+        {
+            _takeover.Lost();
         }
 
         // Let go on the way out, not on the way back in: from here the screens may go dark, which
@@ -1069,8 +1145,10 @@ public sealed partial class App : Application, IDisposable
 
         await pump.ConfigureAwait(false);
         await forwarding.ConfigureAwait(false);
+        await ownSearch.ConfigureAwait(false);
 
-        return attempt;
+        // Dropped for its own control: worth starting from the top at once, the beacon is there.
+        return abandon.IsCancellationRequested && !_shutdown.IsCancellationRequested ? Attempt.Worthwhile : attempt;
     }
 
     /// <summary>

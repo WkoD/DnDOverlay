@@ -22,6 +22,9 @@ public sealed class SessionApi : ISessionApi, IDisposable
     private readonly ILogger<SessionApi> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>The call for orphaned displays, shared with the beacon that carries it.</summary>
+    private readonly OrphanCall _orphans;
+
 
     public SessionApi(
         SceneStore scenes,
@@ -30,8 +33,10 @@ public sealed class SessionApi : ISessionApi, IDisposable
         PairingDirectory pairing,
         SessionEvents events,
         ProcessLog? log,
-        ILogger<SessionApi> logger)
+        ILogger<SessionApi> logger,
+        OrphanCall? orphans = null)
     {
+        _orphans = orphans ?? new OrphanCall(TimeProvider.System);
         _scenes = scenes;
         _screens = screens;
         _connections = connections;
@@ -632,6 +637,15 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return [new SetBackground(Manipulation.HoldAtEdge(background with { RotationDeg = turned }, context))];
             },
             cancellationToken);
+
+    /// <inheritdoc />
+    public Task CallOrphansAsync(CancellationToken cancellationToken = default)
+    {
+        _orphans.Start();
+        HubLog.CallingOrphans(_logger, OrphanCall.Duration);
+
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     public Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>

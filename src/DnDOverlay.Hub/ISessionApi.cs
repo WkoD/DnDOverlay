@@ -38,6 +38,13 @@ namespace DnDOverlay.Hub;
 public interface ISessionApi
 {
     /// <summary>
+    /// Calls for orphaned displays for two minutes: displays that lost their control without a
+    /// goodbye, more than a minute ago, answer with an ordinary Hello and stand as pairing requests
+    /// (Part 4). For a control whose identity is gone - nothing else could reach those displays.
+    /// </summary>
+    Task CallOrphansAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Puts an image on a screen. Placement, the width cap and the <c>ZOrder</c> happen HERE,
     /// not in the caller: placement means reading the state and writing it in the same breath,
     /// and two callers doing it at once would lay two images in the same slot (Part 3).

@@ -39,6 +39,7 @@ public static class HubEndpoints
         services.TryAddSingleton(TimeProvider.System);
 
         // A hosted service, so it announces the control before the surface stands (rule 5).
+        services.AddSingleton(provider => new OrphanCall(provider.GetRequiredService<TimeProvider>()));
         services.AddHostedService<DiscoveryBeacon>();
 
         services.AddSingleton<SceneStore>();
@@ -69,7 +70,8 @@ public static class HubEndpoints
             provider.GetRequiredService<PairingDirectory>(),
             provider.GetRequiredService<SessionEvents>(),
             provider.GetService<ProcessLog>(),
-            provider.GetRequiredService<ILogger<SessionApi>>()));
+            provider.GetRequiredService<ILogger<SessionApi>>(),
+            provider.GetRequiredService<OrphanCall>()));
 
         services.AddSingleton<ISessionApi>(provider => provider.GetRequiredService<SessionApi>());
 

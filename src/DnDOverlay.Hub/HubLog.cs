@@ -467,4 +467,14 @@ internal static partial class HubLog
         Level = LogLevel.Information,
         Message = "Took the scene of {Screen} over from the device: {ItemCount} image(s).")]
     internal static partial void SceneTakenOver(ILogger logger, ScreenRef screen, int itemCount);
+
+    /// <summary>
+    /// The DM sent the call for orphaned displays. Written because what follows - displays of
+    /// another control standing in the list as requests - has to be traceable to a press.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1055,
+        Level = LogLevel.Information,
+        Message = "Calling for orphaned displays for {Duration}.")]
+    internal static partial void CallingOrphans(ILogger logger, TimeSpan duration);
 }

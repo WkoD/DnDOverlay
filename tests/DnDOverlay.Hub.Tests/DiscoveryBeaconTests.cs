@@ -17,7 +17,7 @@ namespace DnDOverlay.Hub.Tests;
 public sealed class DiscoveryBeaconTests
 {
     [Fact(Timeout = 30_000)]
-    public async Task A_control_announces_itself_with_four_things()
+    public async Task A_control_announces_itself_with_five_things()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var control = Guid.NewGuid();
@@ -29,7 +29,8 @@ public sealed class DiscoveryBeaconTests
         var beacon = new DiscoveryBeacon(
             Options.Create(new HubOptions { ControlId = control, Port = 47811 }),
             TimeProvider.System,
-            NullLogger<DiscoveryBeacon>.Instance);
+            NullLogger<DiscoveryBeacon>.Instance,
+            new OrphanCall(TimeProvider.System));
 
         await beacon.StartAsync(cancellationToken);
 
@@ -50,6 +51,7 @@ public sealed class DiscoveryBeaconTests
                 Assert.Equal(47811, heard.Port);
                 Assert.Equal(Protocol.Version, heard.ProtocolVersion);
                 Assert.False(string.IsNullOrWhiteSpace(heard.Name));
+                Assert.False(heard.CallingOrphans);
 
                 return;
             }
