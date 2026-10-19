@@ -112,7 +112,7 @@ public sealed class AssetCache
                 continue;
             }
 
-            var entry = _entries.TryGetValue(id, out var known) ? known : new Entry();
+            var entry = _entries.TryGetValue(id, out var known) ? known : new Entry { Adopted = true };
 
             if (thumbnail)
             {
@@ -124,6 +124,93 @@ public sealed class AssetCache
             }
 
             _entries[id] = entry;
+        }
+    }
+
+    /// <summary>How many pictures were found on disk from an earlier run and not yet settled.</summary>
+    public int Adopted
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.Values.Count(entry => entry.Adopted);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Settles what was found from an earlier run against the first complete set of scenes: whatever
+    /// no item of this device needs goes, original and thumbnail together; what is needed stays and
+    /// counts as this run's from now on (Part 5, rule 3).
+    /// <para>
+    /// <b>Narrower than the running eviction, on purpose.</b> In the run, a picture no longer needed
+    /// stays until the ceiling asks for room - it will probably come back. A leftover from an
+    /// earlier run has no such prospect; it is a store whose purpose is over. Only adopted entries
+    /// are looked at, so nothing this run has fetched can be taken by it.
+    /// </para>
+    /// </summary>
+    /// <returns>How many adopted pictures there were, and how many of them went.</returns>
+    public (int Adopted, int Discarded) PruneAdopted(IReadOnlySet<AssetId> inUse)
+    {
+        ArgumentNullException.ThrowIfNull(inUse);
+
+        lock (_gate)
+        {
+            var adopted = _entries.Where(pair => pair.Value.Adopted).ToList();
+            var discarded = 0;
+
+            foreach (var (id, entry) in adopted)
+            {
+                if (inUse.Contains(id))
+                {
+                    entry.Adopted = false;
+
+                    continue;
+                }
+
+                Delete(Path(id, thumbnail: false));
+                Delete(Path(id, thumbnail: true));
+                _entries.Remove(id);
+                discarded++;
+            }
+
+            return (adopted.Count, discarded);
+        }
+    }
+
+    /// <summary>
+    /// Empties the store, the most recently used picture first (Part 5, rule 1).
+    /// <para>
+    /// <b>The order is what makes a cut-off harmless.</b> Windows grants a shutdown a few seconds and
+    /// the process may not get to the end; what survives is then the oldest and least important,
+    /// never what was on the table a moment ago. Whatever is left, the next start adopts and the
+    /// first scene prunes (rule 3) - so a cut-off empty and a crash look alike, and there is one path.
+    /// </para>
+    /// </summary>
+    /// <returns>The pictures removed, in the order they went - until the store was empty or the token said stop.</returns>
+    public IReadOnlyList<AssetId> Empty(CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var removed = new List<AssetId>();
+
+            // Adopted entries carry no order among themselves - their LastUsed is 0 - and they go
+            // last, which is right: they are older than anything this run has shown.
+            foreach (var (id, _) in _entries.OrderByDescending(pair => pair.Value.LastUsed).ToList())
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                Delete(Path(id, thumbnail: false));
+                Delete(Path(id, thumbnail: true));
+                _entries.Remove(id);
+                removed.Add(id);
+            }
+
+            return removed;
         }
     }
 
@@ -256,6 +343,7 @@ public sealed class AssetCache
             }
 
             entry.LastUsed = ++_sequence;
+            entry.Adopted = false;
             _entries[id] = entry;
         }
     }
@@ -295,6 +383,7 @@ public sealed class AssetCache
             if (_entries.TryGetValue(id, out var entry))
             {
                 entry.LastUsed = ++_sequence;
+                entry.Adopted = false;
             }
         }
 
@@ -338,6 +427,9 @@ public sealed class AssetCache
     private sealed class Entry
     {
         internal long LastUsed { get; set; }
+
+        /// <summary>Found on disk at start and neither used nor settled in this run yet.</summary>
+        internal bool Adopted { get; set; }
 
         // Long rather than int, because an adopted entry is measured off a FILE. What this store
         // writes cannot exceed the source ceiling, but what it finds was not necessarily written

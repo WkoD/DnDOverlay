@@ -455,4 +455,24 @@ internal static partial class DisplayLog
                   + "from the park edge: {Outcome}.")]
     internal static partial void ParkGesture(
         ILogger logger, long towardsDip, long travelDip, long edgeDip, string outcome);
+
+    /// <summary>
+    /// What became of a picture store found at start, once the first scenes were in (Part 5,
+    /// rule 3). Without it nobody could later say why this device had pictures lying about at all.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3038,
+        Level = LogLevel.Information,
+        Message = "Picture store from an earlier run: {Adopted} found, {Discarded} discarded.")]
+    internal static partial void StockSettled(ILogger logger, int adopted, int discarded);
+
+    /// <summary>
+    /// The store was emptied - on exit, or because no control came (Part 5, rules 1 and 3). The
+    /// count says whether the exit got to the end: fewer than were there means it was cut off.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3039,
+        Level = LogLevel.Information,
+        Message = "Picture store emptied {Occasion}: {Count} picture(s) removed, {Left} left.")]
+    internal static partial void StockEmptied(ILogger logger, string occasion, int count, int left);
 }

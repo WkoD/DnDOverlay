@@ -92,6 +92,12 @@ public sealed partial class App : Application, IDisposable
     private const double DriftWorthSaying = 0.5;
 
     /// <summary>
+    /// How long an exit may spend emptying the picture store. Windows gives a shutdown a few seconds
+    /// in all, and the rest of the exit needs some of them.
+    /// </summary>
+    private static readonly TimeSpan EmptyWithin = TimeSpan.FromSeconds(2);
+
+    /// <summary>
     /// How each screen stands right now. Everything starts <see cref="ScreenState.Inactive"/>
     /// and stays that way until a control says otherwise - the silent start (Part 3).
     /// </summary>
@@ -119,6 +125,9 @@ public sealed partial class App : Application, IDisposable
     private HttpClient _http = null!;
     private AssetClient _assets = null!;
     private AssetCache _cache = null!;
+
+    /// <summary>What becomes of a store found at start: pruned by the first scenes, or emptied without a control.</summary>
+    private StockLifetime? _stock;
     private AssetLoader? _loader;
     private readonly AssetProgressTracker _progress = new();
 
@@ -408,9 +417,11 @@ public sealed partial class App : Application, IDisposable
         _assets = new AssetClient(_http);
 
         // The picture store, under the data root so --data moves it with everything else (Part 6).
-        // In M2 it is bound to the session; emptying it on exit and adopting it after a crash are
-        // M5a.
+        // It ends with the process - unless the process ended hard, and then what is found here is
+        // pruned by the first scenes or emptied when no control comes (Part 5, three rules).
         _cache = new AssetCache(Path.Combine(_dataRoot.Path, "cache"));
+        _stock = new StockLifetime(_cache, TimeProvider.System);
+        _stock.Begin(count => DisplayLog.StockEmptied(_logger, "because no control came", count, _cache.Count));
         // The loader asks whether a hand is on the table before every picture: while one is,
         // downloads drop to one at a time. First rule of the order of precedence - the gesture
         // at the table beats new pictures (Part 1).
@@ -805,9 +816,52 @@ public sealed partial class App : Application, IDisposable
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Empty("on exit");
         Dispose();
 
         base.OnExit(e);
+    }
+
+    /// <summary>
+    /// Settles a store found at start once every screen of this device has its scene - the hub sends
+    /// one snapshot per screen after connecting, an empty one included, and only all of them
+    /// together say which pictures are needed. Inactive screens count: the scene stands there too
+    /// (Part 3). Asked after every snapshot; it acts once.
+    /// </summary>
+    private void Settle()
+    {
+        if (_stock is null || !_monitors.Keys.All(id => _scenes.ContainsKey(new ScreenRef(_device, id))))
+        {
+            return;
+        }
+
+        var mine = _scenes.Where(pair => pair.Key.Device == _device).Select(pair => pair.Value);
+
+        if (_stock.Settle(SceneAssets.InUse(mine)) is { Adopted: > 0 } settled)
+        {
+            DisplayLog.StockSettled(_logger, settled.Adopted, settled.Discarded);
+        }
+    }
+
+    /// <summary>
+    /// Every end empties the store, newest first, and within a time bound rather than at any cost:
+    /// Windows grants a shutdown a few seconds, and what is left the next start prunes (Part 5,
+    /// rules 1 and 2). <c>ShutdownBlockReasonCreate</c> stays struck - a display PC holding up a
+    /// shutdown with a warning page is worse than a remnant on disk (Part 6).
+    /// </summary>
+    private void Empty(string occasion)
+    {
+        if (_cache is null)
+        {
+            return;
+        }
+
+        _stock?.Dispose();
+
+        using var bound = new CancellationTokenSource(EmptyWithin);
+        var removed = _cache.Empty(bound.Token);
+
+        DisplayLog.StockEmptied(_logger, occasion, removed.Count, _cache.Count);
     }
 
     public void Dispose()
@@ -1092,6 +1146,7 @@ public sealed partial class App : Application, IDisposable
                 _scenes[snapshot.Screen] = snapshot.Scene;
                 await RenderAsync(snapshot.Screen).ConfigureAwait(false);
                 Fetch(snapshot.Screen);
+                Settle();
                 break;
 
             case ScenePatchMessage patch:

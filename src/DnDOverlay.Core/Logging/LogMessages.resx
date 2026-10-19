@@ -276,6 +276,12 @@
   <data name="E3031_TouchReporting" xml:space="preserve">
     <value>Touch points from this table are {Reporting}.</value>
   </data>
+  <data name="E3038_StockSettled" xml:space="preserve">
+    <value>Picture store from an earlier run: {Adopted} found, {Discarded} discarded.</value>
+  </data>
+  <data name="E3039_StockEmptied" xml:space="preserve">
+    <value>Picture store emptied {Occasion}: {Count} picture(s) removed, {Left} left.</value>
+  </data>
   <data name="E3032_ParkGesture" xml:space="preserve">
     <value>Let go at {TowardsDip} DIP/s after {TravelDip} DIP, hand {EdgeDip} DIP from the park edge: {Outcome}.</value>
   </data>
