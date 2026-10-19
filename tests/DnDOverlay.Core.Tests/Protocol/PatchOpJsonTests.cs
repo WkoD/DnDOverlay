@@ -34,6 +34,8 @@ public sealed class PatchOpJsonTests
         new TransformItem(Item, CenterX: 0.4, CenterY: 0.6, Scale: 0.35, RotationDeg: 270, ZOrder: 12, Revision: 48),
         new SetLocked(Item, Locked: true),
         new ParkItem(Item, Parked: true, ZOrder: 13, Revision: 49),
+        new SetFocus([Item, new ItemId(Guid.NewGuid())]),
+        new ClearItems(),
     ];
 
     public static TheoryData<PatchOp> AllOperations() => [.. Operations];

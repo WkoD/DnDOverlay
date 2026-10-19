@@ -271,4 +271,51 @@ public sealed class SceneOperationTests
 
     private static SceneState Apply(SceneState scene, PatchOp op) =>
         SceneReducer.Apply(scene, op, Screen);
+
+    /// <summary>Everything off, locked and parked too; the background stays, and a focus on nothing ends.</summary>
+    [Fact]
+    public void ClearItems_takes_every_item_and_leaves_the_background()
+    {
+        var locked = Build.Item(locked: true);
+        var parked = Build.Item(parked: true);
+        var scene = Build.SceneWith(locked, parked) with
+        {
+            Background = Build.Background(),
+            FocusItems = [locked.ItemId],
+        };
+
+        var result = Apply(scene, new ClearItems());
+
+        Assert.Empty(result.Items);
+        Assert.Empty(result.FocusItems);
+        Assert.Equal(scene.Background, result.Background);
+    }
+
+    /// <summary>The list replaces the one before, in the order given; what is not on the screen and what is named twice fall out.</summary>
+    [Fact]
+    public void SetFocus_replaces_the_list_and_keeps_only_what_is_there()
+    {
+        var first = Build.Item();
+        var second = Build.Item();
+        var scene = Build.SceneWith(first, second) with { FocusItems = [first.ItemId] };
+
+        var result = Apply(scene, new SetFocus([second.ItemId, new ItemId(Guid.NewGuid()), first.ItemId, second.ItemId]));
+
+        Assert.Equal([second.ItemId, first.ItemId], result.FocusItems);
+        Assert.Equal(scene.Items, result.Items);
+    }
+
+    /// <summary>An item that goes leaves the focus; the rest stays focused, and only the last ends it (Part 3).</summary>
+    [Fact]
+    public void A_removed_item_falls_out_of_the_focus_and_the_last_ends_it()
+    {
+        var first = Build.Item();
+        var second = Build.Item();
+        var scene = Build.SceneWith(first, second) with { FocusItems = [first.ItemId, second.ItemId] };
+
+        var one = Apply(scene, new RemoveItem(first.ItemId));
+
+        Assert.Equal([second.ItemId], one.FocusItems);
+        Assert.Empty(Apply(one, new RemoveItem(second.ItemId)).FocusItems);
+    }
 }

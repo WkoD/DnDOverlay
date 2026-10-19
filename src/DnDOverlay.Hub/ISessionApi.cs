@@ -56,6 +56,36 @@ public interface ISessionApi
     bool DiagnosticsRequested(DeviceId device);
 
     /// <summary>
+    /// Puts these items in focus in this order, or lifts the focus with an empty list (Part 3). The
+    /// list replaces the one before; items the screen does not carry fall out. More than
+    /// <see cref="Focus.Limit"/> are refused - that is no longer a highlight but a second scene - and
+    /// the answer says so, for the tile to tell the DM why nothing happened.
+    /// </summary>
+    Task<FocusOutcome> SetFocusAsync(ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes every item off one screen - locked and parked ones too - and leaves the background
+    /// (Part 3). One patch; nothing happens on a screen without items.
+    /// </summary>
+    Task ClearItemsAsync(ScreenRef screen, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// "Clear all" (Part 7): items AND background off every played screen - every screen whose
+    /// wish is not <see cref="ScreenState.Inactive"/>, because a screen being prepared in the
+    /// background is not part of the table. One patch over all of them, or a screen would stand
+    /// with a bare background for a frame (Part 4). No question asked; undo brings it back.
+    /// </summary>
+    Task ClearAllAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// "Send to all" (Part 7): these pictures onto every played screen, placed as each screen
+    /// places arrivals - one patch over all of them, one step in the timeline (Part 4). Returns the
+    /// new items per screen.
+    /// </summary>
+    Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> SendToAllAsync(
+        IReadOnlyList<AssetRef> assets, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Puts an image on a screen. Placement, the width cap and the <c>ZOrder</c> happen HERE,
     /// not in the caller: placement means reading the state and writing it in the same breath,
     /// and two callers doing it at once would lay two images in the same slot (Part 3).
@@ -620,4 +650,20 @@ public interface ISessionApi
     /// has no keyboard (Part 4).
     /// </summary>
     Task ClearRejectionAsync(DeviceId device, CancellationToken cancellationToken = default);
+}
+
+/// <summary>What became of a focus the DM asked for (Part 3).</summary>
+public enum FocusOutcome
+{
+    /// <summary>The focus lies on the items that were given and are there.</summary>
+    Set,
+
+    /// <summary>An empty list lifted the focus.</summary>
+    Cleared,
+
+    /// <summary>More than <see cref="Focus.Limit"/> items - refused, nothing changed.</summary>
+    TooMany,
+
+    /// <summary>None of the items is on this screen - nothing changed.</summary>
+    NothingThere,
 }

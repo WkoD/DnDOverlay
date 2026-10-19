@@ -32,8 +32,21 @@ public static class SceneReducer
         {
             AddItem add => ApplyAddItem(scene, add, screen),
             RemoveItem remove => Parking.Arrange(
-                scene with { Items = [.. scene.Items.Where(item => item.ItemId != remove.Item)] },
+                scene with
+                {
+                    Items = [.. scene.Items.Where(item => item.ItemId != remove.Item)],
+
+                    // An item that goes leaves the focus too; the rest stays focused, and only the
+                    // last one ends it - a focus on nothing would be a dark screen without a reason
+                    // anybody can see (Part 3).
+                    FocusItems = [.. scene.FocusItems.Where(item => item != remove.Item)],
+                },
                 screen),
+            ClearItems => scene with { Items = [], FocusItems = [] },
+            SetFocus focus => scene with
+            {
+                FocusItems = [.. focus.Items.Distinct().Where(id => scene.Items.Any(item => item.ItemId == id))],
+            },
             SetBackground background => scene with { Background = background.Background },
             ClearBackground => scene with { Background = null },
             SetName name => ApplySetName(scene, name),

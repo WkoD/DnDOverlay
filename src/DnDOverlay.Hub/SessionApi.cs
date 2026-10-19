@@ -667,6 +667,150 @@ public sealed class SessionApi : ISessionApi, IDisposable
     public bool DiagnosticsRequested(DeviceId device) => _diagnosing.ContainsKey(device);
 
     /// <inheritdoc />
+    public async Task<FocusOutcome> SetFocusAsync(
+        ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        var wanted = items.Distinct().ToList();
+
+        if (wanted.Count > Focus.Limit)
+        {
+            return FocusOutcome.TooMany;
+        }
+
+        var outcome = FocusOutcome.Set;
+
+        await ApplyAsync(
+            screen,
+            (scene, _) =>
+            {
+                if (wanted.Count == 0)
+                {
+                    outcome = FocusOutcome.Cleared;
+
+                    return scene.FocusItems.Count == 0 ? [] : [new SetFocus([])];
+                }
+
+                var there = wanted.Where(id => scene.Items.Any(item => item.ItemId == id)).ToList();
+
+                if (there.Count == 0)
+                {
+                    outcome = FocusOutcome.NothingThere;
+
+                    return [];
+                }
+
+                return there.SequenceEqual(scene.FocusItems) ? [] : [new SetFocus(there)];
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return outcome;
+    }
+
+    /// <inheritdoc />
+    public Task ClearItemsAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
+        ApplyAsync(screen, (scene, _) => scene.Items.Count == 0 ? [] : [new ClearItems()], cancellationToken);
+
+    /// <inheritdoc />
+    public Task ClearAllAsync(CancellationToken cancellationToken = default) =>
+        ApplyAcrossAsync(
+            (_, scene, _) =>
+            [
+                .. scene.Items.Count > 0 ? [new ClearItems()] : Array.Empty<PatchOp>(),
+                .. scene.Background is not null ? [new ClearBackground()] : Array.Empty<PatchOp>(),
+            ],
+            cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> SendToAllAsync(
+        IReadOnlyList<AssetRef> assets, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+
+        var arrived = new Dictionary<ScreenRef, IReadOnlyList<ItemId>>();
+
+        if (assets.Count == 0)
+        {
+            return arrived;
+        }
+
+        await ApplyAcrossAsync(
+            (screen, scene, context) =>
+            {
+                var ops = new List<PatchOp>(assets.Count);
+                var items = new List<ItemId>(assets.Count);
+
+                foreach (var asset in assets)
+                {
+                    var op = new AddItem(Arriving(scene, context, asset, position: null));
+
+                    ops.Add(op);
+                    items.Add(op.Item.ItemId);
+
+                    // Folded before the next one is placed, as in AddItemsAsync.
+                    scene = SceneReducer.Apply(scene, op, context);
+                }
+
+                arrived[screen] = items;
+
+                return ops;
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return arrived;
+    }
+
+    /// <summary>
+    /// One command over every played screen - the wish not <see cref="ScreenState.Inactive"/> - in
+    /// ONE patch, under one hold of the gate: "clear all" and "send to all" are one step each, and a
+    /// table rebuilt screen by screen would be seen half done (Part 4).
+    /// </summary>
+    private async Task ApplyAcrossAsync(
+        Func<ScreenRef, SceneState, ScreenContext, IReadOnlyList<PatchOp>> decide,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var ops = new List<ScreenOp>();
+
+            foreach (var view in _screens.Views().Where(view => view.State != ScreenState.Inactive))
+            {
+                var context = _screens.ContextFor(view.Screen);
+                var scene = _scenes.Get(view.Screen);
+                var mine = decide(view.Screen, scene, context);
+
+                foreach (var op in mine)
+                {
+                    scene = SceneReducer.Apply(scene, op, context);
+                    ops.Add(new ScreenOp(view.Screen, op));
+                }
+
+                if (mine.Count > 0)
+                {
+                    _scenes.Set(view.Screen, scene);
+                }
+            }
+
+            if (ops.Count == 0)
+            {
+                return;
+            }
+
+            var patch = new ScenePatch(ops);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
     public Task CallOrphansAsync(CancellationToken cancellationToken = default)
     {
         _orphans.Start();

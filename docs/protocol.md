@@ -546,10 +546,16 @@ timeline.
 | `transformItem` | M3a | where an item lies now — pushed, zoomed, turned |
 | `setLocked` | M3a | locks one item against gestures at the table, or releases it |
 | `parkItem` | M3a | lays an item into the fan along the park edge, or takes it out |
+| `setFocus` | M5b | the items in focus, in the order they were chosen — it replaces the list, an empty one lifts the focus; nothing about the items changes. An item that is removed falls out of it |
+| `clearItems` | M5b | takes every item off a screen, locked and parked ones too, and leaves the background |
 
-The remaining operations — `clearItems` and `setFocus` — arrive with the milestone that implements
-them. An operation that serialises but does nothing in the reducer would look implemented while
-being a trap.
+That is the whole list. **A focus is refused above six items** — beyond that it is a second scene,
+not a highlight — and the command says so rather than changing nothing silently.
+
+**"Clear all" and "send to all" are one patch each over every played screen** — every screen
+whose wish is not `Inactive`, because a screen being prepared is not part of the table. "Clear
+all" is `clearItems` and `clearBackground` on each screen that has something, so no screen stands
+with a bare background for a frame; "send to all" is the arrivals of every screen in one.
 
 **Moving, copying and gripping the background are commands, not operations.** Moving a picture to
 another screen is one patch of a `removeItem` on the source and an `addItem` on the target under

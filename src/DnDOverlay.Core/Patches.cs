@@ -7,11 +7,10 @@ namespace DnDOverlay.Core;
 /// never over a transmitted type name, which is the same stance the whole protocol takes
 /// (Part 4).
 /// <para>
-/// Only the operations a milestone actually reduces live here. The remaining two of Part 4's
-/// fourteen - <c>SetFocus</c> and <c>ClearItems</c>, both with M5b - arrive with the milestone
-/// that implements them: rule 7 is additive, and an operation that serialises but does nothing in
-/// the reducer would look implemented while being a trap. Discriminator strings, once given out,
-/// are never reused for something else.
+/// Only the operations a milestone actually reduces live here, and since M5b that is all of Part
+/// 4's list - <c>SetFocus</c> and <c>ClearItems</c> were the last two. An operation that serialised
+/// but did nothing in the reducer would look implemented while being a trap, which is why they
+/// waited. Discriminator strings, once given out, are never reused for something else (rule 7).
 /// </para>
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "op")]
@@ -27,6 +26,8 @@ namespace DnDOverlay.Core;
 [JsonDerivedType(typeof(TransformItem), "transformItem")]
 [JsonDerivedType(typeof(SetLocked), "setLocked")]
 [JsonDerivedType(typeof(ParkItem), "parkItem")]
+[JsonDerivedType(typeof(SetFocus), "setFocus")]
+[JsonDerivedType(typeof(ClearItems), "clearItems")]
 public abstract record PatchOp;
 
 /// <summary>
@@ -144,6 +145,46 @@ public sealed record ToggleItems(bool Visible) : PatchOp;
 /// <see cref="ToggleItems"/> in all four combinations (Part 11, step 24).
 /// </summary>
 public sealed record ToggleBackground(bool Visible) : PatchOp;
+
+/// <summary>
+/// Puts these items in focus, in this order, or takes the focus away with an empty list (Part 3).
+/// <para>
+/// <b>It replaces the list, it does not add to it.</b> A focus is one moment - "and then THEY stand
+/// before you" - and the next press is the next moment. The order is the order of choosing, so the
+/// DM decides who stands where and not the depth. Items the scene does not carry fall out; the
+/// hub has already refused a list over <see cref="Focus.Limit"/>.
+/// </para>
+/// <para>
+/// <b>Nothing about the items changes.</b> Focus is a way of drawing, not a transformation: centre,
+/// scale and angle stay, which is what makes "everything stands exactly as before" true the moment
+/// it is lifted.
+/// </para>
+/// </summary>
+public sealed record SetFocus(IReadOnlyList<ItemId> Items) : PatchOp
+{
+    /// <summary>Structural over the list - see <see cref="SceneState"/>.</summary>
+    public bool Equals(SetFocus? other) => other is not null && Items.SequenceEqual(other.Items);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        foreach (var item in Items)
+        {
+            hash.Add(item);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>
+/// Takes every item off the screen - locked and parked ones included, because a "cleared" screen
+/// with something left at the edge would be a nasty surprise - and leaves the background alone
+/// (Part 3). Clearing everything is this AND <see cref="ClearBackground"/>, said out loud in one
+/// patch: the two are separate operations so that "empty the lot" has to name both.
+/// </summary>
+public sealed record ClearItems : PatchOp;
 
 /// <summary>
 /// One operation addressed at one screen. The address is always the full <see cref="ScreenRef"/>,
