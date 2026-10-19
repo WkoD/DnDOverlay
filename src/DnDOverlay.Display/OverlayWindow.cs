@@ -90,10 +90,20 @@ internal sealed class OverlayWindow : Window
     private readonly Dictionary<ItemId, Hold> _held = [];
 
     /// <summary>
-    /// The one hand that is on the fan, while it is. There is at most one: the fan is a single
-    /// strip, and two fingers on it would be two answers to the same question.
+    /// The hands that are on the fan, each under the item whose element carries its gesture - the
+    /// one that answered the hit test, because every event of that hand arrives there.
+    /// <para>
+    /// <b>One per hand, not one per window</b> (game session, 18.10.2026). A single field was read
+    /// by EVERY gesture at the table: while one player ran along the fan, the steps of another
+    /// player's picture went into the fan and pulled a card out; while a card was out, every
+    /// gesture was redirected to it - another player's flick parked it, another player's release
+    /// let go of it. The hand actually carrying the card then found nothing to let go, its hold
+    /// stayed, and since a held picture is passed over by the drawing, a parked picture stood where
+    /// the hand had left it, unreachable, until somebody touched the fan. Four people at a table is
+    /// the ordinary case (Part 6).
+    /// </para>
     /// </summary>
-    private Fanning? _fan;
+    private readonly Dictionary<ItemId, Fanning> _fans = [];
 
     /// <summary>
     /// What was last drawn here, so a gesture can be answered without asking anybody: whether the
@@ -561,16 +571,28 @@ internal sealed class OverlayWindow : Window
 
         // A hand on a picture that is no longer in the scene: the manipulation is ended rather than
         // frozen, which is what a scene change under a finger has to look like (Part 4, rule 4).
-        if (_fan is { } fanning && scene.Items.All(item => item.ItemId != fanning.Card))
+        foreach (var (hand, _) in _fans.Where(pair => scene.Items.All(item => item.ItemId != pair.Value.Card)).ToList())
         {
             // The card went away under the hand - the same case as a held picture below, and the
             // same answer: the gesture ends rather than pointing at nothing (conflict rule 4).
-            _fan = null;
+            _fans.Remove(hand);
         }
 
         foreach (var gone in _held.Keys.Where(id => scene.Items.All(item => item.ItemId != id)).ToList())
         {
             _held.Remove(gone);
+        }
+
+        // <b>A gesture that went into the fan is over once the scene says so</b>, whether or not
+        // WPF ever reports the hand gone. Its hold is kept only until the release, and a hold that
+        // outlives its gesture is a picture the drawing passes over for good - parked in the scene,
+        // standing where the hand left it, unreachable (game session, 18.10.2026).
+        foreach (var settled in _held
+            .Where(pair => pair.Value.Parked && scene.Items.Any(item => item.ItemId == pair.Key && item.Parked))
+            .Select(pair => pair.Key)
+            .ToList())
+        {
+            _held.Remove(settled);
         }
 
         var (width, height) = Surface(context);
@@ -637,7 +659,7 @@ internal sealed class OverlayWindow : Window
                 // the table it was tidied off (Parking.Depth).
                 Panel.SetZIndex(
                     mount.Element,
-                    _held.ContainsKey(image.ItemId) || _fan?.Card == image.ItemId
+                    _held.ContainsKey(image.ItemId) || Shown(image.ItemId)
                         ? HeldAbove + item.ZOrder
                         : Parking.Depth(item));
 
@@ -667,7 +689,7 @@ internal sealed class OverlayWindow : Window
                 // picture like any other, and unfolding is the whole point of the peek.
                 Trim(
                     mount,
-                    item.Parked && !_held.ContainsKey(image.ItemId) && _fan?.Card != image.ItemId
+                    item.Parked && !_held.ContainsKey(image.ItemId) && !Shown(image.ItemId)
                         ? Parking.CutOf(scene, context, image.ItemId)
                         : Parking.Cut.Whole,
                     context);
@@ -675,7 +697,7 @@ internal sealed class OverlayWindow : Window
                 // A held item keeps the geometry the finger gave it. Writing the scene's over it
                 // would drag the picture back to where the hub last knew it, twenty times a second,
                 // for as long as somebody is pushing it (Part 4, conflict rule 3).
-                if (!_held.ContainsKey(image.ItemId) && _fan?.Card != image.ItemId)
+                if (!_held.ContainsKey(image.ItemId) && !Shown(image.ItemId))
                 {
                     Lay(
                         mount,
@@ -816,7 +838,7 @@ internal sealed class OverlayWindow : Window
         // the one that answered the hit test - those are different cards nearly every time.
         if (current.Parked)
         {
-            return Grip(at, context);
+            return Grip(item, at, context);
         }
 
         if (!CoreManipulation.AcceptsGestures(_scene, current, State))
@@ -845,7 +867,7 @@ internal sealed class OverlayWindow : Window
     /// A hand has landed on the fan. Picks the card the point means and shows it; from here the
     /// gesture is either a run along the fan or a pull away from it.
     /// </summary>
-    private bool Grip(CorePoint at, ScreenContext context)
+    private bool Grip(ItemId hand, CorePoint at, ScreenContext context)
     {
         if (Parking.Pick(_scene, context, at) is not { } card)
         {
@@ -860,7 +882,7 @@ internal sealed class OverlayWindow : Window
             return false;
         }
 
-        _fan = new Fanning(card);
+        _fans[hand] = new Fanning(card);
         Peek(card, context);
 
         return true;
@@ -871,9 +893,9 @@ internal sealed class OverlayWindow : Window
     /// from it and that card comes out onto the table.
     /// </summary>
     /// <returns>Whether the gesture is still the fan's - <c>false</c> once the card is out.</returns>
-    private bool Fanned(CorePoint now, System.Windows.Point origin, ScreenContext context)
+    private bool Fanned(Fanning fanning, CorePoint now, System.Windows.Point origin, ScreenContext context)
     {
-        if (_fan is not { Taken: false } fanning)
+        if (fanning.Taken)
         {
             return false;
         }
@@ -882,8 +904,15 @@ internal sealed class OverlayWindow : Window
         {
             if (Parking.Pick(_scene, context, now) is { } next && next != fanning.Card)
             {
-                Unpeek(fanning.Card, context);
+                var left = fanning.Card;
+
                 fanning.Card = next;
+
+                // Put back only when no other hand is still showing it.
+                if (!Shown(left))
+                {
+                    Unpeek(left, context);
+                }
 
                 // At the card's OWN place in the fan - the next one steps out further along,
                 // where it lies, rather than at the spot the finger first touched (hand-run of M3).
@@ -904,6 +933,13 @@ internal sealed class OverlayWindow : Window
             || Parking.Peek(_scene, context, fanning.Card) is not { } peek)
         {
             return false;
+        }
+
+        if (_held.ContainsKey(fanning.Card))
+        {
+            // Another hand has this card out already. Two holds on one item would be two truths
+            // about where it is; this hand stays on the fan.
+            return true;
         }
 
         fanning.Taken = true;
@@ -950,17 +986,15 @@ internal sealed class OverlayWindow : Window
     }
 
     /// <summary>The end of a fan gesture that never took a card out: nothing happened.</summary>
-    private void Release(ScreenContext context)
+    private void Release(ItemId hand, ScreenContext context)
     {
-        if (_fan is not { Taken: false } fanning)
+        if (!_fans.Remove(hand, out var fanning) || fanning.Taken || Shown(fanning.Card))
         {
-            _fan = null;
-
+            // Taken: the card is a picture on the table now. Shown: another hand is still on it.
             return;
         }
 
         Unpeek(fanning.Card, context);
-        _fan = null;
     }
 
     /// <summary>
@@ -969,9 +1003,12 @@ internal sealed class OverlayWindow : Window
     /// card of the fan.
     /// </summary>
     private (ItemId Item, Mount Mount) Aimed(ItemId item, Mount mount) =>
-        _fan is { Taken: true } fan && _mounts.TryGetValue(fan.Card, out var theirs)
+        _fans.TryGetValue(item, out var fan) && fan.Taken && _mounts.TryGetValue(fan.Card, out var theirs)
             ? (fan.Card, theirs)
             : (item, mount);
+
+    /// <summary>Whether some hand is showing this card or carrying it out of the fan.</summary>
+    private bool Shown(ItemId card) => _fans.Values.Any(fanning => fanning.Card == card);
 
     /// <summary>One step of a hand on a picture, inertial or not.</summary>
     private void Move(ItemId item, Mount mount, ManipulationDeltaEventArgs e)
@@ -994,11 +1031,12 @@ internal sealed class OverlayWindow : Window
 
         var (width, height) = Surface(context);
 
-        if (_fan is { Taken: false })
+        if (_fans.TryGetValue(item, out var fanning) && !fanning.Taken)
         {
             var origin = e.ManipulationOrigin;
 
             Fanned(
+                fanning,
                 new CorePoint(width <= 0 ? 0 : origin.X / width, height <= 0 ? 0 : origin.Y / height),
                 origin,
                 context);
@@ -1131,15 +1169,18 @@ internal sealed class OverlayWindow : Window
     {
         e.Handled = true;
 
-        if (_fan is { Taken: false })
+        if (_fans.TryGetValue(item, out var fanning))
         {
-            // A hand that only ran along the fan glides nowhere.
-            Still(e);
+            if (!fanning.Taken)
+            {
+                // A hand that only ran along the fan glides nowhere.
+                Still(e);
 
-            return;
+                return;
+            }
+
+            item = fanning.Card;
         }
-
-        item = _fan is { Taken: true } taken ? taken.Card : item;
 
         if (_context is not { } context || !_held.TryGetValue(item, out var hold))
         {
@@ -1210,16 +1251,18 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        if (_fan is { Taken: false })
+        if (_fans.TryGetValue(item, out var fanning) && !fanning.Taken)
         {
             // Let go on the fan without pulling anything out: nothing happens to it (Part 6).
-            Release(context);
+            Release(item, context);
 
             return;
         }
 
+        var hand = item;
+
         (item, mount) = Aimed(item, mount);
-        _fan = null;
+        _fans.Remove(hand);
 
         if (!_held.TryGetValue(item, out var hold))
         {
@@ -1398,11 +1441,12 @@ internal sealed class OverlayWindow : Window
         var now = e.GetPosition(_stage);
         var (width, height) = Surface(context);
 
-        if (_fan is { Taken: false })
+        if (_fans.TryGetValue(item, out var fanning) && !fanning.Taken)
         {
             // The same two halves as under a finger: running along the fan chooses, pulling away
             // takes. A mouse has no other way into the fan, and it needs none.
             Fanned(
+                fanning,
                 new CorePoint(width <= 0 ? 0 : now.X / width, height <= 0 ? 0 : now.Y / height),
                 now,
                 context);
@@ -1451,16 +1495,18 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        if (_fan is { Taken: false })
+        if (_fans.TryGetValue(item, out var fanning) && !fanning.Taken)
         {
-            Release(context);
+            Release(item, context);
             e.Handled = true;
 
             return;
         }
 
+        var hand = item;
+
         (item, mount) = Aimed(item, mount);
-        _fan = null;
+        _fans.Remove(hand);
 
         if (!_held.TryGetValue(item, out var hold))
         {
