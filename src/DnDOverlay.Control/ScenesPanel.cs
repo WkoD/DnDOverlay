@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
@@ -38,6 +39,7 @@ internal sealed class ScenesPanel : Grid
     private readonly ILogger _logger;
     private readonly WrapPanel _tiles = new();
     private readonly ScrollViewer _scroller;
+    private readonly PanelTouch _touch;
     private readonly TextBlock _empty = new()
     {
         Text = "No scene saved yet. Save one from a screen's menu: \"Save screen as scene ...\".",
@@ -57,7 +59,8 @@ internal sealed class ScenesPanel : Grid
         Func<ScreenRef?> active,
         Func<IReadOnlyList<ScreenView>> screens,
         Action<string> say,
-        ILogger logger)
+        ILogger logger,
+        PanelCarry carry)
     {
         _session = session;
         _desk = desk;
@@ -67,25 +70,58 @@ internal sealed class ScenesPanel : Grid
         _say = say;
         _logger = logger;
 
+        var surface = new StackPanel { Children = { _empty, _tiles }, Background = Brushes.Transparent };
+
         _scroller = new ScrollViewer
         {
-            Content = new StackPanel { Children = { _empty, _tiles } },
+            Content = surface,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            PanningMode = PanningMode.Both,
         };
 
         Children.Add(_scroller);
 
+        // A scene is not selected - a tap does nothing, a double tap loads it onto the active screen,
+        // the long press opens its menu, and pulled out it goes onto the tile it is dropped on.
+        _touch = new PanelTouch(_scroller, surface, carry);
+        _touch.DoubleTapped += async (_, tile) =>
+        {
+            if (tile.Tag is string name)
+            {
+                await LoadOnActiveAsync(name).ConfigureAwait(true);
+            }
+        };
+        _touch.Held += (_, tile) =>
+        {
+            if (tile.Tag is string name)
+            {
+                var menu = Menu(name);
+
+                menu.PlacementTarget = tile;
+                tile.ContextMenu = menu;
+                menu.IsOpen = true;
+            }
+        };
+
         Refresh();
     }
 
-    /// <summary>Draws the grid for this filter, order, tile size and lie of the panel.</summary>
-    internal void Apply(string filter, PanelSort sort, double zoom, bool lying)
+    /// <summary>The finger's swipe toward the window's edge - a retracted panel goes back.</summary>
+    internal event EventHandler? SwipedIn
+    {
+        add => _touch.SwipedIn += value;
+        remove => _touch.SwipedIn -= value;
+    }
+
+    /// <summary>Draws the grid for this filter, order, tile size and side of the panel.</summary>
+    internal void Apply(string filter, PanelSort sort, double zoom, PanelSide side)
     {
         _filter = filter;
         _sort = sort;
         _zoom = zoom;
+        _touch.Side = side;
+
+        var lying = side is PanelSide.Top or PanelSide.Bottom;
 
         _tiles.Orientation = lying ? Orientation.Vertical : Orientation.Horizontal;
         _scroller.VerticalScrollBarVisibility = lying ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
@@ -98,6 +134,7 @@ internal sealed class ScenesPanel : Grid
     internal void Refresh()
     {
         _tiles.Children.Clear();
+        _touch.Forget();
 
         if (_desk.Open is not { } open)
         {
@@ -258,6 +295,9 @@ internal sealed class ScenesPanel : Grid
 
         tile.Children.Add(preview);
 
+        tile.Tag = summary.Name;
+        _touch.Card(tile, () => new CarryLoad([], summary.Name, Snapshot(preview)));
+
         if (_zoom >= 96)
         {
             tile.Children.Add(new Border
@@ -282,22 +322,14 @@ internal sealed class ScenesPanel : Grid
             });
         }
 
-        // A double tap and a double click alike: the touch is promoted to a click, and a click count
-        // of two is what both arrive as.
+        // The double click; the double tap comes through PanelTouch, which takes the touch before it
+        // could be promoted to a click.
         tile.MouseLeftButtonDown += async (_, down) =>
         {
-            if (down.ClickCount == 2)
+            if (down.ClickCount == 2 && down.StylusDevice is null)
             {
                 down.Handled = true;
-
-                if (_active() is { } screen)
-                {
-                    await LoadAsync(summary.Name, screen, SceneLoad.Replace).ConfigureAwait(true);
-                }
-                else
-                {
-                    _say("No screen to load onto.");
-                }
+                await LoadOnActiveAsync(summary.Name).ConfigureAwait(true);
             }
         };
 
@@ -337,11 +369,51 @@ internal sealed class ScenesPanel : Grid
     }
 
     /// <summary>
+    /// The double tap's load: replacing, onto the active screen (Part 7).
+    /// </summary>
+    private async Task LoadOnActiveAsync(string name)
+    {
+        if (_active() is { } screen)
+        {
+            await LoadAsync(name, screen, SceneLoad.Replace).ConfigureAwait(true);
+        }
+        else
+        {
+            _say("No screen to load onto.");
+        }
+    }
+
+    /// <summary>
+    /// What the ghost shows while a scene is carried: its preview as it stands in the tile. A copy,
+    /// because the tile itself stays where it is.
+    /// </summary>
+    private static RenderTargetBitmap? Snapshot(FrameworkElement preview)
+    {
+        if (preview.ActualWidth < 1 || preview.ActualHeight < 1)
+        {
+            return null;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(preview);
+        var bitmap = new RenderTargetBitmap(
+            (int)Math.Ceiling(preview.ActualWidth * dpi.DpiScaleX),
+            (int)Math.Ceiling(preview.ActualHeight * dpi.DpiScaleY),
+            dpi.PixelsPerInchX,
+            dpi.PixelsPerInchY,
+            PixelFormats.Pbgra32);
+
+        bitmap.Render(preview);
+        bitmap.Freeze();
+
+        return bitmap;
+    }
+
+    /// <summary>
     /// Loads a scene: the names resolved afresh from the campaign, the pictures it does not have
     /// counted for ONE message (Part 3), and the arrangement computed against the target by the
     /// hub (siting question 4).
     /// </summary>
-    private async Task LoadAsync(string name, ScreenRef screen, SceneLoad mode)
+    internal async Task LoadAsync(string name, ScreenRef screen, SceneLoad mode)
     {
         if (_desk.Open is not { } open || open.Shelf.Scene(name) is not { } saved)
         {

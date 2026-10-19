@@ -50,7 +50,8 @@ internal sealed class CampaignPanel : Border
     private PanelSort _sort;
     private double _pictureZoom;
     private double _sceneZoom;
-    private bool _lying;
+    private PanelSide _side = PanelSide.Right;
+    private string? _narrowedTo;
 
     internal CampaignPanel(
         PanelHead head,
@@ -84,6 +85,13 @@ internal sealed class CampaignPanel : Border
         // grid from being rebuilt on every keystroke.
         _search.TextChanged += (_, _) =>
         {
+            // Typing anything over "Show in stock"'s name goes back to filtering by text.
+            if (_narrowedTo is not null && _search.Text != _narrowedTo)
+            {
+                _narrowedTo = null;
+                _stock.Narrowing = null;
+            }
+
             _typing.Stop();
             _typing.Start();
         };
@@ -101,6 +109,9 @@ internal sealed class CampaignPanel : Border
             }
         };
         _clear.Click += (_, _) => _search.Clear();
+
+        _stock.SwipedIn += (_, _) => SwipedIn?.Invoke(this, EventArgs.Empty);
+        _scenes.SwipedIn += (_, _) => SwipedIn?.Invoke(this, EventArgs.Empty);
 
         _sortButton.Click += (_, _) =>
         {
@@ -147,25 +158,59 @@ internal sealed class CampaignPanel : Border
             }
         };
 
-        Arrange(lying: false);
+        Arrange();
         Apply();
     }
 
     /// <summary>The head: campaign, view, menu - the strip that stays whatever tab is open.</summary>
     internal PanelHead Head { get; }
 
-    /// <summary>Whether the panel lies along the top or bottom edge rather than standing at a side.</summary>
-    internal bool Lying
+    /// <summary>
+    /// The edge the panel docks at. Top or bottom it lies along the edge rather than standing at a
+    /// side; and every side says which way across is toward the stage (<see cref="Core.PanelGesture"/>).
+    /// </summary>
+    internal PanelSide Side
     {
-        get => _lying;
+        get => _side;
         set
         {
-            if (value != _lying)
+            if (value != _side)
             {
-                Arrange(value);
+                _side = value;
+                Arrange();
                 Apply();
             }
         }
+    }
+
+    /// <summary>Whether the panel lies along the top or bottom edge.</summary>
+    internal bool Lying => _side is PanelSide.Top or PanelSide.Bottom;
+
+    /// <summary>A finger swiped toward the window's edge on one of the grids.</summary>
+    internal event EventHandler? SwipedIn;
+
+    /// <summary>
+    /// "Show in stock" from a picture on a tile (Part 7): the tab Pictures, narrowed to this one
+    /// picture whatever filter stood before, and scrolled to it - the way back from the table into
+    /// the stock, where three hundred entries would otherwise mean reading a name and typing it. The
+    /// name stands in the search bar, so it is visible why the grid shows one picture, and typing
+    /// over it filters by text again.
+    /// </summary>
+    internal void ShowInStock(Core.AssetId asset, string name)
+    {
+        if (!PicturesOpen)
+        {
+            Show(pictures: true);
+        }
+
+        _typing.Stop();
+        _narrowedTo = name;
+        _stock.Narrowing = asset;
+        _search.Text = name;
+        _typing.Stop();
+
+        Apply();
+        _stock.Reveal(asset);
     }
 
     /// <summary>Draws the open tab again - after a campaign change or a patch.</summary>
@@ -175,7 +220,7 @@ internal sealed class CampaignPanel : Border
     {
         _picturesTab.IsChecked = pictures;
         _scenesTab.IsChecked = !pictures;
-        Arrange(_lying);
+        Arrange();
         Keep();
         Apply();
     }
@@ -194,11 +239,11 @@ internal sealed class CampaignPanel : Border
 
         if (PicturesOpen)
         {
-            _stock.Apply(_search.Text, _sort, _pictureZoom, _lying);
+            _stock.Apply(_narrowedTo is null ? _search.Text : string.Empty, _sort, _pictureZoom, _side);
         }
         else
         {
-            _scenes.Apply(_search.Text, _sort, _sceneZoom, _lying);
+            _scenes.Apply(_search.Text, _sort, _sceneZoom, _side);
         }
     }
 
@@ -238,9 +283,10 @@ internal sealed class CampaignPanel : Border
     /// Lays the parts out for the panel's lie: upright, everything stacked above the grid; lying,
     /// head and tabs side by side on the left and the search bar over the grid.
     /// </summary>
-    private void Arrange(bool lying)
+    private void Arrange()
     {
-        _lying = lying;
+        var lying = Lying;
+
         Head.Vertical = lying;
 
         Detach(Head, _picturesTab, _scenesTab, _stock, _scenes, _footer);

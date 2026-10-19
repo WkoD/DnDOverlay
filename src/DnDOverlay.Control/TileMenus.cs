@@ -55,6 +55,9 @@ internal sealed class TileMenus(
     /// <summary>The DM asked to save this screen as a scene.</summary>
     internal event EventHandler? Saving;
 
+    /// <summary>The DM asked to see this picture in the stock.</summary>
+    internal event EventHandler<AssetId>? ShowingInStock;
+
     /// <summary>
     /// The screen's own menu. Reached on free tile area <b>and on the head</b> - the second place
     /// is not convenience: on a full screen there is no free area left, and the menu would be out
@@ -281,6 +284,14 @@ internal sealed class TileMenus(
             session.CopyItemsAsync(screen, target, Ids(many), CancellationToken.None)));
         menu.Items.Add(Onto("Move to", target =>
             session.MoveItemsAsync(screen, target, Ids(many), CancellationToken.None)));
+
+        // The way back from the table into the stock (Part 7) - for the picture pressed on, even when
+        // a selection stands: the stock shows one picture at a time this way.
+        if (picture is ImageItem shown)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("Show in stock", () => ShowingInStock?.Invoke(this, shown.AssetId)));
+        }
 
         // Set apart, and expressly NOT beside "move to": in the menu they are neighbours, in effect
         // they are opposites, and a slip there clears a picture off the table (Part 7).

@@ -88,6 +88,28 @@ internal sealed class ScreenTile : Border
 
     private readonly Border _frame;
 
+    /// <summary>
+    /// The thumbnail with the background strip over its lower edge - the target for "as background"
+    /// while something is carried out of the panel (Part 7). <b>Not the head</b>: that is the grip
+    /// to drag by and the place for the menu, and must not get a third meaning.
+    /// </summary>
+    private readonly Grid _faceHost = new();
+
+    private readonly Border _strip = new()
+    {
+        VerticalAlignment = VerticalAlignment.Bottom,
+        Background = new SolidColorBrush(Color.FromArgb(0x90, 0x46, 0x82, 0xB4)),
+        Visibility = Visibility.Collapsed,
+        IsHitTestVisible = false,
+        Child = new TextBlock
+        {
+            Text = "Background",
+            Foreground = Brushes.White,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        },
+    };
+
     private bool _setting;
 
     internal ScreenTile(
@@ -119,9 +141,12 @@ internal sealed class ScreenTile : Border
         grips.Children.Add(_state);
         grips.Children.Add(_unlock);
 
+        _faceHost.Children.Add(_face);
+        _faceHost.Children.Add(_strip);
+
         _frame = new Border
         {
-            Child = _face,
+            Child = _faceHost,
             Margin = new Thickness(0, 4, 0, 0),
             BorderThickness = new Thickness(1),
             BorderBrush = Brushes.Gainsboro,
@@ -250,6 +275,7 @@ internal sealed class ScreenTile : Border
         _menus.Adjusting += (_, adjusting) => _face.Adjusting = adjusting;
         _menus.Diagnosing += (_, on) => Diagnose(on);
         _menus.Saving += (_, _) => Saving?.Invoke(this, EventArgs.Empty);
+        _menus.ShowingInStock += (_, asset) => ShowingInStock?.Invoke(this, asset);
 
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
@@ -281,6 +307,43 @@ internal sealed class ScreenTile : Border
 
     /// <summary>The DM asked to save this screen as a scene.</summary>
     internal event EventHandler? Saving;
+
+    /// <summary>The item menu asked to show a picture in the stock.</summary>
+    internal event EventHandler<AssetId>? ShowingInStock;
+
+    /// <summary>
+    /// Shows or hides the background strip - shown on every tile for as long as something is carried
+    /// out of the panel, so the target is there before the hand gets to it. A fifth of the thumbnail
+    /// and never less than a finger's width.
+    /// </summary>
+    internal void Strip(bool showing)
+    {
+        _strip.Height = Math.Max(26, _faceHost.ActualHeight / 5);
+        _strip.Visibility = showing && !Diagnosed ? Visibility.Visible : Visibility.Collapsed;
+        Lit(false);
+    }
+
+    /// <summary>Whether a place on the screen lies on the background strip - and lights it while it does.</summary>
+    internal bool OnStrip(TilePoint absolute)
+    {
+        if (_strip.Visibility is not Visibility.Visible || !_strip.IsLoaded)
+        {
+            return false;
+        }
+
+        var local = _strip.PointFromScreen(absolute);
+        var on = local.X >= 0 && local.Y >= 0 && local.X <= _strip.ActualWidth && local.Y <= _strip.ActualHeight;
+
+        Lit(on);
+
+        return on;
+    }
+
+    /// <summary>Takes the light off the strip - the hand is over another tile, or over none.</summary>
+    internal void Dim() => Lit(false);
+
+    private void Lit(bool on) =>
+        _strip.Background = new SolidColorBrush(on ? Color.FromArgb(0xE0, 0x46, 0x82, 0xB4) : Color.FromArgb(0x90, 0x46, 0x82, 0xB4));
 
     /// <summary>Something was dropped onto this tile from outside the control.</summary>
     internal event EventHandler<Outside>? DroppedFromOutside;
@@ -477,7 +540,7 @@ internal sealed class ScreenTile : Border
         }
         else
         {
-            _frame.Child = _face;
+            _frame.Child = _faceHost;
         }
 
         Diagnosing?.Invoke(this, on);

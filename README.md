@@ -195,6 +195,20 @@ panel docks at any edge — *Dock panel* in the menu ☰ —, and the line betwe
 be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices, the
 network and the touch points.
 
+Pictures and scenes are **dragged** out of the panel onto a tile: a picture lands where it is let
+go, several side by side, a scene replaces what lies on that screen. While something is carried,
+every tile shows a strip along its lower edge — let go there and the picture becomes the
+background. The other way round, a picture dragged off a tile into the panel leaves the screen and
+stays in the stock; deleting it is a separate step. With a finger the direction decides: along the
+panel the list scrolls, toward the stage the entry comes out. A long press opens an entry's menu,
+a double tap sends it. *Show in stock* in a picture's menu on a tile narrows the panel to that
+picture.
+
+Unticking *Dock panel ▸ Pinned* **retracts** the panel to a narrow tab at its edge, giving the
+stage the whole width. A tap on the tab pushes the panel out over the stage; a tap beside it, a
+swipe toward the edge or the start of a drag sends it back. A picture dragged from a tile onto the
+tab leaves its screen without the panel opening.
+
 **Campaigns** keep the stock of one group apart from another's. The control starts with **none
 open**, so it never puts the wrong group's pictures in front of you; the head above the stage says
 so. Adding the first picture begins a new unnamed campaign — its folder exists from that file on,

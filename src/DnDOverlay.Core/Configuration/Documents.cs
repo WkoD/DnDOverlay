@@ -200,13 +200,15 @@ public enum PanelTab
 /// <param name="PictureZoom">The tile size of the tab "Pictures", in DIP - each tab keeps its own, because they carry different detail.</param>
 /// <param name="SceneZoom">The tile size of the tab "Scenes".</param>
 /// <param name="Tab">The tab that was open - it survives a restart (step 40f1).</param>
+/// <param name="Pinned">Sharing the room with the stage, or retracted to a narrow tab at the edge and pushed over the stage when wanted.</param>
 public sealed record PanelPlacement(
     PanelSide Side,
     double Size,
     PanelSort Sort = PanelSort.Newest,
     double PictureZoom = 128,
     double SceneZoom = 160,
-    PanelTab Tab = PanelTab.Pictures);
+    PanelTab Tab = PanelTab.Pictures,
+    bool Pinned = true);
 
 /// <summary>
 /// The address of one screen as <c>control.json</c> writes it: a raw <see cref="Guid"/> and a raw

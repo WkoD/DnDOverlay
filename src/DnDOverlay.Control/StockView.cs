@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
@@ -26,6 +27,10 @@ namespace DnDOverlay.Control;
 /// 19.10.2026): the plain drag belongs to scrolling. <b>The selection never reaches past what is
 /// seen</b> - a filter change drops what fell out, or a delete of "12 entries" would take pictures
 /// nobody sees (Part 7).
+/// </para>
+/// <para>
+/// <b>A finger taps, double taps, holds, scrolls and pulls out</b> - <see cref="PanelTouch"/> tells
+/// them apart; the mouse keeps its click, double click, Ctrl+click, frame and right button.
 /// </para>
 /// </summary>
 internal sealed class StockView : Grid
@@ -48,6 +53,7 @@ internal sealed class StockView : Grid
     };
 
     private readonly ScrollViewer _scroller;
+    private readonly PanelTouch _touch;
     private readonly List<AssetId> _selection = [];
     private readonly Dictionary<AssetId, Border> _cards = [];
 
@@ -63,7 +69,8 @@ internal sealed class StockView : Grid
         Pictures pictures,
         Func<ScreenRef?> active,
         Func<IReadOnlyList<ScreenView>> screens,
-        Action<string> say)
+        Action<string> say,
+        PanelCarry carry)
     {
         _session = session;
         _desk = desk;
@@ -88,6 +95,32 @@ internal sealed class StockView : Grid
         };
 
         Children.Add(_scroller);
+
+        // With a finger a tap picks one and nothing more - no multiple selection (DM, 19.10.2026).
+        _touch = new PanelTouch(_scroller, surface, carry);
+        _touch.Tapped += (_, card) =>
+        {
+            if (card.Tag is InventoryEntry entry)
+            {
+                Select([new AssetId(entry.AssetId)]);
+            }
+        };
+        _touch.DoubleTapped += async (_, card) =>
+        {
+            if (card.Tag is InventoryEntry entry)
+            {
+                var asset = new AssetId(entry.AssetId);
+
+                await SendAsync(_active(), _selection.Contains(asset) ? Chosen : [Ref(entry)]).ConfigureAwait(true);
+            }
+        };
+        _touch.Held += (_, card) =>
+        {
+            if (card is Border border && border.Tag is InventoryEntry entry)
+            {
+                OpenMenu(border, entry);
+            }
+        };
 
         // The frame starts on free area only, and only with the mouse (Part 7).
         surface.MouseLeftButtonDown += (_, down) =>
@@ -167,12 +200,28 @@ internal sealed class StockView : Grid
     /// <summary>The selection changed - the menu's "send to all" follows it.</summary>
     internal event EventHandler? SelectionChanged;
 
-    /// <summary>Draws the grid for this filter, order, tile size and lie of the panel.</summary>
-    internal void Apply(string filter, PanelSort sort, double zoom, bool lying)
+    /// <summary>The finger's swipe toward the window's edge - a retracted panel goes back.</summary>
+    internal event EventHandler? SwipedIn
+    {
+        add => _touch.SwipedIn += value;
+        remove => _touch.SwipedIn -= value;
+    }
+
+    /// <summary>
+    /// The one picture the grid is narrowed to by "Show in stock" (Part 7) - stronger than the filter
+    /// text, which would also find every name the picture's name is part of. Null shows by the filter.
+    /// </summary>
+    internal AssetId? Narrowing { get; set; }
+
+    /// <summary>Draws the grid for this filter, order, tile size and side of the panel.</summary>
+    internal void Apply(string filter, PanelSort sort, double zoom, PanelSide side)
     {
         _filter = filter;
         _sort = sort;
         _zoom = zoom;
+        _touch.Side = side;
+
+        var lying = side is PanelSide.Top or PanelSide.Bottom;
 
         _tiles.Orientation = lying ? Orientation.Vertical : Orientation.Horizontal;
         _scroller.VerticalScrollBarVisibility = lying ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
@@ -205,6 +254,7 @@ internal sealed class StockView : Grid
     {
         _tiles.Children.Clear();
         _cards.Clear();
+        _touch.Forget();
 
         if (_desk.Open is not { } open)
         {
@@ -215,7 +265,9 @@ internal sealed class StockView : Grid
 
         var entries = open.Store.Entries
             .Select(entry => (Entry: entry, Name: NameFilter.Normalise(entry.Name)))
-            .Where(pair => NameFilter.Matches(pair.Name, _filter))
+            .Where(pair => Narrowing is { } only
+                ? pair.Entry.AssetId == only.Value
+                : NameFilter.Matches(pair.Name, _filter))
             .Select(pair => pair.Entry);
 
         entries = _sort switch
@@ -249,6 +301,35 @@ internal sealed class StockView : Grid
 
         // What fell out of view falls out of the selection (Part 7).
         Select([.. _selection.Where(_cards.ContainsKey)]);
+    }
+
+    /// <summary>
+    /// Picks a picture out and brings it into view with a short highlight - the end of "Show in
+    /// stock" (Part 7). After the layout pass, or there is nothing yet to scroll to.
+    /// </summary>
+    internal void Reveal(AssetId asset)
+    {
+        if (!_cards.TryGetValue(asset, out var card))
+        {
+            return;
+        }
+
+        Select([asset]);
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            card.BringIntoView();
+            card.BorderBrush = Brushes.Orange;
+
+            var fading = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+
+            fading.Tick += (_, _) =>
+            {
+                fading.Stop();
+                Mark();
+            };
+            fading.Start();
+        });
     }
 
     private Border Card(InventoryEntry entry, bool missing)
@@ -327,11 +408,31 @@ internal sealed class StockView : Grid
             BorderThickness = new Thickness(3),
             BorderBrush = Brushes.Transparent,
             ToolTip = entry.Name,
+            Tag = entry,
         };
+
+        // Out of the grid it carries the selection when the entry is part of it, else the entry alone
+        // (Part 7: "dragging drags the whole selection").
+        _touch.Card(card, () =>
+        {
+            IReadOnlyList<AssetRef> taken = _selection.Contains(asset) ? Chosen : [Ref(entry)];
+
+            return taken.Count == 0 ? null : new CarryLoad(taken, Scene: null, _pictures.For(asset));
+        });
+
+        // A press on a picture that is part of a selection keeps the selection - it may be the start
+        // of carrying all of them - and narrows it to this one only if the button comes up unmoved.
+        var narrowOnRelease = false;
 
         card.MouseLeftButtonDown += async (_, down) =>
         {
             down.Handled = true;
+            narrowOnRelease = false;
+
+            if (down.StylusDevice is not null)
+            {
+                return;
+            }
 
             if (down.ClickCount == 2)
             {
@@ -339,7 +440,7 @@ internal sealed class StockView : Grid
                 return;
             }
 
-            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 && down.StylusDevice is null)
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
             {
                 if (!_selection.Remove(asset))
                 {
@@ -348,10 +449,24 @@ internal sealed class StockView : Grid
 
                 Mark();
             }
+            else if (_selection.Contains(asset) && _selection.Count > 1)
+            {
+                narrowOnRelease = true;
+            }
             else
             {
                 Select([asset]);
             }
+        };
+
+        card.MouseLeftButtonUp += (_, up) =>
+        {
+            if (narrowOnRelease && up.StylusDevice is null && !_touch.MouseCarrying)
+            {
+                Select([asset]);
+            }
+
+            narrowOnRelease = false;
         };
 
         card.ContextMenuOpening += (_, _) =>
@@ -367,6 +482,21 @@ internal sealed class StockView : Grid
         card.ContextMenu = Menu(entry);
 
         return card;
+    }
+
+    /// <summary>The entry's menu opened by a finger's long press, on the entry it was pressed on.</summary>
+    private void OpenMenu(Border card, InventoryEntry entry)
+    {
+        if (!_selection.Contains(new AssetId(entry.AssetId)))
+        {
+            Select([new AssetId(entry.AssetId)]);
+        }
+
+        var menu = Menu(entry);
+
+        menu.PlacementTarget = card;
+        card.ContextMenu = menu;
+        menu.IsOpen = true;
     }
 
     /// <summary>

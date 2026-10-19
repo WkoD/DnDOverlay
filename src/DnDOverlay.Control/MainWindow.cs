@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
@@ -21,6 +22,11 @@ namespace DnDOverlay.Control;
 /// "Pictures", its switches on the tiles, the state selector under every tile, and what is no grip
 /// in play - devices, network, touch points - in the head's menu.
 /// </para>
+/// <para>
+/// <b>Pinned or retracting</b> (Part 7): pinned the panel shares the room with the stage; retracted
+/// only a narrow tab stays at the edge, a tap on it pushes the panel over the stage, and a tap beside
+/// it, a swipe toward the edge or the start of a carry out of it sends it back.
+/// </para>
 /// </summary>
 internal sealed class MainWindow : Window, IDisposable
 {
@@ -39,7 +45,28 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly StockView _stock;
     private readonly IntakeRunner _intake;
     private readonly CampaignPanel _panel;
+    private readonly Grid _root = new() { Margin = new Thickness(12) };
     private readonly Grid _main = new();
+
+    /// <summary>The stage with the retracted panel lying over it - only in use while the panel is not pinned.</summary>
+    private readonly Grid _stage = new();
+
+    /// <summary>Where the retracted panel slides; it clips, so a panel pushed out of it can be neither seen nor hit.</summary>
+    private readonly Grid _overlay = new() { ClipToBounds = true };
+
+    private readonly TranslateTransform _slide = new();
+    private readonly TextBlock _edgeLabel = new();
+    private readonly Button _edgeTab = new() { Padding = new Thickness(4, 8, 4, 8) };
+    private readonly PanelCarry _carry;
+
+    /// <summary>Whether the panel shares the room with the stage rather than retracting to a tab.</summary>
+    private bool _pinned = true;
+
+    /// <summary>Whether the retracted panel is out over the stage right now.</summary>
+    private bool _out;
+
+    private PanelSide _side = PanelSide.Right;
+    private double _overlaySize = 380;
     private readonly GridSplitter _splitter = new() { Background = SystemColors.ControlLightBrush, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
     private readonly FrameWatch _frames;
 
@@ -78,7 +105,9 @@ internal sealed class MainWindow : Window, IDisposable
 
         _intake = new IntakeRunner(session, entrances, said => _status.Text = said, _logger);
 
-        _stock = new StockView(session, desk, pictures, () => _board.Active, () => _board.Screens, said => _status.Text = said);
+        _carry = new PanelCarry(_root);
+
+        _stock = new StockView(session, desk, pictures, () => _board.Active, () => _board.Screens, said => _status.Text = said, _carry);
 
         _scenes = new ScenesPanel(
             session,
@@ -87,7 +116,8 @@ internal sealed class MainWindow : Window, IDisposable
             () => _board.Active,
             () => _board.Screens,
             said => _status.Text = said,
-            _logger);
+            _logger,
+            _carry);
 
         // The counter the control never had. It does NOT hold the render hook - Redraw drives it,
         // and only while the stage is actually drawing, because a permanent subscription would keep
@@ -144,26 +174,27 @@ internal sealed class MainWindow : Window, IDisposable
         // Notices and the first-run view across the top, the stage and the panel beneath, the status
         // line at the foot. The stage's row takes what is left, so pulling the window taller gives
         // the room to the tiles (hand-run of M4, second run, 24a).
-        var panel = new Grid { Margin = new Thickness(12) };
-
-        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         Grid.SetRow(_notices, 0);
         Grid.SetRow(_firstRun, 1);
         Grid.SetRow(_main, 2);
         Grid.SetRow(_status, 3);
 
-        panel.Children.Add(_notices);
-        panel.Children.Add(_firstRun);
-        panel.Children.Add(_main);
-        panel.Children.Add(_status);
+        _root.Children.Add(_notices);
+        _root.Children.Add(_firstRun);
+        _root.Children.Add(_main);
+        _root.Children.Add(_status);
 
         _status.Margin = new Thickness(0, 6, 0, 0);
 
-        Content = panel;
+        Content = _root;
+
+        WireRetracting();
+        WireCarrying();
 
         // The touch switch is told once at startup, not only when it changes: the hub keeps it for
         // the run and answers devices that connect later out of it (Part 4).
@@ -176,6 +207,7 @@ internal sealed class MainWindow : Window, IDisposable
             var placement = settings.Current.Panel
                 ?? new PanelPlacement(ActualWidth >= ActualHeight ? PanelSide.Right : PanelSide.Bottom, ActualWidth >= ActualHeight ? 380 : 300);
 
+            _pinned = placement.Pinned;
             Dock(placement.Side, placement.Size);
         };
 
@@ -203,6 +235,7 @@ internal sealed class MainWindow : Window, IDisposable
         {
             pictures.Clear();
             _panelHead.Campaign(desk.OpenLabel);
+            _edgeLabel.Text = desk.OpenLabel ?? "No campaign open";
             _panel.Refresh();
             _ = _stock.CountAsync();
             _ = _board.RefreshAsync(_listening.Token);
@@ -212,6 +245,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said).Open(_panelHead);
         _panelHead.Campaign(desk.OpenLabel);
+        _edgeLabel.Text = desk.OpenLabel ?? "No campaign open";
         _board.ActiveChanged += (_, _) => Remember();
 
         // Whichever of the two ways switched the view - the button here or the tile's own menu -
@@ -581,6 +615,22 @@ internal sealed class MainWindow : Window, IDisposable
             docking.Items.Add(item);
         }
 
+        docking.Items.Add(new Separator());
+
+        var pinned = new MenuItem { Header = "Pinned", IsCheckable = true, IsChecked = _pinned };
+
+        pinned.Click += (_, _) =>
+        {
+            _pinned = pinned.IsChecked;
+            _settings.Update(current => current with
+            {
+                Panel = (current.Panel ?? new PanelPlacement(side, _overlaySize)) with { Pinned = _pinned },
+            });
+            Dock(side, _settings.Current.Panel?.Size ?? _overlaySize);
+        };
+
+        docking.Items.Add(pinned);
+
         menu.Items.Add(docking);
 
         menu.IsOpen = true;
@@ -596,12 +646,33 @@ internal sealed class MainWindow : Window, IDisposable
         _main.Children.Clear();
         _main.RowDefinitions.Clear();
         _main.ColumnDefinitions.Clear();
+        _stage.Children.Clear();
+        _overlay.Children.Clear();
 
         var across = side is PanelSide.Left or PanelSide.Right;
         var panelFirst = side is PanelSide.Left or PanelSide.Top;
         var limit = Math.Max(200, (across ? ActualWidth : ActualHeight) / 2);
         var length = new GridLength(Math.Clamp(size, 160, limit));
         var star = new GridLength(1, GridUnitType.Star);
+
+        _side = side;
+        _overlaySize = length.Value;
+        _panel.Side = side;
+
+        if (!_pinned)
+        {
+            Retract(side, across, panelFirst, length.Value);
+            Keep(side);
+            return;
+        }
+
+        _panel.Width = double.NaN;
+        _panel.Height = double.NaN;
+        _panel.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _panel.VerticalAlignment = VerticalAlignment.Stretch;
+        _panel.RenderTransform = Transform.Identity;
+        _panel.BorderThickness = default;
+        _out = false;
 
         GridLength[] lengths = panelFirst ? [length, new GridLength(6), star] : [star, new GridLength(6), length];
         UIElement[] parts = panelFirst ? [_panel, _splitter, _board] : [_board, _splitter, _panel];
@@ -638,9 +709,252 @@ internal sealed class MainWindow : Window, IDisposable
         _splitter.VerticalAlignment = VerticalAlignment.Stretch;
         _splitter.ResizeDirection = across ? GridResizeDirection.Columns : GridResizeDirection.Rows;
 
-        _panel.Lying = !across;
-
         Keep(side);
+    }
+
+    /// <summary>
+    /// The retracted arrangement: the tab at the edge, the stage taking the rest, and the panel lying
+    /// over the stage at its full size, pushed out of sight until it is wanted (Part 7).
+    /// </summary>
+    private void Retract(PanelSide side, bool across, bool panelFirst, double length)
+    {
+        var tabLength = GridLength.Auto;
+        var star = new GridLength(1, GridUnitType.Star);
+
+        _stage.Children.Add(_board);
+        _stage.Children.Add(_overlay);
+        _overlay.Children.Add(_panel);
+
+        _panel.Width = across ? length : double.NaN;
+        _panel.Height = across ? double.NaN : length;
+        _panel.HorizontalAlignment = side switch
+        {
+            PanelSide.Left => HorizontalAlignment.Left,
+            PanelSide.Right => HorizontalAlignment.Right,
+            _ => HorizontalAlignment.Stretch,
+        };
+        _panel.VerticalAlignment = side switch
+        {
+            PanelSide.Top => VerticalAlignment.Top,
+            PanelSide.Bottom => VerticalAlignment.Bottom,
+            _ => VerticalAlignment.Stretch,
+        };
+
+        // A line on the side that faces the stage, so the panel lying over it has an edge.
+        _panel.BorderBrush = SystemColors.ControlDarkBrush;
+        _panel.BorderThickness = side switch
+        {
+            PanelSide.Left => new Thickness(0, 0, 1, 0),
+            PanelSide.Right => new Thickness(1, 0, 0, 0),
+            PanelSide.Top => new Thickness(0, 0, 0, 1),
+            _ => new Thickness(0, 1, 0, 0),
+        };
+        _panel.RenderTransform = _slide;
+
+        // The tab reads along the edge it stands at.
+        _edgeLabel.LayoutTransform = across ? new RotateTransform(side is PanelSide.Left ? -90 : 90) : Transform.Identity;
+        _edgeTab.Content = _edgeLabel;
+        _edgeTab.Padding = across ? new Thickness(4, 12, 4, 12) : new Thickness(12, 4, 12, 4);
+        _edgeTab.Margin = side switch
+        {
+            PanelSide.Left => new Thickness(0, 0, 6, 0),
+            PanelSide.Right => new Thickness(6, 0, 0, 0),
+            PanelSide.Top => new Thickness(0, 0, 0, 6),
+            _ => new Thickness(0, 6, 0, 0),
+        };
+
+        GridLength[] lengths = panelFirst ? [tabLength, star] : [star, tabLength];
+        UIElement[] parts = panelFirst ? [_edgeTab, _stage] : [_stage, _edgeTab];
+
+        for (var index = 0; index < 2; index++)
+        {
+            if (across)
+            {
+                _main.ColumnDefinitions.Add(new ColumnDefinition { Width = lengths[index] });
+                Grid.SetColumn(parts[index], index);
+                Grid.SetRow(parts[index], 0);
+            }
+            else
+            {
+                _main.RowDefinitions.Add(new RowDefinition { Height = lengths[index] });
+                Grid.SetRow(parts[index], index);
+                Grid.SetColumn(parts[index], 0);
+            }
+
+            _main.Children.Add(parts[index]);
+        }
+
+        Slide(open: false, animate: false);
+    }
+
+    /// <summary>
+    /// Pushes the retracted panel out over the stage or back out of sight. <b>Moved, never
+    /// collapsed</b>: a carry out of the panel begins with the panel going back, and an element that
+    /// collapses takes the hand's capture with it - the carry would end the moment it began.
+    /// </summary>
+    private void Slide(bool open, bool animate = true)
+    {
+        _out = open;
+
+        var away = _overlaySize + 24;
+        var (x, y) = open
+            ? (0.0, 0.0)
+            : _side switch
+            {
+                PanelSide.Left => (-away, 0.0),
+                PanelSide.Right => (away, 0.0),
+                PanelSide.Top => (0.0, -away),
+                _ => (0.0, away),
+            };
+
+        var duration = animate ? TimeSpan.FromMilliseconds(140) : TimeSpan.Zero;
+
+        _slide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(x, duration));
+        _slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(y, duration));
+    }
+
+    /// <summary>
+    /// The retracted panel's grips (Part 7): a tap on the tab opens and closes it, a tap beside it or
+    /// a swipe toward the edge closes it - nowhere is hovering needed, because a finger cannot hover.
+    /// </summary>
+    private void WireRetracting()
+    {
+        _edgeTab.Click += (_, _) => Slide(!_out);
+
+        // The tap beside it closes and does nothing else: it was meant for the panel, and a picture
+        // taken hold of by the same tap would move under a hand that only wanted the panel gone.
+        _board.PreviewMouseLeftButtonDown += (_, down) =>
+        {
+            if (!_pinned && _out && !_carry.Carrying)
+            {
+                Slide(open: false);
+                down.Handled = true;
+            }
+        };
+
+        _board.PreviewTouchDown += (_, down) =>
+        {
+            if (!_pinned && _out && !_carry.Carrying)
+            {
+                Slide(open: false);
+                down.Handled = true;
+            }
+        };
+
+        _panel.SwipedIn += (_, _) =>
+        {
+            if (!_pinned && _out)
+            {
+                Slide(open: false);
+            }
+        };
+    }
+
+    /// <summary>
+    /// Carrying in both directions (Part 7). Out of the panel onto a tile: a picture where it was let
+    /// go, the background on the strip, a scene loaded. Off a tile into the panel - or onto the tab of a
+    /// retracted one, which does not open for it - the picture leaves the screen and stays in the
+    /// stock. Deleting is a different act with its own question; the fastest gesture must not be the
+    /// most final one.
+    /// </summary>
+    private void WireCarrying()
+    {
+        _carry.Began += (_, _) =>
+        {
+            // Out of the way of the tile the DM is aiming at.
+            if (!_pinned && _out)
+            {
+                Slide(open: false);
+            }
+
+            _board.Strips(showing: true);
+        };
+
+        _carry.Moved += (_, at) => _ = _board.Aim(at);
+        _carry.Ended += (_, _) => _board.Strips(showing: false);
+        _carry.Dropped += async (_, dropped) => await LandAsync(dropped.Load, dropped.At).ConfigureAwait(true);
+
+        _board.CarriedAway += async (_, away) =>
+        {
+            if (OverPanel(away.At))
+            {
+                await _session.RemoveItemAsync(away.Screen, away.Item).ConfigureAwait(true);
+            }
+        };
+
+        _board.ShowingInStock += (_, asset) => ShowInStock(asset);
+    }
+
+    private async Task LandAsync(CarryLoad load, System.Windows.Point at)
+    {
+        if (_board.Aim(at) is not { } aim)
+        {
+            return;
+        }
+
+        // Where the DM just put something is where the next blind grip lands (Part 7).
+        _board.Activate(aim.Screen);
+
+        if (load.Scene is { } scene)
+        {
+            await _scenes.LoadAsync(scene, aim.Screen, SceneLoad.Replace).ConfigureAwait(true);
+            return;
+        }
+
+        if (aim.Background)
+        {
+            // A background layer carries one picture (Part 7).
+            if (load.Pictures.Count != 1)
+            {
+                _status.Text = "A background takes one picture.";
+                return;
+            }
+
+            await _session.SetBackgroundAsync(aim.Screen, load.Pictures[0]).ConfigureAwait(true);
+            return;
+        }
+
+        if (load.Pictures.Count == 1)
+        {
+            _ = await _session.AddItemAsync(aim.Screen, load.Pictures[0], aim.At).ConfigureAwait(true);
+            return;
+        }
+
+        // Several are ONE command, and Flow lays them side by side (Part 7).
+        _ = await _session.AddItemsAsync(aim.Screen, load.Pictures).ConfigureAwait(true);
+    }
+
+    /// <summary>Whether a place on the screen lies on the panel, where it can be seen, or on the tab of a retracted one.</summary>
+    private bool OverPanel(System.Windows.Point absolute) =>
+        (_pinned || _out) && Hits(_panel, absolute) || (!_pinned && Hits(_edgeTab, absolute));
+
+    private static bool Hits(FrameworkElement element, System.Windows.Point absolute)
+    {
+        if (!element.IsVisible || !element.IsLoaded)
+        {
+            return false;
+        }
+
+        var local = element.PointFromScreen(absolute);
+
+        return local.X >= 0 && local.Y >= 0 && local.X <= element.ActualWidth && local.Y <= element.ActualHeight;
+    }
+
+    /// <summary>"Show in stock" from a tile: the panel comes out if it was retracted, and narrows to the picture.</summary>
+    private void ShowInStock(AssetId asset)
+    {
+        if (_desk.Open?.Store.Entries.FirstOrDefault(entry => entry.AssetId == asset.Value) is not { } entry)
+        {
+            _status.Text = "This picture is not in the stock of the open campaign.";
+            return;
+        }
+
+        if (!_pinned && !_out)
+        {
+            Slide(open: true);
+        }
+
+        _panel.ShowInStock(asset, entry.Name);
     }
 
     private void Keep(PanelSide side)

@@ -166,6 +166,49 @@ internal sealed class StageBoard : Panel
     /// <summary>A tile's menu asked to save that screen as a scene.</summary>
     internal event EventHandler<ScreenRef>? Saving;
 
+    /// <summary>A tile's item menu asked to show a picture in the stock.</summary>
+    internal event EventHandler<AssetId>? ShowingInStock;
+
+    /// <summary>
+    /// A picture carried off its tile was let go over no tile at all - the window decides whether
+    /// that was the panel, which takes it off the screen (Part 7: "drag goes both ways").
+    /// </summary>
+    internal event EventHandler<(ScreenRef Screen, ItemId Item, ScreenPoint At)>? CarriedAway;
+
+    /// <summary>
+    /// Where something carried out of the panel would land: the tile under the hand, the place on its
+    /// screen, and whether that is the background strip. Null over no tile. Asked in screen
+    /// coordinates, because the hand is over the panel as often as over the stage.
+    /// </summary>
+    internal (ScreenRef Screen, DnDOverlay.Core.Point? At, bool Background)? Aim(ScreenPoint absolute)
+    {
+        if (Under(PointFromScreen(absolute)) is not { } tile)
+        {
+            foreach (var other in _tiles.Values)
+            {
+                other.Dim();
+            }
+
+            return null;
+        }
+
+        foreach (var other in _tiles.Values.Where(other => !ReferenceEquals(other, tile)))
+        {
+            other.Dim();
+        }
+
+        return (tile.Screen, tile.Landing(absolute), tile.OnStrip(absolute));
+    }
+
+    /// <summary>Shows or hides the background strips on every tile - for the length of a carry out of the panel.</summary>
+    internal void Strips(bool showing)
+    {
+        foreach (var tile in _tiles.Values)
+        {
+            tile.Strip(showing);
+        }
+    }
+
     /// <summary>Something from outside the control was dropped onto a tile.</summary>
     internal event EventHandler<(ScreenRef Screen, ScreenTile.Outside Outside)>? DroppedFromOutside;
 
@@ -257,6 +300,7 @@ internal sealed class StageBoard : Panel
             tile.Turning += (_, turned) => Turn(view.Screen, turned);
             tile.Diagnosing += (_, _) => Wanted(view.Screen.Device);
             tile.Saving += (_, _) => Saving?.Invoke(this, view.Screen);
+            tile.ShowingInStock += (_, asset) => ShowingInStock?.Invoke(this, asset);
             tile.DroppedFromOutside += (_, outside) => DroppedFromOutside?.Invoke(this, (view.Screen, outside));
 
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);
@@ -708,9 +752,18 @@ internal sealed class StageBoard : Panel
 
         _carried = null;
 
-        if (taken is not { } from
-            || _tiles.Values.FirstOrDefault(tile => tile.Landing(carried.At) is not null) is not { } target
-            || target.Screen == from.Screen)
+        if (taken is not { } from)
+        {
+            return;
+        }
+
+        if (_tiles.Values.FirstOrDefault(tile => tile.Landing(carried.At) is not null) is not { } target)
+        {
+            CarriedAway?.Invoke(this, (from.Screen, from.Item, carried.At));
+            return;
+        }
+
+        if (target.Screen == from.Screen)
         {
             return;
         }
@@ -771,7 +824,8 @@ internal sealed class StageBoard : Panel
             tile.IsVisible
             && new System.Windows.Rect(tile.TranslatePoint(default, this), tile.RenderSize).Contains(at));
 
-    private void Activate(ScreenRef? screen)
+    /// <summary>Makes a screen the active one - where the next blind grip lands (Part 7).</summary>
+    internal void Activate(ScreenRef? screen)
     {
         if (Active == screen)
         {

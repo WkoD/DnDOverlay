@@ -30,6 +30,7 @@ namespace DnDOverlay.Control;
 internal sealed class Carrying : Adorner
 {
     private readonly ImageSource? _look;
+    private readonly int _count;
 
     private TilePoint _at;
 
@@ -39,10 +40,14 @@ internal sealed class Carrying : Adorner
     /// </summary>
     private const double Tall = 80;
 
-    internal Carrying(UIElement over, ImageSource? look)
+    /// <param name="over">The element whose adorner layer carries the ghost.</param>
+    /// <param name="look">The picture shown, or none for a grey stand-in.</param>
+    /// <param name="count">How many are on their way - more than one is written on the ghost, because the picture shows only the first.</param>
+    internal Carrying(UIElement over, ImageSource? look, int count = 1)
         : base(over)
     {
         _look = look;
+        _count = count;
 
         // It answers nothing: what is under the hand is decided by what lies beneath this, and a
         // ghost that took the hit test would always be the answer.
@@ -84,5 +89,21 @@ internal sealed class Carrying : Adorner
         }
 
         drawingContext.Pop();
+
+        if (_count > 1)
+        {
+            var text = new FormattedText(
+                _count.ToString(System.Globalization.CultureInfo.CurrentCulture),
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Segoe UI"),
+                14,
+                Brushes.White,
+                VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            var badge = new TileRect(place.Right - text.Width - 10, place.Top - 8, text.Width + 12, text.Height + 4);
+
+            drawingContext.DrawRoundedRectangle(Brushes.SteelBlue, null, badge, 6, 6);
+            drawingContext.DrawText(text, new TilePoint(badge.Left + 6, badge.Top + 2));
+        }
     }
 }
