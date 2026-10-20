@@ -333,6 +333,12 @@
   <data name="E4026_CampaignRefused" xml:space="preserve">
     <value>The campaign "{Name}" could not be opened: {Reason}</value>
   </data>
+  <data name="E4027_LayoutSaved" xml:space="preserve">
+    <value>Saved the layout "{Name}" with {Screens} screen(s).</value>
+  </data>
+  <data name="E4028_LayoutLoaded" xml:space="preserve">
+    <value>Loaded the layout "{Name}" ({Mode}): {Loaded} scene(s) laid, {Skipped} left out, {Saved} saved as scenes, {Missing} picture(s) missing.</value>
+  </data>
   <data name="E3040_PicturesSteppedDown" xml:space="preserve">
     <value>{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.</value>
   </data>

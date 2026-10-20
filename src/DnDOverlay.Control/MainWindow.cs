@@ -78,6 +78,7 @@ internal sealed class MainWindow : Window, IDisposable
     private NetworkPanel? _welcome;
     private StageGuard? _guard;
     private readonly ScenesPanel _scenes;
+    private readonly LayoutsPanel _layouts;
     private readonly CampaignDesk _desk;
     private ControlPower? _power;
 
@@ -169,7 +170,10 @@ internal sealed class MainWindow : Window, IDisposable
         Width = 1280;
         Height = 820;
 
-        _panel = new CampaignPanel(_panelHead, _stock, _scenes, _intake, settings);
+        _layouts = new LayoutsPanel(session, desk, pictures, () => _board.Screens, said => _status.Text = said, _logger, _carry);
+        _layouts.ScenesSaved += (_, _) => _scenes.Refresh();
+
+        _panel = new CampaignPanel(_panelHead, _stock, _scenes, _layouts, _intake, settings);
 
         // Notices and the first-run view across the top, the stage and the panel beneath, the status
         // line at the foot. The stage's row takes what is left, so pulling the window taller gives
@@ -234,6 +238,7 @@ internal sealed class MainWindow : Window, IDisposable
         desk.Changed += (_, _) =>
         {
             pictures.Clear();
+            _layouts.Refresh();
             _panelHead.Campaign(desk.OpenLabel);
             _edgeLabel.Text = desk.OpenLabel ?? "No campaign open";
             _panel.Refresh();
@@ -867,11 +872,29 @@ internal sealed class MainWindow : Window, IDisposable
                 Slide(open: false);
             }
 
-            _board.Strips(showing: true);
+            // A layout lights the whole stage; everything else shows where a background would land.
+            if (_carry.Load?.Layout is not null)
+            {
+                _board.Glow(on: true);
+            }
+            else
+            {
+                _board.Strips(showing: true);
+            }
         };
 
-        _carry.Moved += (_, at) => _ = _board.Aim(at);
-        _carry.Ended += (_, _) => _board.Strips(showing: false);
+        _carry.Moved += (_, at) =>
+        {
+            if (_carry.Load?.Layout is null)
+            {
+                _ = _board.Aim(at);
+            }
+        };
+        _carry.Ended += (_, _) =>
+        {
+            _board.Strips(showing: false);
+            _board.Glow(on: false);
+        };
         _carry.Dropped += async (_, dropped) => await LandAsync(dropped.Load, dropped.At).ConfigureAwait(true);
 
         _board.CarriedAway += async (_, away) =>
@@ -887,6 +910,18 @@ internal sealed class MainWindow : Window, IDisposable
 
     private async Task LandAsync(CarryLoad load, System.Windows.Point at)
     {
+        // Wherever over the stage it is let go: a layout reaches the screens it names, not the one
+        // under the hand (Part 7). The blind grip's way of loading - Add until the settings come.
+        if (load.Layout is { } layout)
+        {
+            if (Hits(_board, at))
+            {
+                await _layouts.LoadAsync(layout, LayoutLoad.Add).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
         if (_board.Aim(at) is not { } aim)
         {
             return;

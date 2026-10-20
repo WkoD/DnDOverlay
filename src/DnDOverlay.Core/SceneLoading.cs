@@ -11,6 +11,29 @@ public enum SceneLoad
 }
 
 /// <summary>
+/// How a layout comes onto the table (Part 3) - three ways, not two, because a layout need not fill
+/// every screen and something has to be said about the ones it leaves out.
+/// </summary>
+public enum LayoutLoad
+{
+    /// <summary>Lay each scene onto its screen; the others untouched. The default, and the harmless one.</summary>
+    Add,
+
+    /// <summary>Clear each named screen and lay its scene; the others untouched.</summary>
+    ReplaceUsed,
+
+    /// <summary>Clear EVERY screen - the ones the layout does not fill too - and then lay.</summary>
+    ReplaceAll,
+}
+
+/// <summary>
+/// One scene of a layout and the screen it goes onto - as the control decided after matching the
+/// saved screens against the ones that are there (Part 3: by address, then by name, then the table).
+/// Two scenes may share a screen: "the beamer is not here today, put it on the table".
+/// </summary>
+public sealed record LayoutScene(ScreenRef Screen, SceneState Scene);
+
+/// <summary>
 /// The operations that put a saved scene onto a screen - one patch, worked out against the TARGET
 /// (Part 3). The hub runs this under its gate; it lives here so it can be asserted without one.
 /// </summary>

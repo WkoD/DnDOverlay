@@ -25,9 +25,9 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 > **Status: under construction.** Pictures already go from the DM's machine onto the screens
 > and the players can move them: displays find the control by themselves and are paired by
 > hand, the campaign holds a stock, all four ways in work, the table takes gestures, and the DM
-> sees every screen live and handles it with the same grips; campaigns and scenes can be saved,
-> opened and switched, and the stock stands in a dockable panel. Still missing are layouts, undo
-> and the installers, which are empty — so **nothing is installable yet**; it runs from a build.
+> sees every screen live and handles it with the same grips; campaigns, scenes and layouts can be
+> saved, opened and switched, and the stock stands in a dockable panel. Still missing are undo and
+> the installers, which are empty — so **nothing is installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
 ## Documentation
@@ -231,6 +231,16 @@ adding, renames, overwrites it with a screen, or deletes it. A scene brings the 
 names, a background that filled the screen fills the new one, parked pictures go into that
 screen's fan, and a picture the stock no longer has stands as a placeholder — one message says how
 many. Scenes are files in the campaign folder (`scenes\<name>.json`), named as they are called.
+
+A **layout** holds several screens at one grip — every screen with something on it, inactive ones
+included. *Save layout …* at the end of the search bar in the tab *Layouts* keeps the table as it
+stands; a tile shows the screens side by side and says how many it takes. A double tap, or dragging
+it anywhere onto the stage, lays it with *Add*; its menu also offers *Replace used screens* (clear
+only the screens it names) and *Replace all screens* (clear every screen first), saves its scenes as
+single scenes, renames, overwrites it with the table, or deletes it. Screens are found by their
+address and, failing that, by their name, so a reinstalled display still gets its scene. When a
+screen is not there, a table asks per scene: onto another screen, saved as a scene of its own, or
+not loaded — the layout file stays whole. Layouts are files too (`layouts\<name>.json`).
 
 While a display is connected, the control keeps its own machine from going to sleep — the table
 hangs on it. Its own battery is the one that gets a warning: at 10 % and off the cable, a note

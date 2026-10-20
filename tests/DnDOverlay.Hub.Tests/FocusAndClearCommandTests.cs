@@ -192,6 +192,96 @@ public sealed class FocusAndClearCommandTests
         Assert.Null((await session.GetSceneAsync(Third, Cancellation)).Background);
     }
 
+    /// <summary>
+    /// A layout is one patch over all the screens it touches (Part 3). Adding lays each scene on what
+    /// is there and leaves an unnamed screen alone.
+    /// </summary>
+    [Fact]
+    public async Task A_layout_added_is_one_patch_and_leaves_other_screens_alone()
+    {
+        using var session = Session();
+
+        await session.AddItemsAsync(First, [.. Many(1)], Cancellation);
+        await session.AddItemsAsync(Third, [.. Many(1)], Cancellation);
+
+        var saved = await Saved(2);
+        IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>> arrived = new Dictionary<ScreenRef, IReadOnlyList<ItemId>>();
+
+        var patch = Assert.Single(await PatchesDuring(
+            session,
+            async () => arrived = await session.LoadLayoutAsync(
+                [new LayoutScene(First, saved), new LayoutScene(Second, saved)], LayoutLoad.Add, Cancellation)));
+
+        Assert.Equal([First, Second], patch.Ops.Select(op => op.Screen).Distinct());
+        Assert.Equal(3, (await session.GetSceneAsync(First, Cancellation)).Items.Count);
+        Assert.Equal(2, arrived[Second].Count);
+        Assert.Single((await session.GetSceneAsync(Third, Cancellation)).Items);
+    }
+
+    /// <summary>Replacing the used screens clears exactly those; an unnamed screen keeps what it has.</summary>
+    [Fact]
+    public async Task Replacing_the_used_screens_clears_only_those()
+    {
+        using var session = Session();
+
+        await session.AddItemsAsync(First, [.. Many(3)], Cancellation);
+        await session.AddItemsAsync(Third, [.. Many(1)], Cancellation);
+
+        var saved = await Saved(2);
+
+        await session.LoadLayoutAsync([new LayoutScene(First, saved)], LayoutLoad.ReplaceUsed, Cancellation);
+
+        Assert.Equal(2, (await session.GetSceneAsync(First, Cancellation)).Items.Count);
+        Assert.Single((await session.GetSceneAsync(Third, Cancellation)).Items);
+    }
+
+    /// <summary>Replacing all clears every screen the layout leaves out - an inactive one too, since a layout reaches it.</summary>
+    [Fact]
+    public async Task Replacing_all_clears_the_screens_the_layout_leaves_out()
+    {
+        using var session = Session();
+
+        await session.AddItemsAsync(Second, [.. Many(1)], Cancellation);
+        await session.AddItemsAsync(Third, [.. Many(1)], Cancellation);
+        await session.SetBackgroundAsync(Third, Many(1).Single(), Cancellation);
+        await session.SetScreenStateAsync(Third, ScreenState.Inactive, Cancellation);
+
+        var saved = await Saved(2);
+
+        var patch = Assert.Single(await PatchesDuring(
+            session,
+            () => session.LoadLayoutAsync([new LayoutScene(First, saved)], LayoutLoad.ReplaceAll, Cancellation)));
+
+        Assert.Equal(2, (await session.GetSceneAsync(First, Cancellation)).Items.Count);
+        Assert.Empty((await session.GetSceneAsync(Second, Cancellation)).Items);
+
+        var third = await session.GetSceneAsync(Third, Cancellation);
+
+        Assert.Empty(third.Items);
+        Assert.Null(third.Background);
+        Assert.Contains(patch.Ops, op => op.Screen == Third);
+    }
+
+    /// <summary>
+    /// Two scenes sent to one screen - the mapping table's "put it on the table" - lie side by side:
+    /// only the first may clear, or the second would wipe out the first.
+    /// </summary>
+    [Fact]
+    public async Task A_second_scene_on_the_same_screen_is_added_to_the_first()
+    {
+        using var session = Session();
+
+        await session.AddItemsAsync(First, [.. Many(4)], Cancellation);
+
+        var two = await Saved(2);
+        var one = await Saved(1);
+
+        await session.LoadLayoutAsync(
+            [new LayoutScene(First, two), new LayoutScene(First, one)], LayoutLoad.ReplaceUsed, Cancellation);
+
+        Assert.Equal(3, (await session.GetSceneAsync(First, Cancellation)).Items.Count);
+    }
+
     [Fact]
     public async Task Clearing_an_empty_table_sends_nothing()
     {
@@ -230,6 +320,16 @@ public sealed class FocusAndClearCommandTests
         }
 
         return patches;
+    }
+
+    /// <summary>A scene of so many pictures, laid out in a second session and read back.</summary>
+    private static async Task<SceneState> Saved(int count)
+    {
+        using var other = Session();
+
+        await other.AddItemsAsync(Second, [.. Many(count)], Cancellation);
+
+        return await other.GetSceneAsync(Second, Cancellation);
     }
 
     private static IEnumerable<AssetRef> Many(int count) =>

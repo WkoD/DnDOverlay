@@ -32,10 +32,15 @@ internal sealed class CampaignPanel : Border
     private readonly ControlSettings _settings;
     private readonly StockView _stock;
     private readonly ScenesPanel _scenes;
+    private readonly LayoutsPanel _layouts;
     private readonly IntakeRunner _intake;
 
     private readonly ToggleButton _picturesTab = Tab("Pictures");
     private readonly ToggleButton _scenesTab = Tab("Scenes");
+    private readonly ToggleButton _layoutsTab = Tab("Layouts");
+
+    /// <summary>"Save layout" at the end of the search bar of its tab - where the new entry appears right after (Part 7).</summary>
+    private readonly Button _saveLayout = Small("Save layout ...");
     private readonly TextBox _search = new() { MinWidth = 120, Padding = new Thickness(4, 2, 4, 2), VerticalContentAlignment = VerticalAlignment.Center };
     private readonly Button _clear = Small("×");
     private readonly Button _sortButton = Small(string.Empty);
@@ -50,6 +55,8 @@ internal sealed class CampaignPanel : Border
     private PanelSort _sort;
     private double _pictureZoom;
     private double _sceneZoom;
+    private double _layoutZoom;
+    private PanelTab _open;
     private PanelSide _side = PanelSide.Right;
     private string? _narrowedTo;
 
@@ -57,12 +64,14 @@ internal sealed class CampaignPanel : Border
         PanelHead head,
         StockView stock,
         ScenesPanel scenes,
+        LayoutsPanel layouts,
         IntakeRunner intake,
         ControlSettings settings)
     {
         Head = head;
         _stock = stock;
         _scenes = scenes;
+        _layouts = layouts;
         _intake = intake;
         _settings = settings;
 
@@ -71,14 +80,17 @@ internal sealed class CampaignPanel : Border
         _sort = placement?.Sort ?? PanelSort.Newest;
         _pictureZoom = placement?.PictureZoom ?? 128;
         _sceneZoom = placement?.SceneZoom ?? 160;
+        _layoutZoom = placement?.LayoutZoom ?? 192;
+        _open = placement?.Tab ?? PanelTab.Pictures;
 
         Padding = new Thickness(8);
         Background = SystemColors.ControlBrush;
 
-        _picturesTab.IsChecked = placement?.Tab is not PanelTab.Scenes;
-        _scenesTab.IsChecked = placement?.Tab is PanelTab.Scenes;
-        _picturesTab.Click += (_, _) => Show(pictures: true);
-        _scenesTab.Click += (_, _) => Show(pictures: false);
+        Check();
+        _picturesTab.Click += (_, _) => Show(PanelTab.Pictures);
+        _scenesTab.Click += (_, _) => Show(PanelTab.Scenes);
+        _layoutsTab.Click += (_, _) => Show(PanelTab.Layouts);
+        _saveLayout.Click += async (_, _) => await _layouts.SaveAsync(Window.GetWindow(this)!).ConfigureAwait(true);
 
         // A filter one cannot get rid of in one movement stays by accident, and then pictures are
         // suddenly missing: a tap on × and Escape both clear it (Part 7). A short debounce keeps the
@@ -112,6 +124,7 @@ internal sealed class CampaignPanel : Border
 
         _stock.SwipedIn += (_, _) => SwipedIn?.Invoke(this, EventArgs.Empty);
         _scenes.SwipedIn += (_, _) => SwipedIn?.Invoke(this, EventArgs.Empty);
+        _layouts.SwipedIn += (_, _) => SwipedIn?.Invoke(this, EventArgs.Empty);
 
         _sortButton.Click += (_, _) =>
         {
@@ -200,7 +213,7 @@ internal sealed class CampaignPanel : Border
     {
         if (!PicturesOpen)
         {
-            Show(pictures: true);
+            Show(PanelTab.Pictures);
         }
 
         _typing.Stop();
@@ -216,16 +229,24 @@ internal sealed class CampaignPanel : Border
     /// <summary>Draws the open tab again - after a campaign change or a patch.</summary>
     internal void Refresh() => Apply();
 
-    private void Show(bool pictures)
+    private void Show(PanelTab tab)
     {
-        _picturesTab.IsChecked = pictures;
-        _scenesTab.IsChecked = !pictures;
+        _open = tab;
+        Check();
         Arrange();
         Keep();
         Apply();
     }
 
-    private bool PicturesOpen => _picturesTab.IsChecked is true;
+    /// <summary>The tabs are toggle buttons; a click on the open one must not leave it unchecked.</summary>
+    private void Check()
+    {
+        _picturesTab.IsChecked = _open is PanelTab.Pictures;
+        _scenesTab.IsChecked = _open is PanelTab.Scenes;
+        _layoutsTab.IsChecked = _open is PanelTab.Layouts;
+    }
+
+    private bool PicturesOpen => _open is PanelTab.Pictures;
 
     private void Apply()
     {
@@ -237,29 +258,46 @@ internal sealed class CampaignPanel : Border
             _ => "Newest ↓",
         };
 
-        if (PicturesOpen)
+        switch (_open)
         {
-            _stock.Apply(_narrowedTo is null ? _search.Text : string.Empty, _sort, _pictureZoom, _side);
-        }
-        else
-        {
-            _scenes.Apply(_search.Text, _sort, _sceneZoom, _side);
+            case PanelTab.Pictures:
+                _stock.Apply(_narrowedTo is null ? _search.Text : string.Empty, _sort, _pictureZoom, _side);
+                break;
+
+            case PanelTab.Scenes:
+                _scenes.Apply(_search.Text, _sort, _sceneZoom, _side);
+                break;
+
+            default:
+                _layouts.Apply(_search.Text, _sort, _layoutZoom, _side);
+                break;
         }
     }
 
     private void Zoom(int step)
     {
-        var current = PicturesOpen ? _pictureZoom : _sceneZoom;
+        var current = _open switch
+        {
+            PanelTab.Pictures => _pictureZoom,
+            PanelTab.Scenes => _sceneZoom,
+            _ => _layoutZoom,
+        };
         var index = Array.FindIndex(Zooms, zoom => zoom >= current);
         var next = Zooms[Math.Clamp((index < 0 ? Zooms.Length - 1 : index) + step, 0, Zooms.Length - 1)];
 
-        if (PicturesOpen)
+        switch (_open)
         {
-            _pictureZoom = next;
-        }
-        else
-        {
-            _sceneZoom = next;
+            case PanelTab.Pictures:
+                _pictureZoom = next;
+                break;
+
+            case PanelTab.Scenes:
+                _sceneZoom = next;
+                break;
+
+            default:
+                _layoutZoom = next;
+                break;
         }
 
         Keep();
@@ -275,7 +313,8 @@ internal sealed class CampaignPanel : Border
                 Sort = _sort,
                 PictureZoom = _pictureZoom,
                 SceneZoom = _sceneZoom,
-                Tab = PicturesOpen ? PanelTab.Pictures : PanelTab.Scenes,
+                LayoutZoom = _layoutZoom,
+                Tab = _open,
             },
         });
 
@@ -289,11 +328,11 @@ internal sealed class CampaignPanel : Border
 
         Head.Vertical = lying;
 
-        Detach(Head, _picturesTab, _scenesTab, _stock, _scenes, _footer);
+        Detach(Head, _picturesTab, _scenesTab, _layoutsTab, _stock, _scenes, _layouts, _footer);
 
         var tabs = new StackPanel { Orientation = lying ? Orientation.Vertical : Orientation.Horizontal, Margin = lying ? new Thickness(6, 0, 6, 0) : new Thickness(0, 6, 0, 6) };
 
-        foreach (var tab in new[] { _picturesTab, _scenesTab })
+        foreach (var tab in new[] { _picturesTab, _scenesTab, _layoutsTab })
         {
             // Upright tabs in a lying panel turn their label with them, still symbol AND word (Part 7).
             tab.LayoutTransform = lying ? new RotateTransform(-90) : Transform.Identity;
@@ -301,7 +340,12 @@ internal sealed class CampaignPanel : Border
         }
 
         var bar = SearchBar();
-        var content = (FrameworkElement)(PicturesOpen ? _stock : _scenes);
+        var content = _open switch
+        {
+            PanelTab.Pictures => (FrameworkElement)_stock,
+            PanelTab.Scenes => _scenes,
+            _ => _layouts,
+        };
         var column = new DockPanel();
 
         DockPanel.SetDock(bar, Dock.Top);
@@ -337,7 +381,7 @@ internal sealed class CampaignPanel : Border
 
     private DockPanel SearchBar()
     {
-        Detach(_search, _clear, _sortButton, _smaller, _larger);
+        Detach(_search, _clear, _sortButton, _smaller, _larger, _saveLayout);
 
         var bar = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         var right = new StackPanel { Orientation = Orientation.Horizontal };
@@ -346,6 +390,11 @@ internal sealed class CampaignPanel : Border
         right.Children.Add(_sortButton);
         right.Children.Add(_smaller);
         right.Children.Add(_larger);
+
+        if (_open is PanelTab.Layouts)
+        {
+            right.Children.Add(_saveLayout);
+        }
 
         DockPanel.SetDock(right, Dock.Right);
         bar.Children.Add(right);

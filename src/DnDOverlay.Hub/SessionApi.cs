@@ -743,6 +743,53 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> LoadLayoutAsync(
+        IReadOnlyList<LayoutScene> scenes, LayoutLoad mode, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scenes);
+
+        var arrived = new Dictionary<ScreenRef, IReadOnlyList<ItemId>>();
+
+        await ApplyAcrossAsync(
+            (screen, scene, context) =>
+            {
+                var mine = scenes.Where(part => part.Screen == screen).ToList();
+
+                if (mine.Count == 0)
+                {
+                    return mode is LayoutLoad.ReplaceAll ? Cleared(screen, scene, context) : [];
+                }
+
+                var ops = new List<PatchOp>();
+                var items = new List<ItemId>();
+
+                for (var index = 0; index < mine.Count; index++)
+                {
+                    // Only the first scene on a screen may clear it - the second one was sent there
+                    // to lie beside the first.
+                    var how = index == 0 && mode is not LayoutLoad.Add ? SceneLoad.Replace : SceneLoad.Add;
+                    var laid = SceneLoading.Ops(mine[index].Scene, scene, context, how, _scenes.NextRevision);
+
+                    foreach (var op in laid)
+                    {
+                        scene = SceneReducer.Apply(scene, op, context);
+                    }
+
+                    ops.AddRange(laid);
+                    items.AddRange(laid.OfType<AddItem>().Select(add => add.Item.ItemId));
+                }
+
+                arrived[screen] = items;
+
+                return ops;
+            },
+            cancellationToken,
+            includingInactive: true).ConfigureAwait(false);
+
+        return arrived;
+    }
+
+    /// <inheritdoc />
     public Task ClearItemsAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
         ApplyAsync(screen, (scene, _) => scene.Items.Count == 0 ? [] : [new ClearItems()], cancellationToken);
 

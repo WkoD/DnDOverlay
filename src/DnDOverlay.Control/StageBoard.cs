@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
 using DnDOverlay.Core.Protocol;
@@ -199,6 +200,13 @@ internal sealed class StageBoard : Panel
 
         return (tile.Screen, tile.Landing(absolute), tile.OnStrip(absolute));
     }
+
+    /// <summary>
+    /// Lights the whole stage - while a layout is carried (Part 7). A layout has no single target, and a
+    /// highlight pointing at one tile while the load reaches all of them would be a lie.
+    /// </summary>
+    internal void Glow(bool on) =>
+        Background = on ? new SolidColorBrush(Color.FromArgb(0x30, 0x46, 0x82, 0xB4)) : null;
 
     /// <summary>Shows or hides the background strips on every tile - for the length of a carry out of the panel.</summary>
     internal void Strips(bool showing)

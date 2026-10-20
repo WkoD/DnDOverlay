@@ -6,11 +6,12 @@ using ScreenPoint = System.Windows.Point;
 
 namespace DnDOverlay.Control;
 
-/// <summary>What is carried out of the panel: pictures of the stock, or one saved scene.</summary>
-/// <param name="Pictures">The pictures, in the order they were chosen - empty for a scene.</param>
-/// <param name="Scene">The scene's name, or none for pictures.</param>
+/// <summary>What is carried out of the panel: pictures of the stock, one saved scene, or one layout.</summary>
+/// <param name="Pictures">The pictures, in the order they were chosen - empty for a scene or a layout.</param>
+/// <param name="Scene">The scene's name, or none.</param>
 /// <param name="Look">What the ghost shows.</param>
-internal sealed record CarryLoad(IReadOnlyList<AssetRef> Pictures, string? Scene, ImageSource? Look);
+/// <param name="Layout">The layout's name, or none - a layout has no single target, so the whole stage is its target.</param>
+internal sealed record CarryLoad(IReadOnlyList<AssetRef> Pictures, string? Scene, ImageSource? Look, string? Layout = null);
 
 /// <summary>
 /// One entry - or the whole selection - on its way from the panel to a tile (Part 7: "drag goes both
@@ -37,6 +38,9 @@ internal sealed class PanelCarry
 
     /// <summary>Whether something is on its way.</summary>
     internal bool Carrying => _load is not null;
+
+    /// <summary>What is on its way, if anything.</summary>
+    internal CarryLoad? Load => _load;
 
     /// <summary>A carry began - a retracted panel goes back, the tiles show where a background lands.</summary>
     internal event EventHandler? Began;

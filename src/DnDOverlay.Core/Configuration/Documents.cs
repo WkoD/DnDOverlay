@@ -188,11 +188,12 @@ public enum PanelSort
     NameDescending,
 }
 
-/// <summary>The panel's tabs (Part 7) - "Layouts" joins them with M5b4.</summary>
+/// <summary>The panel's tabs (Part 7): the three reaches of "what do I lay down next?".</summary>
 public enum PanelTab
 {
     Pictures,
     Scenes,
+    Layouts,
 }
 
 /// <summary>The campaign panel as the DM left it (Part 7).</summary>
@@ -201,6 +202,7 @@ public enum PanelTab
 /// <param name="SceneZoom">The tile size of the tab "Scenes".</param>
 /// <param name="Tab">The tab that was open - it survives a restart (step 40f1).</param>
 /// <param name="Pinned">Sharing the room with the stage, or retracted to a narrow tab at the edge and pushed over the stage when wanted.</param>
+/// <param name="LayoutZoom">The tile size of the tab "Layouts" - wider by default, because a tile shows several screens.</param>
 public sealed record PanelPlacement(
     PanelSide Side,
     double Size,
@@ -208,7 +210,8 @@ public sealed record PanelPlacement(
     double PictureZoom = 128,
     double SceneZoom = 160,
     PanelTab Tab = PanelTab.Pictures,
-    bool Pinned = true);
+    bool Pinned = true,
+    double LayoutZoom = 192);
 
 /// <summary>
 /// The address of one screen as <c>control.json</c> writes it: a raw <see cref="Guid"/> and a raw

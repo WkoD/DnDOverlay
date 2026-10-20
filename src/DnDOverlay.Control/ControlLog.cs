@@ -363,4 +363,22 @@ internal static partial class ControlLog
         Level = LogLevel.Warning,
         Message = "The campaign \"{Name}\" could not be opened: {Reason}")]
     internal static partial void CampaignRefused(ILogger logger, string name, string reason);
+
+    /// <summary>The table was saved as a layout - every screen with something on it (Part 3).</summary>
+    [LoggerMessage(
+        EventId = 4027,
+        Level = LogLevel.Information,
+        Message = "Saved the layout \"{Name}\" with {Screens} screen(s).")]
+    internal static partial void LayoutSaved(ILogger logger, string name, int screens);
+
+    /// <summary>
+    /// A layout was loaded. Besides the missing pictures it names what the mapping table decided: the
+    /// scenes left out and the ones saved as scenes of their own, so a screen that stayed empty at the
+    /// table can be traced to the choice that left it so.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4028,
+        Level = LogLevel.Information,
+        Message = "Loaded the layout \"{Name}\" ({Mode}): {Loaded} scene(s) laid, {Skipped} left out, {Saved} saved as scenes, {Missing} picture(s) missing.")]
+    internal static partial void LayoutLoaded(ILogger logger, string name, string mode, int loaded, int skipped, int saved, int missing);
 }

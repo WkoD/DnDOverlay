@@ -80,6 +80,17 @@ public interface ISessionApi
         ScreenRef screen, SceneState scene, SceneLoad mode, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Loads a layout (Part 3): several screens at one grip - <b>one patch, one step</b>, so the table
+    /// never stands half rebuilt. Each scene is computed against its target as
+    /// <see cref="LoadSceneAsync"/> does; a second scene for the same screen is added on top of the
+    /// first whatever the mode. <see cref="LayoutLoad.ReplaceAll"/> clears every screen the layout
+    /// does not name, inactive ones included - a layout reaches them as it reaches the others. Returns
+    /// the new items per screen.
+    /// </summary>
+    Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> LoadLayoutAsync(
+        IReadOnlyList<LayoutScene> scenes, LayoutLoad mode, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// "Clear all" (Part 7): items AND background off every played screen - every screen whose
     /// wish is not <see cref="ScreenState.Inactive"/>, because a screen being prepared in the
     /// background is not part of the table. One patch over all of them, or a screen would stand

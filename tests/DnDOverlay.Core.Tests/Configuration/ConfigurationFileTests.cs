@@ -105,7 +105,7 @@ public sealed class ConfigurationFileTests : IDisposable
     [Fact]
     public void The_panel_comes_back_as_it_was_left()
     {
-        var panel = new PanelPlacement(PanelSide.Bottom, 290, PanelSort.NameDescending, 96, 224, PanelTab.Scenes, Pinned: false);
+        var panel = new PanelPlacement(PanelSide.Bottom, 290, PanelSort.NameDescending, 96, 224, PanelTab.Layouts, Pinned: false, LayoutZoom: 256);
 
         using (var file = Store(TimeProvider.System))
         {
