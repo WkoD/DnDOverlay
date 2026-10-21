@@ -167,6 +167,22 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// has chosen one from the window's shape.
     /// </summary>
     public PanelPlacement? Panel { get; set; }
+
+    /// <summary>
+    /// How a double tap and a drag load a scene - replacing by default, because a scene is changed in
+    /// play (Part 7). A setting rather than wired in: the blind grip must do what this DM expects, and
+    /// the menu always offers both.
+    /// </summary>
+    public SceneLoad SceneLoad { get; set; } = SceneLoad.Replace;
+
+    /// <summary>How a double tap and a drag load a layout - adding by default, the harmless one (Part 3, Part 7).</summary>
+    public LayoutLoad LayoutLoad { get; set; } = LayoutLoad.Add;
+
+    /// <summary>
+    /// Where the campaigns lie - the one folder the DM can move (Part 7). Null is the default under the
+    /// data root; it is written as null rather than as that path, so a moved data root takes it along.
+    /// </summary>
+    public string? CampaignsPath { get; set; }
 }
 
 /// <summary>Which edge of the window the campaign panel lies against (Part 7).</summary>

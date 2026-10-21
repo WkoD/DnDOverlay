@@ -37,6 +37,7 @@ internal sealed class ScenesPanel : Grid
     private readonly Func<IReadOnlyList<ScreenView>> _screens;
     private readonly Action<string> _say;
     private readonly ILogger _logger;
+    private readonly ControlSettings _settings;
     private readonly WrapPanel _tiles = new();
     private readonly ScrollViewer _scroller;
     private readonly PanelTouch _touch;
@@ -60,8 +61,10 @@ internal sealed class ScenesPanel : Grid
         Func<IReadOnlyList<ScreenView>> screens,
         Action<string> say,
         ILogger logger,
-        PanelCarry carry)
+        PanelCarry carry,
+        ControlSettings settings)
     {
+        _settings = settings;
         _session = session;
         _desk = desk;
         _pictures = pictures;
@@ -343,13 +346,14 @@ internal sealed class ScenesPanel : Grid
     }
 
     /// <summary>
-    /// The double tap's load: replacing, onto the active screen (Part 7).
+    /// The double tap's load: the way set in the settings (replacing unless changed), onto the active
+    /// screen (Part 7).
     /// </summary>
     private async Task LoadOnActiveAsync(string name)
     {
         if (_active() is { } screen)
         {
-            await LoadAsync(name, screen, SceneLoad.Replace).ConfigureAwait(true);
+            await LoadAsync(name, screen, _settings.Current.SceneLoad).ConfigureAwait(true);
         }
         else
         {

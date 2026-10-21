@@ -75,7 +75,8 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly ILogger _logger;
 
     private DevicesWindow? _devices;
-    private NetworkWindow? _network;
+    private SettingsWindow? _settingsWindow;
+    private readonly ProcessLog _log;
     private NetworkPanel? _welcome;
     private StageGuard? _guard;
     private readonly ScenesPanel _scenes;
@@ -93,6 +94,7 @@ internal sealed class MainWindow : Window, IDisposable
         ProcessLog log)
     {
         _session = session;
+        _log = log;
         _pairing = pairing;
         _settings = settings;
         _address = address;
@@ -127,7 +129,8 @@ internal sealed class MainWindow : Window, IDisposable
             () => _board.Screens,
             said => _status.Text = said,
             _logger,
-            _carry);
+            _carry,
+            settings);
 
         // The counter the control never had. It does NOT hold the render hook - Redraw drives it,
         // and only while the stage is actually drawing, because a permanent subscription would keep
@@ -179,7 +182,7 @@ internal sealed class MainWindow : Window, IDisposable
         Width = 1280;
         Height = 820;
 
-        _layouts = new LayoutsPanel(session, desk, pictures, () => _board.Screens, said => _status.Text = said, _logger, _carry);
+        _layouts = new LayoutsPanel(session, desk, pictures, () => _board.Screens, said => _status.Text = said, _logger, _carry, settings);
         _layouts.ScenesSaved += (_, _) => _scenes.Refresh();
 
         _panel = new CampaignPanel(_panelHead, _stock, _scenes, _layouts, _intake, settings);
@@ -592,22 +595,22 @@ internal sealed class MainWindow : Window, IDisposable
     }
 
     /// <summary>The network window, reopened rather than duplicated.</summary>
-    private void Network()
+    /// <summary>The window Settings - one at a time, brought forward when it is open already.</summary>
+    private void Settings()
     {
-        if (_network is { IsLoaded: true })
+        if (_settingsWindow is { IsLoaded: true })
         {
-            _ = _network.Activate();
+            _ = _settingsWindow.Activate();
             return;
         }
 
-        _network = new NetworkWindow(_address.Port) { Owner = this };
-        _network.Show();
+        _settingsWindow = new SettingsWindow(_settings, _desk, _session, _log, _logger, _address.Port, said => _status.Text = said) { Owner = this };
+        _settingsWindow.Show();
     }
 
     /// <summary>
     /// The head's menu (Part 7): clear all and send to all, then - set apart - what has nothing to do
-    /// with play: devices, network, the touch points, where the panel docks. Protocol and settings
-    /// join it with the windows they open (M5b7).
+    /// with play: devices, settings, where the panel docks. The protocol joins it with its panel (M5b7e).
     /// </summary>
     private void OpenMenu()
     {
@@ -628,20 +631,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Devices ...", () => Devices()));
-        menu.Items.Add(Item("Network ...", Network));
-
-        var touch = new MenuItem { Header = "Show touch points", IsCheckable = true, IsChecked = _settings.Current.ShowTouchPoints };
-
-        touch.Click += (_, _) =>
-        {
-            var reporting = touch.IsChecked;
-
-            _settings.Update(configuration => configuration with { ShowTouchPoints = reporting });
-            _ = _session.SetTouchPointsAsync(reporting);
-            _status.Text = reporting ? "Tables report their touch points." : "Tables no longer report their touch points.";
-        };
-
-        menu.Items.Add(touch);
+        menu.Items.Add(Item("Settings ...", Settings));
 
         var docking = new MenuItem { Header = "Dock panel" };
         var side = _settings.Current.Panel?.Side ?? PanelSide.Right;
@@ -955,12 +945,12 @@ internal sealed class MainWindow : Window, IDisposable
     private async Task LandAsync(CarryLoad load, System.Windows.Point at)
     {
         // Wherever over the stage it is let go: a layout reaches the screens it names, not the one
-        // under the hand (Part 7). The blind grip's way of loading - Add until the settings come.
+        // under the hand (Part 7), the way the settings say.
         if (load.Layout is { } layout)
         {
             if (Hits(_board, at))
             {
-                await _layouts.LoadAsync(layout, LayoutLoad.Add).ConfigureAwait(true);
+                await _layouts.LoadAsync(layout, _settings.Current.LayoutLoad).ConfigureAwait(true);
             }
 
             return;
@@ -976,7 +966,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         if (load.Scene is { } scene)
         {
-            await _scenes.LoadAsync(scene, aim.Screen, SceneLoad.Replace).ConfigureAwait(true);
+            await _scenes.LoadAsync(scene, aim.Screen, _settings.Current.SceneLoad).ConfigureAwait(true);
             return;
         }
 

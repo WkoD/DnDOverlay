@@ -35,6 +35,7 @@ internal sealed class LayoutsPanel : Grid
     private readonly Func<IReadOnlyList<ScreenView>> _screens;
     private readonly Action<string> _say;
     private readonly ILogger _logger;
+    private readonly ControlSettings _settings;
     private readonly WrapPanel _tiles = new();
     private readonly ScrollViewer _scroller;
     private readonly PanelTouch _touch;
@@ -56,8 +57,10 @@ internal sealed class LayoutsPanel : Grid
         Func<IReadOnlyList<ScreenView>> screens,
         Action<string> say,
         ILogger logger,
-        PanelCarry carry)
+        PanelCarry carry,
+        ControlSettings settings)
     {
+        _settings = settings;
         _session = session;
         _desk = desk;
         _pictures = pictures;
@@ -83,7 +86,7 @@ internal sealed class LayoutsPanel : Grid
         {
             if (tile.Tag is string name)
             {
-                await LoadAsync(name, LayoutLoad.Add).ConfigureAwait(true);
+                await LoadAsync(name, _settings.Current.LayoutLoad).ConfigureAwait(true);
             }
         };
         _touch.Held += (_, tile) =>
@@ -437,7 +440,7 @@ internal sealed class LayoutsPanel : Grid
             if (down.ClickCount == 2 && down.StylusDevice is null)
             {
                 down.Handled = true;
-                await LoadAsync(summary.Name, LayoutLoad.Add).ConfigureAwait(true);
+                await LoadAsync(summary.Name, _settings.Current.LayoutLoad).ConfigureAwait(true);
             }
         };
 

@@ -98,7 +98,7 @@ public sealed partial class App : Application, IDisposable
         var codec = new MagickCodec();
 
         var library = new CampaignLibrary(
-            _dataRoot.CampaignsDefault,
+            _settings.Current.CampaignsPath ?? _dataRoot.CampaignsDefault,
             directory => AssetStore.Open(
                 directory,
                 codec,

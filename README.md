@@ -27,8 +27,8 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 > hand, the campaign holds a stock, all four ways in work, the table takes gestures, and the DM
 > sees every screen live and handles it with the same grips; campaigns, scenes and layouts can be
 > saved, opened and switched, the stock stands in a dockable panel, and undo reaches back through
-> the session. Still missing are the settings window and the installers, which are empty — so
-> **nothing is installable yet**; it runs from a build.
+> the session. Still missing are parts of the device settings and the installers, which are
+> empty — so **nothing is installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
 ## Documentation
@@ -193,8 +193,17 @@ its name, its resolution and marks: *GIF* for an animation, *on 2* when it lies 
 a picture or as the background to any screen or to all, says where it lies, and shows its file in
 the folder. Ctrl+click and a frame drawn with the mouse pick several, which then go together. The
 panel docks at any edge — *Dock panel* in the menu ☰ —, and the line between it and the stage can
-be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices, the
-network and the touch points.
+be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices and the
+settings.
+
+**Settings** (☰ → *Settings …*) holds what is set once: how a double tap or a drag loads a scene
+(replacing, by default) and a layout (adding), the name pasted pictures get, whether the tables
+show touch points, this control's log level, its port (taken at the next start) and the network
+check with its firewall buttons. **Where the campaigns lie** can be changed there too: the question
+names both places, how many campaigns and how big, and offers to take them along or only to change
+the place. On the same drive the move is a rename, over in an instant; to another drive the
+campaigns are copied with progress and a way to break off, checked, and only then removed from the
+old place. If anything fails, everything stays where it was. The open campaign is closed first.
 
 **Undo and redo** sit in the panel head, each labelled with what the next press does — *↶ Add
 "Grimmbart"*, *↷ Clear TISCH-PC//1* —, or with Ctrl+Z and Ctrl+Y. What lays, takes or moves a

@@ -74,7 +74,18 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
     private static readonly System.Text.Json.JsonSerializerOptions Web = new(System.Text.Json.JsonSerializerDefaults.Web);
 
     /// <summary>Where the campaigns lie.</summary>
-    public string BasePath { get; } = basePath;
+    public string BasePath { get; private set; } = basePath;
+
+    /// <summary>
+    /// Points the library at another base path - after the campaigns were moved there, or when the DM
+    /// chose only to change the place (Part 7). No campaign may be open: the caller closes it first.
+    /// </summary>
+    public void Relocate(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        BasePath = path;
+    }
 
     /// <summary>Whether this name is a provisional one.</summary>
     public static bool IsUnnamed(string name) =>

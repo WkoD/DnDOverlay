@@ -398,4 +398,21 @@ internal static partial class ControlLog
         Level = LogLevel.Warning,
         Message = "Deleted {Pictures} picture(s): taken off {Screens} screen(s), out of {Scenes} scene(s) and {Layouts} layout(s).")]
     internal static partial void AssetsDeleted(ILogger logger, int pictures, int screens, int scenes, int layouts);
+
+    /// <summary>
+    /// The campaign folder moved (Part 7) - renamed on the same volume or copied across one. Written,
+    /// because the next question about a campaign that cannot be found starts with "where is it?".
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4031,
+        Level = LogLevel.Information,
+        Message = "Campaigns moved from \"{From}\" to \"{To}\": {Count} campaign(s), copied: {Copied}.")]
+    internal static partial void CampaignsMoved(ILogger logger, string from, string to, int count, bool copied);
+
+    /// <summary>A move of the campaign folder did not happen or was broken off - and left everything at the old place.</summary>
+    [LoggerMessage(
+        EventId = 4032,
+        Level = LogLevel.Warning,
+        Message = "The campaigns stay at \"{From}\": the move to \"{To}\" did not happen. {Reason}")]
+    internal static partial void CampaignsNotMoved(ILogger logger, string from, string to, string reason);
 }

@@ -103,6 +103,33 @@ internal sealed class CampaignDesk
         return null;
     }
 
+    /// <summary>Where the campaigns lie now.</summary>
+    internal string BasePath => _library.BasePath;
+
+    /// <summary>
+    /// Closes the open campaign the way a switch does - the table cleared everywhere, undo ended -
+    /// and opens none. The condition for moving the campaign folder: nobody moves a folder the hub is
+    /// delivering pictures out of (Part 7).
+    /// </summary>
+    internal async Task CloseAsync()
+    {
+        if (Open is null)
+        {
+            return;
+        }
+
+        await _session.ClearEverywhereAsync(CancellationToken.None).ConfigureAwait(true);
+
+        Become(null);
+    }
+
+    /// <summary>The campaigns lie somewhere else now; the switcher lists what is there.</summary>
+    internal void Relocate(string path)
+    {
+        _library.Relocate(path);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// Renames the open campaign and its folder - also how an unnamed one gets its first name.
     /// </summary>

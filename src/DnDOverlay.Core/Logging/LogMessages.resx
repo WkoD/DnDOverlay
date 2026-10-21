@@ -345,6 +345,12 @@
   <data name="E4030_AssetsDeleted" xml:space="preserve">
     <value>Deleted {Pictures} picture(s): taken off {Screens} screen(s), out of {Scenes} scene(s) and {Layouts} layout(s).</value>
   </data>
+  <data name="E4031_CampaignsMoved" xml:space="preserve">
+    <value>Campaigns moved from "{From}" to "{To}": {Count} campaign(s), copied: {Copied}.</value>
+  </data>
+  <data name="E4032_CampaignsNotMoved" xml:space="preserve">
+    <value>The campaigns stay at "{From}": the move to "{To}" did not happen. {Reason}</value>
+  </data>
   <data name="E3040_PicturesSteppedDown" xml:space="preserve">
     <value>{Count} picture(s) stepped down to their thumbnails: {UsedMb} MB committed against a cap of {CapMb} MB.</value>
   </data>
