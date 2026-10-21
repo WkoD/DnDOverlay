@@ -52,6 +52,7 @@ public static class SendClasses
         // every table, every one of which is worthless the moment the next arrives. WindowList
         // joins it in M5b.
         TouchPointsMessage => SendClass.Transient,
+        WindowListMessage => SendClass.Transient,
 
         // A frame time from a moment ago is worthless, and telemetry is what should go first when
         // things get tight - which is why it is not on the Pong (Part 4).

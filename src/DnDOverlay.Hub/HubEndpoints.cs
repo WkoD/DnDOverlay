@@ -606,6 +606,12 @@ public static class HubEndpoints
                 connection.TrySend(new DiagnosticsRequestMessage(On: true));
             }
 
+            // The same for the wireframes: the underground stayed switched on across the reconnect.
+            if (session.WindowsRequested(device.Device))
+            {
+                connection.TrySend(new WindowsRequestMessage(On: true));
+            }
+
             foreach (var screen in connection.Screens)
             {
                 connection.TrySend(new SceneSnapshotMessage(screen, scenes.Get(screen)));
@@ -614,6 +620,7 @@ public static class HubEndpoints
             var relay = new LogRelay(processLog, time, logger, device.Device, device.Name);
             var fingers = new TouchRelay(events, time, logger, device.Name);
             var readings = new DiagnosticsRelay(events, time, logger, device.Device, device.Name);
+            var windows = new WindowsRelay(events, time, logger, device.Device, device.Name);
 
             // Pongs never get here: they are noted where they are heard, because they say nothing
             // about the session - they say the socket is alive.
@@ -698,6 +705,14 @@ public static class HubEndpoints
                         // Named from the connection like the progress below, and not logged: a
                         // reading a second is what the view is for, not the log.
                         readings.Take(diagnostics);
+                        break;
+
+                    case WindowListMessage list:
+                        windows.Take(list);
+                        break;
+
+                    case WindowResultMessage result:
+                        events.Publish(new SessionEvent.WindowResult(device.Device, result.Handle, result.Outcome, result.Bounds));
                         break;
 
                     case AssetProgressMessage progress:

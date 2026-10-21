@@ -254,6 +254,9 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private volatile bool _diagnosing;
 
+    /// <summary>Whether the control wants the window list - forgotten with the connection, like the diagnostics wish.</summary>
+    private volatile bool _windowsWanted;
+
     /// <summary>Who this device is connected to right now, for the bar - the beacon's name, or the host when it came by address.</summary>
     private volatile string? _connectedTo;
 
@@ -345,6 +348,9 @@ public sealed partial class App : Application, IDisposable
     /// parameters in display.json, so the window comes back where it was put.
     /// </summary>
     private readonly Dictionary<ScreenId, WindowPlacement> _placements = [];
+
+    /// <summary>What this device does about foreign windows (Part 6) - report and control, unless set otherwise.</summary>
+    private ForeignWindowsMode _foreign = ForeignWindowsMode.ReportAndControl;
 
     /// <summary>The setup screen, one per monitor, while a pairing request lies before the DM.</summary>
     private readonly List<SetupWindow> _setup = [];
@@ -507,6 +513,7 @@ public sealed partial class App : Application, IDisposable
 
         // The bar and the diagnostics stream, from one reading a second (Part 4, Part 6).
         _ = Task.Run(() => MeasureAsync(_shutdown.Token), _shutdown.Token);
+        _ = Task.Run(() => ReportWindowsAsync(_shutdown.Token), _shutdown.Token);
 
         // The rescue mark, looked at once a second for the length of the process (Part 6).
         _ = Task.Run(() => WatchAbsenceAsync(_shutdown.Token), _shutdown.Token);
@@ -788,6 +795,8 @@ public sealed partial class App : Application, IDisposable
                 _rescueAfterSeconds = seconds;
                 _takeover.Grace = device.RescueAfter;
             }
+
+            _foreign = device.ForeignWindows ?? _foreign;
         }
 
         // Not stored and not reported back, unlike everything above it: this is the control's one
@@ -843,7 +852,7 @@ public sealed partial class App : Application, IDisposable
                     ScreenSettings.Opinion(pair.Value, _names.GetValueOrDefault(pair.Key)),
                     _placements.GetValueOrDefault(pair.Key))),
             ],
-            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted, _rescueAfterSeconds),
+            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted, _rescueAfterSeconds, _foreign),
         };
 
         _configuration.Save(_settings);
@@ -1320,6 +1329,7 @@ public sealed partial class App : Application, IDisposable
         _heardName = null;
         _heardControl = null;
         _diagnosing = false;
+        _windowsWanted = false;
 
         var inbox = Channel.CreateUnbounded<ProtocolMessage>(new UnboundedChannelOptions
         {
@@ -1552,7 +1562,8 @@ public sealed partial class App : Application, IDisposable
                     _log?.Level,
                     _forwarding?.AtLeast,
                     _wake?.Wanted,
-                    (int)_takeover.Grace.TotalSeconds)),
+                    (int)_takeover.Grace.TotalSeconds,
+                    _foreign)),
 
             // What this device still has on its screens. A control that has just restarted takes
             // it over, and only where it has no scene of its own - which is the one exception to
@@ -1622,6 +1633,14 @@ public sealed partial class App : Application, IDisposable
                 }
 
                 _diagnosing = request.On;
+                break;
+
+            case WindowsRequestMessage request:
+                _windowsWanted = request.On;
+                break;
+
+            case WindowCommandMessage command:
+                await Dispatcher.InvokeAsync(() => Lay(command));
                 break;
 
             case SpotlightPulseMessage pulse:
@@ -2599,6 +2618,62 @@ public sealed partial class App : Application, IDisposable
     /// while nobody looks.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The foreign windows, about once a second while the control wants them and this device reports
+    /// them at all (Part 4, Part 6). Our own windows - overlays, setup screen - are left out, or the
+    /// tile would draw itself.
+    /// </summary>
+    private async Task ReportWindowsAsync(CancellationToken cancellationToken)
+    {
+        using var tick = new PeriodicTimer(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (!_windowsWanted || _foreign is ForeignWindowsMode.Off)
+                {
+                    continue;
+                }
+
+                await Dispatcher.InvokeAsync(SendWindows);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The process is going away.
+        }
+    }
+
+    private void SendWindows() =>
+        _outbox?.TrySend(new WindowListMessage(ForeignWindowSurvey.Survey([.. _monitors.Values], Environment.ProcessId)));
+
+    /// <summary>
+    /// A command for a foreign window (Part 6): refused where this device only reports, and on an
+    /// inactive screen - the DM handed it back, somebody may be typing there; otherwise carried out,
+    /// read back, and answered with what actually happened, a fresh list right behind it.
+    /// </summary>
+    private void Lay(WindowCommandMessage command)
+    {
+        DnDOverlay.Core.Rect? after = null;
+
+        var outcome = _foreign is not ForeignWindowsMode.ReportAndControl
+            ? WindowOutcome.NotAllowed
+            : !_monitors.TryGetValue(command.Screen, out var monitor)
+                ? WindowOutcome.Gone
+                : _states.TryGetValue(command.Screen, out var state) && state.State is ScreenState.Inactive
+                    ? WindowOutcome.Inactive
+                    : ForeignWindowSurvey.Lay(command.Handle, command.Program, command.Action, command.Bounds, monitor, out after);
+
+        DisplayLog.WindowLaid(_logger, command.Program, command.Action, outcome);
+        _outbox?.TrySend(new WindowResultMessage(command.Handle, outcome, after));
+
+        if (_windowsWanted)
+        {
+            SendWindows();
+        }
+    }
+
     private async Task MeasureAsync(CancellationToken cancellationToken)
     {
         using var tick = new PeriodicTimer(DiagnosticsInterval);

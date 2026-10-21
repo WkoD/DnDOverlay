@@ -57,6 +57,23 @@ public interface ISessionApi
     bool DiagnosticsRequested(DeviceId device);
 
     /// <summary>
+    /// Switches a device's window list on or off (Part 4) - the tile's "underground" switch. Kept as a
+    /// wish: a device that is not here gets it with its next connection.
+    /// </summary>
+    Task RequestWindowsAsync(DeviceId device, bool wanted, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether the window list is wanted from this device.</summary>
+    bool WindowsRequested(DeviceId device);
+
+    /// <summary>
+    /// A command for one foreign window (Part 4) - answered by the device with a
+    /// <see cref="SessionEvent.WindowResult"/>. False when the device is not connected: a window
+    /// position from before it left means nothing.
+    /// </summary>
+    Task<bool> SendWindowCommandAsync(
+        ScreenRef screen, long handle, string program, WindowAction action, Rect? bounds, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Puts these items in focus in this order, or lifts the focus with an empty list (Part 3). The
     /// list replaces the one before; items the screen does not carry fall out. More than
     /// <see cref="Focus.Limit"/> are refused - that is no longer a highlight but a second scene - and

@@ -124,6 +124,19 @@ public sealed record ScreenInfo(
 /// where an overlay would take the whole screen and the taskbar with it. The same application in a
 /// different frame, not a second way of drawing.
 /// </summary>
+/// <summary>What a device does about the windows of other programs on it (Part 6).</summary>
+public enum ForeignWindowsMode
+{
+    /// <summary>Reports them while asked, and lets the control move, size, minimise and maximise them.</summary>
+    ReportAndControl,
+
+    /// <summary>Reports them, touches none - a device that belongs to somebody else.</summary>
+    ReportOnly,
+
+    /// <summary>Neither.</summary>
+    Off,
+}
+
 public enum ScreenPresentation
 {
     Overlay,
@@ -431,11 +444,16 @@ public sealed record ScreenSettings(
 /// a call for orphaned displays - one clock for both (Part 4, Part 6). A minute by default: the
 /// grace of a tool, not of a handover.
 /// </param>
+/// <param name="ForeignWindows">
+/// What the device does about the windows of other programs on it (Part 4, Part 6): report and let
+/// the control lay them - the default, because display PCs are the DM's own - report only, or nothing.
+/// </param>
 public sealed record DeviceSettings(
     LogLevel? Level = null,
     LogLevel? ForwardAtLeast = null,
     bool? KeepAwake = null,
-    int? RescueAfterSeconds = null)
+    int? RescueAfterSeconds = null,
+    ForeignWindowsMode? ForeignWindows = null)
 {
     /// <summary>The rescue mark's grace when nobody set one (Part 6).</summary>
     public static readonly TimeSpan DefaultRescueAfter = TimeSpan.FromMinutes(1);
@@ -444,11 +462,11 @@ public sealed record DeviceSettings(
     /// What a device does when nobody set anything (Part 6) - Information written, Warning sent on, the
     /// screens kept awake, a minute's grace. The one place these four defaults stand.
     /// </summary>
-    public static readonly DeviceSettings Defaults = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true, RescueAfterSeconds: 60);
+    public static readonly DeviceSettings Defaults = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true, RescueAfterSeconds: 60, ForeignWindows: ForeignWindowsMode.ReportAndControl);
 
     /// <summary>Whether this delta says anything at all. Not serialised - see ScreenSettings.</summary>
     [JsonIgnore]
-    public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null && RescueAfterSeconds is null;
+    public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null && RescueAfterSeconds is null && ForeignWindows is null;
 
     /// <summary>
     /// The grace this delta sets, or the default. Ten seconds at the least: below that every Wi-Fi
@@ -475,7 +493,8 @@ public sealed record DeviceSettings(
             newer.Level ?? older.Level,
             newer.ForwardAtLeast ?? older.ForwardAtLeast,
             newer.KeepAwake ?? older.KeepAwake,
-            newer.RescueAfterSeconds ?? older.RescueAfterSeconds);
+            newer.RescueAfterSeconds ?? older.RescueAfterSeconds,
+            newer.ForeignWindows ?? older.ForeignWindows);
     }
 }
 

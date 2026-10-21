@@ -185,6 +185,14 @@ the control's own window lying on it, or hidden at the device — shows as **⚠
 right of the head; tap the head to read them. Beside it stands the **battery** of a display PC that
 has one, red from 10 %, with a lightning sign on the cable.
 
+**Windows** under a tile shows the other programs' windows on that screen behind the pictures —
+half-transparent, named by their program, never by their title, where two overlap the darker area
+lies on top. Take one by its strip along the top to move it, by a corner to size it; its menu
+minimises, maximises, restores or fills the screen with it. Inside a window the selection frame
+still works. A window of a program that runs elevated, or on an inactive screen, says so instead of
+moving. A device can be set to only report its windows, or to neither (*Windows of other programs*
+in its band).
+
 **The campaign panel** holds what you bring: the tabs *Pictures* and *Scenes*, a filter that
 finds a name by any part of it — case and accents do not matter, several words must all match —,
 an order (newest, oldest, by name) and a zoom (− and +, or Ctrl+wheel). A picture's tile carries

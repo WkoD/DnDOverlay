@@ -678,6 +678,46 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// <inheritdoc />
     public bool DiagnosticsRequested(DeviceId device) => _diagnosing.ContainsKey(device);
 
+    /// <summary>The devices whose window list is wanted - kept for the next connection like the diagnostics wish.</summary>
+    private readonly ConcurrentDictionary<DeviceId, byte> _windowsWanted = new();
+
+    /// <inheritdoc />
+    public Task RequestWindowsAsync(DeviceId device, bool wanted, CancellationToken cancellationToken = default)
+    {
+        if (wanted)
+        {
+            _windowsWanted[device] = 0;
+        }
+        else
+        {
+            _windowsWanted.TryRemove(device, out _);
+        }
+
+        if (_connections.TryGet(device, out var connection))
+        {
+            _ = connection.TrySend(new WindowsRequestMessage(wanted));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public bool WindowsRequested(DeviceId device) => _windowsWanted.ContainsKey(device);
+
+    /// <inheritdoc />
+    public Task<bool> SendWindowCommandAsync(
+        ScreenRef screen, long handle, string program, WindowAction action, Rect? bounds, CancellationToken cancellationToken = default)
+    {
+        if (!_connections.TryGet(screen.Device, out var connection))
+        {
+            return Task.FromResult(false);
+        }
+
+        _ = connection.TrySend(new WindowCommandMessage(handle, screen.Screen, program, action, bounds));
+
+        return Task.FromResult(true);
+    }
+
     /// <inheritdoc />
     public async Task<FocusOutcome> SetFocusAsync(
         ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default)

@@ -85,6 +85,7 @@ public static class DisplayParameters
 
         new(nameof(DeviceSettings.KeepAwake), "Keep the screens awake", ParameterScope.Device, ParameterKind.Toggle),
         new(nameof(DeviceSettings.RescueAfterSeconds), "Rescue mark after", ParameterScope.Device, ParameterKind.Number, "s without a control", 10, 3600),
+        new(nameof(DeviceSettings.ForeignWindows), "Windows of other programs", ParameterScope.Device, ParameterKind.Choice, Choices: Enum.GetNames<ForeignWindowsMode>()),
         new(nameof(DeviceSettings.Level), "Log level", ParameterScope.Device, ParameterKind.Choice, Choices: Levels),
         new(nameof(DeviceSettings.ForwardAtLeast), "Sent to the control from", ParameterScope.Device, ParameterKind.Choice, Choices: Levels),
     ];
@@ -189,6 +190,7 @@ public static class DisplayParameters
         {
             nameof(DeviceSettings.KeepAwake) => known.KeepAwake ?? true,
             nameof(DeviceSettings.RescueAfterSeconds) => known.RescueAfter.TotalSeconds,
+            nameof(DeviceSettings.ForeignWindows) => (known.ForeignWindows ?? ForeignWindowsMode.ReportAndControl).ToString(),
             nameof(DeviceSettings.Level) => (known.Level ?? LogLevel.Information).ToString(),
             nameof(DeviceSettings.ForwardAtLeast) => (known.ForwardAtLeast ?? LogLevel.Warning).ToString(),
             _ => throw Unknown(parameter),
@@ -205,6 +207,7 @@ public static class DisplayParameters
         {
             nameof(DeviceSettings.KeepAwake) => new DeviceSettings(KeepAwake: (bool)value),
             nameof(DeviceSettings.RescueAfterSeconds) => new DeviceSettings(RescueAfterSeconds: (int)Math.Round(Number(value))),
+            nameof(DeviceSettings.ForeignWindows) => new DeviceSettings(ForeignWindows: Enum.Parse<ForeignWindowsMode>((string)value)),
             nameof(DeviceSettings.Level) => new DeviceSettings(Level: Enum.Parse<LogLevel>((string)value)),
             nameof(DeviceSettings.ForwardAtLeast) => new DeviceSettings(ForwardAtLeast: Enum.Parse<LogLevel>((string)value)),
             _ => throw Unknown(parameter),

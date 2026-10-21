@@ -447,6 +447,14 @@ internal sealed class MainWindow : Window, IDisposable
                     _board.Diagnosed(reading.Device, reading.Reading);
                     break;
 
+                case SessionEvent.WindowList list:
+                    _board.Windows(list.Device, list.Windows);
+                    break;
+
+                case SessionEvent.WindowResult result:
+                    _board.WindowAnswered(result.Device, result.Handle, result.Outcome);
+                    break;
+
                 case SessionEvent.ScenePatched:
                 case SessionEvent.SceneReplaced:
                     await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);

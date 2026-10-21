@@ -383,6 +383,13 @@ internal static partial class DisplayLog
         Message = "Restarting on the control's word.")]
     internal static partial void Restarting(ILogger logger);
 
+    /// <summary>A command on a foreign window and what came of it - the program, never the title (idea 9).</summary>
+    [LoggerMessage(
+        EventId = 3050,
+        Level = LogLevel.Information,
+        Message = "Window of {Program}: {Action} - {Outcome}.")]
+    internal static partial void WindowLaid(ILogger logger, string program, WindowAction action, WindowOutcome outcome);
+
     [LoggerMessage(
         EventId = 1034,
         Level = LogLevel.Information,

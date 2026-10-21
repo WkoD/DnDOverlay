@@ -71,6 +71,10 @@ public sealed class ProtocolJsonTests
         new IdentifyScreensMessage(),
         new DeviceCommandMessage(DeviceCommand.Rename, "TISCH-PC"),
         new DeviceCommandMessage(DeviceCommand.Restart),
+        new WindowsRequestMessage(On: true),
+        new WindowListMessage([new ForeignWindow(4242, new ScreenId("DISPLAY-TEST"), "MapTool", new Rect(0.1, 0.2, 0.5, 0.6), 0, Minimized: false)]),
+        new WindowCommandMessage(4242, new ScreenId("DISPLAY-TEST"), "MapTool", WindowAction.Move, new Rect(0, 0, 1, 1)),
+        new WindowResultMessage(4242, WindowOutcome.Elevated),
 
         // The first message that is not state (Part 4). It names no device: the hub knows which
         // connection a reading came in on, and that is the answer a device cannot get wrong.

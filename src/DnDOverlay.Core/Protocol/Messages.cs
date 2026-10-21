@@ -32,6 +32,10 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(ConfigUpdateMessage), "ConfigUpdate")]
 [JsonDerivedType(typeof(IdentifyScreensMessage), "IdentifyScreens")]
 [JsonDerivedType(typeof(DeviceCommandMessage), "DeviceCommand")]
+[JsonDerivedType(typeof(WindowsRequestMessage), "WindowsRequest")]
+[JsonDerivedType(typeof(WindowListMessage), "WindowList")]
+[JsonDerivedType(typeof(WindowCommandMessage), "WindowCommand")]
+[JsonDerivedType(typeof(WindowResultMessage), "WindowResult")]
 [JsonDerivedType(typeof(AssetProgressMessage), "AssetProgress")]
 [JsonDerivedType(typeof(ItemTransformedMessage), "ItemTransformed")]
 [JsonDerivedType(typeof(ItemParkedMessage), "ItemParked")]
@@ -384,6 +388,47 @@ public enum DeviceCommand
 /// </summary>
 /// <param name="Name">The new name, for <see cref="DeviceCommand.Rename"/>; nothing otherwise.</param>
 public sealed record DeviceCommandMessage(DeviceCommand Command, string? Name = null) : ProtocolMessage;
+
+/// <summary>
+/// Switches the window list on or off, per device (Part 4) - bound to the tile's "underground" switch,
+/// not to the diagnostic view: the wireframes belong BEHIND the scene. State: a switch that is lost
+/// leaves the list running or silent against the DM's wish.
+/// </summary>
+public sealed record WindowsRequestMessage(bool On) : ProtocolMessage;
+
+/// <summary>
+/// The foreign windows on the device's screens, about once a second while asked for (Part 4).
+/// Transient, one slot: a window position from a moment ago is worthless, not merely inexact.
+/// </summary>
+public sealed record WindowListMessage(IReadOnlyList<ForeignWindow> Windows) : ProtocolMessage
+{
+    /// <summary>Structural over the windows - records compare lists by reference otherwise.</summary>
+    public bool Equals(WindowListMessage? other) =>
+        other is not null && Windows.SequenceEqual(other.Windows);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        foreach (var window in Windows)
+        {
+            hash.Add(window);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>
+/// A command for one foreign window. State, and answered: the device acts, reads the frame again and
+/// says with <see cref="WindowResultMessage"/> what actually happened.
+/// </summary>
+/// <param name="Program">What the window was when the control saw it - the device refuses if the handle now belongs to another.</param>
+/// <param name="Bounds">For <see cref="WindowAction.Move"/>: where to, normalised to the screen.</param>
+public sealed record WindowCommandMessage(long Handle, ScreenId Screen, string Program, WindowAction Action, Rect? Bounds = null) : ProtocolMessage;
+
+/// <summary>What a window command came to, with the frame as it stands afterwards.</summary>
+public sealed record WindowResultMessage(long Handle, WindowOutcome Outcome, Rect? Bounds = null) : ProtocolMessage;
 
 /// <summary>Constants that both ends agree on.</summary>
 public static class Protocol

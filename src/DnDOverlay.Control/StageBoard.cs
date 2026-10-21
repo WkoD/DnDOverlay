@@ -242,6 +242,46 @@ internal sealed class StageBoard : Panel
     }
 
     /// <summary>
+    /// A device's foreign windows, for every tile of it whose underground is on (Part 7) - with whether
+    /// the device lets them be laid. Rank 4: the next list replaces it.
+    /// </summary>
+    internal void Windows(DeviceId device, IReadOnlyList<ForeignWindow> windows)
+    {
+        var controllable = _session.DeviceSettingsOf(device).ForeignWindows is ForeignWindowsMode.ReportAndControl;
+
+        foreach (var (screen, tile) in _tiles)
+        {
+            if (screen.Device == device)
+            {
+                tile.Windows(windows, controllable);
+            }
+        }
+    }
+
+    /// <summary>What a window command came to, for the tiles of that device.</summary>
+    internal void WindowAnswered(DeviceId device, long handle, WindowOutcome outcome)
+    {
+        foreach (var (screen, tile) in _tiles)
+        {
+            if (screen.Device == device)
+            {
+                tile.WindowAnswered(handle, outcome);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Asks a device for its window list while at least one of its tiles shows the underground, and
+    /// stops when the last one is switched off - the list is per device, the switch per screen.
+    /// </summary>
+    private void WindowsWanted(DeviceId device)
+    {
+        var wanted = _tiles.Any(pair => pair.Key.Device == device && pair.Value.Underground);
+
+        _ = _session.RequestWindowsAsync(device, wanted, CancellationToken.None);
+    }
+
+    /// <summary>
     /// Asks a device for its readings while at least one of its tiles shows the diagnostic view, and
     /// stops when the last one closes - the stream is per device, the view per screen (Part 4).
     /// </summary>
@@ -310,6 +350,7 @@ internal sealed class StageBoard : Panel
             tile.Carried += (_, carried) => Carry(view.Screen, carried);
             tile.Turning += (_, turned) => Turn(view.Screen, turned);
             tile.Diagnosing += (_, _) => Wanted(view.Screen.Device);
+            tile.UndergroundChanged += (_, _) => WindowsWanted(view.Screen.Device);
             tile.Saving += (_, _) => Saving?.Invoke(this, view.Screen);
             tile.ShowingInStock += (_, asset) => ShowingInStock?.Invoke(this, asset);
             tile.Renaming += (_, asset) => Renaming?.Invoke(this, asset);

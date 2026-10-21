@@ -360,6 +360,12 @@
   <data name="E3049_Restarting" xml:space="preserve">
     <value>Restarting on the control's word.</value>
   </data>
+  <data name="E3050_WindowLaid" xml:space="preserve">
+    <value>Window of {Program}: {Action} - {Outcome}.</value>
+  </data>
+  <data name="E1060_WindowListRateExceeded" xml:space="preserve">
+    <value>{DeviceName} is sending more than {Limit} window lists a second; the rest are refused.</value>
+  </data>
   <data name="E3046_ScreenReassigned" xml:space="preserve">
     <value>Screen {To} took over the missing {From}: wish, settings, name and arrangement.</value>
   </data>

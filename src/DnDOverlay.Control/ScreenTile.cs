@@ -45,6 +45,12 @@ internal sealed class ScreenTile : Border
     private ScreenContext _context = ScreenContext.Default(new PixelSize(1920, 1080), 96);
     private ViewRotation _view;
     private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 12, 0) };
+
+    /// <summary>
+    /// The underground switch (Part 7, row 2): the wireframes of the device's other windows behind the
+    /// scene. It asks the device for its window list - per device, so the board decides when to stop.
+    /// </summary>
+    private readonly CheckBox _underground = new() { Content = "Windows", Margin = new Thickness(12, 0, 0, 0) };
     private readonly CheckBox _background = new() { Content = "Background", Margin = new Thickness(0, 0, 12, 0) };
     private readonly Button _unlock = new() { Content = "Unlock all", Padding = new Thickness(8, 2, 8, 2) };
 
@@ -135,6 +141,7 @@ internal sealed class ScreenTile : Border
 
         layers.Children.Add(_images);
         layers.Children.Add(_background);
+        layers.Children.Add(_underground);
 
         var grips = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
 
@@ -279,6 +286,15 @@ internal sealed class ScreenTile : Border
         _menus.Renaming += (_, asset) => Renaming?.Invoke(this, asset);
 
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
+        _underground.Click += (_, _) =>
+        {
+            if (_underground.IsChecked is not true)
+            {
+                _face.Underground([], controllable: false);
+            }
+
+            UndergroundChanged?.Invoke(this, EventArgs.Empty);
+        };
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
         _unlock.Click += async (_, _) =>
             await _session.UnlockAllAsync(Screen, CancellationToken.None).ConfigureAwait(true);
@@ -314,6 +330,24 @@ internal sealed class ScreenTile : Border
 
     /// <summary>The item menu asked to rename a picture.</summary>
     internal event EventHandler<AssetId>? Renaming;
+
+    /// <summary>The underground switch was thrown.</summary>
+    internal event EventHandler? UndergroundChanged;
+
+    /// <summary>Whether this tile shows the wireframes of foreign windows.</summary>
+    internal bool Underground => _underground.IsChecked is true;
+
+    /// <summary>The foreign windows of the device - this tile keeps those of its own screen - and whether they may be laid.</summary>
+    internal void Windows(IReadOnlyList<ForeignWindow> windows, bool controllable)
+    {
+        if (Underground)
+        {
+            _face.Underground([.. windows.Where(window => window.ScreenId == Screen.Screen)], controllable);
+        }
+    }
+
+    /// <summary>What a window command came to.</summary>
+    internal void WindowAnswered(long handle, WindowOutcome outcome) => _face.WindowAnswered(handle, outcome);
 
     /// <summary>
     /// Shows or hides the background strip - shown on every tile for as long as something is carried

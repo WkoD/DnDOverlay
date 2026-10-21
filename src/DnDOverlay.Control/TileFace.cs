@@ -122,6 +122,54 @@ internal sealed class TileFace : Panel
     /// <summary>How tall a face is in the overview, in DIP. The width follows the table's shape.</summary>
     internal const double Small = 150;
 
+    private readonly WindowGrips _grips;
+
+    /// <summary>The foreign windows on this screen, while the underground is switched on (Part 7).</summary>
+    private IReadOnlyList<ForeignWindow> _windows = [];
+
+    /// <summary>The refusals worth saying at the wireframe - elevated, inactive, report only (Part 7).</summary>
+    private readonly Dictionary<long, WindowOutcome> _refusedWindows = [];
+
+    private bool _windowsControllable;
+
+    /// <summary>
+    /// The foreign windows of this screen behind the scene (Part 7), and whether the device lets them
+    /// be laid. An empty list takes the underground away.
+    /// </summary>
+    internal void Underground(IReadOnlyList<ForeignWindow> windows, bool controllable)
+    {
+        _windows = windows;
+        _windowsControllable = controllable;
+
+        foreach (var gone in _refusedWindows.Keys.Where(handle => windows.All(window => window.Handle != handle)).ToList())
+        {
+            _ = _refusedWindows.Remove(gone);
+        }
+
+        Draw();
+    }
+
+    /// <summary>
+    /// What a command on a window came to. Only what one sees and still cannot move is kept and said
+    /// at the wireframe; a window that is gone simply drops out of the next list (Part 7).
+    /// </summary>
+    internal void WindowAnswered(long handle, WindowOutcome outcome)
+    {
+        if (outcome is WindowOutcome.Elevated or WindowOutcome.Inactive or WindowOutcome.NotAllowed)
+        {
+            _refusedWindows[handle] = outcome;
+        }
+        else
+        {
+            _ = _refusedWindows.Remove(handle);
+        }
+
+        Draw();
+    }
+
+    private async Task LayAsync(ForeignWindow window, WindowAction action, CoreRect? bounds) =>
+        _ = await _session.SendWindowCommandAsync(_screenRef, window.Handle, window.Program, action, bounds).ConfigureAwait(true);
+
     internal TileFace(ScreenRef screen, ISessionApi session, Pictures pictures, Selection selection)
     {
         _screenRef = screen;
@@ -140,14 +188,39 @@ internal sealed class TileFace : Panel
         Children.Add(_marks);
         Children.Add(_pointing);
 
+        // On top of everything and hit only at a window's strip or corner, where no picture lies
+        // (WindowGrips). What starts on it is its own, and every handler below lets it pass.
+        _grips = new WindowGrips(at => Picking.At(_scene, _screen, Placing.InScene(at, _view, Wanted(RenderSize))) is not null);
+        _grips.Moving += (_, _) => Draw();
+        _grips.Laid += async (_, laid) => await LayAsync(laid.Window, laid.Action, laid.Bounds).ConfigureAwait(true);
+        Children.Add(_grips);
+
         ClipToBounds = true;
         IsManipulationEnabled = true;
 
         // Mouse and finger are wired apart rather than left to WPF's promotion of touch to mouse:
         // that promotion stops the moment manipulation is switched on, and it is switched on here.
-        PreviewMouseLeftButtonDown += (_, pressed) => Pressed(pressed);
-        PreviewMouseMove += (_, moved) => Dragged(moved);
-        PreviewMouseLeftButtonUp += (_, released) => Lifted(released);
+        PreviewMouseLeftButtonDown += (_, pressed) =>
+        {
+            if (pressed.OriginalSource != _grips)
+            {
+                Pressed(pressed);
+            }
+        };
+        PreviewMouseMove += (_, moved) =>
+        {
+            if (moved.OriginalSource != _grips)
+            {
+                Dragged(moved);
+            }
+        };
+        PreviewMouseLeftButtonUp += (_, released) =>
+        {
+            if (released.OriginalSource != _grips)
+            {
+                Lifted(released);
+            }
+        };
 
         // Only while the button is still DOWN: letting go releases the capture too, and that release
         // is Lifted's to handle, which runs first and has already seen the button come up.
@@ -162,6 +235,13 @@ internal sealed class TileFace : Panel
 
         ManipulationStarting += (_, starting) =>
         {
+            // A finger on a window's handle moves the window, not a picture.
+            if (starting.OriginalSource == _grips)
+            {
+                starting.Cancel();
+                return;
+            }
+
             starting.ManipulationContainer = this;
             starting.Mode = ManipulationModes.All;
         };
@@ -170,6 +250,11 @@ internal sealed class TileFace : Panel
         // it has to start the moment the finger lands, before anything has been taken hold of.
         PreviewTouchDown += (_, down) =>
         {
+            if (down.OriginalSource == _grips)
+            {
+                return;
+            }
+
             var at = down.GetTouchPoint(this).Position;
 
             Landed(down.TouchDevice.Id, at);
@@ -178,6 +263,11 @@ internal sealed class TileFace : Panel
 
         PreviewTouchMove += (_, over) =>
         {
+            if (over.OriginalSource == _grips)
+            {
+                return;
+            }
+
             var at = over.GetTouchPoint(this).Position;
 
             Travelled(over.TouchDevice.Id, at);
@@ -186,6 +276,11 @@ internal sealed class TileFace : Panel
 
         PreviewTouchUp += (_, up) =>
         {
+            if (up.OriginalSource == _grips)
+            {
+                return;
+            }
+
             _ = _fingers.Remove(up.TouchDevice.Id);
             _press.Up();
         };
@@ -194,6 +289,12 @@ internal sealed class TileFace : Panel
         // "holding" means must not differ between a finger and a mouse (Part 7).
         PreviewMouseRightButtonUp += (_, clicked) =>
         {
+            // The window's own menu, on its handle.
+            if (clicked.OriginalSource == _grips)
+            {
+                return;
+            }
+
             clicked.Handled = true;
 
             // Mid-carry the right button ends the carry and asks for nothing: a menu opened there
@@ -461,6 +562,8 @@ internal sealed class TileFace : Panel
                 : _scene;
 
         _thumbnail.Show(scene, _screen, _view);
+        _thumbnail.Underground(_windows, _refusedWindows, _grips.Holding);
+        _grips.Show(_windows, _view, _windowsControllable);
         _loading.Show(scene, _screen, _view);
         _marks.Show(scene, _screen, _view);
         _pointing.Show(_screen, _view);

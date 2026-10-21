@@ -513,4 +513,11 @@ internal static partial class HubLog
         Level = LogLevel.Warning,
         Message = "{DeviceName} is sending more than {Limit} diagnostics readings a second; the rest are refused.")]
     internal static partial void DiagnosticsRateExceeded(ILogger logger, string deviceName, int limit);
+
+    /// <summary>Written once per connection, like the other two ceilings (1053, 1057).</summary>
+    [LoggerMessage(
+        EventId = 1060,
+        Level = LogLevel.Warning,
+        Message = "{DeviceName} is sending more than {Limit} window lists a second; the rest are refused.")]
+    internal static partial void WindowListRateExceeded(ILogger logger, string deviceName, int limit);
 }

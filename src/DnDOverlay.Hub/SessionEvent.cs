@@ -176,6 +176,33 @@ public abstract record SessionEvent
         public SessionEvent? Sent(int waitedMs) => this;
     }
 
+    /// <summary>
+    /// The foreign windows on one device's screens, for the wireframes behind the scene (Part 7). Only
+    /// while somebody asked for them, and transient: a window position from a moment ago is worthless.
+    /// </summary>
+    public sealed record WindowList(DeviceId Device, IReadOnlyList<ForeignWindow> Windows)
+        : SessionEvent, IReplacing<SessionEvent>
+    {
+        /// <inheritdoc />
+        public override SendClass SendClass => SendClass.Transient;
+
+        /// <summary>One slot per device.</summary>
+        public string Slot => string.Create(
+            System.Globalization.CultureInfo.InvariantCulture, $"windows:{Device.Value}");
+
+        /// <summary>The newer list says everything the older one did.</summary>
+        public SessionEvent Over(SessionEvent waiting, int gapMs) => this;
+
+        /// <summary>A list carries no ages.</summary>
+        public SessionEvent? Sent(int waitedMs) => this;
+    }
+
+    /// <summary>
+    /// What a command on a foreign window came to (Part 4) - shown at the wireframe only where it
+    /// says something one can see and still not move: elevated, or the screen inactive (Part 7).
+    /// </summary>
+    public sealed record WindowResult(DeviceId Device, long Handle, WindowOutcome Outcome, Rect? Bounds) : SessionEvent;
+
     public sealed record TouchPoints(ScreenRef Screen, IReadOnlyList<TouchTrail> Touches)
         : SessionEvent, IReplacing<SessionEvent>
     {

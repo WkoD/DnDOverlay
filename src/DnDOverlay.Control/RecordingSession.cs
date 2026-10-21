@@ -219,6 +219,15 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
 
     public bool DiagnosticsRequested(DeviceId device) => _inner.DiagnosticsRequested(device);
 
+    public Task RequestWindowsAsync(DeviceId device, bool wanted, CancellationToken cancellationToken = default) =>
+        _inner.RequestWindowsAsync(device, wanted, cancellationToken);
+
+    public bool WindowsRequested(DeviceId device) => _inner.WindowsRequested(device);
+
+    public Task<bool> SendWindowCommandAsync(
+        ScreenRef screen, long handle, string program, WindowAction action, Rect? bounds, CancellationToken cancellationToken = default) =>
+        _inner.SendWindowCommandAsync(screen, handle, program, action, bounds, cancellationToken);
+
     public Task<FocusOutcome> SetFocusAsync(ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default) =>
         _inner.SetFocusAsync(screen, items, cancellationToken);
 

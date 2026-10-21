@@ -84,6 +84,25 @@ internal sealed class SceneThumbnail : FrameworkElement
     /// <summary>Which card is stepped out of the fan for a look, or <see langword="null"/>.</summary>
     internal void Peeking(ItemId? card) => _peek = card;
 
+    /// <summary>The foreign windows behind the scene (Part 7, "underground") - empty while the switch is off.</summary>
+    private IReadOnlyList<ForeignWindow> _windows = [];
+
+    /// <summary>Why a window could not be laid, where that is something one sees and cannot change (Part 7).</summary>
+    private IReadOnlyDictionary<long, WindowOutcome> _refused = new Dictionary<long, WindowOutcome>();
+
+    /// <summary>
+    /// Hands the underground down: the windows of this screen, and the refusals worth saying. The
+    /// window being moved is drawn where the hand has it - <paramref name="moving"/> - so the
+    /// wireframe follows the hand rather than the next list a second later.
+    /// </summary>
+    internal void Underground(IReadOnlyList<ForeignWindow> windows, IReadOnlyDictionary<long, WindowOutcome> refused, (long Handle, CoreRect Bounds)? moving)
+    {
+        _windows = moving is { } held
+            ? [.. windows.Select(window => window.Handle == held.Handle ? window with { Bounds = held.Bounds } : window)]
+            : windows;
+        _refused = refused;
+    }
+
     /// <summary>
     /// What to draw from now on. It does not draw - the redraw does, once per render pass, so that
     /// twenty arriving patches cost one drawing rather than twenty.
@@ -99,6 +118,71 @@ internal sealed class SceneThumbnail : FrameworkElement
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// The wireframes (Part 7): filled half-transparent rather than outlined, so where two windows
+    /// overlap the darker area says which lies on top - the very question ("is the update dialog over
+    /// MapTool?"). Labelled with the program, never the title, on a slightly firmer strip along the
+    /// top: the strip is also where the window is taken hold of. Drawn bottom-most first. Behind the
+    /// pictures and over the background, which is where they are at the table.
+    /// </summary>
+    private void Wireframes(DrawingContext drawingContext, Size size)
+    {
+        if (_windows.Count == 0)
+        {
+            return;
+        }
+
+        var fill = new SolidColorBrush(Color.FromArgb(0x38, 0x9E, 0xC9, 0xF0));
+        var strip = new SolidColorBrush(Color.FromArgb(0x70, 0x46, 0x82, 0xB4));
+        var edge = new Pen(new SolidColorBrush(Color.FromArgb(0xB0, 0xC8, 0xE0, 0xFF)), 1);
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+
+        foreach (var window in _windows.Where(window => !window.Minimized).OrderByDescending(window => window.ZOrder))
+        {
+            var rect = Placing.InTile(window.Bounds, _view, size);
+            var top = Placing.InTile(window.Bounds with { Height = Math.Min(window.Bounds.Height, Strip(size)) }, _view, size);
+
+            drawingContext.DrawRectangle(fill, edge, rect);
+            drawingContext.DrawRectangle(strip, pen: null, top);
+
+            var label = _refused.TryGetValue(window.Handle, out var reason)
+                ? $"{window.Program} - {Reason(reason)}"
+                : window.Program;
+
+            var text = new FormattedText(
+                label,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Segoe UI"),
+                10,
+                Brushes.White,
+                dpi)
+            {
+                MaxTextWidth = Math.Max(1, top.Width - 6),
+                MaxLineCount = 1,
+                Trimming = TextTrimming.CharacterEllipsis,
+            };
+
+            drawingContext.PushClip(new RectangleGeometry(top));
+            drawingContext.DrawText(text, new TilePoint(top.X + 3, top.Y + Math.Max(0, (top.Height - text.Height) / 2)));
+            drawingContext.Pop();
+        }
+    }
+
+    /// <summary>
+    /// How deep the title strip reaches, as a share of the screen's height: a finger's width at the
+    /// tile's size, so it can be taken hold of on a small tile too.
+    /// </summary>
+    internal static double Strip(Size tile) => Math.Min(0.25, 16 / Math.Max(1, Math.Min(tile.Width, tile.Height)));
+
+    private static string Reason(WindowOutcome outcome) => outcome switch
+    {
+        WindowOutcome.Elevated => "runs elevated, cannot be moved",
+        WindowOutcome.Inactive => "screen inactive",
+        WindowOutcome.NotAllowed => "device only reports",
+        _ => outcome.ToString(),
+    };
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         ArgumentNullException.ThrowIfNull(drawingContext);
@@ -131,6 +215,8 @@ internal sealed class SceneThumbnail : FrameworkElement
                 Parking.Cut.Whole,
                 picture0: null);
         }
+
+        Wireframes(drawingContext, size);
 
         if (!_scene.ItemsVisible)
         {
