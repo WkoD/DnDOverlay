@@ -26,8 +26,9 @@ one that is stays your choice; DnDOverlay assumes nothing about it.
 > and the players can move them: displays find the control by themselves and are paired by
 > hand, the campaign holds a stock, all four ways in work, the table takes gestures, and the DM
 > sees every screen live and handles it with the same grips; campaigns, scenes and layouts can be
-> saved, opened and switched, and the stock stands in a dockable panel. Still missing are undo and
-> the installers, which are empty — so **nothing is installable yet**; it runs from a build.
+> saved, opened and switched, the stock stands in a dockable panel, and undo reaches back through
+> the session. Still missing are the settings window and the installers, which are empty — so
+> **nothing is installable yet**; it runs from a build.
 > The sections below grow with each milestone.
 
 ## Documentation
@@ -194,6 +195,16 @@ the folder. Ctrl+click and a frame drawn with the mouse pick several, which then
 panel docks at any edge — *Dock panel* in the menu ☰ —, and the line between it and the stage can
 be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices, the
 network and the touch points.
+
+**Undo and redo** sit in the panel head, each labelled with what the next press does — *↶ Add
+"Grimmbart"*, *↷ Clear TISCH-PC//1* —, or with Ctrl+Z and Ctrl+Y. What lays, takes or moves a
+picture is a step: adding, removing, moving, copying, a background set or removed, a screen
+cleared, a scene or a layout loaded, *Clear all*, *Send to all* — one step each, however many
+screens it reaches. Pushing pictures around, locking, parking, names and screen states are not.
+Undo takes back only what the step did: pictures the players have moved since stay where they
+are. The timeline lasts as long as the control runs; switching the campaign ends it, and deleting a
+picture from the stock cuts it where it would bring the picture back — the question says how many
+steps that costs.
 
 **Renaming** a picture — from its menu in the stock or from its menu on a tile — changes the name
 everywhere: in the stock, on every screen, in every scene and layout. A name another picture

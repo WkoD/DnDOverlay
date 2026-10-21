@@ -327,6 +327,34 @@ public sealed class FocusAndClearCommandTests
         Assert.Single((await session.GetSceneAsync(Third, Cancellation)).Items);
     }
 
+    /// <summary>
+    /// A timeline step goes out as one patch over the screens it names; what comes back carries a
+    /// fresh revision, and a screen that is not there is skipped.
+    /// </summary>
+    [Fact]
+    public async Task A_step_is_one_patch_and_returning_items_get_a_fresh_revision()
+    {
+        using var session = Session();
+        var laid = await session.AddItemsAsync(First, [.. Many(2)], Cancellation);
+        var before = await session.GetSceneAsync(First, Cancellation);
+        var gone = new ScreenRef(Device, new ScreenId(@"\?\DISPLAY#GONE"));
+
+        await session.ClearItemsAsync(First, Cancellation);
+
+        var patch = Assert.Single(await PatchesDuring(
+            session,
+            () => session.ApplyStepAsync(
+                [.. before.Items.Select(item => new ScreenOp(First, new AddItem(item))), new ScreenOp(gone, new ClearItems())],
+                Cancellation)));
+
+        Assert.All(patch.Ops, op => Assert.Equal(First, op.Screen));
+
+        var back = (await session.GetSceneAsync(First, Cancellation)).Items;
+
+        Assert.Equal(laid, back.Select(item => item.ItemId));
+        Assert.All(back, item => Assert.True(item.Revision > before.Items.Max(old => old.Revision)));
+    }
+
     [Fact]
     public async Task Clearing_an_empty_table_sends_nothing()
     {

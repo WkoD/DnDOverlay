@@ -199,7 +199,9 @@ public sealed partial class App : Application, IDisposable
 
         ControlLog.KnownDevicesRestored(logger, restored.Devices.Count, restored.Dropped);
 
-        var session = _host.Services.GetRequiredService<ISessionApi>();
+        // Every grip of the control goes through the timeline (siting question 3): the window, the
+        // desk that switches campaigns, the pairing - one session in front of the hub's.
+        var session = new RecordingSession(_host.Services.GetRequiredService<ISessionApi>());
         var screens = _host.Services.GetRequiredService<ScreenCatalog>();
 
         // Written when the catalogue says something changed, never on a timer. Polling would be

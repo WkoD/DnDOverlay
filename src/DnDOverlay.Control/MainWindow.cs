@@ -30,7 +30,7 @@ namespace DnDOverlay.Control;
 /// </summary>
 internal sealed class MainWindow : Window, IDisposable
 {
-    private readonly ISessionApi _session;
+    private readonly RecordingSession _session;
     private readonly PairingDesk _pairing;
     private readonly ControlSettings _settings;
     private readonly Uri _address;
@@ -84,7 +84,7 @@ internal sealed class MainWindow : Window, IDisposable
     private ControlPower? _power;
 
     internal MainWindow(
-        ISessionApi session,
+        RecordingSession session,
         PairingDesk pairing,
         Entrances entrances,
         CampaignDesk desk,
@@ -110,6 +110,13 @@ internal sealed class MainWindow : Window, IDisposable
         _carry = new PanelCarry(_root);
 
         _edits = new StockEdits(session, desk, () => _board.Screens, said => _status.Text = said, _logger);
+
+        // The labels follow the timeline, on the UI thread: a step is recorded wherever the command
+        // finished, and a button must never show the act before last.
+        session.TimelineChanged += (_, _) => Dispatcher.BeginInvoke(() =>
+            _panelHead.Timeline(session.Timeline.UndoLabel, session.Timeline.RedoLabel));
+        _panelHead.UndoAsked += async (_, _) => await UndoAsync().ConfigureAwait(true);
+        _panelHead.RedoAsked += async (_, _) => await RedoAsync().ConfigureAwait(true);
         _stock = new StockView(session, desk, pictures, () => _board.Active, () => _board.Screens, said => _status.Text = said, _carry, _edits);
 
         _scenes = new ScenesPanel(
@@ -268,8 +275,23 @@ internal sealed class MainWindow : Window, IDisposable
         // which after any click on a grip is a button - and a button presses on space. Swallowing
         // it stops that without the tile having to guess from focus what the pointer is doing, and
         // the key state the spotlight reads is untouched by the routing (TileFace.Pointing).
-        PreviewKeyDown += (_, key) =>
+        PreviewKeyDown += async (_, key) =>
         {
+            // Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) take back and redo - except while typing, where a
+            // text box has an undo of its own and a name half typed must not vanish from the table.
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0
+                && key.Key is Key.Z or Key.Y
+                && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            {
+                key.Handled = true;
+
+                var redo = key.Key is Key.Y || (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+
+                await (redo ? RedoAsync() : UndoAsync()).ConfigureAwait(true);
+
+                return;
+            }
+
             if (key.Key is Key.Space && _board.IsMouseOver)
             {
                 key.Handled = true;
@@ -312,6 +334,7 @@ internal sealed class MainWindow : Window, IDisposable
     /// <summary>Ends the subscription with the window.</summary>
     public void Dispose()
     {
+        _session.Dispose();
         _listening.Cancel();
         _listening.Dispose();
         _welcome?.Dispose();
@@ -1034,6 +1057,22 @@ internal sealed class MainWindow : Window, IDisposable
         {
             Panel = (current.Panel ?? new PanelPlacement(PanelSide.Right, size)) with { Size = size },
         });
+    }
+
+    /// <summary>Takes back the last act, and says which - the button said it before, the status line confirms it.</summary>
+    private async Task UndoAsync()
+    {
+        var label = await _session.UndoAsync().ConfigureAwait(true);
+
+        _status.Text = label is null ? "Nothing to undo." : $"Undone: {label}.";
+    }
+
+    /// <summary>Does the last undone act again.</summary>
+    private async Task RedoAsync()
+    {
+        var label = await _session.RedoAsync().ConfigureAwait(true);
+
+        _status.Text = label is null ? "Nothing to redo." : $"Redone: {label}.";
     }
 
     private static MenuItem Item(string header, Action chosen)

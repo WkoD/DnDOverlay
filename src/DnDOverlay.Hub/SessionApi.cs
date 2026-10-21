@@ -804,6 +804,19 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public Task ApplyStepAsync(IReadOnlyList<ScreenOp> ops, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ops);
+
+        return ApplyAcrossAsync(
+            (screen, _, _) =>
+                [.. ops.Where(op => op.Screen == screen)
+                    .Select(op => op.Op is AddItem add ? add with { Item = add.Item with { Revision = _scenes.NextRevision() } } : op.Op)],
+            cancellationToken,
+            includingInactive: true);
+    }
+
+    /// <inheritdoc />
     public Task RemoveAssetsAsync(IReadOnlyCollection<AssetId> assets, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(assets);

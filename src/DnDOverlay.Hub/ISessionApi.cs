@@ -98,6 +98,15 @@ public interface ISessionApi
     Task RenameAssetAsync(AssetId asset, string name, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Applies the operations of one timeline step - an undo or a redo the control worked out (siting
+    /// question 3) - as ONE patch over the screens they name. No new operation and no new message
+    /// type (Part 4): every patch rule holds, down to "an operation on an unknown item does nothing".
+    /// An item that comes back gets a fresh revision, so a display does not take it for an old one.
+    /// Operations for a screen that is not there any more are dropped.
+    /// </summary>
+    Task ApplyStepAsync(IReadOnlyList<ScreenOp> ops, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Takes these pictures off every screen - each item showing one, and a background showing one -
     /// inactive screens included, in ONE patch. The first step of deleting from the stock (Part 7):
     /// an item whose file is gone would survive only while a display has it cached, and turn into a

@@ -62,9 +62,36 @@ internal sealed class PanelHead : Border
 
     private readonly StackPanel _row = new() { Orientation = Orientation.Horizontal };
 
+    /// <summary>
+    /// Undo and redo on a line of their own (Part 7: in the head, beside the view switch) - each label
+    /// says what the next press does, and that is the only way through a long timeline. Greyed, never
+    /// gone, when there is nothing.
+    /// </summary>
+    private readonly Grid _times = new() { Margin = new Thickness(0, 6, 0, 0) };
+
+    private readonly Button _undo = new() { Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(0, 0, 4, 0), HorizontalContentAlignment = HorizontalAlignment.Left };
+    private readonly Button _redo = new() { Padding = new Thickness(8, 3, 8, 3), HorizontalContentAlignment = HorizontalAlignment.Left };
+    private readonly TextBlock _undoText = new() { TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly TextBlock _redoText = new() { TextTrimming = TextTrimming.CharacterEllipsis };
+
+    private string? _undoLabel;
+    private string? _redoLabel;
+
     internal PanelHead()
     {
         Padding = new Thickness(0, 0, 0, 6);
+
+        _undo.Content = _undoText;
+        _redo.Content = _redoText;
+        _undo.Click += (_, _) => UndoAsked?.Invoke(this, EventArgs.Empty);
+        _redo.Click += (_, _) => RedoAsked?.Invoke(this, EventArgs.Empty);
+        _undo.SizeChanged += (_, _) => Label();
+        _redo.SizeChanged += (_, _) => Label();
+        Grid.SetColumn(_redo, 1);
+        _times.Children.Add(_undo);
+        _times.Children.Add(_redo);
+        Times(vertical: false);
+        Timeline(undo: null, redo: null);
 
         _row.Children.Add(_campaign);
         _row.Children.Add(_hint);
@@ -74,7 +101,7 @@ internal sealed class PanelHead : Border
         _campaign.Click += (_, _) => CampaignAsked?.Invoke(this, EventArgs.Empty);
         _menu.Click += (_, _) => MenuAsked?.Invoke(this, EventArgs.Empty);
 
-        Child = _row;
+        Child = new StackPanel { Children = { _row, _times } };
 
         _view.Click += (_, _) => Toggled?.Invoke(this, EventArgs.Empty);
 
@@ -93,6 +120,64 @@ internal sealed class PanelHead : Border
     /// <summary>The ☰ button, for the menu to open under.</summary>
     internal UIElement MenuButton => _menu;
 
+    /// <summary>The DM pressed undo.</summary>
+    internal event EventHandler? UndoAsked;
+
+    /// <summary>The DM pressed redo.</summary>
+    internal event EventHandler? RedoAsked;
+
+    /// <summary>What the next undo and redo do - null where there is nothing, which greys the button.</summary>
+    internal void Timeline(string? undo, string? redo)
+    {
+        _undoLabel = undo;
+        _redoLabel = redo;
+        _undo.IsEnabled = undo is not null;
+        _redo.IsEnabled = redo is not null;
+        _undo.ToolTip = undo is null ? "Nothing to undo (Ctrl+Z)" : $"Undo: {undo} (Ctrl+Z)";
+        _redo.ToolTip = redo is null ? "Nothing to redo (Ctrl+Y)" : $"Redo: {redo} (Ctrl+Y)";
+        Label();
+    }
+
+    /// <summary>
+    /// The labels for the room there is: the whole act where it fits, cut to its verb where the panel
+    /// is narrow (step 40d) - "Add" says more than "Add \"Grimm…".
+    /// </summary>
+    private void Label()
+    {
+        _undoText.Text = "↶ " + Fitted(_undoLabel, "Undo", _undo.ActualWidth);
+        _redoText.Text = "↷ " + Fitted(_redoLabel, "Redo", _redo.ActualWidth);
+    }
+
+    private static string Fitted(string? label, string none, double width) =>
+        label is null ? none
+        : width is > 0 and < 150 ? label.Split(' ', 2)[0]
+        : label;
+
+    private void Times(bool vertical)
+    {
+        _times.ColumnDefinitions.Clear();
+        _times.RowDefinitions.Clear();
+
+        if (vertical)
+        {
+            _times.RowDefinitions.Add(new RowDefinition());
+            _times.RowDefinitions.Add(new RowDefinition());
+            Grid.SetColumn(_redo, 0);
+            Grid.SetRow(_redo, 1);
+            _undo.Margin = new Thickness(0, 0, 0, 4);
+            _times.MaxWidth = 180;
+        }
+        else
+        {
+            _times.ColumnDefinitions.Add(new ColumnDefinition());
+            _times.ColumnDefinitions.Add(new ColumnDefinition());
+            Grid.SetColumn(_redo, 1);
+            Grid.SetRow(_redo, 0);
+            _undo.Margin = new Thickness(0, 0, 4, 0);
+            _times.MaxWidth = double.PositiveInfinity;
+        }
+    }
+
     /// <summary>
     /// Whether the head stands on the left over the height of a lying panel rather than across the top
     /// of an upright one (Part 7).
@@ -110,6 +195,8 @@ internal sealed class PanelHead : Border
             {
                 child.Margin = value ? new Thickness(0, 0, 0, 6) : new Thickness(0, 0, 8, 0);
             }
+
+            Times(value);
         }
     }
 

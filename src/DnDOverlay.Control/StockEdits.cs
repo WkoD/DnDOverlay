@@ -16,14 +16,14 @@ internal sealed class StockEdits
     /// <summary>How many names a question lists before it says "and N more" - a dialog is not a report.</summary>
     private const int NamesShown = 8;
 
-    private readonly ISessionApi _session;
+    private readonly RecordingSession _session;
     private readonly CampaignDesk _desk;
     private readonly Func<IReadOnlyList<ScreenView>> _screens;
     private readonly Action<string> _say;
     private readonly ILogger _logger;
 
     internal StockEdits(
-        ISessionApi session, CampaignDesk desk, Func<IReadOnlyList<ScreenView>> screens, Action<string> say, ILogger logger)
+        RecordingSession session, CampaignDesk desk, Func<IReadOnlyList<ScreenView>> screens, Action<string> say, ILogger logger)
     {
         _session = session;
         _desk = desk;
@@ -141,6 +141,15 @@ internal sealed class StockEdits
         if (layouts.Count > 0)
         {
             lines.Add($"Removed from the layout(s): {Listed(layouts)}.");
+        }
+
+        // Undo must never bring back a picture whose file is gone (Part 4), so the timeline is cut up to
+        // the newest step that shows one - and the question says what that costs, as a number.
+        var lost = _session.Timeline.CountLost(ids);
+
+        if (lost > 0)
+        {
+            lines.Add($"{lost} undo step(s) are lost with it.");
         }
 
         lines.Add(one ? "The file is deleted. This cannot be undone." : "The files are deleted. This cannot be undone.");
