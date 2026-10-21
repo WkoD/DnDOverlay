@@ -98,4 +98,21 @@ public sealed class DisplayParametersTests
         Assert.Equal(new DeviceSettings(RescueAfterSeconds: 120), DisplayParameters.Set(grace, 120d));
         Assert.Equal(new DeviceSettings(KeepAwake: true), DisplayParameters.Reset(awake));
     }
+
+    /// <summary>
+    /// The device's language is a device parameter like the others (Part 7, Part 8): set from the
+    /// band, a delta of its own, kept by a merge that does not mention it, and Automatic by default.
+    /// </summary>
+    [Fact]
+    public void The_device_language_travels_like_every_device_parameter()
+    {
+        var language = DisplayParameters.All.Single(parameter => parameter.Key == nameof(DeviceSettings.Language));
+        var german = DisplayParameters.Set(language, nameof(UiLanguage.German));
+
+        Assert.Equal(new DeviceSettings(Language: UiLanguage.German), german);
+        Assert.False(german.IsEmpty);
+        Assert.Equal(UiLanguage.German, DeviceSettings.Merge(german, new DeviceSettings(KeepAwake: false)).Language);
+        Assert.Equal(new DeviceSettings(Language: UiLanguage.Automatic), DisplayParameters.Reset(language));
+        Assert.False(DisplayParameters.FollowsDefault(language, german));
+    }
 }

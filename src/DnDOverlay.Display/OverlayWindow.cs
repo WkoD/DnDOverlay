@@ -244,14 +244,14 @@ internal sealed class OverlayWindow : Window
             IsHitTestVisible = false,
         };
 
-        _rescueAsk.Text = "Hide every overlay on this device?";
+        _rescueAsk.Text = Strings.RescueAsk;
 
-        var hide = Choice("Hide", () =>
+        var hide = Choice(Strings.RescueHide, () =>
         {
             HideRequested?.Invoke();
         });
 
-        var keep = Choice("Cancel", () =>
+        var keep = Choice(Strings.RescueCancel, () =>
         {
             Ask(false);
         });
@@ -505,7 +505,7 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        _rescueAbsence.Text = absence + " - hide overlay";
+        _rescueAbsence.Text = Strings.RescueAbsence(absence);
 
         if (offeredTo is null)
         {
@@ -516,7 +516,7 @@ internal sealed class OverlayWindow : Window
             // What a change costs, said where it can still be refused: the screen wishes live in the
             // control, a new one knows none, so a screen set inactive on purpose is played again.
             // Scene, names and parameters survive - they travel in the Hello (Part 6).
-            _rescueOffer.Text = $"Offering itself to {offeredTo} - don't offer (an inactive screen would be played again)";
+            _rescueOffer.Text = Strings.RescueOffer(offeredTo);
             _rescueOfferRow.Visibility = Visibility.Visible;
         }
 

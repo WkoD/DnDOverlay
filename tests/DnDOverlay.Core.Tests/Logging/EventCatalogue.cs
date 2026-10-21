@@ -71,7 +71,10 @@ internal static class EventCatalogue
     internal static IReadOnlyList<DeclaredEvent> Declared { get; } = ReadDeclarations();
 
     /// <summary>What the neutral catalogue holds, by resource key.</summary>
-    internal static IReadOnlyDictionary<string, string> Catalogue { get; } = ReadCatalogue();
+    internal static IReadOnlyDictionary<string, string> Catalogue { get; } = ReadCatalogue("LogMessages.resx");
+
+    /// <summary>What the German catalogue holds, by resource key.</summary>
+    internal static IReadOnlyDictionary<string, string> German { get; } = ReadCatalogue("LogMessages.de.resx");
 
     /// <summary>What the table in <c>docs/protocol.md</c> lists.</summary>
     internal static IReadOnlyList<DocumentedEvent> Documented { get; } = ReadDocumentation();
@@ -114,14 +117,14 @@ internal static class EventCatalogue
             .Matches(message)
             .Select(match => match.Groups[1].Value.Replace("\\\"", "\"", StringComparison.Ordinal)));
 
-    private static Dictionary<string, string> ReadCatalogue()
+    private static Dictionary<string, string> ReadCatalogue(string file)
     {
         var path = Path.Combine(
             RepositoryLayout.RepositoryRoot.FullName,
             "src",
             "DnDOverlay.Core",
             "Logging",
-            "LogMessages.resx");
+            file);
 
         return XDocument
             .Load(path)

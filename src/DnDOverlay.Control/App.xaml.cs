@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using DnDOverlay.Campaign;
@@ -29,6 +30,7 @@ public sealed partial class App : Application, IDisposable
     private WebApplication? _host;
     private ConfigurationFile<ControlConfiguration>? _configuration;
     private ProcessLog? _log;
+    private CultureInfo _system = CultureInfo.InstalledUICulture;
     private ScreenCatalog? _screens;
     private ControlSettings? _settings;
     private DataRoot _dataRoot;
@@ -73,6 +75,16 @@ public sealed partial class App : Application, IDisposable
         // One owner for the file, several callers: pairing, the screen inventory and later the
         // view state all change it, and separate copies would silently overwrite one another.
         _settings = new ControlSettings(_configuration, loaded.Value);
+
+        // The language before the first window and the first line (Part 8): windows take it once, at
+        // their making, the log follows a later change at once. What Windows shows is kept first,
+        // because Automatic means exactly that - and once overridden it cannot be asked for again.
+        _system = CultureInfo.CurrentUICulture;
+
+        var culture = UiLanguages.CultureOf(loaded.Value.Language, _system);
+
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+        CultureInfo.CurrentUICulture = culture;
 
         // Written back at once when it did not exist: the ControlId has to survive the first
         // restart, or every display would find a stranger where its control used to be (Part 4).
@@ -219,7 +231,8 @@ public sealed partial class App : Application, IDisposable
             desk,
             _settings,
             new Uri($"http://{Environment.MachineName}:{loaded.Value.Port}/"),
-            _log);
+            _log,
+            _system);
 
         MainWindow = window;
         window.Show();

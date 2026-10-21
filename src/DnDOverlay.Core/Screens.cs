@@ -124,6 +124,12 @@ public sealed record ScreenInfo(
 /// where an overlay would take the whole screen and the taskbar with it. The same application in a
 /// different frame, not a second way of drawing.
 /// </summary>
+public enum ScreenPresentation
+{
+    Overlay,
+    Window,
+}
+
 /// <summary>What a device does about the windows of other programs on it (Part 6).</summary>
 public enum ForeignWindowsMode
 {
@@ -135,12 +141,6 @@ public enum ForeignWindowsMode
 
     /// <summary>Neither.</summary>
     Off,
-}
-
-public enum ScreenPresentation
-{
-    Overlay,
-    Window,
 }
 
 public enum SuppressReason
@@ -448,12 +448,17 @@ public sealed record ScreenSettings(
 /// What the device does about the windows of other programs on it (Part 4, Part 6): report and let
 /// the control lay them - the default, because display PCs are the DM's own - report only, or nothing.
 /// </param>
+/// <param name="Language">
+/// The device's own language (Part 8) - for its setup screen, rescue mark, diagnostic bar and its
+/// diagnostic log. Independent of the control's. The log takes it at once, the screens at the next start.
+/// </param>
 public sealed record DeviceSettings(
     LogLevel? Level = null,
     LogLevel? ForwardAtLeast = null,
     bool? KeepAwake = null,
     int? RescueAfterSeconds = null,
-    ForeignWindowsMode? ForeignWindows = null)
+    ForeignWindowsMode? ForeignWindows = null,
+    UiLanguage? Language = null)
 {
     /// <summary>The rescue mark's grace when nobody set one (Part 6).</summary>
     public static readonly TimeSpan DefaultRescueAfter = TimeSpan.FromMinutes(1);
@@ -462,11 +467,11 @@ public sealed record DeviceSettings(
     /// What a device does when nobody set anything (Part 6) - Information written, Warning sent on, the
     /// screens kept awake, a minute's grace. The one place these four defaults stand.
     /// </summary>
-    public static readonly DeviceSettings Defaults = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true, RescueAfterSeconds: 60, ForeignWindows: ForeignWindowsMode.ReportAndControl);
+    public static readonly DeviceSettings Defaults = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true, RescueAfterSeconds: 60, ForeignWindows: ForeignWindowsMode.ReportAndControl, Language: UiLanguage.Automatic);
 
     /// <summary>Whether this delta says anything at all. Not serialised - see ScreenSettings.</summary>
     [JsonIgnore]
-    public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null && RescueAfterSeconds is null && ForeignWindows is null;
+    public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null && RescueAfterSeconds is null && ForeignWindows is null && Language is null;
 
     /// <summary>
     /// The grace this delta sets, or the default. Ten seconds at the least: below that every Wi-Fi
@@ -494,7 +499,8 @@ public sealed record DeviceSettings(
             newer.ForwardAtLeast ?? older.ForwardAtLeast,
             newer.KeepAwake ?? older.KeepAwake,
             newer.RescueAfterSeconds ?? older.RescueAfterSeconds,
-            newer.ForeignWindows ?? older.ForeignWindows);
+            newer.ForeignWindows ?? older.ForeignWindows,
+            newer.Language ?? older.Language);
     }
 }
 

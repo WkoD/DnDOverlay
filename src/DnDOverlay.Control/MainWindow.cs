@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -83,6 +84,9 @@ internal sealed class MainWindow : Window, IDisposable
     private DevicesWindow? _devices;
     private SettingsWindow? _settingsWindow;
     private readonly ProcessLog _log;
+
+    /// <summary>What Windows showed at the start - the language "Automatic" stands for (Part 8).</summary>
+    private readonly CultureInfo _system;
     private NetworkPanel? _welcome;
     private StageGuard? _guard;
     private readonly ScenesPanel _scenes;
@@ -97,10 +101,12 @@ internal sealed class MainWindow : Window, IDisposable
         CampaignDesk desk,
         ControlSettings settings,
         Uri address,
-        ProcessLog log)
+        ProcessLog log,
+        CultureInfo system)
     {
         _session = session;
         _log = log;
+        _system = system;
         _pairing = pairing;
         _settings = settings;
         _address = address;
@@ -624,7 +630,7 @@ internal sealed class MainWindow : Window, IDisposable
             return;
         }
 
-        _settingsWindow = new SettingsWindow(_settings, _desk, _session, _log, _logger, _address.Port, said => _status.Text = said) { Owner = this };
+        _settingsWindow = new SettingsWindow(_settings, _desk, _session, _log, _logger, _address.Port, _system, said => _status.Text = said) { Owner = this };
         _settingsWindow.Show();
     }
 

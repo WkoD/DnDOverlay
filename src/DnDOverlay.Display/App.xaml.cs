@@ -352,6 +352,12 @@ public sealed partial class App : Application, IDisposable
     /// <summary>What this device does about foreign windows (Part 6) - report and control, unless set otherwise.</summary>
     private ForeignWindowsMode _foreign = ForeignWindowsMode.ReportAndControl;
 
+    /// <summary>The device's language as set (Part 8).</summary>
+    private UiLanguage _language = UiLanguage.Automatic;
+
+    /// <summary>What Windows showed at the start - the language Automatic stands for.</summary>
+    private CultureInfo _system = CultureInfo.InstalledUICulture;
+
     /// <summary>The setup screen, one per monitor, while a pairing request lies before the DM.</summary>
     private readonly List<SetupWindow> _setup = [];
     private bool _windowed;
@@ -423,6 +429,17 @@ public sealed partial class App : Application, IDisposable
         var deviceName = options.DeviceName ?? loaded.Value.DeviceName ?? Environment.MachineName;
 
         _deviceName = deviceName;
+
+        // The language before the first window and the first line (Part 8). Windows take it once, at
+        // their making; the log follows a later change at once. What Windows shows is kept first,
+        // because Automatic means exactly that.
+        _system = CultureInfo.CurrentUICulture;
+        _language = loaded.Value.Device.Language ?? UiLanguage.Automatic;
+
+        var culture = UiLanguages.CultureOf(_language, _system);
+
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+        CultureInfo.CurrentUICulture = culture;
 
         // One provider, registered once and never taken out - ILoggerFactory has AddProvider and
         // no counterpart, so the level a display is raised to from the far side of the house has
@@ -797,6 +814,13 @@ public sealed partial class App : Application, IDisposable
             }
 
             _foreign = device.ForeignWindows ?? _foreign;
+
+            // The log at once; the setup screen, rescue mark and diagnostic bar at the next start.
+            if (device.Language is { } language)
+            {
+                _language = language;
+                _log.Culture = UiLanguages.CultureOf(language, _system);
+            }
         }
 
         // Not stored and not reported back, unlike everything above it: this is the control's one
@@ -852,7 +876,7 @@ public sealed partial class App : Application, IDisposable
                     ScreenSettings.Opinion(pair.Value, _names.GetValueOrDefault(pair.Key)),
                     _placements.GetValueOrDefault(pair.Key))),
             ],
-            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted, _rescueAfterSeconds, _foreign),
+            Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted, _rescueAfterSeconds, _foreign, _language),
         };
 
         _configuration.Save(_settings);
@@ -1199,9 +1223,7 @@ public sealed partial class App : Application, IDisposable
 
                 if (due && absent is { } gone)
                 {
-                    words = string.Create(
-                        CultureInfo.CurrentCulture,
-                        $"No control for {Math.Max(1, (int)gone.TotalMinutes)} min");
+                    words = Strings.NoControlFor(Math.Max(1, (int)gone.TotalMinutes));
                 }
 
                 await Dispatcher.InvokeAsync(() =>
@@ -1563,7 +1585,8 @@ public sealed partial class App : Application, IDisposable
                     _forwarding?.AtLeast,
                     _wake?.Wanted,
                     (int)_takeover.Grace.TotalSeconds,
-                    _foreign)),
+                    _foreign,
+                    _language)),
 
             // What this device still has on its screens. A control that has just restarted takes
             // it over, and only where it has no scene of its own - which is the one exception to
@@ -2105,7 +2128,7 @@ public sealed partial class App : Application, IDisposable
 
             DisplayLog.AssetFailed(_logger, name, failure.Asset, failure.Detail);
 
-            _failed[failure.Asset] = "could not be loaded";
+            _failed[failure.Asset] = Strings.PictureNotLoaded;
         }
 
         if (run.Failed.Count > 0)
@@ -2217,7 +2240,7 @@ public sealed partial class App : Application, IDisposable
             // thumbnail that is already standing leaves the thumbnail, which is better than a frame.
             if (!_images.ContainsKey(arrived.Asset))
             {
-                _failed[arrived.Asset] = "could not be read";
+                _failed[arrived.Asset] = Strings.PictureNotRead;
             }
         }
     }
@@ -2763,20 +2786,18 @@ public sealed partial class App : Application, IDisposable
         var who = $"{_deviceName} {_ownAddress ?? "?"} · {_device.Value.ToString()[..8]}";
 
         lines.Add(_connectedTo is { } control
-            ? string.Format(culture, "Connected to {0} · {1} ms · this device {2}", control, Volatile.Read(ref _roundTripMs) is var ms and >= 0 ? ms.ToString(culture) : "?", who)
-            : string.Format(culture, "No control · this device {0}", who));
+            ? Strings.DiagnosticConnected(control, Volatile.Read(ref _roundTripMs) is var ms and >= 0 ? ms.ToString(culture) : "?", who)
+            : Strings.DiagnosticNoControl(who));
 
         var frames = reading.MedianMs is { } median
-            ? string.Format(culture, "Frames {0:0.0} / {1:0.0} / {2:0.0} ms ({3}) · {4} stalls", median, reading.P95Ms, reading.MaxMs, reading.Frames, reading.Stalls)
-            : "Frames: too few to say";
+            ? Strings.DiagnosticFrames(median, reading.P95Ms, reading.MaxMs, reading.Frames, reading.Stalls)
+            : Strings.DiagnosticFramesTooFew;
 
         var power = battery is { } charge
-            ? string.Format(culture, " · battery {0} %{1}", charge.Percent, charge.PluggedIn ? " ⚡" : string.Empty)
+            ? Strings.DiagnosticBattery(charge.Percent, charge.PluggedIn)
             : string.Empty;
 
-        lines.Add(string.Format(
-            culture,
-            "{0} · CPU {1:0.0} % · loading {2}, waiting {3} · store {4} pictures, {5} MB · memory {6} / {7} MB{8}",
+        lines.Add(Strings.DiagnosticLoad(
             frames,
             reading.CpuPercent,
             reading.Downloading,
@@ -2793,7 +2814,7 @@ public sealed partial class App : Application, IDisposable
         {
             foreach (var record in _log.Ring.Recent(64).Where(entry => entry.Level >= LogLevel.Warning).TakeLast(3))
             {
-                lines.Add(string.Format(culture, "{0:HH:mm} {1}", record.At, LogCatalog.Render(record, culture)));
+                lines.Add(string.Format(culture, "{0:HH:mm} {1}", record.At, LogCatalog.Render(record, _log.Culture)));
             }
         }
 

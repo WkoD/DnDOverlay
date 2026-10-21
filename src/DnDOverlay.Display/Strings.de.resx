@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="SetupTitle" xml:space="preserve">
+    <value>DnDOverlay - wartet auf den DM</value>
+  </data>
+  <data name="SetupWaiting" xml:space="preserve">
+    <value>Wartet auf den DM</value>
+  </data>
+  <data name="SetupAddressUnknown" xml:space="preserve">
+    <value>Adresse unbekannt</value>
+  </data>
+  <data name="SetupCode" xml:space="preserve">
+    <value>Code {0}</value>
+  </data>
+  <data name="SetupHint" xml:space="preserve">
+    <value>Dieses Gerät im Control zulassen und den Code vergleichen.</value>
+  </data>
+  <data name="RescueAsk" xml:space="preserve">
+    <value>Alle Overlays auf diesem Gerät ausblenden?</value>
+  </data>
+  <data name="RescueHide" xml:space="preserve">
+    <value>Ausblenden</value>
+  </data>
+  <data name="RescueCancel" xml:space="preserve">
+    <value>Abbrechen</value>
+  </data>
+  <data name="RescueAbsence" xml:space="preserve">
+    <value>{0} - Overlay ausblenden</value>
+  </data>
+  <data name="RescueOffer" xml:space="preserve">
+    <value>Bietet sich {0} an - nicht anbieten (ein inaktiver Bildschirm würde wieder bespielt)</value>
+  </data>
+  <data name="NoControlFor" xml:space="preserve">
+    <value>Seit {0} min kein Control</value>
+  </data>
+  <data name="PictureNotLoaded" xml:space="preserve">
+    <value>ließ sich nicht laden</value>
+  </data>
+  <data name="PictureNotRead" xml:space="preserve">
+    <value>ließ sich nicht lesen</value>
+  </data>
+  <data name="DiagnosticConnected" xml:space="preserve">
+    <value>Verbunden mit {0} · {1} ms · dieses Gerät {2}</value>
+  </data>
+  <data name="DiagnosticNoControl" xml:space="preserve">
+    <value>Kein Control · dieses Gerät {0}</value>
+  </data>
+  <data name="DiagnosticFrames" xml:space="preserve">
+    <value>Frames {0:0.0} / {1:0.0} / {2:0.0} ms ({3}) · {4} Hänger</value>
+  </data>
+  <data name="DiagnosticFramesTooFew" xml:space="preserve">
+    <value>Frames: zu wenige für eine Aussage</value>
+  </data>
+  <data name="DiagnosticBattery" xml:space="preserve">
+    <value> · Akku {0} %{1}</value>
+  </data>
+  <data name="DiagnosticLoad" xml:space="preserve">
+    <value>{0} · CPU {1:0.0} % · lädt {2}, wartet {3} · Vorrat {4} Bilder, {5} MB · Speicher {6} / {7} MB{8}</value>
+  </data>
+</root>

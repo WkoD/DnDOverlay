@@ -149,6 +149,40 @@ public sealed class EventCatalogueTests
     }
 
     /// <summary>
+    /// The German catalogue translates every entry and nothing else, with the same named placeholders
+    /// - a missing one would quietly fall back to English in the middle of a German file, a renamed
+    /// one would print its braces (Part 8).
+    /// </summary>
+    [Fact]
+    public void The_German_catalogue_translates_every_entry_with_the_same_placeholders()
+    {
+        var wrong = new List<string>();
+
+        foreach (var (key, neutral) in EventCatalogue.Catalogue)
+        {
+            if (!EventCatalogue.German.TryGetValue(key, out var german))
+            {
+                wrong.Add($"{key} is missing from LogMessages.de.resx");
+                continue;
+            }
+
+            var inNeutral = EventCatalogue.PlaceholdersOf(neutral).Order().ToList();
+            var inGerman = EventCatalogue.PlaceholdersOf(german).Order().ToList();
+
+            if (!inNeutral.SequenceEqual(inGerman, StringComparer.Ordinal))
+            {
+                wrong.Add($"{key}: neutral has [{string.Join(", ", inNeutral)}], German has [{string.Join(", ", inGerman)}]");
+            }
+        }
+
+        wrong.AddRange(EventCatalogue.German.Keys
+            .Where(key => !EventCatalogue.Catalogue.ContainsKey(key))
+            .Select(key => $"{key} is in LogMessages.de.resx and nowhere else"));
+
+        Assert.Empty(wrong);
+    }
+
+    /// <summary>
     /// And the neutral entry says the SAME THING, word for word. The placeholders matching is not
     /// enough: it was, and the two halves of <c>4004</c> drifted apart underneath it.
     /// <para>

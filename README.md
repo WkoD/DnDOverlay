@@ -208,7 +208,7 @@ the settings.
 screens on the left; on the right stand two bands for what is chosen. The **device band** says it
 applies to all of the device's screens and holds what concerns the device as a whole — its name
 (the screens' default labels follow it; refused if another device or screen has it), keeping the
-screens awake, how soon the rescue mark appears, its log levels — plus *Show the screen names*,
+screens awake, how soon the rescue mark appears, its language, its log levels — plus *Show the screen names*,
 *Clear the picture store …* (fetched again for what lies on the screens), *Restart …* (it connects
 again by itself) and *Unpair …*. The **screen band** holds the screen's name (refused if another
 screen or device already has it), its state and every display parameter: whether it is shown as an
@@ -231,7 +231,7 @@ them. On the same hardware the screens simply carry on. After new hardware the o
 beside the new ones as missing, and **Take over a missing screen** in a new screen's band moves the
 old one's state, settings, name, arrangement, tile place and view onto it.
 
-**Settings** (☰ → *Settings …*) holds what is set once: how a double tap or a drag loads a scene
+**Settings** (☰ → *Settings …*) holds what is set once: this control's language, how a double tap or a drag loads a scene
 (replacing, by default) and a layout (adding), the name pasted pictures get, whether the tables
 show touch points, this control's log level, its port (taken at the next start) and the network
 check with its firewall buttons. **Where the campaigns lie** can be changed there too: the question
@@ -239,6 +239,12 @@ names both places, how many campaigns and how big, and offers to take them along
 the place. On the same drive the move is a rename, over in an instant; to another drive the
 campaigns are copied with progress and a way to break off, checked, and only then removed from the
 old place. If anything fails, everything stays where it was. The open campaign is closed first.
+
+**Language** is *Automatic* (as Windows), *English* or *Deutsch* — for the control in *Settings*, for
+each display in its device band, independently of one another. Log lines follow a change at once, in
+the panel and in the files under `logs\`, and the file notes where it switched; windows and screens
+take it at the next start. A display's setup screen, rescue mark and diagnostic bar are translated;
+the control's own windows are still English only.
 
 **The log** (☰ → *Log*) is a panel beside the stage, at another edge than the campaign panel — the
 opposite one unless *Dock log* says otherwise; edge, size and whether it is shown are kept. It shows

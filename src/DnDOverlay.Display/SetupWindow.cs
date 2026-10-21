@@ -38,15 +38,15 @@ internal sealed class SetupWindow : Window
         Focusable = false;
         Topmost = true;
         Background = new SolidColorBrush(Color.FromRgb(0x12, 0x12, 0x18));
-        Title = "DnDOverlay - waiting for the DM";
+        Title = Strings.SetupTitle;
 
         var lines = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
 
-        lines.Children.Add(Line("Waiting for the DM", 18, 0.7));
+        lines.Children.Add(Line(Strings.SetupWaiting, 18, 0.7));
         lines.Children.Add(Line(name, 48, 1));
-        lines.Children.Add(Line(LocalAddress() ?? "address unknown", 22, 0.85));
-        lines.Children.Add(Line($"Code {code}", 64, 1, margin: 24));
-        lines.Children.Add(Line("Allow this device in the control and compare the code.", 16, 0.7, margin: 18));
+        lines.Children.Add(Line(LocalAddress() ?? Strings.SetupAddressUnknown, 22, 0.85));
+        lines.Children.Add(Line(Strings.SetupCode(code), 64, 1, margin: 24));
+        lines.Children.Add(Line(Strings.SetupHint, 16, 0.7, margin: 18));
 
         // Scaled with the screen: two metres from a 65-inch table and from a 13-inch tablet alike.
         Content = new Viewbox

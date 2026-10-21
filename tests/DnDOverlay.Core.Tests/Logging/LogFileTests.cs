@@ -59,6 +59,28 @@ public sealed class LogFileTests : IDisposable
     }
 
     /// <summary>
+    /// A language changed while running says so in the file - the header once more, naming the new
+    /// one - so a file that switched in the middle shows from which line on it reads differently.
+    /// </summary>
+    [Fact]
+    public void A_changed_language_is_said_in_the_file()
+    {
+        using var file = Open();
+
+        file.Write(Record(1024, "TokenRefused", LogLevel.Warning), "before");
+        file.Relabel(System.Globalization.CultureInfo.GetCultureInfo("de"));
+        file.Write(Record(1024, "TokenRefused", LogLevel.Warning), "after");
+
+        var all = ReadLines(Written().Single());
+
+        Assert.Equal(6, all.Length);
+        Assert.Contains("before", all[2], StringComparison.Ordinal);
+        Assert.Contains("| UI de |", all[3], StringComparison.Ordinal);
+        Assert.Contains("| language changed", all[4], StringComparison.Ordinal);
+        Assert.Contains("after", all[5], StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Rotation follows size, so the file that survives may contain no process start at all -
     /// which is exactly why the header is written per FILE and not per start.
     /// </summary>

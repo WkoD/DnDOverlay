@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="E1001_DisplayConnected" xml:space="preserve">
+    <value>Display {DeviceId} ({DeviceName}) verbunden mit {ScreenCount} Bildschirm(en).</value>
+  </data>
+  <data name="E1002_DisplayDisconnected" xml:space="preserve">
+    <value>Display {DeviceId} getrennt.</value>
+  </data>
+  <data name="E1003_DisplayWithoutHello" xml:space="preserve">
+    <value>Ein Display hat sich ohne Hello verbunden und wurde getrennt.</value>
+  </data>
+  <data name="E1004_ProtocolVersionDiffers" xml:space="preserve">
+    <value>Display {DeviceId} spricht Protokoll {TheirVersion}, wir sprechen {OurVersion} - es geht weiter.</value>
+  </data>
+  <data name="E1005_UnhandledMessageIgnored" xml:space="preserve">
+    <value>Eine Nachricht von {DeviceId}, die dieser Build nicht behandelt, wird übergangen.</value>
+  </data>
+  <data name="E1006_SendFailed" xml:space="preserve">
+    <value>Die Verbindung zu {Address} endete beim Senden.</value>
+  </data>
+  <data name="E1010_Connecting" xml:space="preserve">
+    <value>Verbinde mit {HubUri}.</value>
+  </data>
+  <data name="E1011_Connected" xml:space="preserve">
+    <value>Verbunden mit Control {ControlId}; Bilder kommen von {AssetPath}.</value>
+  </data>
+  <data name="E1012_Disconnected" xml:space="preserve">
+    <value>Die Verbindung zu {HubUri} ist beendet.</value>
+  </data>
+  <data name="E1013_ConnectFailed" xml:space="preserve">
+    <value>{HubUri} ist nicht erreichbar.</value>
+  </data>
+  <data name="E1014_UnknownMessageIgnored" xml:space="preserve">
+    <value>Eine Nachricht, die dieser Build nicht kennt, wird übergangen.</value>
+  </data>
+  <data name="E1015_ListeningForControls" xml:space="preserve">
+    <value>Horche auf UDP {Port} nach einem Control.</value>
+  </data>
+  <data name="E1016_ControlHeard" xml:space="preserve">
+    <value>Control {Name} gehört unter {Address}, Port {Port}.</value>
+  </data>
+  <data name="E1017_ForeignControlIgnored" xml:space="preserve">
+    <value>Control {ControlId} ({Name}) wird übergangen - dieses Gerät gehört zu einem anderen.</value>
+  </data>
+  <data name="E1018_ListeningFailed" xml:space="preserve">
+    <value>Auf UDP {Port} lässt sich nicht horchen; ein Host muss von Hand angegeben werden.</value>
+  </data>
+  <data name="E1020_PairingRequested" xml:space="preserve">
+    <value>Kopplungsanfrage von {DeviceName} unter {Address}, Code {PairingCode} ({DeviceId}).</value>
+  </data>
+  <data name="E1021_PairingApproved" xml:space="preserve">
+    <value>Kopplung zugelassen für {DeviceName} ({DeviceId}) als {Role}.</value>
+  </data>
+  <data name="E1022_PairingDenied" xml:space="preserve">
+    <value>Kopplung abgelehnt für {DeviceName} ({DeviceId}).</value>
+  </data>
+  <data name="E1023_PairingWithdrawn" xml:space="preserve">
+    <value>Die Kopplungsanfrage von {DeviceId} hat sich zurückgezogen - die Verbindung endete.</value>
+  </data>
+  <data name="E1024_TokenRefused" xml:space="preserve">
+    <value>{DeviceName} ({DeviceId}) hat ein Token vorgelegt, das dieses Control nicht kennt.</value>
+  </data>
+  <data name="E1025_NewDevicesBlocked" xml:space="preserve">
+    <value>{DeviceName} unter {Address} hat angeklopft, während keine neuen Geräte angenommen werden.</value>
+  </data>
+  <data name="E1026_LimitReached" xml:space="preserve">
+    <value>{DeviceName} unter {Address} wurde abgewiesen: {Limit}.</value>
+  </data>
+  <data name="E1027_CloneDetected" xml:space="preserve">
+    <value>{DeviceName} ({DeviceId}) ist ein Klon - die Verbindung unter dieser Kennung hat geantwortet. Der DM wird gefragt.</value>
+  </data>
+  <data name="E1028_ConnectionReplaced" xml:space="preserve">
+    <value>Display {DeviceId} hat neu verbunden; die vorige Verbindung war stumm und wurde ersetzt.</value>
+  </data>
+  <data name="E1029_FreshIdentityRequested" xml:space="preserve">
+    <value>{DeviceName} ({DeviceId}) wurde angewiesen, eine neue Kennung anzunehmen und sich neu zu koppeln.</value>
+  </data>
+  <data name="E1030_Unpaired" xml:space="preserve">
+    <value>Kopplung für {DeviceId} aufgehoben - sein Token öffnet nichts mehr.</value>
+  </data>
+  <data name="E1031_RejectionCleared" xml:space="preserve">
+    <value>Die Ablehnung von {DeviceId} wurde zurückgenommen; der nächste Versuch ist eine gewöhnliche Anfrage.</value>
+  </data>
+  <data name="E1032_MessageIgnored" xml:space="preserve">
+    <value>Eine Nachricht, die dieser Build nicht versteht, wurde übergangen.</value>
+  </data>
+  <data name="E1033_PairingPending" xml:space="preserve">
+    <value>Warte darauf, dass der DM dieses Gerät zulässt. Kopplungscode {PairingCode}.</value>
+  </data>
+  <data name="E1034_Paired" xml:space="preserve">
+    <value>Gekoppelt mit Control {ControlId}; das Token ist gespeichert.</value>
+  </data>
+  <data name="E1035_TokenUnknown" xml:space="preserve">
+    <value>Dieses Control kennt dieses Gerät nicht mehr. Die Kopplung bleibt, bis sie AM Gerät zurückgesetzt wird.</value>
+  </data>
+  <data name="E1036_FreshIdentityTaken" xml:space="preserve">
+    <value>Die DeviceId kollidierte mit einem bereits verbundenen Gerät - nehme die neue Kennung {DeviceId} an und kopple neu.</value>
+  </data>
+  <data name="E1037_PairingRefused" xml:space="preserve">
+    <value>Das Control hat dieses Gerät abgewiesen: {Reason}.</value>
+  </data>
+  <data name="E1038_BeaconStarted" xml:space="preserve">
+    <value>Dieses Control meldet sich alle paar Sekunden auf UDP {Port}.</value>
+  </data>
+  <data name="E1039_BeaconStopped" xml:space="preserve">
+    <value>Der Beacon zur Suche hat aufgehört.</value>
+  </data>
+  <data name="E1040_BeaconInterfaceFailed" xml:space="preserve">
+    <value>Der Beacon konnte nicht über {Address} hinausgehen.</value>
+  </data>
+  <data name="E1041_BeaconReachedNobody" xml:space="preserve">
+    <value>Der Beacon hat keine einzige Schnittstelle erreicht - Displays brauchen den Host von Hand.</value>
+  </data>
+  <data name="E1042_RetryingIn" xml:space="preserve">
+    <value>Neuer Versuch in {Delay}.</value>
+  </data>
+  <data name="E1043_StateQueueFull" xml:space="preserve">
+    <value>{Address} nimmt nicht ab, was es bekommt ({Queued} Nachrichten, {Bytes} Bytes in der Schlange) - wird geschlossen.</value>
+  </data>
+  <data name="E1044_WriteTimedOut" xml:space="preserve">
+    <value>Ein Schreiben an {Address} wurde nicht innerhalb von {Limit} fertig - wird geschlossen.</value>
+  </data>
+  <data name="E1045_HeartbeatLost" xml:space="preserve">
+    <value>{Address} hat seit {Silence} nichts gesagt - die Verbindung gilt als tot.</value>
+  </data>
+  <data name="E1046_DeviceClockDiffers" xml:space="preserve">
+    <value>Die Uhr von {DeviceName} weicht um {Difference} von unserer ab - seine eigenen Zeitstempel sind entsprechend zu lesen.</value>
+  </data>
+  <data name="E1047_LogRateExceeded" xml:space="preserve">
+    <value>{DeviceName} hat mehr als {Limit} Protokolleinträge je Sekunde auf {Level} geschickt; der Überschuss wurde verworfen.</value>
+  </data>
+  <data name="E1048_UnknownControlHeard" xml:space="preserve">
+    <value>Control {ControlId} ({Name}) meldet sich, aber dieses Gerät gehört zu {BoundTo}. Wurde dieses Control neu eingerichtet, muss die Kopplung AM Gerät zurückgesetzt werden.</value>
+  </data>
+  <data name="E1053_TouchRateExceeded" xml:space="preserve">
+    <value>{DeviceName} schickt mehr als {Limit} Berührungsmeldungen je Sekunde; der Rest wird abgewiesen.</value>
+  </data>
+  <data name="E1054_AnsweringOrphanCall" xml:space="preserve">
+    <value>Antworte auf den Ruf nach verwaisten Displays von {Name} unter {Address}; dieses Display war an Control {BoundTo} gebunden.</value>
+  </data>
+  <data name="E1055_CallingOrphans" xml:space="preserve">
+    <value>Rufe {Duration} lang nach verwaisten Displays.</value>
+  </data>
+  <data name="E1056_OwnControlBack" xml:space="preserve">
+    <value>Das eigene Control {Name} unter {Address} ist zurück; die Antwort auf den Ruf nach verwaisten Displays wird zurückgezogen.</value>
+  </data>
+  <data name="E1057_DiagnosticsRateExceeded" xml:space="preserve">
+    <value>{DeviceName} schickt mehr als {Limit} Diagnosemessungen je Sekunde; der Rest wird abgewiesen.</value>
+  </data>
+  <data name="E1051_SendQueueFull" xml:space="preserve">
+    <value>Das Control unter {HubUri} nimmt keine Nachrichten ab ({Queued} in der Schlange, {Bytes} Bytes); schließe und verbinde neu.</value>
+  </data>
+  <data name="E1052_SendTimedOut" xml:space="preserve">
+    <value>Eine Nachricht an {HubUri} ging nicht innerhalb von {Limit} hinaus; das Control gilt als weg.</value>
+  </data>
+  <data name="E1049_ConnectionLoopFailed" xml:space="preserve">
+    <value>Die Suche nach einem Control endete unerwartet - dieses Gerät verbindet sich erst nach einem Neustart wieder.</value>
+  </data>
+  <data name="E1050_BeaconTargetsChanged" xml:space="preserve">
+    <value>Der Beacon geht jetzt über {Count} Adresse(n) hinaus: {Targets}.</value>
+  </data>
+  <data name="E2001_AssetTakenIn" xml:space="preserve">
+    <value>{Name} aufgenommen als {AssetId} ({PixelWidth}x{PixelHeight}, {Bytes} Bytes) in {Milliseconds} ms.</value>
+  </data>
+  <data name="E2002_AssetRefused" xml:space="preserve">
+    <value>{Name} wurde nicht aufgenommen: {Reason} - {Detail}</value>
+  </data>
+  <data name="E2003_IntakeFinished" xml:space="preserve">
+    <value>Aufnahme aus {Sources} Quelle(n) fertig in {Milliseconds} ms: {Taken} aufgenommen, {Known} schon vorhanden, {Refused} abgewiesen{Broken}.</value>
+  </data>
+  <data name="E2004_DropNotTakenIn" xml:space="preserve">
+    <value>Ein Ablegen bot nichts, was sich aufnehmen ließ. Formate: {Formats}.</value>
+  </data>
+  <data name="E3001_ScreenFound" xml:space="preserve">
+    <value>Bildschirm {ScreenId} ({Label}): {Size} bei {Dpi} DPI.</value>
+  </data>
+  <data name="E3002_NoScreens" xml:space="preserve">
+    <value>Windows meldet keinen Bildschirm zum Bespielen.</value>
+  </data>
+  <data name="E3003_OverlayOpened" xml:space="preserve">
+    <value>Overlay auf {ScreenId} geöffnet ({Mode}).</value>
+  </data>
+  <data name="E3004_UnknownScreenDiscarded" xml:space="preserve">
+    <value>Eine Operation für Bildschirm {ScreenId} wird verworfen - dieses Gerät hat ihn nicht.</value>
+  </data>
+  <data name="E3005_AssetFailed" xml:space="preserve">
+    <value>Bild {Name} ({AssetId}) ließ sich nicht laden: {Detail}</value>
+  </data>
+  <data name="E3006_AssetDecoded" xml:space="preserve">
+    <value>Bild {Name} ({AssetId}) dekodiert auf {Width}x{Height} in {Milliseconds} ms.</value>
+  </data>
+  <data name="E3007_ScreenAdded" xml:space="preserve">
+    <value>Neuer Bildschirm {Screen} ({Label}) - wird bespielt.</value>
+  </data>
+  <data name="E3008_ScreenMissing" xml:space="preserve">
+    <value>Bildschirm {Screen} ({Label}) wird nicht mehr gemeldet - seine Szene und sein Zustand bleiben.</value>
+  </data>
+  <data name="E3009_ScreenMetricsChanged" xml:space="preserve">
+    <value>Bildschirm {Label} hat sich von {Before} auf {After} geändert - die Bilder darauf wurden neu berechnet.</value>
+  </data>
+  <data name="E3010_ScreenStateChanged" xml:space="preserve">
+    <value>Bildschirm {Screen} ist jetzt {State}.</value>
+  </data>
+  <data name="E3011_ScreenSuppressed" xml:space="preserve">
+    <value>Bildschirm {Screen} wird nicht bespielt: {Reason}.</value>
+  </data>
+  <data name="E3012_ScreenAvailable" xml:space="preserve">
+    <value>Bildschirm {Screen} lässt sich wieder bespielen.</value>
+  </data>
+  <data name="E3013_ScreenCommandIgnored" xml:space="preserve">
+    <value>{DeviceName} hat einen eigenen Bildschirmzustand geschickt - übergangen; Zustände gehören dem Control.</value>
+  </data>
+  <data name="E3014_SceneTakenOver" xml:space="preserve">
+    <value>Szene von {Screen} vom Gerät übernommen: {ItemCount} Bild(er).</value>
+  </data>
+  <data name="E3015_OverlayClosed" xml:space="preserve">
+    <value>Overlay auf {ScreenId} geschlossen.</value>
+  </data>
+  <data name="E3016_ScreensReported" xml:space="preserve">
+    <value>Bildschirmbestand geändert - melde {ScreenCount} Bildschirm(e).</value>
+  </data>
+  <data name="E3017_SettingsApplied" xml:space="preserve">
+    <value>Einstellungen für {ScreenCount} Bildschirm(e) vom Control übernommen.</value>
+  </data>
+  <data name="E3018_ScreensIdentified" xml:space="preserve">
+    <value>Zeige den Bildschirmnamen auf {ScreenCount} Overlay(s).</value>
+  </data>
+  <data name="E3019_WakeLockChanged" xml:space="preserve">
+    <value>Bildschirme wach gehalten: {Holding}.</value>
+  </data>
+  <data name="E3020_AssetsLoaded" xml:space="preserve">
+    <value>{Fetched} Bild(er) geladen in {Milliseconds} ms, {Bytes} Bytes, {Peak} gleichzeitig; {AlreadyHere} schon vorhanden.</value>
+  </data>
+  <data name="E3021_LockedItemNotMoved" xml:space="preserve">
+    <value>Ein gesperrtes Bild auf {ScreenName} wurde vom Tisch aus nicht bewegt.</value>
+  </data>
+  <data name="E3022_ForeignScreenRefused" xml:space="preserve">
+    <value>{DeviceName} hat eine Geste für {ScreenName} gemeldet, der nicht zu seinen Bildschirmen gehört.</value>
+  </data>
+  <data name="E3023_FrameTimes" xml:space="preserve">
+    <value>Frames über {Seconds} s, {Frames} davon: Median {MedianMs} ms, 95. Perzentil {P95Ms} ms, Maximum {MaxMs} ms, Takt {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} Durchgang/Durchgängen, längstes Zeichnen {DrawMs} ms, Hand {HandMs} ms verspätet.</value>
+  </data>
+  <data name="E3035_Spotlight" xml:space="preserve">
+    <value>Ein Spotlight ging an {ScreenName}; ein Display wurde erreicht: {Reached}.</value>
+  </data>
+  <data name="E3033_ItemMoved" xml:space="preserve">
+    <value>Ein Bild wurde von {FromScreen} nach {ToScreen} verschoben.</value>
+  </data>
+  <data name="E3034_ItemCopied" xml:space="preserve">
+    <value>Ein Bild wurde auf {ScreenName} kopiert.</value>
+  </data>
+  <data name="E3036_ItemsMoved" xml:space="preserve">
+    <value>Eine Auswahl von {Count} wurde von {FromScreen} nach {ToScreen} verschoben.</value>
+  </data>
+  <data name="E3037_ItemsCopied" xml:space="preserve">
+    <value>Eine Auswahl von {Count} wurde auf {ScreenName} kopiert.</value>
+  </data>
+  <data name="E3031_TouchReporting" xml:space="preserve">
+    <value>Berührungspunkte von diesem Tisch: {Reporting}.</value>
+  </data>
+  <data name="E3041_SessionEnding" xml:space="preserve">
+    <value>Windows beendet die Sitzung ({Reason}); Einstellungen geschrieben.</value>
+  </data>
+  <data name="E4017_SessionEnding" xml:space="preserve">
+    <value>Windows beendet die Sitzung ({Reason}); Einstellungen geschrieben.</value>
+  </data>
+  <data name="E3042_RescueMarkUp" xml:space="preserve">
+    <value>Seit {Seconds} s kein Control; die Rettungsmarke steht auf {Screens} Bildschirm(en).</value>
+  </data>
+  <data name="E3043_HiddenAtDevice" xml:space="preserve">
+    <value>Am Gerät mit der Rettungsmarke ausgeblendet: {Screens} Bildschirm(e).</value>
+  </data>
+  <data name="E3044_OfferWithdrawn" xml:space="preserve">
+    <value>Das Angebot an {Name} wurde zurückgezogen.</value>
+  </data>
+  <data name="E3045_DiagnosticsRequested" xml:space="preserve">
+    <value>Diagnosestrom an das Control: {On}.</value>
+  </data>
+  <data name="E4018_StandbyHeld" xml:space="preserve">
+    <value>Dieser Rechner wird wach gehalten: {Holding}.</value>
+  </data>
+  <data name="E4019_BatteryLow" xml:space="preserve">
+    <value>Der Akku dieses Control steht bei {Percent} % und hängt nicht am Kabel.</value>
+  </data>
+  <data name="E4020_SceneSaved" xml:space="preserve">
+    <value>Szene "{Name}" mit {Items} Bild(ern) gespeichert.</value>
+  </data>
+  <data name="E4021_SceneLoaded" xml:space="preserve">
+    <value>Szene "{Name}" geladen ({Mode}): {Items} Bild(er), {Missing} Bild(er) fehlen.</value>
+  </data>
+  <data name="E4022_CampaignOpened" xml:space="preserve">
+    <value>Kampagne "{Name}" geöffnet: {Pictures} Bild(er), {Scenes} Szene(n).</value>
+  </data>
+  <data name="E4023_CampaignReconciled" xml:space="preserve">
+    <value>Kampagnenordner abgeglichen: {Adopted} aufgenommen, {Duplicates} Doppelte entfernt, {Missing} fehlen, {Foreign} fremde Datei(en), Bestandsliste neu aufgebaut: {Reconstructed}.</value>
+  </data>
+  <data name="E4024_CampaignRenamed" xml:space="preserve">
+    <value>Kampagne "{Old}" in "{New}" umbenannt.</value>
+  </data>
+  <data name="E4025_CampaignDeleted" xml:space="preserve">
+    <value>Kampagne "{Name}" samt Ordner gelöscht.</value>
+  </data>
+  <data name="E4026_CampaignRefused" xml:space="preserve">
+    <value>Die Kampagne "{Name}" ließ sich nicht öffnen: {Reason}</value>
+  </data>
+  <data name="E4027_LayoutSaved" xml:space="preserve">
+    <value>Aufbau "{Name}" mit {Screens} Bildschirm(en) gespeichert.</value>
+  </data>
+  <data name="E4028_LayoutLoaded" xml:space="preserve">
+    <value>Aufbau "{Name}" geladen ({Mode}): {Loaded} Szene(n) gelegt, {Skipped} ausgelassen, {Saved} als Szenen gespeichert, {Missing} Bild(er) fehlen.</value>
+  </data>
+  <data name="E4029_AssetRenamed" xml:space="preserve">
+    <value>Bild "{Old}" in "{New}" umbenannt.</value>
+  </data>
+  <data name="E4030_AssetsDeleted" xml:space="preserve">
+    <value>{Pictures} Bild(er) gelöscht: von {Screens} Bildschirm(en) genommen, aus {Scenes} Szene(n) und {Layouts} Aufbau/Aufbauten entfernt.</value>
+  </data>
+  <data name="E1058_DeviceAdopted" xml:space="preserve">
+    <value>{DeviceId} wurde als das bekannte Gerät {KnownId} eingelassen und übernimmt dessen Namen, Einstellungen und Bildschirme.</value>
+  </data>
+  <data name="E1059_DeviceCommandSent" xml:space="preserve">
+    <value>Gerätebefehl {Command} für {DeviceId} - jetzt gesendet: {Now}.</value>
+  </data>
+  <data name="E3047_DeviceRenamed" xml:space="preserve">
+    <value>Dieses Gerät heißt ab jetzt "{Name}".</value>
+  </data>
+  <data name="E3048_CacheCleared" xml:space="preserve">
+    <value>Bildvorrat auf Anweisung des Control geleert: {Count} Bild(er) entfernt.</value>
+  </data>
+  <data name="E3049_Restarting" xml:space="preserve">
+    <value>Neustart auf Anweisung des Control.</value>
+  </data>
+  <data name="E3050_WindowLaid" xml:space="preserve">
+    <value>Fenster von {Program}: {Action} - {Outcome}.</value>
+  </data>
+  <data name="E1060_WindowListRateExceeded" xml:space="preserve">
+    <value>{DeviceName} schickt mehr als {Limit} Fensterlisten je Sekunde; der Rest wird abgewiesen.</value>
+  </data>
+  <data name="E3046_ScreenReassigned" xml:space="preserve">
+    <value>Bildschirm {To} hat den fehlenden {From} übernommen: Wunsch, Einstellungen, Name und Anordnung.</value>
+  </data>
+  <data name="E4031_CampaignsMoved" xml:space="preserve">
+    <value>Kampagnen von "{From}" nach "{To}" umgezogen: {Count} Kampagne(n), kopiert: {Copied}.</value>
+  </data>
+  <data name="E4032_CampaignsNotMoved" xml:space="preserve">
+    <value>Die Kampagnen bleiben in "{From}": der Umzug nach "{To}" fand nicht statt. {Reason}</value>
+  </data>
+  <data name="E3040_PicturesSteppedDown" xml:space="preserve">
+    <value>{Count} Bild(er) auf ihre Vorschaubilder zurückgestuft: {UsedMb} MB belegt bei einer Obergrenze von {CapMb} MB.</value>
+  </data>
+  <data name="E3038_StockSettled" xml:space="preserve">
+    <value>Bildvorrat aus einem früheren Lauf: {Adopted} gefunden, {Discarded} verworfen.</value>
+  </data>
+  <data name="E3039_StockEmptied" xml:space="preserve">
+    <value>Bildvorrat geleert {Occasion}: {Count} Bild(er) entfernt, {Left} übrig.</value>
+  </data>
+  <data name="E3032_ParkGesture" xml:space="preserve">
+    <value>Losgelassen mit {TowardsDip} DIP/s nach {TravelDip} DIP, Hand {EdgeDip} DIP vom Parkrand: {Outcome}.</value>
+  </data>
+  <data name="E3030_GestureCorrected" xml:space="preserve">
+    <value>Geste auf {Name} kam nach {Milliseconds} ms {DriftDip} DIP entfernt zurück: losgelassen bei {MineX},{MineY} Skalierung {MineScale}, der Hub sagt {HubX},{HubY} Skalierung {HubScale}.</value>
+  </data>
+  <data name="E3029_SessionPulse" xml:space="preserve">
+    <value>Stand nach {Uptime}: {Items} Bild(er) auf {Screens} Bildschirm(en), {Bitmaps} dekodiert, {MemoryMb} MB privat (Spitze {PeakMb}), Bildvorrat {StoreMb} MB in {Files} Datei(en), {Gestures} Geste(n), {Connections} Verbindung(en), {TouchReports} Berührungsmeldung(en) mit {TouchPoints} Punkt(en).</value>
+  </data>
+  <data name="E3028_GestureConfirmed" xml:space="preserve">
+    <value>Geste auf {Name} nach {Milliseconds} ms bestätigt, {DriftDip} DIP von der Stelle, an der losgelassen wurde.</value>
+  </data>
+  <data name="E3027_SurfaceMeasured" xml:space="preserve">
+    <value>{ScreenId} zeichnet auf {WidthDip}x{HeightDip} DIP für einen Bildschirm von {Size} bei {Dpi} DPI.</value>
+  </data>
+  <data name="E3026_RenderPath" xml:space="preserve">
+    <value>Renderweg: Stufe {Tier}, Modus {Mode}.</value>
+  </data>
+  <data name="E3025_PictureSharpened" xml:space="preserve">
+    <value>{Name} erneut dekodiert auf {StepPixels} px, vorher {BeforePixels} px.</value>
+  </data>
+  <data name="E3024_FrameBudgetMissed" xml:space="preserve">
+    <value>{ScreenName} hält sein Frame-Budget nicht, {Missing} darüber: Median {MedianMs} ms gegen {BudgetMs} ms, 95. Perzentil {P95Ms} ms gegen {StutterMs} ms, Maximum {MaxMs} ms gegen 100 ms, CPU {CpuPercent} %.</value>
+  </data>
+  <data name="E4001_DataRootChosen" xml:space="preserve">
+    <value>Datenwurzel: {Path}</value>
+  </data>
+  <data name="E4002_DataRootChosen" xml:space="preserve">
+    <value>Datenwurzel: {Path}</value>
+  </data>
+  <data name="E4003_ConfigurationCreated" xml:space="preserve">
+    <value>Noch keine control.json - eine angelegt, Control {ControlId}.</value>
+  </data>
+  <data name="E4004_ConfigurationReplaced" xml:space="preserve">
+    <value>control.json war unlesbar. Beiseitegelegt als {SetAside}; Start mit Vorgaben und einer neuen Kennung, gekoppelte Displays finden dieses Control also nicht von selbst - ihre Kopplung muss an jedem Gerät zurückgesetzt werden.</value>
+  </data>
+  <data name="E4005_ConfigurationCreated" xml:space="preserve">
+    <value>Noch keine display.json - eine angelegt, Gerät {DeviceId}.</value>
+  </data>
+  <data name="E4006_ConfigurationReplaced" xml:space="preserve">
+    <value>display.json war unlesbar. Beiseitegelegt als {SetAside}; dieses Gerät startet mit einer neuen Kennung und muss neu gekoppelt werden - oder im Control neu zugeordnet.</value>
+  </data>
+  <data name="E4007_KnownDevicesRestored" xml:space="preserve">
+    <value>{Restored} gekoppelte(s) Gerät(e) wiederhergestellt, {Dropped} verworfen, weil das Token sich nicht entschlüsseln ließ.</value>
+  </data>
+  <data name="E4008_LogFileFailed" xml:space="preserve">
+    <value>Die Protokolldatei unter {Path} ließ sich nicht schreiben; protokolliert wird nur noch im Speicher.</value>
+  </data>
+  <data name="E4009_PortTaken" xml:space="preserve">
+    <value>Port {Port} ist schon belegt - vermutlich läuft schon ein Control. Für ein zweites "Port" in {Path} ändern.</value>
+  </data>
+  <data name="E4010_IdentityRecovered" xml:space="preserve">
+    <value>control.json war unlesbar. Beiseitegelegt als {SetAside}; die Kennung {ControlId} wurde daraus geborgen, gekoppelte Displays finden dieses Control also wieder - sie kommen als Kopplungsanfragen, weil ihre Tokens mit der Datei gegangen sind.</value>
+  </data>
+  <data name="E4011_UnhandledFault" xml:space="preserve">
+    <value>Unbehandelter Fehler in {Where} - dieses Control geht herunter.</value>
+  </data>
+  <data name="E4012_UnhandledFault" xml:space="preserve">
+    <value>Unbehandelter Fehler in {Where} - dieses Display geht herunter.</value>
+  </data>
+  <data name="E4015_SessionStreamRestarted" xml:space="preserve">
+    <value>Hinter dem Sitzungsstrom zurückgefallen, und der Hub hat ihn beendet - wieder aufgenommen und vom Hub neu gezeichnet. {Restarts} bisher in diesem Lauf.</value>
+  </data>
+  <data name="E4016_StageMemory" xml:space="preserve">
+    <value>Bühnenspeicher über {Seconds} s: {AllocatedMb} MB angelegt, Heap {HeapMb} MB (groß {LargeMb} MB), Prozess {ProcessMb} MB, Sammlungen {Gen0}/{Gen1}/{Gen2}, {Pictures} Bilder und {Greyed} graue im Speicher, {Tiles} Kacheln.</value>
+  </data>
+  <data name="E4013_FrameTimes" xml:space="preserve">
+    <value>Bühnen-Frames über {Seconds} s, {Frames} davon: Median {MedianMs} ms, 95. Perzentil {P95Ms} ms, Maximum {MaxMs} ms, Takt {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} Durchgang/Durchgängen, längstes Zeichnen {DrawMs} ms, Hand {HandMs} ms verspätet.</value>
+  </data>
+</root>

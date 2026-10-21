@@ -366,7 +366,7 @@ internal sealed class LogPanel : DockPanel, IDisposable
             .Append(' ')
             .Append(record.EventName)
             .Append("  ")
-            .Append(LogCatalog.Render(record))
+            .Append(LogCatalog.Render(record, _log.Culture))
             .ToString();
 
         var line = new Grid { Margin = new Thickness(0, 0, 0, 1) };

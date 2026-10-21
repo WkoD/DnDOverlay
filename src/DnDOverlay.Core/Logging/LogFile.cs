@@ -71,6 +71,37 @@ public sealed class LogFile : IDisposable
     /// <summary>The file being written, or null while nothing has been opened.</summary>
     public string? Path { get; private set; }
 
+    /// <summary>The language the lines are rendered in, as the header names it - the process log renders them.</summary>
+    public CultureInfo Culture { get; private set; } = CultureInfo.CurrentUICulture;
+
+    /// <summary>
+    /// Takes a new language and says so in the file: the header once more, so a file that switched in
+    /// the middle shows from which line on it reads differently (Part 8).
+    /// </summary>
+    public void Relabel(CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(culture);
+
+        lock (_gate)
+        {
+            Culture = culture;
+
+            if (_writer is null || _broken)
+            {
+                return;
+            }
+
+            try
+            {
+                Header("language changed");
+            }
+            catch (IOException exception)
+            {
+                Break(exception);
+            }
+        }
+    }
+
     /// <summary>Appends one rendered line. Silent about its own failures after the first.</summary>
     public void Write(LogRecord record, string text)
     {
@@ -263,7 +294,7 @@ public sealed class LogFile : IDisposable
             return;
         }
 
-        var ui = Named(CultureInfo.CurrentUICulture);
+        var ui = Named(Culture);
         var system = Named(CultureInfo.InstalledUICulture);
         var now = _time.GetLocalNow().ToString(HeaderTimestamp, CultureInfo.InvariantCulture);
 

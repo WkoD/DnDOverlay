@@ -189,6 +189,12 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// data root; it is written as null rather than as that path, so a moved data root takes it along.
     /// </summary>
     public string? CampaignsPath { get; set; }
+
+    /// <summary>
+    /// The control's language (Part 8) - Automatic follows Windows. Log lines take a change at once,
+    /// windows and menus at the next start. The devices have their own.
+    /// </summary>
+    public UiLanguage Language { get; set; } = UiLanguage.Automatic;
 }
 
 /// <summary>Which edge of the window the campaign panel lies against (Part 7).</summary>

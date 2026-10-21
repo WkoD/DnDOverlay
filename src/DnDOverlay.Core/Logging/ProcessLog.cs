@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Core.Logging;
@@ -25,6 +26,7 @@ public sealed class ProcessLog : ILoggerProvider
     private readonly LogIdentity _identity;
     private readonly LogFile? _file;
     private readonly TimeProvider _time;
+    private CultureInfo _culture = CultureInfo.CurrentUICulture;
 
     /// <param name="directory">
     /// Where the file goes - always under the handed-in data root, never composed here (rule 10).
@@ -62,6 +64,27 @@ public sealed class ProcessLog : ILoggerProvider
     /// </summary>
     public LogLevel Level { get; set; } = LogLevel.Information;
 
+    /// <summary>
+    /// The language lines are rendered in - for the file and for whoever shows them. Settable while
+    /// running: a changed language reaches the log at once, the windows only at the next start (Part 8).
+    /// </summary>
+    public CultureInfo Culture
+    {
+        get => _culture;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+
+            if (Equals(value, _culture))
+            {
+                return;
+            }
+
+            _culture = value;
+            _file?.Relabel(value);
+        }
+    }
+
     /// <summary>What the tray list, the log panel and the forwarding read from.</summary>
     public LogRing Ring { get; }
 
@@ -82,7 +105,7 @@ public sealed class ProcessLog : ILoggerProvider
         ArgumentNullException.ThrowIfNull(record);
 
         Ring.Add(record);
-        _file?.Write(record, LogCatalog.Render(record));
+        _file?.Write(record, LogCatalog.Render(record, _culture));
 
         Added?.Invoke(record);
     }

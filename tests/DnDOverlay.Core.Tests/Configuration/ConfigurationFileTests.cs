@@ -135,6 +135,23 @@ public sealed class ConfigurationFileTests : IDisposable
         Assert.Equal(log, reopened.Load(() => new ControlConfiguration()).Value.LogPanel);
     }
 
+    /// <summary>The control's language comes back; a file without one follows Windows (Part 8).</summary>
+    [Fact]
+    public void The_language_comes_back_and_defaults_to_automatic()
+    {
+        Assert.Equal(UiLanguage.Automatic, new ControlConfiguration().Language);
+
+        using (var file = Store(TimeProvider.System))
+        {
+            file.Save(new ControlConfiguration { Language = UiLanguage.German });
+            file.Flush();
+        }
+
+        using var reopened = Store(TimeProvider.System);
+
+        Assert.Equal(UiLanguage.German, reopened.Load(() => new ControlConfiguration()).Value.Language);
+    }
+
     /// <summary>
     /// Twenty changes, one file. Without the debounce every keystroke in a settings field would
     /// be its own write - which is why the clock is handed in: this is a test, not a stopwatch.

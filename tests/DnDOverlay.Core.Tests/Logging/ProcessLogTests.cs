@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using DnDOverlay.Core.Logging;
 using DnDOverlay.Core.Tests.Configuration;
@@ -13,13 +14,62 @@ public sealed class ProcessLogTests
 {
     private static readonly LogIdentity Identity = new("DnDOverlay.Display", "0.1.0-test", 1);
 
+    /// <summary>Said out loud wherever a sentence is compared: the machine running the tests may be German.</summary>
+    private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en");
+
+    /// <summary>
+    /// The same record reads German in a German control and English everywhere else - a regional
+    /// German steps down to the German entry, a language with no entry to the neutral English (Part 8).
+    /// </summary>
+    [Fact]
+    public void A_record_is_rendered_in_the_language_asked_for()
+    {
+        var record = Record(1024, "TokenRefused", [new LogValue("DeviceName", "TISCH-PC"), new LogValue("DeviceId", "aaaa-0001")]);
+
+        Assert.Equal("TISCH-PC (aaaa-0001) hat ein Token vorgelegt, das dieses Control nicht kennt.", LogCatalog.Render(record, CultureInfo.GetCultureInfo("de")));
+        Assert.Equal(LogCatalog.Render(record, CultureInfo.GetCultureInfo("de")), LogCatalog.Render(record, CultureInfo.GetCultureInfo("de-AT")));
+        Assert.Equal(LogCatalog.Render(record, English), LogCatalog.Render(record, CultureInfo.GetCultureInfo("fr-FR")));
+    }
+
+    /// <summary>
+    /// A changed language reaches the file with the next line - the windows wait for the next start,
+    /// the log does not (step 51) - and the file says where it switched.
+    /// </summary>
+    [Fact]
+    public void A_changed_language_reaches_the_file_at_once()
+    {
+        var directory = Directory.CreateTempSubdirectory("dndoverlay-language");
+
+        try
+        {
+            using (var log = new ProcessLog(Identity, directory.FullName, LogFileLimits.Display, new ManualTime()) { Culture = English })
+            {
+                log.Add(Record(1039, "BeaconStopped", []));
+                log.Culture = CultureInfo.GetCultureInfo("de");
+                log.Add(Record(1039, "BeaconStopped", []));
+            }
+
+            var lines = File.ReadAllLines(directory.EnumerateFiles().Single().FullName);
+            var english = Array.FindIndex(lines, line => line.Contains("The discovery beacon has stopped.", StringComparison.Ordinal));
+            var marked = Array.FindIndex(lines, line => line.Contains("| language changed", StringComparison.Ordinal));
+            var german = Array.FindIndex(lines, line => line.Contains("Der Beacon zur Suche hat aufgehört.", StringComparison.Ordinal));
+
+            Assert.True(english >= 0 && english < marked && marked < german, string.Join(Environment.NewLine, lines));
+            Assert.Contains("| UI de |", lines[marked - 1], StringComparison.Ordinal);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void A_known_message_is_filled_in()
     {
         var rendered = LogCatalog.Render(Record(
             1024,
             "TokenRefused",
-            [new LogValue("DeviceName", "TISCH-PC"), new LogValue("DeviceId", "aaaa-0001")]));
+            [new LogValue("DeviceName", "TISCH-PC"), new LogValue("DeviceId", "aaaa-0001")]), English);
 
         Assert.Equal("TISCH-PC (aaaa-0001) presented a token this control does not know.", rendered);
     }
@@ -34,7 +84,7 @@ public sealed class ProcessLogTests
         var rendered = LogCatalog.Render(Record(
             2001,
             "AssetDownloadFailed",
-            [new LogValue("AssetId", "ab12cd"), new LogValue("Attempt", "3")]));
+            [new LogValue("AssetId", "ab12cd"), new LogValue("Attempt", "3")]), English);
 
         Assert.Equal("AssetDownloadFailed (AssetId=ab12cd, Attempt=3)", rendered);
     }
@@ -42,7 +92,7 @@ public sealed class ProcessLogTests
     [Fact]
     public void A_placeholder_without_a_value_stays_where_it_is()
     {
-        var rendered = LogCatalog.Render(Record(1024, "TokenRefused", [new LogValue("DeviceName", "TISCH-PC")]));
+        var rendered = LogCatalog.Render(Record(1024, "TokenRefused", [new LogValue("DeviceName", "TISCH-PC")]), English);
 
         Assert.Equal("TISCH-PC ({DeviceId}) presented a token this control does not know.", rendered);
     }
@@ -56,7 +106,7 @@ public sealed class ProcessLogTests
     {
         var record = Record(1039, "BeaconStopped", []) with { RawText = "Access to the path is denied." };
 
-        Assert.Equal("The discovery beacon has stopped. - Access to the path is denied.", LogCatalog.Render(record));
+        Assert.Equal("The discovery beacon has stopped. - Access to the path is denied.", LogCatalog.Render(record, English));
     }
 
     /// <summary>
@@ -215,7 +265,7 @@ public sealed class ProcessLogTests
 
         Assert.Equal("Microsoft.AspNetCore.Server.Kestrel", record.EventName);
         Assert.Equal("Heartbeat took longer than 00:00:01.", record.RawText);
-        Assert.Contains("Heartbeat took longer than", LogCatalog.Render(record), StringComparison.Ordinal);
+        Assert.Contains("Heartbeat took longer than", LogCatalog.Render(record, English), StringComparison.Ordinal);
     }
 
 #pragma warning restore CA1848, CA1873

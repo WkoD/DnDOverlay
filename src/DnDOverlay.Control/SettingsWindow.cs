@@ -30,6 +30,7 @@ internal sealed class SettingsWindow : Window, IDisposable
     private readonly ProcessLog _log;
     private readonly ILogger _logger;
     private readonly Action<string> _say;
+    private readonly CultureInfo _system;
     private readonly NetworkPanel _network;
     private readonly TextBlock _place = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
     private readonly TextBlock _moving = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
@@ -40,7 +41,7 @@ internal sealed class SettingsWindow : Window, IDisposable
     private CancellationTokenSource? _breaking;
 
     internal SettingsWindow(
-        ControlSettings settings, CampaignDesk desk, ISessionApi session, ProcessLog log, ILogger logger, int port, Action<string> say)
+        ControlSettings settings, CampaignDesk desk, ISessionApi session, ProcessLog log, ILogger logger, int port, CultureInfo system, Action<string> say)
     {
         _settings = settings;
         _desk = desk;
@@ -48,6 +49,7 @@ internal sealed class SettingsWindow : Window, IDisposable
         _log = log;
         _logger = logger;
         _say = say;
+        _system = system;
         _network = new NetworkPanel(port, firstRun: false);
 
         Title = "Settings";
@@ -56,7 +58,10 @@ internal sealed class SettingsWindow : Window, IDisposable
 
         var panel = new StackPanel { Margin = new Thickness(16) };
 
-        panel.Children.Add(Heading("Loading", first: true));
+        panel.Children.Add(Heading("Language", first: true));
+        panel.Children.Add(Speech());
+
+        panel.Children.Add(Heading("Loading"));
         panel.Children.Add(Loading());
 
         panel.Children.Add(Heading("Pictures"));
@@ -182,6 +187,26 @@ internal sealed class SettingsWindow : Window, IDisposable
         buttons.Children.Add(open);
 
         return new StackPanel { Children = { _place, buttons, _progress, _moving, _breakOff } };
+    }
+
+    /// <summary>
+    /// This control's language (Part 8), the devices have their own. The log takes it at once; windows
+    /// and menus are built in code once, so they take it at the next start. Each language is named in
+    /// itself - whoever looks for theirs reads it in theirs.
+    /// </summary>
+    private StackPanel Speech()
+    {
+        var note = Note("Log lines change at once, windows and menus at the next start.");
+        var language = Choice(
+            [("Automatic (as Windows)", UiLanguage.Automatic), ("English", UiLanguage.English), ("Deutsch", UiLanguage.German)],
+            _settings.Current.Language,
+            chosen =>
+            {
+                _log.Culture = UiLanguages.CultureOf(chosen, _system);
+                _settings.Update(current => current with { Language = chosen });
+            });
+
+        return new StackPanel { Children = { Rows(("This control speaks", language)), note } };
     }
 
     /// <summary>The level of this control's own log - it takes effect at once (Part 8).</summary>

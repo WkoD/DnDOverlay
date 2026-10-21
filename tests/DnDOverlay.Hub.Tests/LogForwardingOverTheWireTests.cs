@@ -61,7 +61,7 @@ public sealed class LogForwardingOverTheWireTests
         // carrying: the DM reads "Dilwyn Kemri", not a hash (Part 8).
         Assert.Equal(
             "Could not load asset Dilwyn Kemri (ab12cd): The server answered 404 Not Found.",
-            LogCatalog.Render(record));
+            LogCatalog.Render(record, System.Globalization.CultureInfo.GetCultureInfo("en")));
     }
 
     /// <summary>

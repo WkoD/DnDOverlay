@@ -58,7 +58,7 @@ public sealed class ProtocolJsonTests
                     new ScreenSettings(ParkEdge: ParkEdge.Bottom),
                     new ScreenCommand(ScreenState.Diagnostic, SuppressReason.ControlWindow)),
             ],
-            new DeviceSettings(ForwardAtLeast: LogLevel.Debug, KeepAwake: false))),
+            new DeviceSettings(ForwardAtLeast: LogLevel.Debug, KeepAwake: false, ForeignWindows: ForeignWindowsMode.ReportOnly, Language: UiLanguage.German))),
 
         // The one switch for every device (M3c). It is a FIELD on a type this list already covered,
         // which is the hole this list cannot see by itself: the guard below compares TYPES, so a
