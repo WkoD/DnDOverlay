@@ -15,8 +15,9 @@ namespace DnDOverlay.Control;
 /// fault-finding, not a grip during play.
 /// </para>
 /// <para>
-/// The two bands - everything about a device, everything about one of its screens - arrive in M5b
-/// out of the shared parameter description (Part 6). Until then this is the list and nothing else.
+/// <b>The list on the left, the two bands on the right</b> (Part 7) - everything about a device,
+/// everything about one of its screens, out of the shared parameter description (<see cref="DeviceBands"/>).
+/// On a narrow window they lie one beneath the other: nothing disappears, it only wraps.
 /// </para>
 /// </summary>
 internal sealed class DevicesWindow : Window, IDisposable
@@ -28,6 +29,17 @@ internal sealed class DevicesWindow : Window, IDisposable
     private readonly ListBox _waiting = new() { MinHeight = 60, Margin = new Thickness(0, 0, 0, 8) };
     private readonly ListBox _refused = new() { MinHeight = 60, Margin = new Thickness(0, 0, 0, 8) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly StackPanel _bandsHost = new() { Margin = new Thickness(16) };
+    private readonly ScrollViewer _list = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly ScrollViewer _right = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly Grid _panes = new();
+    private readonly DeviceBands _bands;
+
+    /// <summary>The devices as last reported - the bands are drawn from it.</summary>
+    private IReadOnlyList<DeviceView> _devices = [];
+
+    /// <summary>What is chosen in the list, kept across the list being rebuilt on every device event.</summary>
+    private (DeviceId Device, ScreenRef? Screen)? _picked;
 
     /// <summary>
     /// Where each screen sits in the tree, so that "set up screen ..." can arrive at one. The tree
@@ -42,16 +54,19 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// </summary>
     private ScreenRef? _wanted;
 
-    internal DevicesWindow(ISessionApi session, PairingDesk pairing, Uri address)
+    internal DevicesWindow(ISessionApi session, PairingDesk pairing, CampaignDesk desk, Uri address)
     {
         ArgumentNullException.ThrowIfNull(address);
 
         _session = session;
         _pairing = pairing;
+        _bands = new DeviceBands(session, desk, said => _status.Text = said, this);
+        _bands.Changed += (_, _) => ShowBands(force: true);
+        _bands.ScenesSaved += (_, _) => ScenesSaved?.Invoke(this, EventArgs.Empty);
 
         Title = "Devices";
-        Width = 640;
-        Height = 720;
+        Width = 1180;
+        Height = 760;
 
         var panel = new StackPanel { Margin = new Thickness(16) };
 
@@ -65,8 +80,6 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         panel.Children.Add(Heading("Devices"));
         panel.Children.Add(_tree);
-        panel.Children.Add(Naming());
-        panel.Children.Add(Waking());
 
         panel.Children.Add(Heading("Turned away"));
         panel.Children.Add(_refused);
@@ -83,11 +96,25 @@ internal sealed class DevicesWindow : Window, IDisposable
         panel.Children.Add(Orphans());
         panel.Children.Add(_status);
 
-        Content = new ScrollViewer
+        _list.Content = panel;
+        _right.Content = _bandsHost;
+        _panes.Children.Add(_list);
+        _panes.Children.Add(_right);
+        Content = _panes;
+
+        Lay(wide: true);
+        SizeChanged += (_, _) => Lay(ActualWidth >= 1000);
+
+        _tree.SelectedItemChanged += (_, _) =>
         {
-            Content = panel,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            if ((_tree.SelectedItem as TreeViewItem)?.Tag is Picked picked)
+            {
+                _picked = (picked.Device.Device, picked.Screen?.Screen);
+                ShowBands(force: true);
+            }
         };
+
+        ShowBands(force: true);
 
         Closed += (_, _) => Dispose();
 
@@ -99,6 +126,9 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// its channel and be cut off eventually, which is the right answer for a subscriber that has
     /// stopped listening and the wrong one to arrive at by accident.
     /// </summary>
+    /// <summary>Scenes were saved before an unpair - the tab Scenes has new entries.</summary>
+    internal event EventHandler? ScenesSaved;
+
     public void Dispose()
     {
         _listening.Cancel();
@@ -170,6 +200,7 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// </summary>
     private void Show(IReadOnlyList<DeviceView> devices)
     {
+        _devices = devices;
         _tree.Items.Clear();
         _rows.Clear();
 
@@ -190,12 +221,22 @@ internal sealed class DevicesWindow : Window, IDisposable
             {
                 Header = header,
                 IsExpanded = true,
-                Tag = device,
+                Tag = new Picked(device, null),
             };
+
+            if (_picked is { Screen: null } wantedDevice && wantedDevice.Device == device.Device)
+            {
+                node.IsSelected = true;
+            }
 
             foreach (var screen in device.Screens)
             {
-                var row = new TreeViewItem { Header = Describe(screen), Tag = device };
+                var row = new TreeViewItem { Header = Describe(screen), Tag = new Picked(device, screen) };
+
+                if (_picked is { Screen: { } wantedScreen } && wantedScreen == screen.Screen)
+                {
+                    row.IsSelected = true;
+                }
 
                 _rows[screen.Screen] = row;
                 node.Items.Add(row);
@@ -210,6 +251,61 @@ internal sealed class DevicesWindow : Window, IDisposable
         }
 
         Reach();
+        ShowBands(force: false);
+    }
+
+    /// <summary>
+    /// Draws the bands for what is chosen. Not while a value in them is being typed, unless asked to:
+    /// a device event arrives every few seconds, and a band redrawn under the cursor would eat the
+    /// number half typed.
+    /// </summary>
+    private void ShowBands(bool force)
+    {
+        if (!force && _bandsHost.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        var device = _picked is { } picked ? _devices.FirstOrDefault(known => known.Device == picked.Device) : null;
+
+        if (device is null)
+        {
+            _bandsHost.Children.Clear();
+            _bandsHost.Children.Add(new TextBlock
+            {
+                Text = "Choose a device or one of its screens on the left - its settings stand here.",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.8,
+            });
+
+            return;
+        }
+
+        var screen = _picked?.Screen is { } wanted ? device.Screens.FirstOrDefault(known => known.Screen == wanted) : null;
+
+        _bands.Show(_bandsHost, device, screen, _devices);
+    }
+
+    /// <summary>Side by side on a wide window, one beneath the other on a narrow one (Part 7).</summary>
+    private void Lay(bool wide)
+    {
+        _panes.ColumnDefinitions.Clear();
+        _panes.RowDefinitions.Clear();
+
+        if (wide)
+        {
+            _panes.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            _panes.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.2, GridUnitType.Star) });
+            Grid.SetColumn(_right, 1);
+            Grid.SetRow(_right, 0);
+        }
+        else
+        {
+            _panes.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            _panes.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(_right, 0);
+            Grid.SetRow(_right, 1);
+        }
     }
 
     /// <summary>
@@ -338,86 +434,6 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// under the tree because there are no tiles yet.
     /// </para>
     /// </summary>
-    private Button Naming()
-    {
-        var button = new Button
-        {
-            Content = "Show the screen names on the selected device",
-            Padding = new Thickness(12, 6, 12, 6),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
-
-        button.Click += async (_, _) =>
-        {
-            if ((_tree.SelectedItem as TreeViewItem)?.Tag is not DeviceView device)
-            {
-                _status.Text = "Select a device first.";
-                return;
-            }
-
-            // Said rather than left to a button that does nothing: a device that is switched off
-            // has no overlay to show anything on, and the grip is silent by nature.
-            if (!device.Connected)
-            {
-                _status.Text = $"{device.Name} is not connected.";
-                return;
-            }
-
-            await _session.IdentifyScreensAsync(device.Device).ConfigureAwait(true);
-            _status.Text = $"{device.Name} is showing its screen names.";
-        };
-
-        return button;
-    }
-
-    /// <summary>
-    /// Whether that device holds its screens on. Part 6 asks for it to be switchable from afar, and
-    /// this is the machine the demand is written for: nobody is sitting at a display PC to notice
-    /// that its table went dark.
-    /// <para>
-    /// Two buttons rather than a checkbox, and that is deliberate for now: the value lives in the
-    /// device and does not travel back in <see cref="DeviceView"/>, so a box would have to show a
-    /// state it does not know. The band that shows the real value is built in M5b out of the shared
-    /// parameter description, together with the other nine device-scope parameters (Part 6, Part 7).
-    /// </para>
-    /// </summary>
-    private StackPanel Waking()
-    {
-        var keep = new Button { Content = "Keep the screens awake", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var sleep = new Button { Content = "Let them sleep", Padding = new Thickness(12, 6, 12, 6) };
-
-        keep.Click += (_, _) => WakeAsync(keep: true);
-        sleep.Click += (_, _) => WakeAsync(keep: false);
-
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
-
-        row.Children.Add(keep);
-        row.Children.Add(sleep);
-
-        return row;
-    }
-
-    private async void WakeAsync(bool keep)
-    {
-        if ((_tree.SelectedItem as TreeViewItem)?.Tag is not DeviceView device)
-        {
-            _status.Text = "Select a device first.";
-            return;
-        }
-
-        // Sent whether or not the device is connected. What is set here stands in control.json and
-        // goes out with the next ConfigUpdate - without that the remote configuration would be
-        // useless exactly when it is wanted, before the display PC is switched on (Part 7).
-        await _session
-            .ApplyConfigAsync(device.Device, new ConfigUpdate([], new DeviceSettings(KeepAwake: keep)))
-            .ConfigureAwait(true);
-
-        _status.Text = keep
-            ? $"{device.Name} keeps its screens awake."
-            : $"{device.Name} lets its screens sleep.";
-    }
-
     /// <summary>
     /// The only way out of "rejected" the DM walks himself. Without it a mistaken no could only be
     /// healed at the device, with "reset pairing" on a machine that has no keyboard (Part 4).
@@ -537,6 +553,9 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// - which is the answer to the question actually being asked (Part 4).
     /// </para>
     /// </summary>
+    /// <summary>What a row of the list stands for: a device, or one of its screens with the device it belongs to.</summary>
+    private sealed record Picked(DeviceView Device, ScreenView? Screen);
+
     private sealed record RefusedEntry(RefusedDevice Device)
     {
         public override string ToString() =>

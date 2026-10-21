@@ -588,13 +588,13 @@ internal sealed class MainWindow : Window, IDisposable
             return standing;
         }
 
-        _devices = new DevicesWindow(_session, _pairing, _address) { Owner = this };
+        _devices = new DevicesWindow(_session, _pairing, _desk, _address) { Owner = this };
+        _devices.ScenesSaved += (_, _) => _scenes.Refresh();
         _devices.Show();
 
         return _devices;
     }
 
-    /// <summary>The network window, reopened rather than duplicated.</summary>
     /// <summary>The window Settings - one at a time, brought forward when it is open already.</summary>
     private void Settings()
     {

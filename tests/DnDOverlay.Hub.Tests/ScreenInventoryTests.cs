@@ -374,6 +374,34 @@ public sealed class ScreenInventoryTests
         Assert.Equal(3, announced);
     }
 
+    /// <summary>
+    /// What a device reported stays known after it went back out - the device band shows the real
+    /// value, not the default (M3 finding: it used to be forgotten with the drain). Changes from
+    /// either side go on top.
+    /// </summary>
+    [Fact]
+    public void A_reported_device_value_stays_known_after_the_drain()
+    {
+        var catalog = new ScreenCatalog();
+
+        Assert.Equal(DeviceSettings.Defaults, catalog.DeviceSettingsOf(Device));
+
+        catalog.Report(Device, [Info(Screen)], new ConfigUpdate([], new DeviceSettings(Level: LogLevel.Debug)));
+        _ = catalog.Drain(Device);
+
+        Assert.Equal(LogLevel.Debug, catalog.DeviceSettingsOf(Device).Level);
+
+        catalog.Change(Device, new DeviceSettings(KeepAwake: false));
+        catalog.Apply(Device, new ConfigUpdate([], new DeviceSettings(RescueAfterSeconds: 90)));
+
+        var known = catalog.DeviceSettingsOf(Device);
+
+        Assert.Equal(LogLevel.Debug, known.Level);
+        Assert.Equal(false, known.KeepAwake);
+        Assert.Equal(90, known.RescueAfterSeconds);
+        Assert.Equal(LogLevel.Warning, known.ForwardAtLeast);
+    }
+
     private static ScreenInfo Info(ScreenId screen) => Info(screen, new PixelSize(1920, 1080), 96);
 
     private static ScreenInfo Info(ScreenId screen, PixelSize size, double dpi) =>

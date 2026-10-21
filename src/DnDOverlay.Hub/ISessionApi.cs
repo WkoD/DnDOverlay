@@ -547,6 +547,15 @@ public interface ISessionApi
     Task<SceneState> GetSceneAsync(ScreenRef screen, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The parameters a screen works with now - the device's report and every change on top, over
+    /// the defaults. What the screen band of the window Devices shows (Part 7).
+    /// </summary>
+    ScreenContext ContextOf(ScreenRef screen);
+
+    /// <summary>A device's process settings as they stand - what the device band shows.</summary>
+    DeviceSettings DeviceSettingsOf(DeviceId device);
+
+    /// <summary>
     /// Every known screen with its reported facts, the DM's wish and whatever is getting in the
     /// way right now - the shape a tile is drawn from. Screens of a device that is switched off
     /// are in here too, and they are fully playable (Part 3).

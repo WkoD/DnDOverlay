@@ -281,6 +281,10 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
 
     public Task<SceneState> GetSceneAsync(ScreenRef screen, CancellationToken cancellationToken = default) => _inner.GetSceneAsync(screen, cancellationToken);
 
+    public ScreenContext ContextOf(ScreenRef screen) => _inner.ContextOf(screen);
+
+    public DeviceSettings DeviceSettingsOf(DeviceId device) => _inner.DeviceSettingsOf(device);
+
     public Task SetScreenStateAsync(ScreenRef screen, ScreenState state, CancellationToken cancellationToken = default) =>
         _inner.SetScreenStateAsync(screen, state, cancellationToken);
 

@@ -28,6 +28,13 @@ public sealed class ScreenCatalog
     private readonly Dictionary<ScreenRef, ScreenSettings> _pending = [];
     private readonly Dictionary<DeviceId, DeviceSettings> _pendingDevice = [];
 
+    /// <summary>
+    /// What each device's process settings are, as far as anybody has said - its report, then every
+    /// change on top. Kept beyond the drain: before, a value the device reported was gone from the
+    /// control the moment it had been sent back, and the device band could only show the default.
+    /// </summary>
+    private readonly Dictionary<DeviceId, DeviceSettings> _deviceKnown = [];
+
     private long _reports;
 
     /// <summary>
@@ -153,6 +160,13 @@ public sealed class ScreenCatalog
                 _pendingDevice[device] = _pendingDevice.TryGetValue(device, out var mine)
                     ? DeviceSettings.Merge(older: device_, newer: mine)
                     : device_;
+
+                Know(device, device_);
+
+                if (mine is not null)
+                {
+                    Know(device, mine);
+                }
             }
 
             result = new InventoryChange(added, missing, changed, presence);
@@ -324,6 +338,8 @@ public sealed class ScreenCatalog
             _pendingDevice[device] = _pendingDevice.TryGetValue(device, out var known)
                 ? DeviceSettings.Merge(older: known, newer: settings)
                 : settings;
+
+            Know(device, settings);
         }
 
         Announce(persist: true);
@@ -359,6 +375,12 @@ public sealed class ScreenCatalog
                     _entries[key] = entry with { Context = settings.ApplyTo(entry.Context) };
                     applied = true;
                 }
+            }
+
+            if (update.Device is { IsEmpty: false } device_)
+            {
+                Know(device, device_);
+                applied = true;
             }
         }
 
@@ -399,6 +421,24 @@ public sealed class ScreenCatalog
             return new ConfigUpdate(screens, pending is { IsEmpty: false } ? pending : null);
         }
     }
+
+    /// <summary>
+    /// A device's process settings as they stand - its report and every change since, over the
+    /// defaults. Unknown before the device has ever reported in this run: then the defaults and what
+    /// the control set while it was away.
+    /// </summary>
+    public DeviceSettings DeviceSettingsOf(DeviceId device)
+    {
+        lock (_gate)
+        {
+            return DeviceSettings.Merge(DeviceSettings.Defaults, _deviceKnown.GetValueOrDefault(device) ?? new DeviceSettings());
+        }
+    }
+
+    private void Know(DeviceId device, DeviceSettings settings) =>
+        _deviceKnown[device] = _deviceKnown.TryGetValue(device, out var known)
+            ? DeviceSettings.Merge(older: known, newer: settings)
+            : settings;
 
     /// <summary>What goes into control.json.</summary>
     public IReadOnlyList<KnownScreen> Snapshot()

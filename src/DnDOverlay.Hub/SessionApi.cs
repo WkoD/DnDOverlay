@@ -804,6 +804,12 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public ScreenContext ContextOf(ScreenRef screen) => _screens.ContextFor(screen);
+
+    /// <inheritdoc />
+    public DeviceSettings DeviceSettingsOf(DeviceId device) => _screens.DeviceSettingsOf(device);
+
+    /// <inheritdoc />
     public Task ApplyStepAsync(IReadOnlyList<ScreenOp> ops, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ops);

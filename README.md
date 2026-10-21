@@ -196,6 +196,19 @@ panel docks at any edge — *Dock panel* in the menu ☰ —, and the line betwe
 be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices and the
 settings.
 
+**Devices** (☰ → *Devices …*, or *Set up screen …* in a tile's menu) lists every device with its
+screens on the left; on the right stand two bands for what is chosen. The **device band** says it
+applies to all of the device's screens and holds what concerns the device as a whole — keeping the
+screens awake, how soon the rescue mark appears, its log levels — plus *Show the screen names* and
+*Unpair …*. The **screen band** holds the screen's name (refused if another screen or device already
+has it), its state and every display parameter: arrival size and width, placement, the direction new
+pictures face, where parked pictures line up, the smallest and largest picture, names, turning,
+snapping, the arrival highlight, gliding, scrolling, the diagnostic bar. A value at its default
+stands back in grey with *default* after it; a value that was set stands in full with *Reset* beside
+it, and *Reset all to defaults* clears the screen. Every change takes effect at once — and works with
+the device switched off too: it goes out when the device connects. *Unpair …* names the screens and
+pictures that would be lost and offers to save every occupied screen as a scene first.
+
 **Settings** (☰ → *Settings …*) holds what is set once: how a double tap or a drag loads a scene
 (replacing, by default) and a layout (adding), the name pasted pictures get, whether the tables
 show touch points, this control's log level, its port (taken at the next start) and the network

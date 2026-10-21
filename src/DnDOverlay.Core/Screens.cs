@@ -422,6 +422,12 @@ public sealed record DeviceSettings(
     /// <summary>The rescue mark's grace when nobody set one (Part 6).</summary>
     public static readonly TimeSpan DefaultRescueAfter = TimeSpan.FromMinutes(1);
 
+    /// <summary>
+    /// What a device does when nobody set anything (Part 6) - Information written, Warning sent on, the
+    /// screens kept awake, a minute's grace. The one place these four defaults stand.
+    /// </summary>
+    public static readonly DeviceSettings Defaults = new(LogLevel.Information, LogLevel.Warning, KeepAwake: true, RescueAfterSeconds: 60);
+
     /// <summary>Whether this delta says anything at all. Not serialised - see ScreenSettings.</summary>
     [JsonIgnore]
     public bool IsEmpty => Level is null && ForwardAtLeast is null && KeepAwake is null && RescueAfterSeconds is null;
