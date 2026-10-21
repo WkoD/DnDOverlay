@@ -118,6 +118,23 @@ public sealed class ConfigurationFileTests : IDisposable
         Assert.Equal(panel, reopened.Load(() => new ControlConfiguration()).Value.Panel);
     }
 
+    /// <summary>The log panel's edge, size and whether it was shown come back; the filter has no place in the file (Part 8).</summary>
+    [Fact]
+    public void The_log_panel_comes_back_as_it_was_left()
+    {
+        var log = new LogPlacement(PanelSide.Top, 240, Shown: true);
+
+        using (var file = Store(TimeProvider.System))
+        {
+            file.Save(new ControlConfiguration { LogPanel = log });
+            file.Flush();
+        }
+
+        using var reopened = Store(TimeProvider.System);
+
+        Assert.Equal(log, reopened.Load(() => new ControlConfiguration()).Value.LogPanel);
+    }
+
     /// <summary>
     /// Twenty changes, one file. Without the debounce every keystroke in a settings field would
     /// be its own write - which is why the clock is handed in: this is a test, not a stopwatch.

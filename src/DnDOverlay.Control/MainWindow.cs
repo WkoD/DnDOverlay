@@ -49,6 +49,12 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Grid _root = new() { Margin = new Thickness(12) };
     private readonly Grid _main = new();
 
+    /// <summary>The main room with the log panel at its own edge beside it, or the main room alone (Part 7).</summary>
+    private readonly Grid _frame = new();
+
+    private readonly LogPanel _logPanel;
+    private readonly GridSplitter _logSplitter = new() { Background = SystemColors.ControlLightBrush, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
+
     /// <summary>The stage with the retracted panel lying over it - only in use while the panel is not pinned.</summary>
     private readonly Grid _stage = new();
 
@@ -106,6 +112,9 @@ internal sealed class MainWindow : Window, IDisposable
         _board = new StageBoard(session, settings, pictures);
 
         _logger = log.CreateLogger("Control");
+
+        _logPanel = new LogPanel(log, "Control");
+        _logSplitter.DragCompleted += LogResized;
 
         _intake = new IntakeRunner(session, entrances, said => _status.Text = said, _logger);
 
@@ -197,12 +206,12 @@ internal sealed class MainWindow : Window, IDisposable
 
         Grid.SetRow(_notices, 0);
         Grid.SetRow(_firstRun, 1);
-        Grid.SetRow(_main, 2);
+        Grid.SetRow(_frame, 2);
         Grid.SetRow(_status, 3);
 
         _root.Children.Add(_notices);
         _root.Children.Add(_firstRun);
-        _root.Children.Add(_main);
+        _root.Children.Add(_frame);
         _root.Children.Add(_status);
 
         _status.Margin = new Thickness(0, 6, 0, 0);
@@ -225,6 +234,7 @@ internal sealed class MainWindow : Window, IDisposable
 
             _pinned = placement.Pinned;
             Dock(placement.Side, placement.Size);
+            Frame();
         };
 
         // Built with the window and fed from the subscription below - a second stream would take
@@ -343,6 +353,7 @@ internal sealed class MainWindow : Window, IDisposable
         _welcome?.Dispose();
         _guard?.Dispose();
         _power?.Dispose();
+        _logPanel.Dispose();
 
         // Off the collector first, then away: a tick arriving at a disposed watch would be the one
         // fault this line exists to keep out of a shutdown.
@@ -496,6 +507,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         _board.Show([.. devices.SelectMany(device => device.Screens)]);
         _board.Know(devices);
+        _logPanel.Know(devices);
 
         _ = _board.RefreshAsync(_listening.Token);
     }
@@ -618,7 +630,7 @@ internal sealed class MainWindow : Window, IDisposable
 
     /// <summary>
     /// The head's menu (Part 7): clear all and send to all, then - set apart - what has nothing to do
-    /// with play: devices, settings, where the panel docks. The protocol joins it with its panel (M5b7e).
+    /// with play: devices, the log, settings, where the two panels dock.
     /// </summary>
     private void OpenMenu()
     {
@@ -639,6 +651,11 @@ internal sealed class MainWindow : Window, IDisposable
 
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Devices ...", () => Devices()));
+
+        var log = new MenuItem { Header = "Log", IsCheckable = true, IsChecked = _settings.Current.LogPanel is { Shown: true } };
+
+        log.Click += (_, _) => PlaceLog(placement => placement with { Shown = log.IsChecked });
+        menu.Items.Add(log);
         menu.Items.Add(Item("Settings ...", Settings));
 
         var docking = new MenuItem { Header = "Dock panel" };
@@ -670,6 +687,20 @@ internal sealed class MainWindow : Window, IDisposable
 
         menu.Items.Add(docking);
 
+        // The campaign panel's edge is taken; docking the log is wanting to see it.
+        var logDocking = new MenuItem { Header = "Dock log" };
+        var logSide = LogSide();
+
+        foreach (var edge in Enum.GetValues<PanelSide>())
+        {
+            var item = new MenuItem { Header = edge.ToString(), IsCheckable = true, IsChecked = edge == logSide, IsEnabled = edge != _side };
+
+            item.Click += (_, _) => PlaceLog(placement => placement with { Side = edge, Shown = true });
+            logDocking.Items.Add(item);
+        }
+
+        menu.Items.Add(logDocking);
+
         menu.IsOpen = true;
     }
 
@@ -700,6 +731,7 @@ internal sealed class MainWindow : Window, IDisposable
         {
             Retract(side, across, panelFirst, length.Value);
             Keep(side);
+            Frame();
             return;
         }
 
@@ -747,6 +779,114 @@ internal sealed class MainWindow : Window, IDisposable
         _splitter.ResizeDirection = across ? GridResizeDirection.Columns : GridResizeDirection.Rows;
 
         Keep(side);
+        Frame();
+    }
+
+    /// <summary>The room the stage keeps between the two panels, in DIP - a row of tiles still fits.</summary>
+    private const double StageMinimum = 320;
+
+    /// <summary>
+    /// The log panel at its edge beside the main room, or the main room alone (Part 7). <b>Never at the
+    /// campaign panel's edge</b> - it goes to the opposite one when that edge is taken - and <b>the one
+    /// shown last gives way</b>: it opens narrower rather than pressing the stage under its minimum.
+    /// </summary>
+    private void Frame()
+    {
+        _frame.Children.Clear();
+        _frame.RowDefinitions.Clear();
+        _frame.ColumnDefinitions.Clear();
+        Grid.SetRow(_main, 0);
+        Grid.SetColumn(_main, 0);
+
+        if (_settings.Current.LogPanel is not { Shown: true } placement)
+        {
+            _frame.Children.Add(_main);
+            return;
+        }
+
+        var side = LogSide();
+        var across = side is PanelSide.Left or PanelSide.Right;
+        var logFirst = side is PanelSide.Left or PanelSide.Top;
+        var room = across ? _frame.ActualWidth : _frame.ActualHeight;
+        var taken = _pinned && (_side is PanelSide.Left or PanelSide.Right) == across ? _overlaySize : 0;
+        var limit = Math.Max(160, room - taken - StageMinimum);
+        var length = new GridLength(Math.Clamp(placement.Size, 160, limit));
+        var star = new GridLength(1, GridUnitType.Star);
+
+        GridLength[] lengths = logFirst ? [length, new GridLength(6), star] : [star, new GridLength(6), length];
+        UIElement[] parts = logFirst ? [_logPanel, _logSplitter, _main] : [_main, _logSplitter, _logPanel];
+        var at = logFirst ? 0 : 2;
+
+        for (var index = 0; index < 3; index++)
+        {
+            if (across)
+            {
+                _frame.ColumnDefinitions.Add(new ColumnDefinition
+                {
+                    Width = lengths[index],
+                    MinWidth = index == at ? 160 : 0,
+                    MaxWidth = index == at ? limit : double.PositiveInfinity,
+                });
+                Grid.SetColumn(parts[index], index);
+                Grid.SetRow(parts[index], 0);
+            }
+            else
+            {
+                _frame.RowDefinitions.Add(new RowDefinition
+                {
+                    Height = lengths[index],
+                    MinHeight = index == at ? 160 : 0,
+                    MaxHeight = index == at ? limit : double.PositiveInfinity,
+                });
+                Grid.SetRow(parts[index], index);
+                Grid.SetColumn(parts[index], 0);
+            }
+
+            _frame.Children.Add(parts[index]);
+        }
+
+        _logSplitter.ResizeDirection = across ? GridResizeDirection.Columns : GridResizeDirection.Rows;
+
+        if (side != placement.Side)
+        {
+            _settings.Update(current => current with { LogPanel = placement with { Side = side } });
+        }
+    }
+
+    /// <summary>The log panel's edge: its own, unless the campaign panel lies there - then the opposite one.</summary>
+    private PanelSide LogSide()
+    {
+        var side = _settings.Current.LogPanel?.Side ?? Opposite(_side);
+
+        return side == _side ? Opposite(_side) : side;
+    }
+
+    private static PanelSide Opposite(PanelSide side) =>
+        side switch
+        {
+            PanelSide.Left => PanelSide.Right,
+            PanelSide.Right => PanelSide.Left,
+            PanelSide.Top => PanelSide.Bottom,
+            _ => PanelSide.Top,
+        };
+
+    /// <summary>Changes the log panel's placement, kept globally, and lays the frame anew.</summary>
+    private void PlaceLog(Func<LogPlacement, LogPlacement> change)
+    {
+        var side = LogSide();
+
+        _settings.Update(current => current with
+        {
+            LogPanel = change(current.LogPanel ?? new LogPlacement(side, side is PanelSide.Left or PanelSide.Right ? 480 : 260, Shown: false)),
+        });
+        Frame();
+    }
+
+    private void LogResized(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        var size = LogSide() is PanelSide.Left or PanelSide.Right ? _logPanel.ActualWidth : _logPanel.ActualHeight;
+
+        PlaceLog(placement => placement with { Size = size });
     }
 
     /// <summary>

@@ -169,6 +169,12 @@ public sealed record ControlConfiguration : IConfigurationDocument
     public PanelPlacement? Panel { get; set; }
 
     /// <summary>
+    /// The log panel as the DM left it - edge, size, shown or not (Part 7). Global like the campaign
+    /// panel; <b>its filter is not kept</b> (Part 8). <see langword="null"/> until it was first shown.
+    /// </summary>
+    public LogPlacement? LogPanel { get; set; }
+
+    /// <summary>
     /// How a double tap and a drag load a scene - replacing by default, because a scene is changed in
     /// play (Part 7). A setting rather than wired in: the blind grip must do what this DM expects, and
     /// the menu always offers both.
@@ -228,6 +234,12 @@ public sealed record PanelPlacement(
     PanelTab Tab = PanelTab.Pictures,
     bool Pinned = true,
     double LayoutZoom = 192);
+
+/// <summary>The log panel as the DM left it (Part 7).</summary>
+/// <param name="Side">Its edge - never the campaign panel's; the opposite one by default.</param>
+/// <param name="Size">How wide (left, right) or high (top, bottom) it is, in DIP.</param>
+/// <param name="Shown">Whether it is in view - switched from the head's menu.</param>
+public sealed record LogPlacement(PanelSide Side, double Size, bool Shown);
 
 /// <summary>
 /// The address of one screen as <c>control.json</c> writes it: a raw <see cref="Guid"/> and a raw

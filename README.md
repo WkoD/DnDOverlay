@@ -201,8 +201,8 @@ its name, its resolution and marks: *GIF* for an animation, *on 2* when it lies 
 a picture or as the background to any screen or to all, says where it lies, and shows its file in
 the folder. Ctrl+click and a frame drawn with the mouse pick several, which then go together. The
 panel docks at any edge — *Dock panel* in the menu ☰ —, and the line between it and the stage can
-be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices and the
-settings.
+be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices, the log and
+the settings.
 
 **Devices** (☰ → *Devices …*, or *Set up screen …* in a tile's menu) lists every device with its
 screens on the left; on the right stand two bands for what is chosen. The **device band** says it
@@ -239,6 +239,17 @@ names both places, how many campaigns and how big, and offers to take them along
 the place. On the same drive the move is a rename, over in an instant; to another drive the
 campaigns are copied with progress and a way to break off, checked, and only then removed from the
 old place. If anything fails, everything stays where it was. The open campaign is closed first.
+
+**The log** (☰ → *Log*) is a panel beside the stage, at another edge than the campaign panel — the
+opposite one unless *Dock log* says otherwise; edge, size and whether it is shown are kept. It shows
+this control's lines and those the devices forward in one stream: time, level as a word, the
+source's name, event number and name, the sentence. The values behind a line are in the files under
+`logs\`. A coloured bar at each line's edge matches its source — the control grey, every device a
+colour, its screens shades of it —, and the name stands there as text too, so a copied line loses
+nothing. The bubbles at the head filter: a tap on a device hides it with its screens, a tap on a
+screen hides only that one and leaves the device half filled; right-click or a long press offers
+*Only these* and *Show all*. Devices that are not connected stand dimmed. The filter only changes
+the view — nothing stops being forwarded or written — and is gone at the next start.
 
 **Undo and redo** sit in the panel head, each labelled with what the next press does — *↶ Add
 "Grimmbart"*, *↷ Clear TISCH-PC//1* —, or with Ctrl+Z and Ctrl+Y. What lays, takes or moves a
