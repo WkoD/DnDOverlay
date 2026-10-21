@@ -402,6 +402,62 @@ public sealed class ScreenInventoryTests
         Assert.Equal(LogLevel.Warning, known.ForwardAtLeast);
     }
 
+    /// <summary>
+    /// Adoption re-keys a device: its screens, their wishes and settings, and its device settings move
+    /// to the new identity, and the old one knows nothing any more.
+    /// </summary>
+    [Fact]
+    public void Rekeying_moves_screens_and_settings_to_the_new_identity()
+    {
+        var catalog = new ScreenCatalog();
+        var old = catalog.Report(Device, [Info(Screen)], new ConfigUpdate([], new DeviceSettings(Level: LogLevel.Debug)));
+
+        catalog.Change(new ScreenRef(Device, Screen), new ScreenSettings(ParkEdge: ParkEdge.Left));
+        _ = catalog.SetState(new ScreenRef(Device, Screen), ScreenState.Disabled);
+        catalog.Departed(Device, old.Presence);
+
+        catalog.Rekey(Device, Twin);
+
+        Assert.Null(catalog.ViewOf(new ScreenRef(Device, Screen)));
+
+        var moved = catalog.ViewOf(new ScreenRef(Twin, Screen));
+
+        Assert.Equal(ScreenState.Disabled, moved?.State);
+        Assert.Equal(ParkEdge.Left, catalog.ContextFor(new ScreenRef(Twin, Screen)).ParkEdge);
+        Assert.Equal(LogLevel.Debug, catalog.DeviceSettingsOf(Twin).Level);
+    }
+
+    /// <summary>
+    /// A screen that is there takes over a missing one: wish, settings and name, queued for its device;
+    /// the missing entry goes.
+    /// </summary>
+    [Fact]
+    public void A_reassigned_screen_takes_over_wish_settings_and_name()
+    {
+        var catalog = new ScreenCatalog();
+        var gone = new ScreenRef(Device, Screen);
+        var there = new ScreenRef(Twin, Second);
+        var old = catalog.Report(Device, [Info(Screen) with { CustomName = "Tisch", Label = "Tisch" }], reported: null);
+
+        catalog.Change(gone, new ScreenSettings(ScaleOnLoad: 0.25));
+        _ = catalog.SetState(gone, ScreenState.Diagnostic);
+        catalog.Departed(Device, old.Presence);
+        _ = catalog.Drain(Device);
+        catalog.Report(Twin, [Info(Second)], reported: null);
+
+        Assert.True(catalog.Reassign(gone, there));
+
+        Assert.Null(catalog.ViewOf(gone));
+        Assert.Equal(ScreenState.Diagnostic, catalog.ViewOf(there)?.State);
+        Assert.Equal("Tisch", catalog.ViewOf(there)?.Info.Label);
+        Assert.Equal(0.25, catalog.ContextFor(there).ScaleOnLoad);
+
+        var queued = Assert.Single(catalog.Drain(Twin).Screens).Settings;
+
+        Assert.Equal(0.25, queued?.ScaleOnLoad);
+        Assert.Equal("Tisch", queued?.CustomName);
+    }
+
     private static ScreenInfo Info(ScreenId screen) => Info(screen, new PixelSize(1920, 1080), 96);
 
     private static ScreenInfo Info(ScreenId screen, PixelSize size, double dpi) =>

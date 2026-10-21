@@ -54,13 +54,13 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// </summary>
     private ScreenRef? _wanted;
 
-    internal DevicesWindow(ISessionApi session, PairingDesk pairing, CampaignDesk desk, Uri address)
+    internal DevicesWindow(ISessionApi session, PairingDesk pairing, CampaignDesk desk, ControlSettings settings, Uri address)
     {
         ArgumentNullException.ThrowIfNull(address);
 
         _session = session;
         _pairing = pairing;
-        _bands = new DeviceBands(session, desk, said => _status.Text = said, this);
+        _bands = new DeviceBands(session, desk, settings, said => _status.Text = said, this);
         _bands.Changed += (_, _) => ShowBands(force: true);
         _bands.ScenesSaved += (_, _) => ScenesSaved?.Invoke(this, EventArgs.Empty);
 
@@ -393,21 +393,49 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// many (Part 7). Assigning to a KNOWN device is the fourth and arrives in M5b, together with
     /// the screen mask it shares with "reassign screen".
     /// </summary>
-    private StackPanel Decisions()
+    /// <summary>
+    /// "Assign to a known device" (Part 7): offered are only devices that are NOT connected - a
+    /// connected one is demonstrably somebody else, and offering it would be the one wrong grip that
+    /// throws two devices onto one entry. The question says what can go wrong rather than only warning.
+    /// </summary>
+    private async Task AdoptAsync(PendingPairing request)
+    {
+        var candidates = _devices.Where(device => !device.Connected && device.Device != request.Device).ToList();
+
+        if (candidates.Count == 0)
+        {
+            _status.Text = "Every known device is connected - there is none this one could be.";
+            return;
+        }
+
+        if (AdoptQuestion.Ask(this, request, candidates) is not { } known)
+        {
+            return;
+        }
+
+        _status.Text = await _pairing.AdoptAsync(request, known).ConfigureAwait(true)
+            ? $"{request.Name} came in as {known.Name}. Screens it reports under new ids stand beside the old ones - use \"Take over\" in a screen's band to map them."
+            : $"{request.Name} could not be assigned - it is no longer waiting, or {known.Name} connected meanwhile.";
+    }
+
+    private WrapPanel Decisions()
     {
         var allow = new Button { Content = "Allow", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
         var deny = new Button { Content = "Reject", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var own = new Button { Content = "Take on as its own device", Padding = new Thickness(12, 6, 12, 6) };
+        var own = new Button { Content = "Take on as its own device", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var known = new Button { Content = "Assign to a known device ...", Padding = new Thickness(12, 6, 12, 6) };
 
         allow.Click += (_, _) => DecideAsync(request => _pairing.AllowAsync(request));
         deny.Click += (_, _) => DecideAsync(request => _pairing.DenyAsync(request));
         own.Click += (_, _) => DecideAsync(request => _pairing.AcceptAsOwnAsync(request));
+        known.Click += (_, _) => DecideAsync(AdoptAsync);
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
 
         row.Children.Add(allow);
         row.Children.Add(deny);
         row.Children.Add(own);
+        row.Children.Add(known);
 
         return row;
     }
@@ -420,20 +448,17 @@ internal sealed class DevicesWindow : Window, IDisposable
             return;
         }
 
+        var before = _status.Text;
+
         await decision(entry.Request).ConfigureAwait(true);
 
-        _status.Text = $"Decided about {entry.Request.Name}.";
+        // A decision that said something of its own keeps it.
+        if (_status.Text == before)
+        {
+            _status.Text = $"Decided about {entry.Request.Name}.";
+        }
     }
 
-    /// <summary>
-    /// "Which one are you?" - every overlay of the selected device shows its own name for a few
-    /// seconds (Part 6). With two devices of two screens each it is the only answer there is: the
-    /// names are the DM's own, and the identifiers behind them appear in no surface (Part 3).
-    /// <para>
-    /// In M4 this moves into the tile's screen context menu, where the DM already is. Here it sits
-    /// under the tree because there are no tiles yet.
-    /// </para>
-    /// </summary>
     /// <summary>
     /// The only way out of "rejected" the DM walks himself. Without it a mistaken no could only be
     /// healed at the device, with "reset pairing" on a machine that has no keyboard (Part 4).

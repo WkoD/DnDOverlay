@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Configuration;
 using DnDOverlay.Hub;
 
 namespace DnDOverlay.Control;
@@ -33,9 +34,11 @@ internal sealed class DeviceBands
     private readonly CampaignDesk _desk;
     private readonly Action<string> _say;
     private readonly Window _owner;
+    private readonly ControlSettings _settings;
 
-    internal DeviceBands(ISessionApi session, CampaignDesk desk, Action<string> say, Window owner)
+    internal DeviceBands(ISessionApi session, CampaignDesk desk, ControlSettings settings, Action<string> say, Window owner)
     {
+        _settings = settings;
         _session = session;
         _desk = desk;
         _say = say;
@@ -153,6 +156,11 @@ internal sealed class DeviceBands
 
         band.Children.Add(rows);
 
+        if (screen.Suppressed is not SuppressReason.Unavailable)
+        {
+            TakeOver(band, screen, all);
+        }
+
         var resetAll = Button("Reset all to defaults");
 
         resetAll.Click += async (_, _) =>
@@ -169,6 +177,98 @@ internal sealed class DeviceBands
         band.Children.Add(resetAll);
 
         return band;
+    }
+
+    /// <summary>
+    /// "Take over" (Part 3, "reassign screen"): this screen, which is there, takes over a missing one -
+    /// its wish, settings, name, the arrangement on it, its tile place and view. Offered only while a
+    /// missing screen exists; the question names what moves and that the old entry goes.
+    /// </summary>
+    private void TakeOver(StackPanel band, ScreenView screen, IReadOnlyList<DeviceView> all)
+    {
+        var missing = all.SelectMany(device => device.Screens)
+            .Where(other => other.Suppressed is SuppressReason.Unavailable && other.Screen != screen.Screen)
+            .ToList();
+
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        var choice = new ComboBox { MinWidth = 220, Margin = new Thickness(0, 0, 8, 0) };
+
+        foreach (var old in missing)
+        {
+            choice.Items.Add(new ComboBoxItem { Content = old.Info.Label, Tag = old });
+        }
+
+        choice.SelectedIndex = 0;
+
+        var take = Button("Take over ...");
+
+        take.Click += async (_, _) =>
+        {
+            if (choice.SelectedItem is not ComboBoxItem { Tag: ScreenView old })
+            {
+                return;
+            }
+
+            var answer = MessageBox.Show(
+                _owner,
+                $"{screen.Info.Label} takes over {old.Info.Label}: its state, settings, name and what lies on it, its place among the tiles and the view. What lies on {screen.Info.Label} now is replaced. {old.Info.Label} disappears from the list.",
+                "Take over a missing screen",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question,
+                MessageBoxResult.Cancel);
+
+            if (answer != MessageBoxResult.OK)
+            {
+                return;
+            }
+
+            if (!await _session.ReassignScreenAsync(old.Screen, screen.Screen).ConfigureAwait(true))
+            {
+                _say($"{old.Info.Label} could not be taken over - it is there again, or gone.");
+                return;
+            }
+
+            Inherit(old.Screen, screen.Screen);
+            _say($"{screen.Info.Label} took over {old.Info.Label}.");
+            Changed?.Invoke(this, EventArgs.Empty);
+        };
+
+        var row = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+
+        row.Children.Add(new TextBlock { Text = "Take over a missing screen:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        row.Children.Add(choice);
+        row.Children.Add(take);
+        band.Children.Add(row);
+    }
+
+    /// <summary>The control's half of a take-over: the old screen's tile place and view rotation go to the new one.</summary>
+    private void Inherit(ScreenRef old, ScreenRef fresh)
+    {
+        var from = new ScreenKey(old.Device.Value, old.Screen.Value);
+        var to = new ScreenKey(fresh.Device.Value, fresh.Screen.Value);
+
+        _settings.Update(configuration =>
+        {
+            var view = configuration.KnownScreens.FirstOrDefault(known => known.DeviceId == from.DeviceId && known.ScreenId == from.ScreenId)?.View;
+            var order = configuration.TileOrder.Contains(from)
+                ? configuration.TileOrder.Where(key => key != to).Select(key => key == from ? to : key)
+                : configuration.TileOrder;
+
+            return configuration with
+            {
+                TileOrder = [.. order],
+                KnownScreens =
+                [
+                    .. configuration.KnownScreens
+                        .Where(known => !(known.DeviceId == from.DeviceId && known.ScreenId == from.ScreenId))
+                        .Select(known => known.DeviceId == to.DeviceId && known.ScreenId == to.ScreenId && view is { } turned ? known with { View = turned } : known),
+                ],
+            };
+        });
     }
 
     /// <summary>

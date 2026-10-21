@@ -96,6 +96,46 @@ internal sealed class PairingDesk
         await _session.ApprovePairingAsync(request.Device, token).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// Lets a waiting device in as a known one that is not connected (Part 7). The same order as an
+    /// approval - token to disk first, hub second - and the control's half of the take-over: the known
+    /// entry's name goes to the new one, its screens' tile places and view rotations follow the new
+    /// identity. False when the hub refused, and then nothing here changed either.
+    /// </summary>
+    internal async Task<bool> AdoptAsync(PendingPairing request, DeviceView known)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(known);
+
+        var before = _settings.Current;
+        var token = DeviceTokens.Create();
+        var from = known.Device.Value;
+        var to = request.Device.Value;
+
+        _settings.Update(configuration => configuration with
+        {
+            KnownDevices =
+            [
+                .. configuration.KnownDevices.Where(device => device.DeviceId != from && device.DeviceId != to),
+                new KnownDevice(to, known.Name, PairingRole.Display, DeviceTokens.Store(_secrets, token), _time.GetLocalNow()),
+            ],
+            TileOrder = [.. configuration.TileOrder.Select(key => key.DeviceId == from ? key with { DeviceId = to } : key)],
+            KnownScreens = [.. configuration.KnownScreens.Select(screen => screen.DeviceId == from ? screen with { DeviceId = to } : screen)],
+        });
+
+        _settings.Flush();
+
+        if (await _session.AdoptDeviceAsync(request.Device, known.Device, token).ConfigureAwait(true))
+        {
+            return true;
+        }
+
+        _settings.Update(_ => before);
+        _settings.Flush();
+
+        return false;
+    }
+
     /// <summary>Says no. The device keeps its place in the list, with the reason (Part 4).</summary>
     internal Task DenyAsync(PendingPairing request)
     {

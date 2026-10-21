@@ -1829,6 +1829,99 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<bool> AdoptDeviceAsync(DeviceId incoming, DeviceId known, string token, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+
+        if (_connections.TryGet(known, out _) || !_pairing.IsWaiting(incoming) || !_pairing.IsPaired(known))
+        {
+            return false;
+        }
+
+        // Re-keyed BEFORE the request is settled: settling lets the device's connection go on, and
+        // its first report must find the old screens already under the new identity rather than
+        // making fresh ones beside them.
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            Rekey(known, incoming);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (!_pairing.Adopt(incoming, known, token))
+        {
+            // Withdrawn meanwhile: everything goes back to the known identity, as if nothing happened.
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                Rekey(incoming, known);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            return false;
+        }
+
+        HubLog.DeviceAdopted(_logger, incoming, known);
+
+        return true;
+    }
+
+    private void Rekey(DeviceId from, DeviceId to)
+    {
+        _screens.Rekey(from, to);
+
+        foreach (var screen in _scenes.Screens.Where(screen => screen.Device == from).ToList())
+        {
+            _scenes.Set(new ScreenRef(to, screen.Screen), _scenes.Remove(screen));
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ReassignScreenAsync(ScreenRef missing, ScreenRef present, CancellationToken cancellationToken = default)
+    {
+        if (_screens.ViewOf(missing) is not { Suppressed: SuppressReason.Unavailable }
+            || _screens.ViewOf(present) is not { } fresh
+            || fresh.Suppressed is SuppressReason.Unavailable)
+        {
+            return false;
+        }
+
+        var scene = _scenes.Get(missing);
+
+        if (!_screens.Reassign(missing, present))
+        {
+            return false;
+        }
+
+        _ = _scenes.Remove(missing);
+
+        // The arrangement as ONE patch onto the screen that is there: what lay on it goes, what lay on
+        // the old one comes - the ordinary path, so the display draws it like any other.
+        await ApplyAsync(
+            present,
+            (current, _) =>
+            [
+                .. current.Items.Count > 0 ? [new ClearItems()] : Array.Empty<PatchOp>(),
+                .. scene.Items.Select(item => (PatchOp)new AddItem(item with { Revision = _scenes.NextRevision() })),
+                .. scene.Background is { } background ? [new SetBackground(background)] : current.Background is not null ? [new ClearBackground()] : Array.Empty<PatchOp>(),
+            ],
+            cancellationToken).ConfigureAwait(false);
+
+        Push(present.Device);
+        HubLog.ScreenReassigned(_logger, missing, present);
+
+        return true;
+    }
+
+    /// <inheritdoc />
     public Task AcceptAsOwnDeviceAsync(DeviceId device, CancellationToken cancellationToken = default)
     {
         _ = _pairing.AcceptAsOwnDevice(device);

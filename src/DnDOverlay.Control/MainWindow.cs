@@ -588,7 +588,7 @@ internal sealed class MainWindow : Window, IDisposable
             return standing;
         }
 
-        _devices = new DevicesWindow(_session, _pairing, _desk, _address) { Owner = this };
+        _devices = new DevicesWindow(_session, _pairing, _desk, _settings, _address) { Owner = this };
         _devices.ScenesSaved += (_, _) => _scenes.Refresh();
         _devices.Show();
 

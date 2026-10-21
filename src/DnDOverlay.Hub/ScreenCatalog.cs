@@ -440,6 +440,84 @@ public sealed class ScreenCatalog
             ? DeviceSettings.Merge(older: known, newer: settings)
             : settings;
 
+    /// <summary>
+    /// Moves everything known about one device's screens and settings to another identity - the
+    /// adoption of a known device by a newly arrived one (Part 7). The screens keep their ids: on the
+    /// same hardware they are what the new device reports, and they simply carry on; after a change
+    /// of hardware they stand as missing beside the new ones, for "reassign screen" to map.
+    /// </summary>
+    public void Rekey(DeviceId from, DeviceId to)
+    {
+        lock (_gate)
+        {
+            foreach (var key in _entries.Keys.Where(key => key.Device == from).ToList())
+            {
+                var moved = new ScreenRef(to, key.Screen);
+
+                if (_entries.Remove(key, out var entry) && !_entries.ContainsKey(moved))
+                {
+                    _entries[moved] = entry;
+                }
+
+                if (_pending.Remove(key, out var settings))
+                {
+                    _pending[moved] = settings;
+                }
+            }
+
+            if (_pendingDevice.Remove(from, out var pending))
+            {
+                _pendingDevice[to] = pending;
+            }
+
+            if (_deviceKnown.Remove(from, out var known))
+            {
+                _deviceKnown[to] = known;
+            }
+
+            _present.Remove(from);
+        }
+
+        Announce(persist: true);
+    }
+
+    /// <summary>
+    /// "Reassign screen" (Part 3, Part 7): the screen that is there takes over the wish, the settings
+    /// and the name of one that is gone, and the old entry goes. The settings are queued for the new
+    /// screen's device like any change from the control's side. False when either is not known.
+    /// </summary>
+    public bool Reassign(ScreenRef from, ScreenRef to)
+    {
+        lock (_gate)
+        {
+            if (from == to || !_entries.TryGetValue(from, out var old) || !_entries.TryGetValue(to, out var fresh))
+            {
+                return false;
+            }
+
+            var opinion = ScreenSettings.Opinion(old.Context, old.Info.CustomName);
+
+            _entries[to] = fresh with
+            {
+                State = old.State,
+                Context = opinion.ApplyTo(fresh.Context) with { Size = fresh.Info.Size, Dpi = fresh.Info.Dpi },
+                Info = old.Info.CustomName is { Length: > 0 } name ? fresh.Info with { CustomName = name, Label = name } : fresh.Info,
+            };
+
+            if (!opinion.IsEmpty)
+            {
+                _pending[to] = _pending.TryGetValue(to, out var mine) ? ScreenSettings.Merge(older: mine, newer: opinion) : opinion;
+            }
+
+            _entries.Remove(from);
+            _pending.Remove(from);
+        }
+
+        Announce(persist: true);
+
+        return true;
+    }
+
     /// <summary>What goes into control.json.</summary>
     public IReadOnlyList<KnownScreen> Snapshot()
     {

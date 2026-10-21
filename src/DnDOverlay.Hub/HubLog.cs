@@ -176,6 +176,17 @@ internal static partial class HubLog
         Message = "Pairing withdrawn for {DeviceId} - its token no longer opens anything.")]
     internal static partial void Unpaired(ILogger logger, DeviceId deviceId);
 
+    /// <summary>
+    /// A waiting device was let in as a known one that was not connected (Part 7) - the one pairing
+    /// that takes over another entry, so both identities are written: the trail has to say where the
+    /// old device's settings went.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1058,
+        Level = LogLevel.Information,
+        Message = "{DeviceId} was let in as the known device {KnownId}, taking over its name, settings and screens.")]
+    internal static partial void DeviceAdopted(ILogger logger, DeviceId deviceId, DeviceId knownId);
+
     [LoggerMessage(
         EventId = 1031,
         Level = LogLevel.Information,
@@ -348,6 +359,13 @@ internal static partial class HubLog
         Level = LogLevel.Information,
         Message = "Screen {Screen} is now {State}.")]
     internal static partial void ScreenStateChanged(ILogger logger, ScreenRef screen, ScreenState state);
+
+    /// <summary>A screen that is there took over a missing one - its wish, settings, name and arrangement (Part 3).</summary>
+    [LoggerMessage(
+        EventId = 3046,
+        Level = LogLevel.Information,
+        Message = "Screen {To} took over the missing {From}: wish, settings, name and arrangement.")]
+    internal static partial void ScreenReassigned(ILogger logger, ScreenRef from, ScreenRef to);
 
     /// <summary>
     /// A finding, never a state. The wish stands untouched next to it, which is what makes the

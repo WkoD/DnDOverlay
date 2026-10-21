@@ -339,6 +339,9 @@ public sealed partial class App : Application, IDisposable
     private string? _sessionToken;
     private DeviceId _device;
     private string _deviceName = string.Empty;
+
+    /// <summary>The setup screen, one per monitor, while a pairing request lies before the DM.</summary>
+    private readonly List<SetupWindow> _setup = [];
     private bool _windowed;
 
     /// <summary>
@@ -1388,6 +1391,10 @@ public sealed partial class App : Application, IDisposable
             _takeover.Lost();
         }
 
+        // A request is a connection: when it ends, nothing lies before the DM any more, and the
+        // setup screen goes with it - the next attempt brings it back if it is still waiting.
+        await Dispatcher.InvokeAsync(CloseSetup);
+
         _connectedTo = null;
         Volatile.Write(ref _roundTripMs, -1);
 
@@ -1498,16 +1505,18 @@ public sealed partial class App : Application, IDisposable
                 _assetPath = welcome.AssetPath;
                 _connections++;
                 Remember(welcome);
+                await Dispatcher.InvokeAsync(CloseSetup);
                 break;
 
             case PairingPendingMessage pending:
-                // In M5b this is where the setup screen goes down: name, address and code, large
-                // enough to read from two metres. Until then the tray - which is also M6 - has to
-                // make do with the log (Part 6).
+                // The setup screen: name, address and code, large enough to read from two metres -
+                // exactly while the request lies before the DM (Part 4, Part 6).
                 DisplayLog.PairingPending(_logger, pending.PairingCode);
+                await Dispatcher.InvokeAsync(() => ShowSetup(pending.PairingCode));
                 break;
 
             case RejectedMessage rejected:
+                await Dispatcher.InvokeAsync(CloseSetup);
                 Refused(rejected.Reason);
                 break;
 
@@ -1597,6 +1606,33 @@ public sealed partial class App : Application, IDisposable
     /// <summary>
     /// The three ways a control can turn this device away, and they are told apart on purpose.
     /// </summary>
+    /// <summary>Puts the setup screen on every monitor, or leaves it where it already stands.</summary>
+    private void ShowSetup(string code)
+    {
+        if (_setup.Count > 0)
+        {
+            return;
+        }
+
+        foreach (var monitor in _monitors.Values)
+        {
+            var window = new SetupWindow(monitor, _deviceName, code);
+
+            window.Show();
+            _setup.Add(window);
+        }
+    }
+
+    private void CloseSetup()
+    {
+        foreach (var window in _setup)
+        {
+            window.Close();
+        }
+
+        _setup.Clear();
+    }
+
     private void Refused(RejectionReason reason)
     {
         switch (reason)

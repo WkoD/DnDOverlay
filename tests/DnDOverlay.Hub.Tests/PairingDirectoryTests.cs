@@ -338,6 +338,28 @@ public sealed class PairingDirectoryTests
         Assert.IsType<Admission.Admitted>(directory.Consider(Hello(token: "s3cret"), "10.0.0.7"));
     }
 
+    /// <summary>
+    /// "Assign to a known device" (Part 7): the waiting device comes in under the known entry's name,
+    /// with its own fresh token, and the known entry is gone - taken over, not copied.
+    /// </summary>
+    [Fact]
+    public async Task Adopting_lets_the_device_in_under_the_known_name_and_the_known_entry_goes()
+    {
+        var known = Some(42);
+        var directory = Directory(new PairedDevice(known, "BEAMER", PairingRole.Display, "lost-token"));
+        var waiting = Assert.IsType<Admission.Waiting>(directory.Consider(Hello(), "10.0.0.7"));
+
+        Assert.True(directory.Adopt(Device, known, "fresh-token"));
+
+        var decision = Assert.IsType<PairingDecision.Approved>(await waiting.Request.Decision);
+
+        Assert.Equal("BEAMER", decision.Device.Name);
+        Assert.Equal("fresh-token", decision.Device.Token);
+        Assert.False(directory.IsPaired(known));
+        Assert.Null(directory.Authenticate("lost-token", PairingRole.Display));
+        Assert.False(directory.Adopt(Device, known, "again"));
+    }
+
     private static DeviceId Some(int number) =>
         new(new Guid($"00000000-0000-0000-0000-0000000000{number:00}"));
 

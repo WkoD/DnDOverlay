@@ -81,6 +81,10 @@ public sealed class SceneStore
     /// </summary>
     public bool Has(ScreenRef screen) => _scenes.ContainsKey(screen);
 
+    /// <summary>Lets a screen's scene go - the screen it lay on has been reassigned or re-keyed.</summary>
+    public SceneState Remove(ScreenRef screen) =>
+        _scenes.TryRemove(screen, out var scene) ? scene : SceneState.Empty;
+
     /// <summary>Every screen that carries a scene, for the snapshots a connecting display gets.</summary>
     public IReadOnlyCollection<ScreenRef> Screens => _scenes.Keys.ToList();
 }

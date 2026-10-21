@@ -700,6 +700,23 @@ public interface ISessionApi
     Task RejectAsync(DeviceId device, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lets a waiting device in as a known one that is not connected (Part 7, "assign to a known
+    /// device"): its name and remote settings move over, its screens and their scenes too - on the
+    /// same hardware the screens are the same and carry straight on; after a change of hardware the
+    /// old ones stand as missing, for <see cref="ReassignScreenAsync"/>. The known entry goes. The
+    /// token is the control's, written before the call, as with an approval. False when the device
+    /// is no longer waiting, or the known one is connected or unknown.
+    /// </summary>
+    Task<bool> AdoptDeviceAsync(DeviceId incoming, DeviceId known, string token, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// "Reassign screen" (Part 3): a screen that is there takes over a missing one - wish, settings,
+    /// name and the arrangement on it, as one patch - and the missing one goes. False unless
+    /// <paramref name="missing"/> is missing and <paramref name="present"/> is there.
+    /// </summary>
+    Task<bool> ReassignScreenAsync(ScreenRef missing, ScreenRef present, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// For a device that turned out to be a clone: tells it to take a fresh identity and pair
     /// regularly. Also barred over <c>/ws/control</c> - it lets a device in (Part 4).
     /// </summary>

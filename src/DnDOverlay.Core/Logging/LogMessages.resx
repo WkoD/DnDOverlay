@@ -345,6 +345,12 @@
   <data name="E4030_AssetsDeleted" xml:space="preserve">
     <value>Deleted {Pictures} picture(s): taken off {Screens} screen(s), out of {Scenes} scene(s) and {Layouts} layout(s).</value>
   </data>
+  <data name="E1058_DeviceAdopted" xml:space="preserve">
+    <value>{DeviceId} was let in as the known device {KnownId}, taking over its name, settings and screens.</value>
+  </data>
+  <data name="E3046_ScreenReassigned" xml:space="preserve">
+    <value>Screen {To} took over the missing {From}: wish, settings, name and arrangement.</value>
+  </data>
   <data name="E4031_CampaignsMoved" xml:space="preserve">
     <value>Campaigns moved from "{From}" to "{To}": {Count} campaign(s), copied: {Copied}.</value>
   </data>

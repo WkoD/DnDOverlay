@@ -431,6 +431,57 @@ public sealed class PairingDirectory
         return settled;
     }
 
+    /// <summary>Whether this device is waiting and could be let in - not a clone, which takes a fresh identity instead.</summary>
+    public bool IsWaiting(DeviceId device)
+    {
+        lock (_gate)
+        {
+            return _pending.TryGetValue(device, out var request) && !request.Snapshot.IsClone;
+        }
+    }
+
+    /// <summary>Whether this device is paired.</summary>
+    public bool IsPaired(DeviceId device)
+    {
+        lock (_gate)
+        {
+            return _paired.ContainsKey(device);
+        }
+    }
+
+    /// <summary>
+    /// "Assign to a known device" (Part 7): lets the waiting device in under the known entry's name
+    /// and role, and the known entry goes - TAKEN OVER, not copied, or the very card-index corpse the
+    /// grip exists against would stay. The token does not travel: the device gets the fresh one it
+    /// would get from an ordinary approval.
+    /// </summary>
+    public bool Adopt(DeviceId incoming, DeviceId known, string token)
+    {
+        bool settled;
+
+        lock (_gate)
+        {
+            if (!_pending.TryGetValue(incoming, out var request) || request.Snapshot.IsClone
+                || !_paired.TryGetValue(known, out var old))
+            {
+                return false;
+            }
+
+            var paired = new PairedDevice(incoming, old.Name, old.Role, token);
+
+            _paired.Remove(known);
+            _paired[incoming] = paired;
+            _refused.Remove(incoming);
+            _pending.Remove(incoming);
+
+            settled = request.Settle(new PairingDecision.Approved(paired));
+        }
+
+        Changed?.Invoke();
+
+        return settled;
+    }
+
     /// <summary>Withdraws the token. The device is a stranger again the next time it knocks.</summary>
     public bool Unpair(DeviceId device)
     {

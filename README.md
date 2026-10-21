@@ -209,6 +209,15 @@ it, and *Reset all to defaults* clears the screen. Every change takes effect at 
 the device switched off too: it goes out when the device connects. *Unpair …* names the screens and
 pictures that would be lost and offers to save every occupied screen as a scene first.
 
+A display waiting to be paired shows its **setup screen** — its name, its address and the pairing
+code, large enough to read from across the room — for exactly as long as the request lies before
+you; at the control the same three stand in the waiting line. A display that lost its identity —
+reinstalled Windows, a swapped disk — knocks as a new device: **Assign to a known device …** lets it
+in as the old one, which is not connected, taking over its name, settings, screens and what lies on
+them. On the same hardware the screens simply carry on. After new hardware the old screens stand
+beside the new ones as missing, and **Take over a missing screen** in a new screen's band moves the
+old one's state, settings, name, arrangement, tile place and view onto it.
+
 **Settings** (☰ → *Settings …*) holds what is set once: how a double tap or a drag loads a scene
 (replacing, by default) and a layout (adding), the name pasted pictures get, whether the tables
 show touch points, this control's log level, its port (taken at the next start) and the network

@@ -307,6 +307,12 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
 
     public Task RejectAsync(DeviceId device, CancellationToken cancellationToken = default) => _inner.RejectAsync(device, cancellationToken);
 
+    public Task<bool> AdoptDeviceAsync(DeviceId incoming, DeviceId known, string token, CancellationToken cancellationToken = default) =>
+        _inner.AdoptDeviceAsync(incoming, known, token, cancellationToken);
+
+    public Task<bool> ReassignScreenAsync(ScreenRef missing, ScreenRef present, CancellationToken cancellationToken = default) =>
+        _inner.ReassignScreenAsync(missing, present, cancellationToken);
+
     public Task AcceptAsOwnDeviceAsync(DeviceId device, CancellationToken cancellationToken = default) => _inner.AcceptAsOwnDeviceAsync(device, cancellationToken);
 
     public Task UnpairAsync(DeviceId device, CancellationToken cancellationToken = default) => _inner.UnpairAsync(device, cancellationToken);
