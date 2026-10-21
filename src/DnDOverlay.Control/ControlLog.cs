@@ -381,4 +381,21 @@ internal static partial class ControlLog
         Level = LogLevel.Information,
         Message = "Loaded the layout \"{Name}\" ({Mode}): {Loaded} scene(s) laid, {Skipped} left out, {Saved} saved as scenes, {Missing} picture(s) missing.")]
     internal static partial void LayoutLoaded(ILogger logger, string name, string mode, int loaded, int skipped, int saved, int missing);
+
+    /// <summary>A picture was renamed - campaign-wide, on every screen and in every saved scene (Part 3).</summary>
+    [LoggerMessage(
+        EventId = 4029,
+        Level = LogLevel.Information,
+        Message = "Renamed the picture \"{Old}\" to \"{New}\".")]
+    internal static partial void AssetRenamed(ILogger logger, string old, string @new);
+
+    /// <summary>
+    /// Pictures were deleted from the stock - the one cascade that reaches screens, scenes and layouts
+    /// at once (Part 7), so the counts of what it reached are written with it.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4030,
+        Level = LogLevel.Warning,
+        Message = "Deleted {Pictures} picture(s): taken off {Screens} screen(s), out of {Scenes} scene(s) and {Layouts} layout(s).")]
+    internal static partial void AssetsDeleted(ILogger logger, int pictures, int screens, int scenes, int layouts);
 }

@@ -91,6 +91,21 @@ public interface ISessionApi
         IReadOnlyList<LayoutScene> scenes, LayoutLoad mode, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Renames a picture on every screen it shows on - items and background, inactive screens
+    /// included - in ONE patch (Part 3: "one picture, one name"; Part 4: the same picture must not be
+    /// called two things for a moment). The stock's own rename is the control's; this is the table's half.
+    /// </summary>
+    Task RenameAssetAsync(AssetId asset, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes these pictures off every screen - each item showing one, and a background showing one -
+    /// inactive screens included, in ONE patch. The first step of deleting from the stock (Part 7):
+    /// an item whose file is gone would survive only while a display has it cached, and turn into a
+    /// placeholder at its next start, days later and untraceable.
+    /// </summary>
+    Task RemoveAssetsAsync(IReadOnlyCollection<AssetId> assets, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// "Clear all" (Part 7): items AND background off every played screen - every screen whose
     /// wish is not <see cref="ScreenState.Inactive"/>, because a screen being prepared in the
     /// background is not part of the table. One patch over all of them, or a screen would stand
@@ -260,8 +275,8 @@ public interface ISessionApi
 
     /// <summary>
     /// Renames an ASSET wherever it shows on this screen - every item carrying it and the
-    /// background too. "One picture, one name" (Part 3): the control sends one of these per
-    /// affected screen, otherwise the same picture would briefly be called two different things.
+    /// background too. For a rename from the stock, <see cref="RenameAssetAsync"/> does every
+    /// screen in one patch.
     /// </summary>
     Task SetAssetNameAsync(
         ScreenRef screen, AssetId asset, string name, CancellationToken cancellationToken = default);

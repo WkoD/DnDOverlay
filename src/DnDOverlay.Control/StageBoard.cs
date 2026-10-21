@@ -170,6 +170,9 @@ internal sealed class StageBoard : Panel
     /// <summary>A tile's item menu asked to show a picture in the stock.</summary>
     internal event EventHandler<AssetId>? ShowingInStock;
 
+    /// <summary>A tile's item menu asked to rename a picture.</summary>
+    internal event EventHandler<AssetId>? Renaming;
+
     /// <summary>
     /// A picture carried off its tile was let go over no tile at all - the window decides whether
     /// that was the panel, which takes it off the screen (Part 7: "drag goes both ways").
@@ -309,6 +312,7 @@ internal sealed class StageBoard : Panel
             tile.Diagnosing += (_, _) => Wanted(view.Screen.Device);
             tile.Saving += (_, _) => Saving?.Invoke(this, view.Screen);
             tile.ShowingInStock += (_, asset) => ShowingInStock?.Invoke(this, asset);
+            tile.Renaming += (_, asset) => Renaming?.Invoke(this, asset);
             tile.DroppedFromOutside += (_, outside) => DroppedFromOutside?.Invoke(this, (view.Screen, outside));
 
             tile.PreviewMouseDown += (_, _) => Activate(view.Screen);

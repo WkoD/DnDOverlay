@@ -905,8 +905,10 @@ into one of them would have made the range names stop meaning anything.
 | 4026 | `CampaignRefused` | Warning | control |
 | 4027 | `LayoutSaved` | Information | control |
 | 4028 | `LayoutLoaded` | Information | control |
+| 4029 | `AssetRenamed` | Information | control |
+| 4030 | `AssetsDeleted` | Warning | control |
 
-**Next free: 4029. 4014 is retired**, never issued in a release and never to be reused: it was the
+**Next free: 4031. 4014 is retired**, never issued in a release and never to be reused: it was the
 control's own frame-budget warning, and the second hand-run of M4 showed every one of its lines to
 be false - a stage holding 16.7 ms warned against a budget of 2.8 ms, because the budget follows a
 cadence that a sparse stream cannot estimate. The reading stays, the judgement went.

@@ -287,6 +287,76 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         }
     }
 
+    /// <summary>
+    /// Renames a picture, campaign-wide (Part 3). The name is an identifier, not a file name: a name
+    /// another picture carries is <b>refused</b> - compared ordinally and ignoring case, like the
+    /// filter that could never tell the two apart - while a change of case of its own name passes.
+    /// Typed names are trimmed; an empty one is refused.
+    /// </summary>
+    public NameOutcome Rename(AssetId asset, string name)
+    {
+        var wanted = name?.Trim();
+
+        if (string.IsNullOrEmpty(wanted))
+        {
+            return NameOutcome.Empty;
+        }
+
+        lock (_gate)
+        {
+            if (!_entries.TryGetValue(asset.Value, out var entry))
+            {
+                return NameOutcome.Unknown;
+            }
+
+            if (_entries.Values.Any(other => !ReferenceEquals(other, entry) && string.Equals(other.Name, wanted, StringComparison.OrdinalIgnoreCase)))
+            {
+                return NameOutcome.Taken;
+            }
+
+            entry.Name = wanted;
+            SaveInventory();
+        }
+
+        return NameOutcome.Done;
+    }
+
+    /// <summary>
+    /// Takes a picture out of the stock: the entry, the file and its thumbnail. <b>Only this</b> - the
+    /// screens and the saved scenes are the caller's to clear first (Part 7: what is deleted
+    /// disappears everywhere), and the order matters: the reference goes before the bytes. A file
+    /// that cannot be deleted right now - open in a viewer - stays behind as a foreign file the next
+    /// reconciliation names; the entry is gone either way. False when there was no such entry.
+    /// </summary>
+    public bool Remove(AssetId asset)
+    {
+        InventoryEntry? entry;
+
+        lock (_gate)
+        {
+            if (!_entries.Remove(asset.Value, out entry))
+            {
+                return false;
+            }
+
+            SaveInventory();
+        }
+
+        foreach (var file in new[] { FileOf(entry), ThumbnailPath(asset) })
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Left for the reconciliation, see above.
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Where the thumbnail of an asset lies, whether or not it exists yet.</summary>
     public string ThumbnailPath(AssetId id) =>
         Path.Combine(
@@ -669,6 +739,22 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         "jpg" or "jpeg" => "image/jpeg",
         _ => "application/octet-stream",
     };
+}
+
+/// <summary>What became of renaming a picture.</summary>
+public enum NameOutcome
+{
+    /// <summary>Renamed and written.</summary>
+    Done,
+
+    /// <summary>Another picture carries that name - refused, the control names it (Part 3).</summary>
+    Taken,
+
+    /// <summary>Nothing was typed.</summary>
+    Empty,
+
+    /// <summary>There is no such picture in the stock.</summary>
+    Unknown,
 }
 
 /// <summary>

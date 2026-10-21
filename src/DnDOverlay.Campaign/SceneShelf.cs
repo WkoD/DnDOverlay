@@ -43,6 +43,19 @@ public sealed record SceneSummary(string Name, DateTimeOffset SavedAt, PixelSize
 /// <summary>A layout as the tab lists it - name, time, and the names of the screens it fills.</summary>
 public sealed record LayoutSummary(string Name, DateTimeOffset SavedAt, IReadOnlyList<string> Screens);
 
+/// <summary>Where a picture is used: the saved scenes and the layouts that show it, by name (Part 7).</summary>
+public sealed record AssetUsage(IReadOnlyList<string> Scenes, IReadOnlyList<string> Layouts)
+{
+    /// <summary>Whether anything saved needs the picture.</summary>
+    public bool Used => Scenes.Count > 0 || Layouts.Count > 0;
+}
+
+/// <summary>
+/// What a delete left behind: scenes and layouts that held nothing else and are empty now - offered
+/// for deletion, never kept quietly (Part 7).
+/// </summary>
+public sealed record EmptiedByDelete(IReadOnlyList<string> Scenes, IReadOnlyList<string> Layouts);
+
 /// <summary>What became of a save or a rename.</summary>
 public enum ShelfOutcome
 {
@@ -172,10 +185,7 @@ public sealed class SceneShelf
             return refused;
         }
 
-        var saved = new SavedScene(origin, _time.GetLocalNow(), scene with { FocusItems = [] });
-
-        Replace(ScenesFolder, _scenes, name, saved, JsonSerializer.SerializeToUtf8Bytes(
-            SceneFile.Of(saved), CampaignJsonContext.Default.SceneFile));
+        WriteScene(name, new SavedScene(origin, _time.GetLocalNow(), scene with { FocusItems = [] }));
 
         return ShelfOutcome.Done;
     }
@@ -190,12 +200,9 @@ public sealed class SceneShelf
             return refused;
         }
 
-        var saved = new SavedLayout(
+        WriteLayout(name, new SavedLayout(
             _time.GetLocalNow(),
-            [.. parts.Select(part => part with { Scene = part.Scene with { Scene = part.Scene.Scene with { FocusItems = [] } } })]);
-
-        Replace(LayoutsFolder, _layouts, name, saved, JsonSerializer.SerializeToUtf8Bytes(
-            LayoutFile.Of(saved), CampaignJsonContext.Default.LayoutFile));
+            [.. parts.Select(part => part with { Scene = part.Scene with { Scene = part.Scene.Scene with { FocusItems = [] } } })]));
 
         return ShelfOutcome.Done;
     }
@@ -213,6 +220,139 @@ public sealed class SceneShelf
 
     /// <summary>Deletes a layout and its file.</summary>
     public bool DeleteLayout(string name) => Delete(LayoutsFolder, _layouts, name);
+
+    /// <summary>Which saved scenes and layouts show a picture - the reference display before a delete (Part 7).</summary>
+    public AssetUsage UsageOf(AssetId asset) =>
+        new(
+            [.. _scenes.Where(pair => Shows(pair.Value.Scene, asset)).Select(pair => pair.Key).Order(FileNames.Comparer)],
+            [.. _layouts.Where(pair => pair.Value.Parts.Any(part => Shows(part.Scene.Scene, asset))).Select(pair => pair.Key).Order(FileNames.Comparer)]);
+
+    /// <summary>
+    /// For every picture used anywhere, in how many saved scenes and layouts - one pass over the shelf
+    /// for the marks of a whole grid, rather than one per tile.
+    /// </summary>
+    public IReadOnlyDictionary<AssetId, int> UseCounts()
+    {
+        var counts = new Dictionary<AssetId, int>();
+
+        void Count(IEnumerable<SceneState> scenes)
+        {
+            foreach (var asset in scenes.SelectMany(Pictures).Distinct())
+            {
+                counts[asset] = counts.GetValueOrDefault(asset) + 1;
+            }
+        }
+
+        foreach (var scene in _scenes.Values)
+        {
+            Count([scene.Scene]);
+        }
+
+        foreach (var layout in _layouts.Values)
+        {
+            Count(layout.Parts.Select(part => part.Scene.Scene));
+        }
+
+        return counts;
+    }
+
+    /// <summary>
+    /// Carries a picture's new name into every scene and layout that shows it. Names are resolved
+    /// afresh when a scene is loaded anyway (Part 3); written here too, so a placeholder for a picture
+    /// that goes missing later and the previews of both tabs say the current name. The time of saving
+    /// stays: this is not the DM saving.
+    /// </summary>
+    public void RenameAsset(AssetId asset, string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        foreach (var (key, saved) in _scenes.Where(pair => Shows(pair.Value.Scene, asset)).ToList())
+        {
+            WriteScene(key, saved with { Scene = Named(saved.Scene, asset, name) });
+        }
+
+        foreach (var (key, saved) in _layouts.Where(pair => pair.Value.Parts.Any(part => Shows(part.Scene.Scene, asset))).ToList())
+        {
+            WriteLayout(key, saved with
+            {
+                Parts = [.. saved.Parts.Select(part => part with { Scene = part.Scene with { Scene = Named(part.Scene.Scene, asset, name) } })],
+            });
+        }
+    }
+
+    /// <summary>
+    /// The cascade of a delete (Part 7): the pictures' items and backgrounds are taken out of every
+    /// scene and layout - removed, not left as placeholders; whoever deletes on purpose wants them
+    /// gone. A layout loses the screens that held nothing else. Returns what is empty now, so the
+    /// control can offer it for deletion.
+    /// </summary>
+    public EmptiedByDelete RemoveAssets(IReadOnlyCollection<AssetId> assets)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+
+        var gone = assets.ToHashSet();
+        var emptiedScenes = new List<string>();
+        var emptiedLayouts = new List<string>();
+
+        foreach (var (key, saved) in _scenes.Where(pair => gone.Any(asset => Shows(pair.Value.Scene, asset))).ToList())
+        {
+            var left = Without(saved.Scene, gone);
+
+            WriteScene(key, saved with { Scene = left });
+
+            if (IsEmpty(left))
+            {
+                emptiedScenes.Add(key);
+            }
+        }
+
+        foreach (var (key, saved) in _layouts.Where(pair => pair.Value.Parts.Any(part => gone.Any(asset => Shows(part.Scene.Scene, asset)))).ToList())
+        {
+            var parts = saved.Parts
+                .Select(part => part with { Scene = part.Scene with { Scene = Without(part.Scene.Scene, gone) } })
+                .Where(part => !IsEmpty(part.Scene.Scene))
+                .ToList();
+
+            WriteLayout(key, saved with { Parts = parts });
+
+            if (parts.Count == 0)
+            {
+                emptiedLayouts.Add(key);
+            }
+        }
+
+        return new EmptiedByDelete(emptiedScenes, emptiedLayouts);
+    }
+
+    private void WriteScene(string name, SavedScene saved) =>
+        Replace(ScenesFolder, _scenes, name, saved, JsonSerializer.SerializeToUtf8Bytes(
+            SceneFile.Of(saved), CampaignJsonContext.Default.SceneFile));
+
+    private void WriteLayout(string name, SavedLayout saved) =>
+        Replace(LayoutsFolder, _layouts, name, saved, JsonSerializer.SerializeToUtf8Bytes(
+            LayoutFile.Of(saved), CampaignJsonContext.Default.LayoutFile));
+
+    private static IEnumerable<AssetId> Pictures(SceneState scene) =>
+        scene.Items.OfType<ImageItem>().Select(item => item.AssetId)
+            .Concat(scene.Background is { } background ? [background.AssetId] : []);
+
+    private static bool Shows(SceneState scene, AssetId asset) => Pictures(scene).Contains(asset);
+
+    private static bool IsEmpty(SceneState scene) => scene.Items.Count == 0 && scene.Background is null;
+
+    private static SceneState Without(SceneState scene, HashSet<AssetId> gone) =>
+        scene with
+        {
+            Items = [.. scene.Items.Where(item => item is not ImageItem image || !gone.Contains(image.AssetId))],
+            Background = scene.Background is { } background && gone.Contains(background.AssetId) ? null : scene.Background,
+        };
+
+    private static SceneState Named(SceneState scene, AssetId asset, string name) =>
+        scene with
+        {
+            Items = [.. scene.Items.Select(item => item is ImageItem image && image.AssetId == asset ? image with { Name = name } : item)],
+            Background = scene.Background is { } background && background.AssetId == asset ? background with { Name = name } : scene.Background,
+        };
 
     private static ShelfOutcome? Refused(string name, IEnumerable<string> taken, bool overwrite)
     {

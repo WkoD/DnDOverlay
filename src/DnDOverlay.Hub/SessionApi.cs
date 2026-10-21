@@ -790,6 +790,37 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public Task RenameAssetAsync(AssetId asset, string name, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        return ApplyAcrossAsync(
+            (_, scene, _) =>
+                scene.Items.OfType<ImageItem>().Any(item => item.AssetId == asset) || scene.Background?.AssetId == asset
+                    ? [new SetName(asset, name)]
+                    : [],
+            cancellationToken,
+            includingInactive: true);
+    }
+
+    /// <inheritdoc />
+    public Task RemoveAssetsAsync(IReadOnlyCollection<AssetId> assets, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+
+        var gone = assets.ToHashSet();
+
+        return ApplyAcrossAsync(
+            (_, scene, _) =>
+            [
+                .. scene.Items.OfType<ImageItem>().Where(item => gone.Contains(item.AssetId)).Select(item => new RemoveItem(item.ItemId)),
+                .. scene.Background is { } background && gone.Contains(background.AssetId) ? [new ClearBackground()] : Array.Empty<PatchOp>(),
+            ],
+            cancellationToken,
+            includingInactive: true);
+    }
+
+    /// <inheritdoc />
     public Task ClearItemsAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
         ApplyAsync(screen, (scene, _) => scene.Items.Count == 0 ? [] : [new ClearItems()], cancellationToken);
 

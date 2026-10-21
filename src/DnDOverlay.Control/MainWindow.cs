@@ -43,6 +43,7 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly PanelHead _panelHead = new();
     private readonly StageBoard _board;
     private readonly StockView _stock;
+    private readonly StockEdits _edits;
     private readonly IntakeRunner _intake;
     private readonly CampaignPanel _panel;
     private readonly Grid _root = new() { Margin = new Thickness(12) };
@@ -108,7 +109,8 @@ internal sealed class MainWindow : Window, IDisposable
 
         _carry = new PanelCarry(_root);
 
-        _stock = new StockView(session, desk, pictures, () => _board.Active, () => _board.Screens, said => _status.Text = said, _carry);
+        _edits = new StockEdits(session, desk, () => _board.Screens, said => _status.Text = said, _logger);
+        _stock = new StockView(session, desk, pictures, () => _board.Active, () => _board.Screens, said => _status.Text = said, _carry, _edits);
 
         _scenes = new ScenesPanel(
             session,
@@ -274,12 +276,21 @@ internal sealed class MainWindow : Window, IDisposable
             }
 
             // Del removes what is selected, as the menu's "Remove" does (fourth hand-run,
-            // 15.09.2026) - except while typing, where it belongs to the text. The stock list has
-            // no delete of its own yet; when it gets one (M5b) the key has to be split by focus.
+            // 15.09.2026) - except while typing, where it belongs to the text. Split by focus since the
+            // stock has a delete of its own (Part 7): with the stock focused it deletes from the
+            // campaign - after its question - and otherwise it takes items off the stage.
             if (key.Key is Key.Delete
                 && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
             {
-                key.Handled = _board.RemoveSelected();
+                if (_stock.IsKeyboardFocusWithin)
+                {
+                    key.Handled = true;
+                    _ = _stock.DeleteChosenAsync();
+                }
+                else
+                {
+                    key.Handled = _board.RemoveSelected();
+                }
             }
         };
 
@@ -906,6 +917,16 @@ internal sealed class MainWindow : Window, IDisposable
         };
 
         _board.ShowingInStock += (_, asset) => ShowInStock(asset);
+        _board.Renaming += async (_, asset) => await _edits.RenameAsync(this, asset).ConfigureAwait(true);
+
+        // A rename or a delete reaches the stock, the scenes, the layouts and the marks.
+        _edits.Changed += (_, _) =>
+        {
+            _panel.Refresh();
+            _scenes.Refresh();
+            _layouts.Refresh();
+            _ = _stock.CountAsync();
+        };
     }
 
     private async Task LandAsync(CarryLoad load, System.Windows.Point at)

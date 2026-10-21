@@ -311,6 +311,44 @@ public sealed class AssetStoreTests : IDisposable
         Assert.Equal(before, File.ReadAllBytes(path));
     }
 
+    /// <summary>
+    /// A picture's name is an identifier (Part 3): another picture's name is refused, whatever its
+    /// case; the picture's own name in another case passes, and so does a new name, kept after reopening.
+    /// </summary>
+    [Fact]
+    public async Task A_rename_refuses_a_name_another_picture_carries()
+    {
+        var store = Open();
+        var orc = await Taken(store, "orc.png", "Ork");
+        await Taken(store, "goblin.png", "Goblin");
+
+        Assert.Equal(NameOutcome.Taken, store.Rename(orc.Asset.AssetId, "goblin"));
+        Assert.Equal(NameOutcome.Empty, store.Rename(orc.Asset.AssetId, "   "));
+        Assert.Equal(NameOutcome.Unknown, store.Rename(new AssetId(new string('f', 64)), "Troll"));
+        Assert.Equal(NameOutcome.Done, store.Rename(orc.Asset.AssetId, "ORK"));
+        Assert.Equal(NameOutcome.Done, store.Rename(orc.Asset.AssetId, " Ork-Häuptling "));
+
+        Assert.Contains(Open().Entries, entry => entry.AssetId == orc.Asset.AssetId.Value && entry.Name == "Ork-Häuptling");
+    }
+
+    /// <summary>Removing takes the entry, the file and the thumbnail - and only that picture.</summary>
+    [Fact]
+    public async Task Removing_takes_the_entry_the_file_and_the_thumbnail()
+    {
+        var store = Open();
+        var orc = await Taken(store, "orc.png", "Ork");
+        var goblin = await Taken(store, "goblin.png", "Goblin");
+        var thumbnail = store.ThumbnailPath(orc.Asset.AssetId);
+        var files = Directory.GetFiles(Path.Combine(_directory, "assets"), orc.Asset.AssetId.Value + ".*");
+
+        Assert.True(store.Remove(orc.Asset.AssetId));
+        Assert.False(store.Remove(orc.Asset.AssetId));
+
+        Assert.All(files, file => Assert.False(File.Exists(file)));
+        Assert.False(File.Exists(thumbnail));
+        Assert.Equal([goblin.Asset.AssetId.Value], Open().Entries.Select(entry => entry.AssetId));
+    }
+
     private AssetStore Open() => AssetStore.Open(_directory, _codec, _time);
 
     private static ReadOnlyMemory<byte> Bytes(string seed) => Encoding.UTF8.GetBytes("source:" + seed);

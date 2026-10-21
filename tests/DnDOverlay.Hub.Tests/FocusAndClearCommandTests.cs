@@ -282,6 +282,51 @@ public sealed class FocusAndClearCommandTests
         Assert.Equal(3, (await session.GetSceneAsync(First, Cancellation)).Items.Count);
     }
 
+    /// <summary>A rename from the stock reaches every screen showing the picture - an inactive one too - in one patch.</summary>
+    [Fact]
+    public async Task A_picture_renamed_is_renamed_on_every_screen_in_one_patch()
+    {
+        using var session = Session();
+        var picture = Many(1).Single();
+
+        await session.AddItemsAsync(First, [picture], Cancellation);
+        await session.SetBackgroundAsync(Third, picture, Cancellation);
+        await session.SetScreenStateAsync(Third, ScreenState.Inactive, Cancellation);
+
+        var patch = Assert.Single(await PatchesDuring(session, () => session.RenameAssetAsync(picture.AssetId, "Grimmbart", Cancellation)));
+
+        Assert.Equal([First, Third], patch.Ops.Select(op => op.Screen).OrderBy(screen => screen.Screen.Value, StringComparer.Ordinal));
+        Assert.Equal("Grimmbart", Assert.IsType<ImageItem>(Assert.Single((await session.GetSceneAsync(First, Cancellation)).Items)).Name);
+        Assert.Equal("Grimmbart", (await session.GetSceneAsync(Third, Cancellation)).Background?.Name);
+    }
+
+    /// <summary>
+    /// Deleting from the stock takes the pictures off every screen - items and a background showing
+    /// one - in one patch, and leaves every other picture where it lies.
+    /// </summary>
+    [Fact]
+    public async Task Deleted_pictures_leave_every_screen_in_one_patch()
+    {
+        using var session = Session();
+        var pictures = Many(3).ToList();
+
+        await session.AddItemsAsync(First, [pictures[0], pictures[1], pictures[0]], Cancellation);
+        await session.SetBackgroundAsync(Second, pictures[2], Cancellation);
+        await session.AddItemsAsync(Third, [pictures[1]], Cancellation);
+
+        var patch = Assert.Single(await PatchesDuring(
+            session,
+            () => session.RemoveAssetsAsync([pictures[0].AssetId, pictures[2].AssetId], Cancellation)));
+
+        Assert.Equal(3, patch.Ops.Count);
+
+        var first = await session.GetSceneAsync(First, Cancellation);
+
+        Assert.Equal(pictures[1].AssetId, Assert.IsType<ImageItem>(Assert.Single(first.Items)).AssetId);
+        Assert.Null((await session.GetSceneAsync(Second, Cancellation)).Background);
+        Assert.Single((await session.GetSceneAsync(Third, Cancellation)).Items);
+    }
+
     [Fact]
     public async Task Clearing_an_empty_table_sends_nothing()
     {

@@ -41,6 +41,7 @@ internal sealed class StockView : Grid
     private readonly Func<ScreenRef?> _active;
     private readonly Func<IReadOnlyList<ScreenView>> _screens;
     private readonly Action<string> _say;
+    private readonly StockEdits _edits;
 
     private readonly WrapPanel _tiles = new() { Background = Brushes.Transparent };
     private readonly Canvas _overlay = new() { IsHitTestVisible = false };
@@ -61,6 +62,7 @@ internal sealed class StockView : Grid
     private PanelSort _sort = PanelSort.Newest;
     private double _zoom = 128;
     private IReadOnlyDictionary<AssetId, int> _lying = new Dictionary<AssetId, int>();
+    private IReadOnlyDictionary<AssetId, int> _used = new Dictionary<AssetId, int>();
     private TilePoint? _frameFrom;
 
     internal StockView(
@@ -70,7 +72,8 @@ internal sealed class StockView : Grid
         Func<ScreenRef?> active,
         Func<IReadOnlyList<ScreenView>> screens,
         Action<string> say,
-        PanelCarry carry)
+        PanelCarry carry,
+        StockEdits edits)
     {
         _session = session;
         _desk = desk;
@@ -78,6 +81,12 @@ internal sealed class StockView : Grid
         _active = active;
         _screens = screens;
         _say = say;
+        _edits = edits;
+
+        // It takes the keyboard when an entry is pressed, so Del can tell "the stock" from "the stage"
+        // by focus (Part 7) - the key goes to whatever has focus, not to whatever the hand is over.
+        Focusable = true;
+        FocusVisualStyle = null;
 
         _overlay.Children.Add(_frame);
 
@@ -103,6 +112,7 @@ internal sealed class StockView : Grid
             if (card.Tag is InventoryEntry entry)
             {
                 Select([new AssetId(entry.AssetId)]);
+                Focus();
             }
         };
         _touch.DoubleTapped += async (_, card) =>
@@ -280,6 +290,8 @@ internal sealed class StockView : Grid
 
         var missing = open.Store.Missing;
 
+        _used = open.Shelf.UseCounts();
+
         foreach (var entry in entries)
         {
             var card = Card(entry, missing.Contains(new AssetId(entry.AssetId)));
@@ -376,6 +388,13 @@ internal sealed class StockView : Grid
                 marks.Add(string.Create(CultureInfo.CurrentCulture, $"on {on}"));
             }
 
+            // Whether something saved needs it, before anybody clicks (Part 7): "in 3" is three scenes
+            // or layouts. A picture nothing needs carries no mark and looks different for it.
+            if (_used.GetValueOrDefault(asset) is var used and > 0)
+            {
+                marks.Add(string.Create(CultureInfo.CurrentCulture, $"in {used}"));
+            }
+
             var top = new DockPanel
             {
                 VerticalAlignment = VerticalAlignment.Top,
@@ -433,6 +452,8 @@ internal sealed class StockView : Grid
             {
                 return;
             }
+
+            Focus();
 
             if (down.ClickCount == 2)
             {
@@ -542,8 +563,59 @@ internal sealed class StockView : Grid
         });
 
         menu.Items.Add(Entry("Show file in folder", () => ShowFile(entry), enabled: !several));
+        menu.Items.Add(Used(entry, several));
+        menu.Items.Add(Entry("Rename ...", () => _ = _edits.RenameAsync(Window.GetWindow(this)!, asset), enabled: !several));
+
+        // Set apart at the foot: the one entry here that cannot be taken back.
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Entry(
+            several ? string.Create(CultureInfo.CurrentCulture, $"Delete {_selection.Count} pictures ...") : "Delete ...",
+            () => _ = DeleteChosenAsync(entry)));
 
         return menu;
+    }
+
+    /// <summary>Deletes the selection, or the one entry when nothing is chosen - the menu's and the Del key's way in.</summary>
+    internal Task DeleteChosenAsync(InventoryEntry? pressed = null)
+    {
+        IReadOnlyList<AssetId> assets = _selection.Count > 0
+            ? [.. _selection]
+            : pressed is null ? [] : [new AssetId(pressed.AssetId)];
+
+        return assets.Count == 0 ? Task.CompletedTask : _edits.DeleteAsync(Window.GetWindow(this)!, assets);
+    }
+
+    /// <summary>
+    /// "Used in" (Part 7): the scenes and layouts that show the picture, by name - unfolded from the
+    /// mark on the tile. One entry only; for several it would be a list of lists.
+    /// </summary>
+    private MenuItem Used(InventoryEntry entry, bool several)
+    {
+        if (several || _desk.Open is not { } open)
+        {
+            return new MenuItem { Header = "Used in ...", IsEnabled = false };
+        }
+
+        var usage = open.Shelf.UsageOf(new AssetId(entry.AssetId));
+
+        if (!usage.Used)
+        {
+            return new MenuItem { Header = "Used in no scene or layout", IsEnabled = false };
+        }
+
+        var used = new MenuItem { Header = "Used in" };
+
+        foreach (var scene in usage.Scenes)
+        {
+            used.Items.Add(new MenuItem { Header = $"Scene: {scene}", IsEnabled = false });
+        }
+
+        foreach (var layout in usage.Layouts)
+        {
+            used.Items.Add(new MenuItem { Header = $"Layout: {layout}", IsEnabled = false });
+        }
+
+        return used;
     }
 
     private async Task SendAsync(ScreenRef? screen, IReadOnlyList<AssetRef> assets)

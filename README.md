@@ -188,12 +188,20 @@ has one, red from 10 %, with a lightning sign on the cable.
 finds a name by any part of it — case and accents do not matter, several words must all match —,
 an order (newest, oldest, by name) and a zoom (− and +, or Ctrl+wheel). A picture's tile carries
 its name, its resolution and marks: *GIF* for an animation, *on 2* when it lies on two screens,
-*missing* when its file is gone. A double tap sends it to the active screen; its menu sends it as
+*in 3* when three saved scenes or layouts use it, *missing* when its file is gone. A double tap sends it to the active screen; its menu sends it as
 a picture or as the background to any screen or to all, says where it lies, and shows its file in
 the folder. Ctrl+click and a frame drawn with the mouse pick several, which then go together. The
 panel docks at any edge — *Dock panel* in the menu ☰ —, and the line between it and the stage can
 be dragged; both are kept. The same menu holds *Clear all*, *Send to all*, the devices, the
 network and the touch points.
+
+**Renaming** a picture — from its menu in the stock or from its menu on a tile — changes the name
+everywhere: in the stock, on every screen, in every scene and layout. A name another picture
+already carries is refused. **Deleting** takes the picture out of the campaign for good, after one
+question that names what goes: the screens it is taken off, the scenes and layouts it is removed
+from. Scenes and layouts left empty by it are offered for deletion too. *Used in* in the menu lists
+them beforehand. Several chosen pictures are deleted with one question, and Del does the same while
+the stock has the focus — on the stage, Del only takes pictures off the screen.
 
 Pictures and scenes are **dragged** out of the panel onto a tile: a picture lands where it is let
 go, several side by side, a scene replaces what lies on that screen. While something is carried,

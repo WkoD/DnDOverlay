@@ -58,6 +58,9 @@ internal sealed class TileMenus(
     /// <summary>The DM asked to see this picture in the stock.</summary>
     internal event EventHandler<AssetId>? ShowingInStock;
 
+    /// <summary>The DM asked to rename this picture - campaign-wide, the same act as from the stock.</summary>
+    internal event EventHandler<AssetId>? Renaming;
+
     /// <summary>
     /// The screen's own menu. Reached on free tile area <b>and on the head</b> - the second place
     /// is not convenience: on a full screen there is no free area left, and the menu would be out
@@ -259,6 +262,13 @@ internal sealed class TileMenus(
                 Ids(many),
                 picture is not ImageItem { ShowName: true },
                 CancellationToken.None)));
+
+        // The same rename as from the stock (Part 7): it changes the name everywhere - the way
+        // through the tile is only the shorter one when the picture is in front of the DM anyway.
+        if (picture is ImageItem named)
+        {
+            menu.Items.Add(Entry("Rename ...", () => Renaming?.Invoke(this, named.AssetId)));
+        }
 
         menu.Items.Add(new Separator());
 

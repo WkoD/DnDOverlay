@@ -206,7 +206,94 @@ public sealed class SceneShelfTests : IDisposable
         Assert.Equal([gone], missing);
     }
 
+    /// <summary>The reference display (Part 7): which scenes and layouts show a picture, as an item or as the background.</summary>
+    [Fact]
+    public void Usage_names_the_scenes_and_layouts_that_show_a_picture()
+    {
+        var shelf = Shelf();
+        var orc = new AssetId(new string('a', 64));
+        var map = new AssetId(new string('b', 64));
+
+        shelf.SaveScene("Dorf", Origin, SceneState.Empty with { Items = [Item(orc, "Ork")] }, overwrite: false);
+        shelf.SaveScene("Karte", Origin, SceneState.Empty with { Background = Background(map, "Karte") }, overwrite: false);
+        shelf.SaveLayout("Abend", [Part(SceneState.Empty with { Items = [Item(orc, "Ork")], Background = Background(map, "Karte") })], overwrite: false);
+
+        var usage = shelf.UsageOf(orc);
+
+        Assert.Equal(["Dorf"], usage.Scenes);
+        Assert.Equal(["Abend"], usage.Layouts);
+        Assert.Equal(["Karte"], shelf.UsageOf(map).Scenes);
+        Assert.False(shelf.UsageOf(new AssetId(new string('c', 64))).Used);
+        Assert.Equal(2, shelf.UseCounts()[orc]);
+    }
+
+    /// <summary>A rename reaches the files, keeps their time of saving, and is there after reopening.</summary>
+    [Fact]
+    public void A_renamed_picture_carries_its_new_name_in_the_files()
+    {
+        var shelf = Shelf();
+        var orc = new AssetId(new string('a', 64));
+
+        shelf.SaveScene("Dorf", Origin, SceneState.Empty with { Items = [Item(orc, "Ork")], Background = Background(orc, "Ork") }, overwrite: false);
+        shelf.SaveLayout("Abend", [Part(SceneState.Empty with { Items = [Item(orc, "Ork")] })], overwrite: false);
+
+        var savedAt = shelf.Scene("Dorf")!.SavedAt;
+
+        _time.Now = _time.Now.AddHours(1);
+        shelf.RenameAsset(orc, "Grimmbart");
+
+        var reopened = Shelf();
+        var scene = reopened.Scene("Dorf")!;
+
+        Assert.Equal("Grimmbart", Assert.IsType<ImageItem>(Assert.Single(scene.Scene.Items)).Name);
+        Assert.Equal("Grimmbart", scene.Scene.Background?.Name);
+        Assert.Equal(savedAt, scene.SavedAt);
+        Assert.Equal("Grimmbart", Assert.IsType<ImageItem>(Assert.Single(reopened.Layout("Abend")!.Parts[0].Scene.Scene.Items)).Name);
+    }
+
+    /// <summary>
+    /// The delete cascade (Part 7): items and backgrounds go from every file, a layout loses the screen
+    /// that held nothing else, and what became empty is reported - not deleted.
+    /// </summary>
+    [Fact]
+    public void A_delete_takes_the_pictures_out_and_reports_what_became_empty()
+    {
+        var shelf = Shelf();
+        var orc = new AssetId(new string('a', 64));
+        var goblin = new AssetId(new string('b', 64));
+
+        shelf.SaveScene("Nur Ork", Origin, SceneState.Empty with { Items = [Item(orc, "Ork")], Background = Background(orc, "Ork") }, overwrite: false);
+        shelf.SaveScene("Gemischt", Origin, SceneState.Empty with { Items = [Item(orc, "Ork"), Item(goblin, "Goblin")] }, overwrite: false);
+        shelf.SaveLayout(
+            "Abend",
+            [Part(SceneState.Empty with { Items = [Item(orc, "Ork")] }), Part(SceneState.Empty with { Items = [Item(goblin, "Goblin")] })],
+            overwrite: false);
+        shelf.SaveLayout("Nur Ork", [Part(SceneState.Empty with { Items = [Item(orc, "Ork")] })], overwrite: false);
+
+        var emptied = shelf.RemoveAssets([orc]);
+
+        Assert.Equal(["Nur Ork"], emptied.Scenes);
+        Assert.Equal(["Nur Ork"], emptied.Layouts);
+
+        var reopened = Shelf();
+
+        Assert.Empty(reopened.Scene("Nur Ork")!.Scene.Items);
+        Assert.Null(reopened.Scene("Nur Ork")!.Scene.Background);
+        Assert.Equal(goblin, Assert.IsType<ImageItem>(Assert.Single(reopened.Scene("Gemischt")!.Scene.Items)).AssetId);
+        Assert.Single(reopened.Layout("Abend")!.Parts);
+        Assert.False(reopened.UsageOf(orc).Used);
+    }
+
     private SceneShelf Shelf() => SceneShelf.Open(_directory, _time);
+
+    private static LayoutPart Part(SceneState scene) =>
+        new(
+            new ScreenRef(new DeviceId(Guid.NewGuid()), new ScreenId(@"\\?\DISPLAY#" + Guid.NewGuid().ToString("N"))),
+            "TISCH-PC//1",
+            new SavedScene(Origin, DateTimeOffset.UnixEpoch, scene));
+
+    private static BackgroundItem Background(AssetId asset, string name) =>
+        new(asset, new AssetMeta(1920, 1080, "png", 2048, false, new string('e', 64)), name, false, 0.5, 0.5, 1, 0, false);
 
     private static SceneState Scene(params string[] names) =>
         SceneState.Empty with { Items = [.. names.Select(name => Item(new AssetId(new string('c', 64)), name))] };

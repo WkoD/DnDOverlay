@@ -276,6 +276,7 @@ internal sealed class ScreenTile : Border
         _menus.Diagnosing += (_, on) => Diagnose(on);
         _menus.Saving += (_, _) => Saving?.Invoke(this, EventArgs.Empty);
         _menus.ShowingInStock += (_, asset) => ShowingInStock?.Invoke(this, asset);
+        _menus.Renaming += (_, asset) => Renaming?.Invoke(this, asset);
 
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
@@ -310,6 +311,9 @@ internal sealed class ScreenTile : Border
 
     /// <summary>The item menu asked to show a picture in the stock.</summary>
     internal event EventHandler<AssetId>? ShowingInStock;
+
+    /// <summary>The item menu asked to rename a picture.</summary>
+    internal event EventHandler<AssetId>? Renaming;
 
     /// <summary>
     /// Shows or hides the background strip - shown on every tile for as long as something is carried
