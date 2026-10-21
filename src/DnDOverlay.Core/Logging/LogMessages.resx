@@ -348,6 +348,18 @@
   <data name="E1058_DeviceAdopted" xml:space="preserve">
     <value>{DeviceId} was let in as the known device {KnownId}, taking over its name, settings and screens.</value>
   </data>
+  <data name="E1059_DeviceCommandSent" xml:space="preserve">
+    <value>Device command {Command} for {DeviceId} - sent now: {Now}.</value>
+  </data>
+  <data name="E3047_DeviceRenamed" xml:space="preserve">
+    <value>This device is called "{Name}" from now on.</value>
+  </data>
+  <data name="E3048_CacheCleared" xml:space="preserve">
+    <value>Picture store emptied on the control's word: {Count} picture(s) removed.</value>
+  </data>
+  <data name="E3049_Restarting" xml:space="preserve">
+    <value>Restarting on the control's word.</value>
+  </data>
   <data name="E3046_ScreenReassigned" xml:space="preserve">
     <value>Screen {To} took over the missing {From}: wish, settings, name and arrangement.</value>
   </data>

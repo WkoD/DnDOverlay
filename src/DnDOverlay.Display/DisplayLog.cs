@@ -362,6 +362,27 @@ internal static partial class DisplayLog
         Message = "Waiting for the DM to allow this device. Pairing code {PairingCode}.")]
     internal static partial void PairingPending(ILogger logger, string pairingCode);
 
+    /// <summary>The device took a new name from the control - its screens' default labels follow.</summary>
+    [LoggerMessage(
+        EventId = 3047,
+        Level = LogLevel.Information,
+        Message = "This device is called \"{Name}\" from now on.")]
+    internal static partial void DeviceRenamed(ILogger logger, string name);
+
+    /// <summary>The picture store was emptied on the control's word; what lies on the screens is fetched again.</summary>
+    [LoggerMessage(
+        EventId = 3048,
+        Level = LogLevel.Information,
+        Message = "Picture store emptied on the control's word: {Count} picture(s) removed.")]
+    internal static partial void CacheCleared(ILogger logger, int count);
+
+    /// <summary>The application restarts on the control's word - the line before the gap in the log.</summary>
+    [LoggerMessage(
+        EventId = 3049,
+        Level = LogLevel.Information,
+        Message = "Restarting on the control's word.")]
+    internal static partial void Restarting(ILogger logger);
+
     [LoggerMessage(
         EventId = 1034,
         Level = LogLevel.Information,

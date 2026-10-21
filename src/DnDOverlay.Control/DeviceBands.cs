@@ -5,6 +5,7 @@ using System.Windows.Media;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
+using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
 
 namespace DnDOverlay.Control;
@@ -55,7 +56,7 @@ internal sealed class DeviceBands
     internal void Show(StackPanel host, DeviceView device, ScreenView? screen, IReadOnlyList<DeviceView> all)
     {
         host.Children.Clear();
-        host.Children.Add(DeviceBand(device));
+        host.Children.Add(DeviceBand(device, all));
 
         if (screen is not null)
         {
@@ -67,7 +68,7 @@ internal sealed class DeviceBands
         }
     }
 
-    private StackPanel DeviceBand(DeviceView device)
+    private StackPanel DeviceBand(DeviceView device, IReadOnlyList<DeviceView> all)
     {
         var band = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
         var labels = device.Screens.Select(screen => screen.Info.Label).ToList();
@@ -93,6 +94,7 @@ internal sealed class DeviceBands
         var rows = new Grid();
 
         Columns(rows);
+        DeviceNameRow(rows, device, all);
 
         foreach (var parameter in DisplayParameters.For(ParameterScope.Device))
         {
@@ -110,9 +112,39 @@ internal sealed class DeviceBands
 
         var buttons = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
         var identify = Button("Show the screen names");
+        var clear = Button("Clear the picture store ...");
+        var restart = Button("Restart ...");
         var unpair = Button("Unpair ...");
 
         identify.IsEnabled = device.Connected;
+        clear.IsEnabled = device.Connected;
+        restart.IsEnabled = device.Connected;
+
+        clear.Click += async (_, _) =>
+        {
+            if (Ask($"Empty the picture store of {device.Name}? It applies to all its screens. What lies on them now is fetched again.", "Clear the picture store"))
+            {
+                await CommandAsync(device, DeviceCommand.ClearCache, $"{device.Name} empties its picture store.").ConfigureAwait(true);
+            }
+        };
+
+        restart.Click += async (_, _) =>
+        {
+            // Asked only while something is shown: a restart puts every screen of the device out for a moment.
+            var showing = 0;
+
+            foreach (var screen in device.Screens)
+            {
+                var scene = await _session.GetSceneAsync(screen.Screen).ConfigureAwait(true);
+
+                showing += scene.Items.Count > 0 || scene.Background is not null ? 1 : 0;
+            }
+
+            if (showing == 0 || Ask($"Restart {device.Name}? Its {device.Screens.Count} screen(s) go dark for a moment, {showing} of them showing something; it connects again by itself.", "Restart"))
+            {
+                await CommandAsync(device, DeviceCommand.Restart, $"{device.Name} restarts.").ConfigureAwait(true);
+            }
+        };
         identify.Click += async (_, _) =>
         {
             await _session.IdentifyScreensAsync(device.Device).ConfigureAwait(true);
@@ -121,6 +153,8 @@ internal sealed class DeviceBands
         unpair.Click += async (_, _) => await UnpairAsync(device).ConfigureAwait(true);
 
         buttons.Children.Add(identify);
+        buttons.Children.Add(clear);
+        buttons.Children.Add(restart);
         buttons.Children.Add(unpair);
         band.Children.Add(buttons);
 
@@ -316,6 +350,72 @@ internal sealed class DeviceBands
 
         Place(rows, "Name", name, hint, reset: null);
     }
+
+    /// <summary>
+    /// The device's name - in the lists, and at the device, whose screens' default labels follow it
+    /// (Part 7). Refused when another device or a screen carries it, across all devices (Part 3). Set
+    /// while the device is off, it goes out when it connects.
+    /// </summary>
+    private void DeviceNameRow(Grid rows, DeviceView device, IReadOnlyList<DeviceView> all)
+    {
+        var name = new TextBox { Text = device.Name, Padding = new Thickness(4, 2, 4, 2), MinWidth = 180 };
+
+        async Task KeepAsync()
+        {
+            var typed = name.Text.Trim();
+
+            if (typed.Length == 0 || string.Equals(typed, device.Name, StringComparison.Ordinal))
+            {
+                name.Text = device.Name;
+                return;
+            }
+
+            var taken = all.Where(other => other.Device != device.Device).Select(other => other.Name)
+                .Concat(all.SelectMany(other => other.Screens).Select(screen => screen.Info.Label));
+
+            if (taken.Contains(typed, StringComparer.OrdinalIgnoreCase))
+            {
+                _say($"\"{typed}\" is already the name of another device or screen.");
+                name.Text = device.Name;
+                return;
+            }
+
+            if (!await _session.SendDeviceCommandAsync(device.Device, DeviceCommand.Rename, typed).ConfigureAwait(true))
+            {
+                name.Text = device.Name;
+                return;
+            }
+
+            _settings.Update(configuration => configuration with
+            {
+                KnownDevices = [.. configuration.KnownDevices.Select(known => known.DeviceId == device.Device.Value ? known with { Name = typed } : known)],
+            });
+
+            _say(device.Connected ? $"{device.Name} is called {typed} now." : $"{device.Name} is called {typed} now - the device hears it when it connects.");
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        name.LostFocus += async (_, _) => await KeepAsync().ConfigureAwait(true);
+        name.KeyDown += async (_, key) =>
+        {
+            if (key.Key is System.Windows.Input.Key.Enter)
+            {
+                await KeepAsync().ConfigureAwait(true);
+            }
+        };
+
+        Place(rows, "Name", name, null, reset: null);
+    }
+
+    private async Task CommandAsync(DeviceView device, DeviceCommand command, string done)
+    {
+        _say(await _session.SendDeviceCommandAsync(device.Device, command).ConfigureAwait(true)
+            ? done
+            : $"{device.Name} is not connected.");
+    }
+
+    private bool Ask(string question, string title) =>
+        MessageBox.Show(_owner, question, title, MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel) == MessageBoxResult.OK;
 
     private void StateRow(Grid rows, ScreenView screen)
     {

@@ -31,6 +31,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(ScreensChangedMessage), "ScreensChanged")]
 [JsonDerivedType(typeof(ConfigUpdateMessage), "ConfigUpdate")]
 [JsonDerivedType(typeof(IdentifyScreensMessage), "IdentifyScreens")]
+[JsonDerivedType(typeof(DeviceCommandMessage), "DeviceCommand")]
 [JsonDerivedType(typeof(AssetProgressMessage), "AssetProgress")]
 [JsonDerivedType(typeof(ItemTransformedMessage), "ItemTransformed")]
 [JsonDerivedType(typeof(ItemParkedMessage), "ItemParked")]
@@ -362,6 +363,27 @@ public sealed record ConfigUpdateMessage(ConfigUpdate Update) : ProtocolMessage;
 /// </para>
 /// </summary>
 public sealed record IdentifyScreensMessage : ProtocolMessage;
+
+/// <summary>The coarse commands for a whole device (Part 7, device band) - each one reaches every screen of it.</summary>
+public enum DeviceCommand
+{
+    /// <summary>Empties the picture store on the disk; what lies on the screens is fetched again.</summary>
+    ClearCache,
+
+    /// <summary>Starts the display application anew - the device connects again by itself.</summary>
+    Restart,
+
+    /// <summary>The device takes a new name, and its screens' default labels with it.</summary>
+    Rename,
+}
+
+/// <summary>
+/// One of the device commands (Part 7). State, not transient: pressed while setting up, when nothing
+/// is going on, and a press that silently does nothing is worse than a late one. A rename for a
+/// device that is switched off is kept by the hub and goes out when it connects.
+/// </summary>
+/// <param name="Name">The new name, for <see cref="DeviceCommand.Rename"/>; nothing otherwise.</param>
+public sealed record DeviceCommandMessage(DeviceCommand Command, string? Name = null) : ProtocolMessage;
 
 /// <summary>Constants that both ends agree on.</summary>
 public static class Protocol

@@ -440,6 +440,26 @@ public sealed class PairingDirectory
         }
     }
 
+    /// <summary>Gives a paired device another name - the one the control's lists show. False when it is not paired.</summary>
+    public bool Rename(DeviceId device, string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        lock (_gate)
+        {
+            if (!_paired.TryGetValue(device, out var paired))
+            {
+                return false;
+            }
+
+            _paired[device] = paired with { Name = name };
+        }
+
+        Changed?.Invoke();
+
+        return true;
+    }
+
     /// <summary>Whether this device is paired.</summary>
     public bool IsPaired(DeviceId device)
     {

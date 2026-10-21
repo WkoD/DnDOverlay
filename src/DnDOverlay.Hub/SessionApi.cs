@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Logging;
@@ -1771,6 +1772,53 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
         return Task.CompletedTask;
     }
+
+    /// <summary>New names for devices that were switched off when they were renamed - they go out on connect.</summary>
+    private readonly ConcurrentDictionary<DeviceId, string> _renames = new();
+
+    /// <inheritdoc />
+    public Task<bool> SendDeviceCommandAsync(DeviceId device, DeviceCommand command, string? name = null, CancellationToken cancellationToken = default)
+    {
+        var connected = _connections.TryGet(device, out var connection);
+
+        if (command is DeviceCommand.Rename)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+            if (!_pairing.Rename(device, name))
+            {
+                return Task.FromResult(false);
+            }
+
+            if (connected)
+            {
+                _ = _renames.TryRemove(device, out _);
+                _ = connection!.TrySend(new DeviceCommandMessage(command, name));
+            }
+            else
+            {
+                _renames[device] = name;
+            }
+
+            HubLog.DeviceCommandSent(_logger, device, command, connected);
+
+            return Task.FromResult(true);
+        }
+
+        if (!connected)
+        {
+            return Task.FromResult(false);
+        }
+
+        _ = connection!.TrySend(new DeviceCommandMessage(command));
+        HubLog.DeviceCommandSent(_logger, device, command, true);
+
+        return Task.FromResult(true);
+    }
+
+    /// <summary>A new name kept for a device that was off when it was renamed - taken, so it goes out once.</summary>
+    internal string? TakeRename(DeviceId device) =>
+        _renames.TryRemove(device, out var name) ? name : null;
 
     /// <inheritdoc />
     public Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default)

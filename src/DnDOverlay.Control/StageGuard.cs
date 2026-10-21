@@ -131,7 +131,11 @@ internal sealed class StageGuard : IDisposable
 
         foreach (var device in _devices.Where(device => Here(device, own)))
         {
-            foreach (var screen in device.Screens.Where(screen => covered.Contains(screen.Screen.Screen)))
+            // A screen shown as a window does not lie on top of the stage - it can slip behind it
+            // like any window, so it is not held back (Part 6).
+            foreach (var screen in device.Screens.Where(screen =>
+                covered.Contains(screen.Screen.Screen)
+                && _session.ContextOf(screen.Screen).Presentation is not ScreenPresentation.Window))
             {
                 _ = wanted.Add(screen.Screen);
             }

@@ -69,6 +69,8 @@ public sealed class ProtocolJsonTests
         // Carries nothing, and that is the statement: the device knows its own screens and what
         // each is called, so a list from the control would be a second copy of the names (Part 6).
         new IdentifyScreensMessage(),
+        new DeviceCommandMessage(DeviceCommand.Rename, "TISCH-PC"),
+        new DeviceCommandMessage(DeviceCommand.Restart),
 
         // The first message that is not state (Part 4). It names no device: the hub knows which
         // connection a reading came in on, and that is the answer a device cannot get wrong.

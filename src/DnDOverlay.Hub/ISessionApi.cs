@@ -1,4 +1,5 @@
 using DnDOverlay.Core;
+using DnDOverlay.Core.Protocol;
 
 namespace DnDOverlay.Hub;
 
@@ -635,6 +636,14 @@ public interface ISessionApi
     /// </para>
     /// </summary>
     Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// One of the coarse device commands (Part 7). Clearing the picture store and restarting reach a
+    /// connected device only - false otherwise, said rather than silently dropped. A rename changes
+    /// the name in the lists at once and reaches the device now or, when it is switched off, the
+    /// next time it connects; its screens' default labels follow it.
+    /// </summary>
+    Task<bool> SendDeviceCommandAsync(DeviceId device, DeviceCommand command, string? name = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Everything a surface shows, as one stream: the device tree, the scenes, the pairing desk and

@@ -192,6 +192,9 @@ internal sealed class OverlayWindow : Window
     /// </summary>
     private readonly DispatcherTimer _sweep;
 
+    /// <summary>Whether this screen is shown as an ordinary window rather than the overlay (Part 6).</summary>
+    internal bool Windowed => _windowed;
+
     internal OverlayWindow(MonitorInfo monitor, bool windowed)
     {
         _monitor = monitor;

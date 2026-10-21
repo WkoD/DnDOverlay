@@ -372,7 +372,12 @@ public sealed record DisplayConfiguration : IConfigurationDocument
 }
 
 /// <summary>The stored parameters of one screen, keyed by the identifier the device derives.</summary>
-public sealed record ScreenPreferences(string ScreenId, ScreenSettings Settings);
+/// <param name="Window">
+/// Where the screen's window stood, for a screen shown as a window (Part 6): a window that is
+/// somewhere else after every start would be the reason never to use the mode again. Null for one
+/// that never was a window.
+/// </param>
+public sealed record ScreenPreferences(string ScreenId, ScreenSettings Settings, WindowPlacement? Window = null);
 
 /// <summary>
 /// The source-generated context for the configuration files. Same reasoning as the protocol:

@@ -1,5 +1,6 @@
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
+using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
 
 namespace DnDOverlay.Control;
@@ -299,6 +300,9 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
     public Task SpotlightAsync(ScreenRef screen, Point at, CancellationToken cancellationToken = default) => _inner.SpotlightAsync(screen, at, cancellationToken);
 
     public Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default) => _inner.IdentifyScreensAsync(device, cancellationToken);
+
+    public Task<bool> SendDeviceCommandAsync(DeviceId device, DeviceCommand command, string? name = null, CancellationToken cancellationToken = default) =>
+        _inner.SendDeviceCommandAsync(device, command, name, cancellationToken);
 
     public IAsyncEnumerable<SessionEvent> Subscribe(CancellationToken cancellationToken = default) => _inner.Subscribe(cancellationToken);
 

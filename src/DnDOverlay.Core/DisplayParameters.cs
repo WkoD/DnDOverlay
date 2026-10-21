@@ -66,6 +66,7 @@ public static class DisplayParameters
     /// <summary>Every parameter, screen ones first, in the order a band lists them.</summary>
     public static IReadOnlyList<DisplayParameter> All { get; } =
     [
+        new(nameof(ScreenSettings.Presentation), "Shown as", ParameterScope.Screen, ParameterKind.Choice, Choices: Enum.GetNames<ScreenPresentation>()),
         new(nameof(ScreenSettings.ScaleOnLoad), "Arrival size", ParameterScope.Screen, ParameterKind.Number, "of the screen height", 0.05, 1, 2),
         new(nameof(ScreenSettings.MaxWidthOnLoad), "Arrival width at most", ParameterScope.Screen, ParameterKind.Number, "of the screen width", 0.1, 1, 2),
         new(nameof(ScreenSettings.Placement), "New pictures arrive", ParameterScope.Screen, ParameterKind.Choice, Choices: Enum.GetNames<PlacementMode>()),
@@ -99,6 +100,7 @@ public static class DisplayParameters
 
         return parameter.Key switch
         {
+            nameof(ScreenSettings.Presentation) => context.Presentation.ToString(),
             nameof(ScreenSettings.ScaleOnLoad) => context.ScaleOnLoad,
             nameof(ScreenSettings.MaxWidthOnLoad) => context.MaxWidthOnLoad,
             nameof(ScreenSettings.Placement) => context.Placement.ToString(),
@@ -127,6 +129,7 @@ public static class DisplayParameters
 
         return parameter.Key switch
         {
+            nameof(ScreenSettings.Presentation) => new ScreenSettings(Presentation: Enum.Parse<ScreenPresentation>((string)value)),
             nameof(ScreenSettings.ScaleOnLoad) => new ScreenSettings(ScaleOnLoad: Number(value)),
             nameof(ScreenSettings.MaxWidthOnLoad) => new ScreenSettings(MaxWidthOnLoad: Number(value)),
             nameof(ScreenSettings.Placement) => new ScreenSettings(Placement: Enum.Parse<PlacementMode>((string)value)),

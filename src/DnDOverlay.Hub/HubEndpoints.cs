@@ -593,6 +593,12 @@ public static class HubEndpoints
 
             connection.TrySend(new ConfigUpdateMessage(settings));
 
+            // A rename made while the device was switched off: its screens' labels follow the name.
+            if (session is SessionApi api && api.TakeRename(device.Device) is { } renamed)
+            {
+                connection.TrySend(new DeviceCommandMessage(DeviceCommand.Rename, renamed));
+            }
+
             // A diagnostic view that stayed open across the reconnect. The device forgot the wish
             // with its last connection, as it should - a stream must not outlive its reader.
             if (session.DiagnosticsRequested(device.Device))

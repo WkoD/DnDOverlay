@@ -340,6 +340,12 @@ public sealed partial class App : Application, IDisposable
     private DeviceId _device;
     private string _deviceName = string.Empty;
 
+    /// <summary>
+    /// Where each screen's window stood, for a screen shown as a window (Part 6) - kept beside the
+    /// parameters in display.json, so the window comes back where it was put.
+    /// </summary>
+    private readonly Dictionary<ScreenId, WindowPlacement> _placements = [];
+
     /// <summary>The setup screen, one per monitor, while a pairing request lies before the DM.</summary>
     private readonly List<SetupWindow> _setup = [];
     private bool _windowed;
@@ -606,6 +612,11 @@ public sealed partial class App : Application, IDisposable
 
         var stored = _settings.Screens.ToDictionary(screen => screen.ScreenId, screen => screen.Settings, StringComparer.Ordinal);
 
+        foreach (var screen in _settings.Screens.Where(screen => screen.Window is not null))
+        {
+            _placements.TryAdd(new ScreenId(screen.ScreenId), screen.Window!);
+        }
+
         _monitors.Clear();
 
         foreach (var monitor in monitors)
@@ -737,6 +748,13 @@ public sealed partial class App : Application, IDisposable
             {
                 _contexts[screen.Screen] = settings.ApplyTo(context);
 
+                // Overlay and window are two frames, not two switches on one: the window is built
+                // anew in the other one, and Show below puts it down again.
+                if (settings.Presentation is { } presentation && presentation != context.Presentation)
+                {
+                    Close(screen.Screen);
+                }
+
                 // Null means unchanged on the wire, so an EMPTY name is how one is taken away
                 // again - and the default underneath is still there to fall back to.
                 if (settings.CustomName is { Length: > 0 } name)
@@ -822,7 +840,8 @@ public sealed partial class App : Application, IDisposable
                     // The OPINION, not the full set: a value nobody ever touched is not written, so
                     // a corrected default reaches this machine on the next start instead of being
                     // overwritten by its own file (Guide G13, ScreenSettings.Opinion).
-                    ScreenSettings.Opinion(pair.Value, _names.GetValueOrDefault(pair.Key)))),
+                    ScreenSettings.Opinion(pair.Value, _names.GetValueOrDefault(pair.Key)),
+                    _placements.GetValueOrDefault(pair.Key))),
             ],
             Device = new DeviceSettings(_log?.Level, _forwarding?.AtLeast, _wake?.Wanted, _rescueAfterSeconds),
         };
@@ -864,7 +883,30 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        var window = new OverlayWindow(monitor, _windowed) { State = command.State };
+        var windowed = Windowed(screen);
+        var window = new OverlayWindow(monitor, windowed) { State = command.State };
+
+        // A window comes back where it was put; an overlay always covers its monitor.
+        if (windowed)
+        {
+            if (_placements.TryGetValue(screen, out var placed))
+            {
+                window.WindowStartupLocation = WindowStartupLocation.Manual;
+                window.Left = placed.Left;
+                window.Top = placed.Top;
+                window.Width = placed.Width;
+                window.Height = placed.Height;
+
+                if (placed.Maximised)
+                {
+                    window.WindowState = WindowState.Maximized;
+                }
+            }
+
+            window.LocationChanged += (_, _) => Placed(screen, window);
+            window.SizeChanged += (_, _) => Placed(screen, window);
+            window.StateChanged += (_, _) => Placed(screen, window);
+        }
 
         // Before Show, because the layout that gives the stage its size happens inside it. The
         // scene is normalised against the surface it is drawn on, so a surface that changes size
@@ -935,6 +977,24 @@ public sealed partial class App : Application, IDisposable
         // inactive to active has to stand there complete, not empty until the DM next touches it.
         // That is what makes preparing on an inactive screen work at all (Part 3).
         Draw(new ScreenRef(_device, screen));
+    }
+
+    /// <summary>Whether a screen is shown as a window: by its parameter, or for every screen by <c>--windowed</c> for this session (Part 6).</summary>
+    private bool Windowed(ScreenId screen) =>
+        _windowed || (_contexts.TryGetValue(screen, out var context) && context.Presentation is ScreenPresentation.Window);
+
+    /// <summary>A window was moved or sized: kept, so it stands there after the next start too.</summary>
+    private void Placed(ScreenId screen, OverlayWindow window)
+    {
+        if (!window.IsLoaded)
+        {
+            return;
+        }
+
+        var bounds = window.WindowState is WindowState.Maximized ? window.RestoreBounds : new System.Windows.Rect(window.Left, window.Top, window.Width, window.Height);
+
+        _placements[screen] = new WindowPlacement(bounds.Left, bounds.Top, bounds.Width, bounds.Height, window.WindowState is WindowState.Maximized);
+        Remember();
     }
 
     private void Close(ScreenId screen)
@@ -1122,7 +1182,7 @@ public sealed partial class App : Application, IDisposable
         {
             while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                var due = !_windowed && _takeover.IsOpen;
+                var due = _takeover.IsOpen;
                 var absent = _takeover.Absent;
                 var offer = _offer;
 
@@ -1137,19 +1197,23 @@ public sealed partial class App : Application, IDisposable
 
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    if (words is not null && !_rescueUp && _windows.Count > 0)
+                    var overlays = _windows.Values.Count(window => !window.Windowed);
+
+                    if (words is not null && !_rescueUp && overlays > 0)
                     {
                         _rescueUp = true;
-                        DisplayLog.RescueMarkUp(_logger, _windows.Count, (int)_takeover.Grace.TotalSeconds);
+                        DisplayLog.RescueMarkUp(_logger, overlays, (int)_takeover.Grace.TotalSeconds);
                     }
                     else if (words is null)
                     {
                         _rescueUp = false;
                     }
 
+                    // Where an overlay lies and only there: a window leaves the taskbar free, and the
+                    // mark rescues the operability of a device whose taskbar is covered (Part 6).
                     foreach (var window in _windows.Values)
                     {
-                        window.Rescue(words, offer?.Name);
+                        window.Rescue(window.Windowed ? null : words, offer?.Name);
                     }
                 });
             }
@@ -1545,6 +1609,10 @@ public sealed partial class App : Application, IDisposable
                 await Dispatcher.InvokeAsync(Identify);
                 break;
 
+            case DeviceCommandMessage command:
+                await Dispatcher.InvokeAsync(() => Obey(command));
+                break;
+
             case DiagnosticsRequestMessage request:
                 // Said when it changes, so "switching the view off stops the device sending" can
                 // be read off this device's log (step 37a).
@@ -1606,6 +1674,57 @@ public sealed partial class App : Application, IDisposable
     /// <summary>
     /// The three ways a control can turn this device away, and they are told apart on purpose.
     /// </summary>
+    /// <summary>
+    /// The coarse device commands (Part 7): a new name - the screens' default labels follow it and go
+    /// up at once -, the picture store emptied and refilled for what lies on the screens, or a restart
+    /// of this application, which connects again by itself.
+    /// </summary>
+    private void Obey(DeviceCommandMessage command)
+    {
+        switch (command.Command)
+        {
+            case DeviceCommand.Rename when command.Name is { Length: > 0 } name:
+                _deviceName = name;
+                _settings = _settings with { DeviceName = name };
+                _configuration?.Save(_settings);
+                DisplayLog.DeviceRenamed(_logger, name);
+
+                // The same path as a monitor change: survey under the new name, report the labels.
+                OnDisplaySettingsChanged(this, EventArgs.Empty);
+                break;
+
+            case DeviceCommand.ClearCache:
+                var emptied = _cache.Empty();
+
+                DisplayLog.CacheCleared(_logger, emptied.Count);
+
+                foreach (var screen in _scenes.Keys.ToList())
+                {
+                    Fetch(screen);
+                }
+
+                break;
+
+            case DeviceCommand.Restart:
+                DisplayLog.Restarting(_logger);
+                _configuration?.Flush();
+
+                var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+
+                foreach (var argument in Environment.GetCommandLineArgs().Skip(1))
+                {
+                    start.ArgumentList.Add(argument);
+                }
+
+                _ = System.Diagnostics.Process.Start(start);
+                Shutdown();
+                break;
+
+            default:
+                break;
+        }
+    }
+
     /// <summary>Puts the setup screen on every monitor, or leaves it where it already stands.</summary>
     private void ShowSetup(string code)
     {

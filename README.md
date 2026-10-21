@@ -198,10 +198,15 @@ settings.
 
 **Devices** (☰ → *Devices …*, or *Set up screen …* in a tile's menu) lists every device with its
 screens on the left; on the right stand two bands for what is chosen. The **device band** says it
-applies to all of the device's screens and holds what concerns the device as a whole — keeping the
-screens awake, how soon the rescue mark appears, its log levels — plus *Show the screen names* and
-*Unpair …*. The **screen band** holds the screen's name (refused if another screen or device already
-has it), its state and every display parameter: arrival size and width, placement, the direction new
+applies to all of the device's screens and holds what concerns the device as a whole — its name
+(the screens' default labels follow it; refused if another device or screen has it), keeping the
+screens awake, how soon the rescue mark appears, its log levels — plus *Show the screen names*,
+*Clear the picture store …* (fetched again for what lies on the screens), *Restart …* (it connects
+again by itself) and *Unpair …*. The **screen band** holds the screen's name (refused if another
+screen or device already has it), its state and every display parameter: whether it is shown as an
+**overlay** or as an ordinary **window** — for a television on the wall or a player's monitor, where
+an overlay would take the whole screen; the window remembers where it was put, and the rescue mark
+does not appear on it —, arrival size and width, placement, the direction new
 pictures face, where parked pictures line up, the smallest and largest picture, names, turning,
 snapping, the arrival highlight, gliding, scrolling, the diagnostic bar. A value at its default
 stands back in grey with *default* after it; a value that was set stands in full with *Reset* beside

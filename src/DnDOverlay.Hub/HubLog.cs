@@ -1,4 +1,5 @@
 using DnDOverlay.Core;
+using DnDOverlay.Core.Protocol;
 using Microsoft.Extensions.Logging;
 
 namespace DnDOverlay.Hub;
@@ -186,6 +187,13 @@ internal static partial class HubLog
         Level = LogLevel.Information,
         Message = "{DeviceId} was let in as the known device {KnownId}, taking over its name, settings and screens.")]
     internal static partial void DeviceAdopted(ILogger logger, DeviceId deviceId, DeviceId knownId);
+
+    /// <summary>A coarse device command went out - or, for a rename of a device that is off, waits for it.</summary>
+    [LoggerMessage(
+        EventId = 1059,
+        Level = LogLevel.Information,
+        Message = "Device command {Command} for {DeviceId} - sent now: {Now}.")]
+    internal static partial void DeviceCommandSent(ILogger logger, DeviceId deviceId, DeviceCommand command, bool now);
 
     [LoggerMessage(
         EventId = 1031,

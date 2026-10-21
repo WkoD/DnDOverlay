@@ -118,6 +118,18 @@ public sealed record ScreenInfo(
 /// Leaving the wish untouched means there is NOTHING to restore (Part 3).
 /// </para>
 /// </summary>
+/// <summary>
+/// How a screen is shown (Part 6, "Darstellung"): the transparent always-on-top overlay over what
+/// lies beneath, or an ordinary window - for a television on the wall or a player's second monitor,
+/// where an overlay would take the whole screen and the taskbar with it. The same application in a
+/// different frame, not a second way of drawing.
+/// </summary>
+public enum ScreenPresentation
+{
+    Overlay,
+    Window,
+}
+
 public enum SuppressReason
 {
     /// <summary>Gone from the Windows inventory, or its device is not connected.</summary>
@@ -198,7 +210,8 @@ public sealed record ScreenSettings(
     double? ArrivalHighlightSeconds = null,
     bool? Inertia = null,
     bool? ScrollUpZoomsIn = null,
-    ParkEdge? DiagnosticEdge = null)
+    ParkEdge? DiagnosticEdge = null,
+    ScreenPresentation? Presentation = null)
 {
     /// <summary>Nothing changed - the answer when a diff finds no difference.</summary>
     public static readonly ScreenSettings None = new();
@@ -229,7 +242,8 @@ public sealed record ScreenSettings(
         && ArrivalHighlightSeconds is null
         && Inertia is null
         && ScrollUpZoomsIn is null
-        && DiagnosticEdge is null;
+        && DiagnosticEdge is null
+        && Presentation is null;
 
     /// <summary>
     /// The full effective set of a screen, for the baseline in the <c>Hello</c>. Size and DPI are
@@ -256,7 +270,8 @@ public sealed record ScreenSettings(
             ArrivalHighlightSeconds: context.ArrivalHighlightSeconds,
             Inertia: context.Inertia,
             ScrollUpZoomsIn: context.ScrollUpZoomsIn,
-            DiagnosticEdge: context.DiagnosticEdge);
+            DiagnosticEdge: context.DiagnosticEdge,
+            Presentation: context.Presentation);
     }
 
     /// <summary>
@@ -309,6 +324,7 @@ public sealed record ScreenSettings(
             Inertia = Inertia ?? context.Inertia,
             ScrollUpZoomsIn = ScrollUpZoomsIn ?? context.ScrollUpZoomsIn,
             DiagnosticEdge = DiagnosticEdge ?? context.DiagnosticEdge,
+            Presentation = Presentation ?? context.Presentation,
         };
     }
 
@@ -344,7 +360,8 @@ public sealed record ScreenSettings(
             ArrivalHighlightSeconds: newer.ArrivalHighlightSeconds ?? older.ArrivalHighlightSeconds,
             Inertia: newer.Inertia ?? older.Inertia,
             ScrollUpZoomsIn: newer.ScrollUpZoomsIn ?? older.ScrollUpZoomsIn,
-            DiagnosticEdge: newer.DiagnosticEdge ?? older.DiagnosticEdge);
+            DiagnosticEdge: newer.DiagnosticEdge ?? older.DiagnosticEdge,
+            Presentation: newer.Presentation ?? older.Presentation);
     }
 
     /// <summary>
@@ -385,7 +402,8 @@ public sealed record ScreenSettings(
             ScrollUpZoomsIn: before.ScrollUpZoomsIn == after.ScrollUpZoomsIn
                 ? null
                 : after.ScrollUpZoomsIn,
-            DiagnosticEdge: before.DiagnosticEdge == after.DiagnosticEdge ? null : after.DiagnosticEdge);
+            DiagnosticEdge: before.DiagnosticEdge == after.DiagnosticEdge ? null : after.DiagnosticEdge,
+            Presentation: before.Presentation == after.Presentation ? null : after.Presentation);
     }
 }
 
@@ -666,7 +684,10 @@ public sealed record ScreenContext(
     /// opposite side - the default (Part 6). Never the park edge itself: <see cref="DiagnosticBar.EdgeOf"/>
     /// moves it away, so a bar can never lie on the fan.
     /// </summary>
-    ParkEdge? DiagnosticEdge = null)
+    ParkEdge? DiagnosticEdge = null,
+
+    /// <summary>Overlay or window (Part 6) - the default is the overlay.</summary>
+    ScreenPresentation Presentation = ScreenPresentation.Overlay)
 {
     /// <summary>The screen height in DIP - the unit <see cref="MinVisiblePixels"/> is given in.</summary>
     public double HeightInDip => Dpi <= 0 ? Size.Height : Size.Height * 96d / Dpi;
