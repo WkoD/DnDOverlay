@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using DnDOverlay.Core;
 
@@ -80,4 +81,44 @@ public sealed class InventoryEntry
     [JsonIgnore]
     public AssetMeta Meta =>
         new(PixelWidth, PixelHeight, Extension, Bytes, IsAnimated, ContentHash);
+}
+
+/// <summary>
+/// Reads the <c>schemaVersion</c> of a campaign file BEFORE it is read as what it is (Part 3: "only
+/// one thing is a hard no: a schemaVersion newer than ours"). Asked after a typed read, the rule
+/// depended on the newer file still parsing with the old types: a scene with a new item kind became
+/// "unreadable" and could be overwritten, an inventory with a changed field was set aside and replaced
+/// - after which the hard no could never fire again.
+/// </summary>
+internal static class SchemaVersions
+{
+    /// <summary>The version a file says it was written by, or <see langword="null"/> when it says none.</summary>
+    /// <exception cref="JsonException">Not JSON at all - unreadable, as before.</exception>
+    internal static int? Of(ReadOnlyMemory<byte> file)
+    {
+        // A byte order mark is no damage (the configuration learned that the hard way, Part 6).
+        if (file.Span.StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]))
+        {
+            file = file[3..];
+        }
+
+        using var document = JsonDocument.Parse(file);
+
+        if (document.RootElement.ValueKind is not JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            if (property.Name.Equals("schemaVersion", StringComparison.OrdinalIgnoreCase)
+                && property.Value.ValueKind is JsonValueKind.Number)
+            {
+                // A number too large for an int is newer than anything this build knows.
+                return property.Value.TryGetInt32(out var version) ? version : int.MaxValue;
+            }
+        }
+
+        return null;
+    }
 }

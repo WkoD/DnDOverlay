@@ -603,11 +603,19 @@ public sealed class SceneShelf
     private static T? Read<T>(string path, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type)
         where T : class, IVersioned
     {
-        T? file;
-
         try
         {
-            file = JsonSerializer.Deserialize(File.ReadAllBytes(path), type);
+            var bytes = File.ReadAllBytes(path);
+
+            // The version first, whatever shape the rest has: a scene from a newer build with an item
+            // kind this one does not know is refused, not filed as unreadable (see SchemaVersions).
+            if (SchemaVersions.Of(bytes) is { } version && version > InventoryDocument.CurrentSchemaVersion)
+            {
+                throw new CampaignSchemaException(
+                    Strings.SceneFileTooNew(path, version, InventoryDocument.CurrentSchemaVersion));
+            }
+
+            return JsonSerializer.Deserialize(bytes, type);
         }
         catch (JsonException)
         {
@@ -617,19 +625,6 @@ public sealed class SceneShelf
         {
             return null;
         }
-
-        if (file is null)
-        {
-            return null;
-        }
-
-        if (file.SchemaVersion > InventoryDocument.CurrentSchemaVersion)
-        {
-            throw new CampaignSchemaException(
-                Strings.SceneFileTooNew(path, file.SchemaVersion, InventoryDocument.CurrentSchemaVersion));
-        }
-
-        return file;
     }
 }
 

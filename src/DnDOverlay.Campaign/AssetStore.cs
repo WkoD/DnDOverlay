@@ -1010,28 +1010,26 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             return null;
         }
 
+        var bytes = File.ReadAllBytes(path);
         InventoryDocument? document;
 
         try
         {
-            document = JsonSerializer.Deserialize<InventoryDocument>(File.ReadAllBytes(path), Json);
+            // The version first, whatever shape the rest has: a newer inventory is refused, never set
+            // aside and replaced (see SchemaVersions).
+            if (SchemaVersions.Of(bytes) is { } version && version > InventoryDocument.CurrentSchemaVersion)
+            {
+                throw new CampaignSchemaException(
+                    Strings.CampaignTooNew(path, version, InventoryDocument.CurrentSchemaVersion));
+            }
+
+            document = JsonSerializer.Deserialize<InventoryDocument>(bytes, Json);
         }
         catch (JsonException)
         {
             unreadable = true;
 
             return null;
-        }
-
-        if (document is null)
-        {
-            return null;
-        }
-
-        if (document.SchemaVersion > InventoryDocument.CurrentSchemaVersion)
-        {
-            throw new CampaignSchemaException(
-                Strings.CampaignTooNew(path, document.SchemaVersion, InventoryDocument.CurrentSchemaVersion));
         }
 
         return document;

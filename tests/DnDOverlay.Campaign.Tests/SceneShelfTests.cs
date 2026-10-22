@@ -202,6 +202,24 @@ public sealed class SceneShelfTests : IDisposable
     }
 
     /// <summary>
+    /// The hard no does not depend on the newer file parsing with today's types: a scene with an item
+    /// kind this build does not know is refused as newer, not filed as unreadable - where a save could
+    /// replace it.
+    /// </summary>
+    [Fact]
+    public void A_newer_file_of_a_shape_this_build_cannot_read_is_still_refused_as_newer()
+    {
+        Shelf().SaveScene("Dorfkarte", Origin, Scene("X"), overwrite: false);
+
+        var path = Path.Combine(_directory, "scenes", "Dorfkarte.json");
+        File.WriteAllText(path, File.ReadAllText(path)
+            .Replace("\"schemaVersion\": 1", "\"schemaVersion\": 2", StringComparison.Ordinal)
+            .Replace("\"kind\": \"image\"", "\"kind\": \"hologram\"", StringComparison.Ordinal));
+
+        Assert.Throws<CampaignSchemaException>(Shelf);
+    }
+
+    /// <summary>
     /// Names come from the campaign as it is now, never from the file - and a picture the campaign
     /// does not have keeps its saved name and is listed once, for the one summary message.
     /// </summary>

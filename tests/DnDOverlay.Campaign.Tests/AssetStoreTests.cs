@@ -312,6 +312,26 @@ public sealed class AssetStoreTests : IDisposable
     }
 
     /// <summary>
+    /// A newer inventory whose fields this build cannot even read is still refused as newer - not set
+    /// aside as unreadable and replaced by a fresh schema-1 inventory, after which the hard no could
+    /// never fire again.
+    /// </summary>
+    [Fact]
+    public void ANewerSchemaOfAnotherShapeIsRefusedAndNotReplaced()
+    {
+        Open();
+
+        var path = Path.Combine(_directory, "inventory.json");
+        File.WriteAllText(path, "{ \"schemaVersion\": 2, \"createdAt\": \"2027-01-01T00:00:00Z\", \"entries\": { \"neu\": true } }");
+
+        var before = File.ReadAllBytes(path);
+
+        Assert.Throws<CampaignSchemaException>(() => Open());
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Empty(Directory.GetFiles(_directory, "inventory.json.unreadable-*"));
+    }
+
+    /// <summary>
     /// A picture's name is an identifier (Part 3): another picture's name is refused, whatever its
     /// case; the picture's own name in another case passes, and so does a new name, kept after reopening.
     /// </summary>
