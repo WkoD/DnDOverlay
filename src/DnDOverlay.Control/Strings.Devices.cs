@@ -289,4 +289,6 @@ internal static partial class Strings
     internal static string DeviceBandSpreadArrivalSizeTip => Text[nameof(DeviceBandSpreadArrivalSizeTip)];
 
     internal static string DeviceBandSpreadArrivalSizeDone(double size, int screens) => Text.Format(nameof(DeviceBandSpreadArrivalSizeDone), size, screens);
+
+    internal static string DeviceBandAutomaticRefused => Text[nameof(DeviceBandAutomaticRefused)];
 }

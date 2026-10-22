@@ -184,7 +184,7 @@ internal sealed class DeviceBands
                 DisplayParameters.Value(parameter, context),
                 DisplayParameters.FollowsDefault(parameter, context),
                 DisplayParameters.CanReset(parameter),
-                set: value => ApplyAsync(device, screen, DisplayParameters.Set(parameter, context, value)),
+                set: value => SetAsync(device, screen, DisplayParameters.Set(parameter, context, value)),
                 reset: () => ApplyAsync(device, screen, DisplayParameters.Reset(parameter, context)));
         }
 
@@ -578,6 +578,24 @@ internal sealed class DeviceBands
         };
 
         return spread;
+    }
+
+    /// <summary>
+    /// A value chosen in the screen band. A choice that cannot be sent - "Automatic" for the
+    /// diagnostic edge, because null means "unchanged" in a delta (decided 21.10.2026) - is refused
+    /// where it was made: the band is drawn again from what is in force, so the box does not show
+    /// "Automatic" while the device keeps its edge, and the line says why (M5 review).
+    /// </summary>
+    private async Task SetAsync(DeviceView device, ScreenView screen, ScreenSettings settings)
+    {
+        if (settings.IsEmpty)
+        {
+            _say(Strings.DeviceBandAutomaticRefused);
+            Changed?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        await ApplyAsync(device, screen, settings).ConfigureAwait(true);
     }
 
     private async Task ApplyAsync(DeviceView device, ScreenView screen, ScreenSettings settings)
