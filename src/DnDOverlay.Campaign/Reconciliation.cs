@@ -42,6 +42,13 @@ public sealed record CampaignReport(
     /// </summary>
     public IReadOnlyList<string> Skipped { get; init; } = [];
 
+    /// <summary>
+    /// The campaign was closed - switched away from, renamed, deleted, moved - before the check was done.
+    /// What it did so far is in the counts; nothing more was touched, and the report belongs to a
+    /// campaign that is no longer open.
+    /// </summary>
+    public bool Interrupted { get; init; }
+
     /// <summary>Whether there is anything to say at all - a campaign without findings opens without a report.</summary>
     public bool IsEmpty =>
         Adopted == 0 && Duplicates == 0 && Missing.Count == 0 && Foreign.Count == 0 && !Reconstructed && UnreadableScenes.Count == 0
@@ -134,6 +141,13 @@ public static partial class Reconciliation
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            // The stock refuses writes once closed, and its path may name another campaign's folder by
+            // now - an unnamed one reuses a freed name. Nothing below may touch a file after that.
+            if (store.IsClosed)
+            {
+                break;
+            }
+
             try
             {
                 await SettleOneAsync(store, shelf, findings, file, tally, cancellationToken).ConfigureAwait(false);
@@ -165,6 +179,7 @@ public static partial class Reconciliation
         {
             Kept = Relative(store, tally.Kept),
             Skipped = Relative(store, tally.Skipped),
+            Interrupted = store.IsClosed,
         };
     }
 
@@ -233,7 +248,11 @@ public static partial class Reconciliation
 
         if (result is not IngestResult.Taken taken)
         {
-            tally.Foreign.Add(file);
+            // Refused because the stock closed meanwhile is no verdict on the file.
+            if (!store.IsClosed)
+            {
+                tally.Foreign.Add(file);
+            }
 
             return;
         }
@@ -267,7 +286,7 @@ public static partial class Reconciliation
     /// </summary>
     private static bool RemoveCopy(AssetStore store, string file, Tally tally)
     {
-        if (store.Keeps(file))
+        if (store.Keeps(file) || store.IsClosed)
         {
             return false;
         }

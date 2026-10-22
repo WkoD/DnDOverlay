@@ -36,6 +36,14 @@ public sealed class OpenCampaign
 
     /// <summary>Where it lies.</summary>
     public string Directory => Store.Directory;
+
+    /// <summary>
+    /// Ends every write into its folder - for the caller that switches away from it, closes it or
+    /// moves the campaigns: an ingest still decoding and a folder check still settling would otherwise
+    /// write into the old path afterwards (<see cref="AssetStore.Close"/>). Rename and delete close it
+    /// themselves.
+    /// </summary>
+    public void Close() => Store.Close();
 }
 
 /// <summary>What became of a rename.</summary>
@@ -182,6 +190,11 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
         var from = campaign.Directory;
         var to = Path.Combine(BasePath, newName);
 
+        // Closed first: an ingest that finished after the move would write into the old path and bring
+        // the folder back as a second campaign. The campaign comes back opened from the new place; if
+        // the move is refused, the old stock takes writes again.
+        campaign.Close();
+
         try
         {
             if (sameOne)
@@ -198,12 +211,10 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
                 Directory.Move(from, to);
             }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return (CampaignOutcome.Busy, campaign);
-        }
-        catch (UnauthorizedAccessException)
-        {
+            campaign.Store.Reopen();
+
             return (CampaignOutcome.Busy, campaign);
         }
 
@@ -227,6 +238,9 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
         {
             throw new InvalidOperationException($"{campaign.Directory} is not a campaign under {BasePath}.");
         }
+
+        // Nothing may write the folder back after it is gone - the delete is final (Part 3).
+        campaign.Close();
 
         Directory.Delete(campaign.Directory, recursive: true);
     }

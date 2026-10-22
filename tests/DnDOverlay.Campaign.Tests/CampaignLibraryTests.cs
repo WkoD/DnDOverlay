@@ -87,6 +87,89 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_base, "~unbenannt")));
     }
 
+    /// <summary>
+    /// An ingest that finishes after the rename - it was still decoding while the folder moved - writes
+    /// nothing into the old path: no "~unbenannt" with a full inventory and one file in it comes back
+    /// in the switcher. The picture is refused with a reason instead.
+    /// </summary>
+    [Fact]
+    public async Task A_picture_finished_after_a_rename_does_not_bring_the_old_folder_back()
+    {
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+        var old = campaign.Store;
+
+        await Ingest(old, "eins");
+        Assert.Equal(CampaignOutcome.Done, library.Rename(campaign, "Kerkerwelt").Outcome);
+
+        var late = await old.IngestAsync(Bytes("zwei"), "Zwei", Cancellation);
+
+        Assert.Equal(IntakeRejection.Unavailable, Assert.IsType<IngestResult.Refused>(late).Reason);
+        Assert.False(Directory.Exists(Path.Combine(_base, "~unbenannt")));
+        Assert.Equal(["Kerkerwelt"], library.List().Select(summary => summary.Name));
+    }
+
+    /// <summary>The same after a delete: the campaign stays deleted (Part 3), and so does a closed one's stock.</summary>
+    [Fact]
+    public async Task Nothing_written_after_a_delete_brings_the_campaign_back()
+    {
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+
+        library.Delete(campaign);
+
+        Assert.IsType<IngestResult.Refused>(await campaign.Store.IngestAsync(Bytes("eins"), "Eins", Cancellation));
+        Assert.False(campaign.Store.Remove(new AssetId(new string('a', 64))));
+        Assert.Empty(library.List());
+        Assert.False(Directory.Exists(campaign.Directory));
+    }
+
+    /// <summary>
+    /// A folder check still settling when the campaign is closed stops there: it moves, takes in and
+    /// deletes nothing more, and says it was interrupted, so its report is not shown for a campaign
+    /// that is no longer open.
+    /// </summary>
+    [Fact]
+    public async Task A_folder_check_stops_when_its_campaign_is_closed()
+    {
+        var campaign = Campaign("Sturmküste");
+
+        _codec.PassThrough = true;
+        File.WriteAllBytes(Path.Combine(campaign, "Ork.png"), Bytes("ork"));
+
+        var opened = Library().Open("Sturmküste");
+
+        opened.Close();
+
+        var report = await Reconciliation.SettleAsync(opened.Store, opened.Shelf, opened.Findings, cancellationToken: Cancellation);
+
+        Assert.True(report.Interrupted);
+        Assert.Equal(0, report.Adopted);
+        Assert.True(File.Exists(Path.Combine(campaign, "Ork.png")));
+        Assert.Empty(opened.Store.Entries);
+    }
+
+    /// <summary>A rename the system refuses leaves the campaign as it was - and its stock taking pictures again.</summary>
+    [Fact]
+    public async Task A_refused_rename_leaves_the_stock_open()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to move a folder with a file held open inside");
+        }
+
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+
+        using (File.Open(Path.Combine(campaign.Directory, "inventory.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Equal(CampaignOutcome.Busy, library.Rename(campaign, "Kerkerwelt").Outcome);
+        }
+
+        Assert.False(campaign.Store.IsClosed);
+        await Ingest(campaign.Store, "eins");
+    }
+
     [Fact]
     public void Deleting_takes_the_folder()
     {

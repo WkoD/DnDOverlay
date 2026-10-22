@@ -59,4 +59,7 @@
   <data name="NothingCameOfIt" xml:space="preserve">
     <value>Nothing came of it.</value>
   </data>
+  <data name="CampaignClosed" xml:space="preserve">
+    <value>The campaign was closed while this picture came in, so it was not taken in.</value>
+  </data>
 </root>

@@ -59,6 +59,9 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// <summary>See <see cref="InventoryDocument.Removed"/>; guarded by <see cref="_gate"/> like the entries.</summary>
     private readonly HashSet<string> _removed = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>See <see cref="Close"/>; guarded by <see cref="_gate"/>.</summary>
+    private bool _closed;
+
     private AssetStore(
         string directory,
         IImageCodec codec,
@@ -109,6 +112,45 @@ public sealed class AssetStore : IAssetSource, IAssetSink
                     .Select(entry => new AssetId(entry.AssetId))
                     .ToHashSet();
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether this stock was closed (<see cref="Close"/>) and writes nothing any more.
+    /// </summary>
+    public bool IsClosed
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _closed;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ends the writes into this folder: the campaign is renamed, deleted, switched away from or moved.
+    /// A stock is bound to its folder's path for good, and a write after that - an ingest that was
+    /// still decoding, a folder check still settling - recreated the old folder with a full inventory
+    /// and brought the campaign back as a ghost (Part 3: the delete is final; Part 7: nobody moves a
+    /// folder pictures are being written into). Returns once a write in progress is done; reading
+    /// stays possible. Idempotent.
+    /// </summary>
+    public void Close()
+    {
+        lock (_gate)
+        {
+            _closed = true;
+        }
+    }
+
+    /// <summary>Takes back <see cref="Close"/> when the step it was for did not happen - a rename the system refused.</summary>
+    internal void Reopen()
+    {
+        lock (_gate)
+        {
+            _closed = false;
         }
     }
 
@@ -309,7 +351,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
         lock (_gate)
         {
-            if (!_entries.TryGetValue(asset.Value, out var entry))
+            if (_closed || !_entries.TryGetValue(asset.Value, out var entry))
             {
                 return NameOutcome.Unknown;
             }
@@ -332,42 +374,38 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// disappears everywhere), and the order matters: the reference goes before the bytes. A file
     /// that cannot be deleted right now - open in a viewer - stays behind as a foreign file the next
     /// reconciliation names (M5b5) - noted in the inventory, or it would come back in as a picture
-    /// without an entry; the entry is gone either way. False when there was no such entry.
+    /// without an entry; the entry is gone either way. False when there was no such entry, or the
+    /// stock is closed: its path may name another campaign's folder by now.
     /// </summary>
     public bool Remove(AssetId asset)
     {
-        InventoryEntry? entry;
-
         lock (_gate)
         {
-            if (!_entries.Remove(asset.Value, out entry))
+            if (_closed || !_entries.Remove(asset.Value, out var entry))
             {
                 return false;
             }
 
             SaveInventory();
-        }
 
-        try
-        {
-            File.Delete(FileOf(entry));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            lock (_gate)
+            try
+            {
+                File.Delete(FileOf(entry));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _removed.Add(Path.GetFileName(FileOf(entry)));
                 SaveInventory();
             }
-        }
 
-        try
-        {
-            File.Delete(ThumbnailPath(asset));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Derived: the next reconciliation removes it as a thumbnail nobody has.
+            try
+            {
+                File.Delete(ThumbnailPath(asset));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Derived: the next reconciliation removes it as a thumbnail nobody has.
+            }
         }
 
         return true;
@@ -387,7 +425,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     {
         lock (_gate)
         {
-            if (_removed.RemoveWhere(name => !File.Exists(Path.Combine(Directory, AssetsFolder, name))) > 0)
+            if (!_closed && _removed.RemoveWhere(name => !File.Exists(Path.Combine(Directory, AssetsFolder, name))) > 0)
             {
                 try
                 {
@@ -511,13 +549,22 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             return new IngestResult.Refused(rejected.Reason.AsIntake(), rejected.Message);
         }
 
-        // Written before the entry exists, and that order is the promise: an ingest that fails
-        // after the file is there leaves no item without a picture, because the reference only
-        // goes out once the bytes are on disk (Part 11).
-        WriteFiles(entry, normalised, thumbnail);
-
         lock (_gate)
         {
+            // Closed while this one decoded - renamed, deleted, switched away from, moved. Writing now
+            // would bring the old folder back as a campaign with a full inventory and one file in it
+            // (Part 3: the delete is final). Asked under the same lock Close takes, so a write that
+            // has begun is finished before the folder may move, and none begins after.
+            if (_closed)
+            {
+                return new IngestResult.Refused(IntakeRejection.Unavailable, Strings.CampaignClosed);
+            }
+
+            // Written before the entry exists, and that order is the promise: an ingest that fails
+            // after the file is there leaves no item without a picture, because the reference only
+            // goes out once the bytes are on disk (Part 11).
+            WriteFiles(entry, normalised, thumbnail);
+
             // Somebody else may have finished the same image while this one was decoding. Theirs
             // won - the bytes are identical by construction, so the loser drops its work rather
             // than making a second entry. A healed entry lands here too, and keeps its name.
@@ -618,7 +665,8 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
         lock (_gate)
         {
-            if (!_entries.TryGetValue(asset.Value, out var entry)
+            if (_closed
+                || !_entries.TryGetValue(asset.Value, out var entry)
                 || !string.Equals(entry.ContentHash, hash, StringComparison.Ordinal)
                 || File.Exists(FileOf(entry)))
             {
@@ -657,8 +705,8 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// a file that fails any of this is foreign and stays where it is (Part 3).
     /// </summary>
     /// <returns>
-    /// The entry's reference, or <see langword="null"/> when the file is no picture to adopt this way
-    /// or another file lies where it would go.
+    /// The entry's reference, or <see langword="null"/> when the file is no picture to adopt this way,
+    /// another file lies where it would go, or the stock is closed.
     /// </returns>
     public AssetRef? AdoptStored(string file, string name, DateTimeOffset addedAt)
     {
@@ -704,6 +752,11 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
         lock (_gate)
         {
+            if (_closed)
+            {
+                return null;
+            }
+
             if (_entries.TryGetValue(id.Value, out var known))
             {
                 return new AssetRef(id, known.Meta, known.Name);
@@ -783,12 +836,9 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     public int RepairThumbnails()
     {
         var made = 0;
-        var known = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var entry in Entries)
         {
-            known.Add(entry.AssetId);
-
             var thumbnail = ThumbnailPath(new AssetId(entry.AssetId));
             var file = FileOf(entry);
 
@@ -799,7 +849,20 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
             try
             {
-                AtomicFile.WriteContentAddressed(thumbnail, _codec.Thumbnail(File.ReadAllBytes(file), ThumbnailWidth));
+                // Made outside the lock - it is a decode - and written inside it, like every write here,
+                // so a closed stock writes nothing (see Close).
+                var bytes = _codec.Thumbnail(File.ReadAllBytes(file), ThumbnailWidth);
+
+                lock (_gate)
+                {
+                    if (_closed)
+                    {
+                        return made;
+                    }
+
+                    AtomicFile.WriteContentAddressed(thumbnail, bytes);
+                }
+
                 made++;
             }
             catch (ImageRejectedException)
@@ -814,18 +877,26 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
         var folder = Path.Combine(Directory, AssetsFolder, ThumbnailFolder);
 
-        if (!System.IO.Directory.Exists(folder))
+        // Under the lock, and the entries asked inside it rather than from a list taken at the start: an
+        // ingest writes its thumbnail and adds its entry in one step under the same lock, so a picture
+        // dropped while this ran is never seen with a thumbnail and without an entry - and its fresh
+        // thumbnail is not removed as one nobody has.
+        lock (_gate)
         {
-            return made;
-        }
-
-        foreach (var stray in System.IO.Directory.EnumerateFiles(folder, "*.png"))
-        {
-            var stem = Path.GetFileNameWithoutExtension(stray);
-            var id = stem.Split('_')[0];
-
-            if (!known.Contains(id))
+            if (_closed || !System.IO.Directory.Exists(folder))
             {
+                return made;
+            }
+
+            foreach (var stray in System.IO.Directory.EnumerateFiles(folder, "*.png"))
+            {
+                var id = Path.GetFileNameWithoutExtension(stray).Split('_')[0];
+
+                if (_entries.ContainsKey(id))
+                {
+                    continue;
+                }
+
                 try
                 {
                     File.Delete(stray);

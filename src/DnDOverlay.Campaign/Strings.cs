@@ -31,4 +31,6 @@ internal static class Strings
     internal static string MoveCopyFailed(string reason) => Text.Format(nameof(MoveCopyFailed), reason);
 
     internal static string NothingCameOfIt => Text[nameof(NothingCameOfIt)];
+
+    internal static string CampaignClosed => Text[nameof(CampaignClosed)];
 }
