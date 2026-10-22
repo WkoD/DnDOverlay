@@ -54,7 +54,14 @@ public sealed record AssetUsage(IReadOnlyList<string> Scenes, IReadOnlyList<stri
 /// What a delete left behind: scenes and layouts that held nothing else and are empty now - offered
 /// for deletion, never kept quietly (Part 7).
 /// </summary>
-public sealed record EmptiedByDelete(IReadOnlyList<string> Scenes, IReadOnlyList<string> Layouts);
+public sealed record EmptiedByDelete(IReadOnlyList<string> Scenes, IReadOnlyList<string> Layouts)
+{
+    /// <summary>
+    /// Scenes and layouts whose file could not be rewritten - held by a sync client, a full disk. They
+    /// still show the deleted pictures, which load as placeholders; the control names them.
+    /// </summary>
+    public IReadOnlyList<string> NotWritten { get; init; } = [];
+}
 
 /// <summary>What became of a save or a rename.</summary>
 public enum ShelfOutcome
@@ -70,6 +77,13 @@ public enum ShelfOutcome
 
     /// <summary>There is no scene or layout of that name.</summary>
     Unknown,
+
+    /// <summary>
+    /// The file system refused - a file held by a sync client or a scanner, a full disk. Nothing
+    /// changed, on disk or in the list; the control says so (the stock's refusals are stated the
+    /// same way, not thrown).
+    /// </summary>
+    Failed,
 }
 
 /// <summary>
@@ -187,9 +201,7 @@ public sealed class SceneShelf
             return refused;
         }
 
-        WriteScene(name, new SavedScene(origin, _time.GetLocalNow(), scene with { FocusItems = [] }));
-
-        return ShelfOutcome.Done;
+        return Attempt(() => WriteScene(name, new SavedScene(origin, _time.GetLocalNow(), scene with { FocusItems = [] })));
     }
 
     /// <summary>Saves a layout under a typed name, with the same rules as a scene.</summary>
@@ -202,11 +214,9 @@ public sealed class SceneShelf
             return refused;
         }
 
-        WriteLayout(name, new SavedLayout(
+        return Attempt(() => WriteLayout(name, new SavedLayout(
             _time.GetLocalNow(),
-            [.. parts.Select(part => part with { Scene = part.Scene with { Scene = part.Scene.Scene with { FocusItems = [] } } })]));
-
-        return ShelfOutcome.Done;
+            [.. parts.Select(part => part with { Scene = part.Scene with { Scene = part.Scene.Scene with { FocusItems = [] } } })])));
     }
 
     /// <summary>Renames a scene and its file. A change of case only is a rename, not a collision.</summary>
@@ -217,10 +227,10 @@ public sealed class SceneShelf
     public ShelfOutcome RenameLayout(string name, string newName) =>
         Rename(LayoutsFolder, _layouts, name, newName);
 
-    /// <summary>Deletes a scene and its file.</summary>
+    /// <summary>Deletes a scene and its file. False when there is none, or its file would not go - then it stays listed.</summary>
     public bool DeleteScene(string name) => Delete(ScenesFolder, _scenes, name);
 
-    /// <summary>Deletes a layout and its file.</summary>
+    /// <summary>Deletes a layout and its file, with the same answer as <see cref="DeleteScene"/>.</summary>
     public bool DeleteLayout(string name) => Delete(LayoutsFolder, _layouts, name);
 
     /// <summary>Which saved scenes and layouts show a picture - the reference display before a delete (Part 7).</summary>
@@ -264,29 +274,46 @@ public sealed class SceneShelf
     /// that goes missing later and the previews of both tabs say the current name. The time of saving
     /// stays: this is not the DM saving.
     /// </summary>
-    public void RenameAsset(AssetId asset, string name)
+    /// <returns>
+    /// The scenes and layouts whose file could not be rewritten. Harmless beyond the preview: they keep
+    /// the old name on disk, and loading resolves the current one anyway.
+    /// </returns>
+    public IReadOnlyList<string> RenameAsset(AssetId asset, string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
+        var notWritten = new List<string>();
+
         foreach (var (key, saved) in _scenes.Where(pair => Shows(pair.Value.Scene, asset)).ToList())
         {
-            WriteScene(key, saved with { Scene = Named(saved.Scene, asset, name) });
+            if (Attempt(() => WriteScene(key, saved with { Scene = Named(saved.Scene, asset, name) })) is ShelfOutcome.Failed)
+            {
+                notWritten.Add(key);
+            }
         }
 
         foreach (var (key, saved) in _layouts.Where(pair => pair.Value.Parts.Any(part => Shows(part.Scene.Scene, asset))).ToList())
         {
-            WriteLayout(key, saved with
+            var renamed = saved with
             {
                 Parts = [.. saved.Parts.Select(part => part with { Scene = part.Scene with { Scene = Named(part.Scene.Scene, asset, name) } })],
-            });
+            };
+
+            if (Attempt(() => WriteLayout(key, renamed)) is ShelfOutcome.Failed)
+            {
+                notWritten.Add(key);
+            }
         }
+
+        return notWritten;
     }
 
     /// <summary>
     /// The cascade of a delete (Part 7): the pictures' items and backgrounds are taken out of every
     /// scene and layout - removed, not left as placeholders; whoever deletes on purpose wants them
     /// gone. A layout loses the screens that held nothing else. Returns what is empty now, so the
-    /// control can offer it for deletion.
+    /// control can offer it for deletion - and what could not be rewritten, one file not stopping
+    /// the others.
     /// </summary>
     public EmptiedByDelete RemoveAssets(IReadOnlyCollection<AssetId> assets)
     {
@@ -295,14 +322,17 @@ public sealed class SceneShelf
         var gone = assets.ToHashSet();
         var emptiedScenes = new List<string>();
         var emptiedLayouts = new List<string>();
+        var notWritten = new List<string>();
 
         foreach (var (key, saved) in _scenes.Where(pair => gone.Any(asset => Shows(pair.Value.Scene, asset))).ToList())
         {
             var left = Without(saved.Scene, gone);
 
-            WriteScene(key, saved with { Scene = left });
-
-            if (IsEmpty(left))
+            if (Attempt(() => WriteScene(key, saved with { Scene = left })) is ShelfOutcome.Failed)
+            {
+                notWritten.Add(key);
+            }
+            else if (IsEmpty(left))
             {
                 emptiedScenes.Add(key);
             }
@@ -315,15 +345,36 @@ public sealed class SceneShelf
                 .Where(part => !IsEmpty(part.Scene.Scene))
                 .ToList();
 
-            WriteLayout(key, saved with { Parts = parts });
-
-            if (parts.Count == 0)
+            if (Attempt(() => WriteLayout(key, saved with { Parts = parts })) is ShelfOutcome.Failed)
+            {
+                notWritten.Add(key);
+            }
+            else if (parts.Count == 0)
             {
                 emptiedLayouts.Add(key);
             }
         }
 
-        return new EmptiedByDelete(emptiedScenes, emptiedLayouts);
+        return new EmptiedByDelete(emptiedScenes, emptiedLayouts) { NotWritten = notWritten };
+    }
+
+    /// <summary>
+    /// A file operation, with the file system's refusal turned into <see cref="ShelfOutcome.Failed"/>.
+    /// Every step below changes the list only after the file did what it was told, so a refusal leaves
+    /// both as they were.
+    /// </summary>
+    private static ShelfOutcome Attempt(Action write)
+    {
+        try
+        {
+            write();
+
+            return ShelfOutcome.Done;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ShelfOutcome.Failed;
+        }
     }
 
     private void WriteScene(string name, SavedScene saved) =>
@@ -386,21 +437,59 @@ public sealed class SceneShelf
     {
         System.IO.Directory.CreateDirectory(Path.Combine(_directory, folder));
 
-        // An overwrite under a different case keeps the new spelling: the old file goes first, or
-        // on a case-insensitive file system the write would land in it under its old name.
+        // An overwrite under a different case keeps the new spelling. The content goes into the file
+        // under its old spelling first - a write that fails then leaves the old scene, never neither -
+        // and the spelling changes after; if that step is refused, the new content stays under the old
+        // name. Deleting the old file first lost the scene from disk and list on a failed write.
         if (Existing(folder, shelf, name) is { } existing
             && !string.Equals(existing, name, StringComparison.Ordinal))
         {
-            File.Delete(PathOf(folder, existing));
+            AtomicFile.Write(PathOf(folder, existing), content);
             shelf.Remove(existing);
-            _unreadable.RemoveAll(path => string.Equals(path, PathOf(folder, existing), StringComparison.OrdinalIgnoreCase));
+            Forget(folder, existing);
+
+            try
+            {
+                MoveCaseOnly(PathOf(folder, existing), PathOf(folder, name));
+                shelf[name] = value;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                shelf[existing] = value;
+            }
+
+            return;
         }
 
         AtomicFile.Write(PathOf(folder, name), content);
         shelf[name] = value;
+        Forget(folder, name);
+    }
 
-        // Overwritten after the question: what would not read is replaced by what the DM saved.
+    /// <summary>Overwritten after the question: what would not read is replaced by what the DM saved.</summary>
+    private void Forget(string folder, string name) =>
         _unreadable.RemoveAll(path => string.Equals(path, PathOf(folder, name), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// A change of case only, through a temporary name - a case-insensitive file system would call it a
+    /// move onto itself and keep the old spelling. A refused second step takes the first back, so the
+    /// file does not stay under the temporary name, where <c>*.json</c> no longer finds it.
+    /// </summary>
+    private static void MoveCaseOnly(string from, string to)
+    {
+        var between = from + ".renaming";
+
+        File.Move(from, between);
+
+        try
+        {
+            File.Move(between, to);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            File.Move(between, from);
+            throw;
+        }
     }
 
     private ShelfOutcome Rename<T>(string folder, Dictionary<string, T> shelf, string name, string newName)
@@ -426,24 +515,25 @@ public sealed class SceneShelf
         var from = PathOf(folder, existing);
         var to = PathOf(folder, newName);
 
-        if (sameEntry)
+        var moved = Attempt(() =>
         {
-            // Only the case changes: through a temporary name, or a case-insensitive file system
-            // would call it a move onto itself and keep the old spelling.
-            var between = from + ".renaming";
+            if (sameEntry)
+            {
+                MoveCaseOnly(from, to);
+            }
+            else
+            {
+                File.Move(from, to);
+            }
+        });
 
-            File.Move(from, between);
-            File.Move(between, to);
-        }
-        else
+        if (moved is ShelfOutcome.Done)
         {
-            File.Move(from, to);
+            shelf.Remove(existing);
+            shelf[newName] = value;
         }
 
-        shelf.Remove(existing);
-        shelf[newName] = value;
-
-        return ShelfOutcome.Done;
+        return moved;
     }
 
     private bool Delete<T>(string folder, Dictionary<string, T> shelf, string name)
@@ -453,7 +543,11 @@ public sealed class SceneShelf
             return false;
         }
 
-        File.Delete(PathOf(folder, existing));
+        if (Attempt(() => File.Delete(PathOf(folder, existing))) is ShelfOutcome.Failed)
+        {
+            return false;
+        }
+
         shelf.Remove(existing);
 
         return true;

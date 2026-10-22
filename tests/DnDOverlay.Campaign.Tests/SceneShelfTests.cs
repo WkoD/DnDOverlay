@@ -325,6 +325,70 @@ public sealed class SceneShelfTests : IDisposable
         Assert.Empty(Shelf().Unreadable);
     }
 
+    /// <summary>
+    /// A file held by a sync client or a scanner: save, rename and delete answer with a stated refusal
+    /// and change nothing - not an exception that ends the control - and the delete cascade rewrites
+    /// the other files and names the one it could not.
+    /// </summary>
+    [Fact]
+    public void A_held_file_is_a_stated_refusal_and_changes_nothing()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to replace, move or delete a file that somebody holds open");
+        }
+
+        var shelf = Shelf();
+        var orc = new AssetId(new string('a', 64));
+
+        shelf.SaveScene("Dorfkarte", Origin, SceneState.Empty with { Items = [Item(orc, "Ork")] }, overwrite: false);
+        shelf.SaveScene("Markt", Origin, SceneState.Empty with { Items = [Item(orc, "Ork"), Item(new AssetId(new string('b', 64)), "Händler")] }, overwrite: false);
+
+        EmptiedByDelete emptied;
+
+        using (File.Open(Path.Combine(_directory, "scenes", "Dorfkarte.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Equal(ShelfOutcome.Failed, shelf.SaveScene("Dorfkarte", Origin, Scene("Grimmbart"), overwrite: true));
+            Assert.Equal(ShelfOutcome.Failed, shelf.RenameScene("Dorfkarte", "Weiler"));
+            Assert.False(shelf.DeleteScene("Dorfkarte"));
+
+            emptied = shelf.RemoveAssets([orc]);
+        }
+
+        Assert.Equal(["Dorfkarte"], emptied.NotWritten);
+        Assert.Equal(["Dorfkarte", "Markt"], shelf.Scenes.Select(scene => scene.Name).Order(StringComparer.Ordinal));
+        Assert.Equal("Ork", Assert.IsType<ImageItem>(Assert.Single(Shelf().Scene("Dorfkarte")!.Scene.Items)).Name);
+        Assert.Single(Shelf().Scene("Markt")!.Scene.Items);
+    }
+
+    /// <summary>
+    /// Overwriting a scene under another spelling used to delete the old file before writing the new
+    /// one - a write that failed then lost the scene from disk and list. Now the old one stays.
+    /// </summary>
+    [Fact]
+    public void A_failed_overwrite_under_another_spelling_keeps_the_old_scene()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("stages the failed write with a held scratch file, which only Windows refuses");
+        }
+
+        var shelf = Shelf();
+
+        shelf.SaveScene("Dorfkarte", Origin, Scene("Grimmbart"), overwrite: false);
+
+        using (File.Open(Path.Combine(_directory, "scenes", "dorfkarte.json" + AtomicFile.TemporarySuffix), FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            Assert.Equal(ShelfOutcome.Failed, shelf.SaveScene("dorfkarte", Origin, Scene("Ratsherr"), overwrite: true));
+        }
+
+        Assert.Equal("Grimmbart", Assert.IsType<ImageItem>(Assert.Single(shelf.Scene("Dorfkarte")!.Scene.Items)).Name);
+        Assert.Equal("Grimmbart", Assert.IsType<ImageItem>(Assert.Single(Shelf().Scene("Dorfkarte")!.Scene.Items)).Name);
+
+        Assert.Equal(ShelfOutcome.Done, shelf.SaveScene("dorfkarte", Origin, Scene("Ratsherr"), overwrite: true));
+        Assert.Equal(["dorfkarte"], Shelf().Scenes.Select(scene => scene.Name));
+    }
+
     private SceneShelf Shelf() => SceneShelf.Open(_directory, _time);
 
     private static LayoutPart Part(SceneState scene) =>
