@@ -480,13 +480,23 @@ internal sealed class OverlayWindow : Window
     /// <para>
     /// Resizing raises <see cref="SurfaceChanged"/> by itself, so the redraw is not asked for here.
     /// </para>
+    /// <para>
+    /// <b>A window in windowed mode keeps its place.</b> It stands where somebody put it, and that
+    /// place is remembered (Part 6, <i>Fenster statt Overlay</i>); this is called on every
+    /// <c>ConfigUpdate</c>, every reconnect brings one, and snapping the window over its whole monitor
+    /// each time wrote the full-monitor rectangle into display.json as its place. Windows moves an
+    /// ordinary window with its monitor by itself, as for any other application.
+    /// </para>
     /// </summary>
     internal void Moved(MonitorInfo monitor)
     {
         _monitor = monitor;
         Title = monitor.Screen.Label;
 
-        Settle();
+        if (!_windowed)
+        {
+            Settle();
+        }
     }
 
     /// <summary>

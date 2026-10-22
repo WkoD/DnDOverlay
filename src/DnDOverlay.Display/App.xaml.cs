@@ -948,6 +948,12 @@ public sealed partial class App : Application, IDisposable
             window.StateChanged += (_, _) => Placed(screen, window);
         }
 
+        // A window has a close box, and Alt+F4 reaches it. Closed from outside, it is forgotten here
+        // too - a closed window kept in the table made the screen dead for good: Show only told the
+        // dead window its state, and Close called Close on it again. The next Show puts a new one
+        // down. Closed from here, Close has taken it out of the table already and this does nothing.
+        window.Closed += (_, _) => Forget(screen, window);
+
         // Before Show, because the layout that gives the stage its size happens inside it. The
         // scene is normalised against the surface it is drawn on, so a surface that changes size
         // has to be drawn on again - otherwise the first drawing stands on a guess until the next
@@ -1047,6 +1053,19 @@ public sealed partial class App : Application, IDisposable
         }
 
         window.Close();
+        DisplayLog.OverlayClosed(_logger, screen);
+    }
+
+    /// <summary>A window that was closed from outside - see the <c>Closed</c> handler in <see cref="Show"/>.</summary>
+    private void Forget(ScreenId screen, OverlayWindow window)
+    {
+        if (!_windows.TryGetValue(screen, out var standing) || !ReferenceEquals(standing, window))
+        {
+            return;
+        }
+
+        _ = _windows.Remove(screen);
+        _ = _touching.TryRemove(screen, out _);
         DisplayLog.OverlayClosed(_logger, screen);
     }
 
