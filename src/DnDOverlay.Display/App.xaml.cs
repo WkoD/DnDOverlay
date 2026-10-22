@@ -1078,9 +1078,9 @@ public sealed partial class App : Application, IDisposable
     /// together say which pictures are needed. Inactive screens count: the scene stands there too
     /// (Part 3). Asked after every snapshot; it acts once.
     /// </summary>
-    private void Settle()
+    private void Settle(List<ScreenId> screens)
     {
-        if (_stock is null || !_monitors.Keys.All(id => _scenes.ContainsKey(new ScreenRef(_device, id))))
+        if (_stock is null || !screens.All(id => _scenes.ContainsKey(new ScreenRef(_device, id))))
         {
             return;
         }
@@ -1361,7 +1361,11 @@ public sealed partial class App : Application, IDisposable
         // Every attempt builds its own Hello. After a pairing this device has a token where it had
         // a code a moment ago - a message built once at startup would go on introducing this
         // machine as a stranger for as long as it runs.
-        var hello = Introduction(deviceName);
+        //
+        // Built on the UI thread: it walks the screens, their names and parameters, and those
+        // tables belong to it - a reconnect after waking the PC lands in the same moment as a burst
+        // of DisplaySettingsChanged that rebuilds them.
+        var hello = await Dispatcher.InvokeAsync(() => Introduction(deviceName));
 
         _hubHttp = new Uri($"http://{target.Host}:{target.Port}/");
 
@@ -1477,7 +1481,12 @@ public sealed partial class App : Application, IDisposable
                 _takeover.Connected();
             }
 
-            await HandleAsync(message).ConfigureAwait(false);
+            // One message that fails costs that message, not the connection and not the search for
+            // a control (Part 1) - see MessageGuard.
+            await MessageGuard.HandleAsync(
+                () => HandleAsync(message),
+                fault => MessageFailed(message, fault),
+                _shutdown.Token).ConfigureAwait(false);
         }
 
         // Only a connection that was accepted opens the window when it ends. A request that stood
@@ -1595,6 +1604,20 @@ public sealed partial class App : Application, IDisposable
                 .Select(pair => new ScreenScene(pair.Key.Screen, pair.Value))]);
     }
 
+    /// <summary>
+    /// A message whose handling threw. Said with the fault, because nothing else shows it: the
+    /// connection carries on, and whatever the message should have done is simply missing.
+    /// </summary>
+    private void MessageFailed(ProtocolMessage message, Exception fault)
+    {
+        // INTERIM: 4012 is the nearest line there is, and its text ("going down") is wrong here - the
+        // connection carries on. To be replaced by a line of its own (MessageHandlingFailed), which
+        // needs its catalogue entry first.
+        var where = $"the handling of {message.GetType().Name} (the connection carries on)";
+
+        DisplayLog.UnhandledFault(_logger, fault, where);
+    }
+
     private async Task HandleAsync(ProtocolMessage message)
     {
         switch (message)
@@ -1626,7 +1649,11 @@ public sealed partial class App : Application, IDisposable
                 _scenes[snapshot.Screen] = snapshot.Scene;
                 await RenderAsync(snapshot.Screen).ConfigureAwait(false);
                 Fetch(snapshot.Screen);
-                Settle();
+
+                // The monitors are the UI thread's: Survey clears and refills them on every
+                // DisplaySettingsChanged, and a resolution change brings one snapshot per screen
+                // in the same moment. Only the list is taken there; the store is settled here.
+                Settle(await Dispatcher.InvokeAsync(() => _monitors.Keys.ToList()));
                 break;
 
             case ScenePatchMessage patch:
