@@ -74,6 +74,12 @@ public sealed partial class App : Application, IDisposable
     /// <summary>When a picture was last touched or arrived, as a running count - its age for the memory rule.</summary>
     private readonly ConcurrentDictionary<AssetId, long> _touchedAt = new();
 
+    /// <summary>
+    /// Pictures to fetch again although they are decoded - the store was emptied under them by
+    /// "clear the picture store" (Part 7). Taken by the next run that asks for them.
+    /// </summary>
+    private readonly ConcurrentDictionary<AssetId, byte> _refill = new();
+
     private long _touches;
 
     /// <summary>One relief at a time; a second asked meanwhile has nothing to add.</summary>
@@ -1828,6 +1834,13 @@ public sealed partial class App : Application, IDisposable
 
                 DisplayLog.CacheCleared(_logger, emptied.Count);
 
+                // Every picture on the screens is decoded, so a fetch that asks for what is missing
+                // would ask for nothing - they are marked to be fetched again (AssetsWanted).
+                foreach (var asset in SceneAssets.InUse(_scenes.Values))
+                {
+                    _refill[asset] = 0;
+                }
+
                 foreach (var screen in _scenes.Keys.ToList())
                 {
                     Fetch(screen);
@@ -2105,17 +2118,7 @@ public sealed partial class App : Application, IDisposable
             ? Math.Max(context.Size.Width, context.Size.Height)
             : 0;
 
-        var wanted = new List<AssetWanted>();
-
-        if (scene.Background is { } background && !_images.ContainsKey(background.AssetId))
-        {
-            wanted.Add(new AssetWanted(background.AssetId, background.Meta, IsBackground: true));
-        }
-
-        wanted.AddRange(scene.Items
-            .OfType<ImageItem>()
-            .Where(item => !_images.ContainsKey(item.AssetId))
-            .Select(item => new AssetWanted(item.AssetId, item.Meta, IsParked: item.Parked)));
+        var wanted = AssetsWanted.Of(scene, _images.ContainsKey, asset => _refill.TryRemove(asset, out _));
 
         if (wanted.Count == 0)
         {
@@ -2532,6 +2535,7 @@ public sealed partial class App : Application, IDisposable
             _moving.TryRemove(asset, out _);
             _steppedDown.TryRemove(asset, out _);
             _touchedAt.TryRemove(asset, out _);
+            _refill.TryRemove(asset, out _);
         }
 
         // The file may stay - the store keeps what it has room for, because a picture that comes
