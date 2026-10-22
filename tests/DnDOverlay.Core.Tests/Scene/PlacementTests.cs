@@ -439,4 +439,51 @@ public sealed class PlacementTests
         Assert.Equal(0.7, reset.CenterX, 9);
         Assert.Equal(0.3, reset.CenterY, 9);
     }
+
+    /// <summary>
+    /// A parked card belongs to the fan, which owns its size and angle (Part 6) - a reset that gave it
+    /// the arrival size would lay it over its neighbours. The lying picture of the same selection is
+    /// still reset.
+    /// </summary>
+    [Fact]
+    public void A_reset_leaves_a_parked_card_to_the_fan()
+    {
+        var screen = Build.Screen();
+        var parked = Build.Item(centerX: 0.9, centerY: 0.95, scale: 0.1, rotationDeg: 12, parked: true);
+        var lying = Build.Item(scale: 0.8);
+
+        var reset = Placement.Reset([parked, lying], screen);
+
+        Assert.Equal([lying.ItemId], reset.Select(transform => transform.Item));
+    }
+
+    /// <summary>
+    /// A text goes back to a text's arrival height, not to a picture's - which would make a caption
+    /// several times larger. The place stays, as for a picture.
+    /// </summary>
+    [Fact]
+    public void A_reset_text_gets_a_texts_arrival_height()
+    {
+        var screen = Build.Screen() with { DefaultRotationDeg = 0 };
+        var text = new TextItem(new ItemId(Guid.NewGuid()), 0.4, 0.2, 0.2, 1.5, 15, 2, Locked: false, Parked: false, Revision: 1, Text: "Townsvil");
+
+        var reset = Placement.Reset([text], screen).Single();
+
+        Assert.Equal(TextItem.ArrivalScale, reset.Scale, 9);
+        Assert.Equal(0, reset.RotationDeg);
+        Assert.Equal(0.4, reset.CenterX, 9);
+        Assert.Equal(0.2, reset.CenterY, 9);
+    }
+
+    /// <summary>A long line arrives lower rather than wider than most of the screen - and a reset keeps that cap.</summary>
+    [Fact]
+    public void A_long_texts_arrival_height_keeps_it_inside_the_screen()
+    {
+        var screen = Build.Screen();
+
+        var scale = Placement.TextArrivalScale(30, screen);
+
+        Assert.Equal(0.9 * screen.AspectRatio / 30, scale, 9);
+        Assert.True(scale < TextItem.ArrivalScale);
+    }
 }

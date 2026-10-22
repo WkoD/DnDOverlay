@@ -86,14 +86,43 @@ public static class Placement
     /// an hour ago would be one the table has filled since, and a picture that jumps somewhere else is
     /// not what "reset" promises. The hub clamps a grown picture back inside the screen, as it does
     /// for any transform.
+    /// <para>
+    /// <b>A parked card is left out.</b> The fan owns its size, angle and place and lays them on every
+    /// pass (Part 6, <see cref="Parking.Arrange"/>), and a transform does not re-run that pass - a reset
+    /// card would lie at arrival size over its neighbours at the fan's edge until the next park.
+    /// What a parked card would get arriving now is its place in the fan, which it already has.
+    /// </para>
+    /// <para>
+    /// <b>A text gets a text's arrival size</b>, not a picture's: <see cref="TextArrivalScale"/>.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<ItemTransform> Reset(IReadOnlyList<SceneItem> items, ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(screen);
 
-        return [.. items.Select(item => new ItemTransform(
-            item.ItemId, item.CenterX, item.CenterY, ArrivalScale(item.AspectRatio, screen), screen.DefaultRotationDeg))];
+        return [.. items
+            .Where(item => !item.Parked)
+            .Select(item => new ItemTransform(
+                item.ItemId,
+                item.CenterX,
+                item.CenterY,
+                item is TextItem ? TextArrivalScale(item.AspectRatio, screen) : ArrivalScale(item.AspectRatio, screen),
+                screen.DefaultRotationDeg))];
+    }
+
+    /// <summary>
+    /// How high a text of this shape arrives: a heading's height (<see cref="TextItem.ArrivalScale"/>),
+    /// but never wider than most of the screen - a long line comes in lower rather than reaching past
+    /// both edges (Part 7, free text).
+    /// </summary>
+    public static double TextArrivalScale(double aspectRatio, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var screenAspect = screen.AspectRatio > 0 ? screen.AspectRatio : 1;
+
+        return aspectRatio > 0 ? Math.Min(TextItem.ArrivalScale, 0.9 * screenAspect / aspectRatio) : TextItem.ArrivalScale;
     }
 
     /// <summary>
