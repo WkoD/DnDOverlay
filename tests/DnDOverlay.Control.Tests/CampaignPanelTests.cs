@@ -102,6 +102,56 @@ public sealed class CampaignPanelTests
         });
     }
 
+    /// <summary>
+    /// With no campaign open and the campaigns folder out of reach, the head says so in place of the
+    /// two ways on - both would lead to an empty switcher (Part 3). An open campaign hides it.
+    /// </summary>
+    [Fact]
+    public async Task An_unreachable_campaigns_folder_is_said_in_the_head()
+    {
+        using var thread = new DispatcherThread();
+
+        await thread.On(() =>
+        {
+            var head = new PanelHead();
+
+            head.Campaign(label: null, unreachable: "Der Stick fehlt");
+
+            Assert.Contains(Texts(head), text => text.StartsWith(Strings.PanelHeadUnreachable, StringComparison.Ordinal));
+            Assert.Contains("Der Stick fehlt", Texts(head));
+
+            head.Campaign(label: null);
+
+            Assert.DoesNotContain("Der Stick fehlt", Texts(head));
+            Assert.Contains(Strings.PanelHeadHint, Texts(head));
+
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>Every text the head shows: the labels of its buttons and its text blocks.</summary>
+    private static List<string> Texts(System.Windows.DependencyObject element)
+    {
+        var texts = new List<string>();
+
+        if (element is System.Windows.Controls.TextBlock { Visibility: System.Windows.Visibility.Visible } block)
+        {
+            texts.Add(block.Text);
+        }
+
+        if (element is System.Windows.Controls.ContentControl { Content: string content })
+        {
+            texts.Add(content);
+        }
+
+        foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(element).OfType<System.Windows.DependencyObject>())
+        {
+            texts.AddRange(Texts(child));
+        }
+
+        return texts;
+    }
+
     private static (CampaignPanel Panel, StockView Stock) Panel(CampaignBench bench)
     {
         var parts = bench.Parts();
