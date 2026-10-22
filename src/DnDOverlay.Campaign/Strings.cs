@@ -26,6 +26,9 @@ internal static class Strings
 
     internal static string MoveCampaignFailed(string name, string reason) => Text.Format(nameof(MoveCampaignFailed), name, reason);
 
+    internal static string MoveCampaignFailedSplit(string name, string reason, string place, string names) =>
+        Text.Format(nameof(MoveCampaignFailedSplit), name, reason, place, names);
+
     internal static string MoveCopyMismatch(string name) => Text.Format(nameof(MoveCopyMismatch), name);
 
     internal static string MoveCopyFailed(string reason) => Text.Format(nameof(MoveCopyFailed), reason);

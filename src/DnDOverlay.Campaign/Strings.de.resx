@@ -50,6 +50,9 @@
   <data name="MoveCampaignFailed" xml:space="preserve">
     <value>Die Kampagne "{0}" ließ sich nicht umziehen: {1}</value>
   </data>
+  <data name="MoveCampaignFailedSplit" xml:space="preserve">
+    <value>Die Kampagne "{0}" ließ sich nicht umziehen: {1} Diese ließen sich nicht zurücklegen und liegen jetzt in {2}: {3}</value>
+  </data>
   <data name="MoveCopyMismatch" xml:space="preserve">
     <value>Die Kopie von "{0}" stimmt in Anzahl oder Größe der Dateien nicht mit dem Original überein.</value>
   </data>

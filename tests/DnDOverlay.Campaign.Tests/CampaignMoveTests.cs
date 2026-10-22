@@ -47,6 +47,39 @@ public sealed class CampaignMoveTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(To, "Tyranny")));
     }
 
+    /// <summary>
+    /// Half renamed, and the way back is refused for one campaign too - something now holds it at the
+    /// new place. The move still ends in its stated refusal, naming which campaigns lie where, instead
+    /// of a raw exception that ended the control with the campaigns split and nobody told.
+    /// </summary>
+    [Fact]
+    public void A_way_back_that_is_refused_is_named_not_thrown()
+    {
+        Campaign("Anfang", files: 1);
+        Campaign("Mitte", files: 1);
+        Campaign("Schluss", files: 1);
+        Directory.CreateDirectory(Path.Combine(To, "Andere"));
+
+        void Rename(string source, string target)
+        {
+            var name = Path.GetFileName(source);
+
+            if (name == "Schluss" || (name == "Anfang" && source.StartsWith(To, StringComparison.Ordinal)))
+            {
+                throw new IOException("held open");
+            }
+
+            Directory.Move(source, target);
+        }
+
+        var refused = Assert.Throws<CampaignMoveException>(() => CampaignMove.Move(From, To, rename: Rename, cancellationToken: Cancellation));
+
+        Assert.Contains("Schluss", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Anfang", refused.Message, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(Path.Combine(To, "Anfang")));
+        Assert.True(Directory.Exists(Path.Combine(From, "Mitte")));
+    }
+
     /// <summary>A campaign of the same name at the target stops the move before it begins - with the name, and nothing touched.</summary>
     [Fact]
     public void A_name_at_the_target_stops_the_move_before_it_begins()

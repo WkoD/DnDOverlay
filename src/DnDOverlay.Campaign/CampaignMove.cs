@@ -189,20 +189,36 @@ public static class CampaignMove
                 rename(Path.Combine(from, name), Path.Combine(to, name));
                 done.Add(name);
             }
-            catch (IOException refused)
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
             {
-                if (done.Count == 0)
+                if (done.Count == 0 && refused is IOException)
                 {
                     return false;
                 }
 
-                // Half renamed: put back what moved, then say so.
+                // Half renamed: put back what moved, then say so. A campaign that will not go back -
+                // something now holds it at the new place - is named rather than escaping as a raw
+                // exception: "all or nothing" holds only if the way back works, and where it does
+                // not, the DM has to know which campaigns lie where.
+                var stuck = new List<string>();
+
                 foreach (var back in done)
                 {
-                    rename(Path.Combine(to, back), Path.Combine(from, back));
+                    try
+                    {
+                        rename(Path.Combine(to, back), Path.Combine(from, back));
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        stuck.Add(back);
+                    }
                 }
 
-                throw new CampaignMoveException(Strings.MoveCampaignFailed(name, refused.Message), refused);
+                throw new CampaignMoveException(
+                    stuck.Count == 0
+                        ? Strings.MoveCampaignFailed(name, refused.Message)
+                        : Strings.MoveCampaignFailedSplit(name, refused.Message, to, string.Join(", ", stuck)),
+                    refused);
             }
         }
 

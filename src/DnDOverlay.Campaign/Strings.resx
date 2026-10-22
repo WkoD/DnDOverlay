@@ -50,6 +50,9 @@
   <data name="MoveCampaignFailed" xml:space="preserve">
     <value>The campaign "{0}" could not be moved: {1}</value>
   </data>
+  <data name="MoveCampaignFailedSplit" xml:space="preserve">
+    <value>The campaign "{0}" could not be moved: {1} These could not be put back and are now in {2}: {3}</value>
+  </data>
   <data name="MoveCopyMismatch" xml:space="preserve">
     <value>The copy of "{0}" does not match its source in number or size of files.</value>
   </data>
