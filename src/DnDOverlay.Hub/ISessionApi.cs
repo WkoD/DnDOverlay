@@ -760,7 +760,8 @@ public interface ISessionApi
 
     /// <summary>
     /// "Reassign screen" (Part 3): a screen that is there takes over a missing one - wish, settings,
-    /// name and the arrangement on it, as one patch - and the missing one goes. False unless
+    /// name and the arrangement on it, as one patch, fitted to the screen that is there the way a
+    /// loaded scene is, with its items and focus kept - and the missing one goes. False unless
     /// <paramref name="missing"/> is missing and <paramref name="present"/> is there.
     /// </summary>
     Task<bool> ReassignScreenAsync(ScreenRef missing, ScreenRef present, CancellationToken cancellationToken = default);

@@ -39,6 +39,40 @@ public sealed class ReassignTests
         }
     }
 
+    /// <summary>
+    /// After a change of hardware the arrangement is fitted to the screen that is there, as a loaded
+    /// scene is: a background that covered the old screen covers the new one, and the focus carries
+    /// on with the pictures. Before, everything was laid down unchanged - a "Cover" background on a
+    /// 1280x1024 monitor kept the centre and scale of the 1920x1080 one, and the focus was dropped.
+    /// </summary>
+    [Fact]
+    public async Task The_arrangement_is_fitted_to_the_new_screen_and_keeps_its_focus()
+    {
+        var (session, catalog) = Session();
+
+        using (session)
+        {
+            var laid = await session.AddItemsAsync(Gone, [.. Many(2)], Cancellation);
+
+            await session.SetBackgroundAsync(Gone, Many(3).Last(), Cancellation);
+            await session.SetBackgroundFitAsync(Gone, BackgroundFit.Cover, Cancellation);
+            _ = await session.SetFocusAsync(Gone, [laid[1]], Cancellation);
+
+            catalog.Departed(Old, catalog.Report(Old, [Info(Gone.Screen)], reported: null).Presence);
+            catalog.Report(New, [Info(There.Screen) with { Size = new PixelSize(1280, 1024) }], reported: null);
+
+            Assert.True(await session.ReassignScreenAsync(Gone, There, Cancellation));
+
+            var scene = await session.GetSceneAsync(There, Cancellation);
+            var (centre, scale) = Layout.FitBackground(
+                scene.Background!.Meta.AspectRatio, BackgroundFit.Cover, session.ContextOf(There), 0);
+
+            Assert.Equal(scale, scene.Background.Scale, 9);
+            Assert.Equal(centre.X, scene.Background.CenterX, 9);
+            Assert.Equal([laid[1]], scene.FocusItems);
+        }
+    }
+
     /// <summary>A screen that is still there cannot be taken over - it is somebody's table.</summary>
     [Fact]
     public async Task A_screen_that_is_there_is_not_taken_over()

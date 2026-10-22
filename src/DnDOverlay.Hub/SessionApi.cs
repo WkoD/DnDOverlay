@@ -2128,26 +2128,66 @@ public sealed class SessionApi : ISessionApi, IDisposable
             return false;
         }
 
-        var scene = _scenes.Get(missing);
+        // <b>One hold, from reading the missing scene to writing the present one</b> - the rule
+        // ApplyAsync states for every command. Read, let go and written later, a picture deleted from
+        // the stock in between came back from the captured copy, and a cross-screen command that had
+        // listed the screens before could set a ghost scene under the missing one after it was gone.
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-        if (!_screens.Reassign(missing, present))
+        try
         {
-            return false;
-        }
+            var scene = _scenes.Get(missing);
 
-        _ = _scenes.Remove(missing);
+            if (!_screens.Reassign(missing, present))
+            {
+                return false;
+            }
 
-        // The arrangement as ONE patch onto the screen that is there: what lay on it goes, what lay on
-        // the old one comes - the ordinary path, so the display draws it like any other.
-        await ApplyAsync(
-            present,
-            (current, _) =>
+            _ = _scenes.Remove(missing);
+
+            // The arrangement as ONE patch onto the screen that is there: what lay on it goes, what
+            // lay on the old one comes - worked out against the NEW screen, as a loaded scene is
+            // (SceneLoading): capped and held at its edge, the fan at its park edge, a fitted
+            // background fitted again. Laid down unchanged, pictures from a wider screen lay past the
+            // edge of a narrower one, out of reach, and a "Cover" background no longer covered it.
+            //
+            // The items keep their ids, unlike a loaded scene: this is the same arrangement carrying
+            // on, not a second copy of it - and with the ids the focus carries on too. SceneLoading
+            // lays them in depth order, which is the order they are matched back in.
+            var context = _screens.ContextFor(present);
+            var current = _scenes.Get(present);
+            var ids = new Queue<ItemId>(scene.Items.OrderBy(item => item.ZOrder).Select(item => item.ItemId));
+
+            List<PatchOp> ops =
             [
-                .. current.Items.Count > 0 ? [new ClearItems()] : Array.Empty<PatchOp>(),
-                .. scene.Items.Select(item => (PatchOp)new AddItem(item with { Revision = _scenes.NextRevision() })),
-                .. scene.Background is { } background ? [new SetBackground(background)] : current.Background is not null ? [new ClearBackground()] : Array.Empty<PatchOp>(),
-            ],
-            cancellationToken).ConfigureAwait(false);
+                .. SceneLoading.Ops(scene, current, context, SceneLoad.Replace, _scenes.NextRevision)
+                    .Select(op => op is AddItem add ? new AddItem(add.Item with { ItemId = ids.Dequeue() }) : op),
+            ];
+
+            if (scene.FocusItems.Count > 0)
+            {
+                ops.Add(new SetFocus(scene.FocusItems));
+            }
+
+            if (ops.Count > 0)
+            {
+                foreach (var op in ops)
+                {
+                    current = SceneReducer.Apply(current, op, context);
+                }
+
+                _scenes.Set(present, current);
+
+                var patch = new ScenePatch([.. ops.Select(op => new ScreenOp(present, op))]);
+
+                _connections.Dispatch(patch);
+                _events.Publish(new SessionEvent.ScenePatched(patch));
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
 
         Push(present.Device);
         HubLog.ScreenReassigned(_logger, missing, present);
