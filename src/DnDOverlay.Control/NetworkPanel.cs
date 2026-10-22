@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Windows;
@@ -56,18 +55,18 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
         {
             // Only on the very first start, and then never again: it answers the three questions of
             // that one moment. Afterwards the way in is the window (Part 7).
-            Children.Add(Heading("No device yet - here is the way there", first: true));
+            Children.Add(Heading(Strings.NetworkFirstRunHeading, first: true));
             Children.Add(Steps());
         }
 
-        Children.Add(Heading("This control", first: !firstRun));
+        Children.Add(Heading(Strings.NetworkThisControl, first: !firstRun));
         Children.Add(_addresses);
         Children.Add(_listening);
 
-        Children.Add(Heading("Networks"));
+        Children.Add(Heading(Strings.NetworkNetworks));
         Children.Add(_networks);
 
-        Children.Add(Heading("Firewall"));
+        Children.Add(Heading(Strings.NetworkFirewall));
         Children.Add(_rules);
         Children.Add(Buttons());
         Children.Add(_status);
@@ -84,19 +83,17 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
         var addresses = LocalAddresses.Preferred();
 
         _addresses.Text = addresses.Count == 0
-            ? "No network address - this machine is reachable over loopback only."
-            : "Reachable at " + string.Join(
-                "   ",
-                addresses.Select(address => $"http://{address.Address}:{_port}/"))
-                + $"   (machine name: {Environment.MachineName})";
+            ? Strings.NetworkNoAddress
+            : Strings.NetworkReachable(
+                string.Join("   ", addresses.Select(address => $"http://{address.Address}:{_port}/")),
+                Environment.MachineName);
 
         ShowFirewall();
 
         // Last, because it is the only one that waits on anything.
         _listening.Text = await ListeningAsync().ConfigureAwait(true)
-            ? "The hub is listening. Whether the port is open cannot be said from here - a request "
-                + "to this machine's own address never passes the firewall."
-            : "The hub is NOT answering on this machine. Nothing else here matters until it does.";
+            ? Strings.NetworkListening
+            : Strings.NetworkNotListening;
     }
 
     private async Task<bool> ListeningAsync()
@@ -134,7 +131,7 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
 
         if (!state.Asked)
         {
-            _networks.Children.Add(Line("The firewall could not be asked - the service may be off."));
+            _networks.Children.Add(Line(Strings.NetworkFirewallNotAsked));
             return;
         }
 
@@ -159,8 +156,8 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
         {
             // The network list could not be read. The profile bitmask still can be, and it is what
             // this view showed before there were rows at all.
-            _networks.Children.Add(Line($"Active profiles: {Describe(active)}"));
-            _networks.Children.Add(AllowRow("Allow for the networks in force", active, networks));
+            _networks.Children.Add(Line(Strings.NetworkActiveProfiles(Describe(active))));
+            _networks.Children.Add(AllowRow(Strings.NetworkAllowInForce, active, networks));
 
             return;
         }
@@ -195,14 +192,14 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
         });
 
         row.Children.Add(label);
-        row.Children.Add(AllowRow($"Allow for {network.Name}", network.Category, networks));
+        row.Children.Add(AllowRow(Strings.NetworkAllowFor(network.Name), network.Category, networks));
 
         if (open)
         {
             // The better remedy, offered next to the working one: a home network classified as
             // public is the wrong statement about that network for the whole machine, not just
             // for us.
-            row.Children.Add(Link("Change its classification ..."));
+            row.Children.Add(Link(Strings.NetworkChangeClassification));
         }
 
         return row;
@@ -235,15 +232,11 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
             // Every network the resulting rule would cover, named. Two networks classified the
             // same cannot be told apart by a profile-scoped rule, so "allow for the cable" may well
             // cover the Wi-Fi too - and this is where that is said instead of implied.
-            var also = covered.Count > 1
-                ? "\n\nThis rule will apply to: " + string.Join(", ", covered.Select(network => network.Name))
-                : string.Empty;
+            var message = covered.Count > 1
+                ? Strings.NetworkPublicMessageCovering(string.Join(", ", covered.Select(network => network.Name)))
+                : Strings.NetworkPublicMessage;
 
-            if (anywhere && !Confirm(
-                "Allow on public networks?",
-                "This rule also covers PUBLIC networks. It applies in every foreign network this "
-                + "machine joins, until it is removed.\n\nIf this is your home network, classify it "
-                + "as private instead - the rule then needs no public part." + also))
+            if (anywhere && !Confirm(Strings.NetworkPublicTitle, message))
             {
                 return;
             }
@@ -262,27 +255,21 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
         {
             // First, and before any counting: a block beats every allow beside it, so how many
             // rules there are is the second question.
-            _rules.Children.Add(Line(
-                "A rule BLOCKS this program. A block beats every allow, so nothing gets through "
-                + "until it is removed.",
-                Brushes.Firebrick));
+            _rules.Children.Add(Line(Strings.NetworkRuleBlocks, Brushes.Firebrick));
         }
         else if (judged.Count == 0)
         {
-            _rules.Children.Add(Line("No rule of ours, and none for this program. A display on "
-                + "another machine will not get through until one is set."));
+            _rules.Children.Add(Line(Strings.NetworkNoRule));
 
             return;
         }
         else if (!FirewallVerdicts.GetsThrough(judged))
         {
-            _rules.Children.Add(Line(
-                "Rules exist, but none of them lets this program through right now.",
-                Brushes.Firebrick));
+            _rules.Children.Add(Line(Strings.NetworkNoneLetsThrough, Brushes.Firebrick));
         }
         else if (judged.Count > 1)
         {
-            _rules.Children.Add(Line($"{judged.Count} rules found - more than one is worth clearing up:"));
+            _rules.Children.Add(Line(Strings.NetworkRulesFound(judged.Count)));
         }
 
         foreach (var rule in judged)
@@ -308,10 +295,7 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
             return;
         }
 
-        _rules.Children.Add(Line(
-            "One of these rules covers PUBLIC networks. It applies in every foreign network this "
-            + "machine joins.",
-            Brushes.DarkOrange));
+        _rules.Children.Add(Line(Strings.NetworkPublicStanding, Brushes.DarkOrange));
     }
 
     /// <summary>
@@ -322,12 +306,12 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
     {
         var verdict = judged.Verdict switch
         {
-            FirewallVerdict.Allows => "applies now",
-            FirewallVerdict.Blocks => "BLOCKS this program - beats every allow",
-            FirewallVerdict.Overruled => "would allow, but the block above wins",
-            FirewallVerdict.OtherProfile => "does not cover any profile in force",
-            FirewallVerdict.Disabled => "disabled",
-            _ => "points somewhere else - probably left over",
+            FirewallVerdict.Allows => Strings.NetworkVerdictAllows,
+            FirewallVerdict.Blocks => Strings.NetworkVerdictBlocks,
+            FirewallVerdict.Overruled => Strings.NetworkVerdictOverruled,
+            FirewallVerdict.OtherProfile => Strings.NetworkVerdictOtherProfile,
+            FirewallVerdict.Disabled => Strings.NetworkVerdictDisabled,
+            _ => Strings.NetworkVerdictOtherProgram,
         };
 
         var colour = judged.Verdict switch
@@ -338,12 +322,12 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
         };
 
         var rule = judged.Rule;
-        var action = rule.Action == FirewallAction.Allow ? "allow" : "block";
+        var action = rule.Action == FirewallAction.Allow ? Strings.NetworkActionAllow : Strings.NetworkActionBlock;
 
         return new TextBlock
         {
             Text = $"    {rule.Name}  [{action}, {Describe(rule.Profiles)}]  {verdict}"
-                + $"\n        {rule.Program ?? "(no program)"}",
+                + $"\n        {rule.Program ?? Strings.NetworkNoProgram}",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 2, 0, 2),
             Foreground = colour,
@@ -354,22 +338,29 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
     {
         if (profiles == FirewallProfiles.All)
         {
-            return "all profiles";
+            return Strings.NetworkAllProfiles;
         }
 
         var named = new[] { FirewallProfiles.Domain, FirewallProfiles.Private, FirewallProfiles.Public }
             .Where(profile => profiles.HasFlag(profile))
-            .Select(profile => profile.ToString().ToLowerInvariant())
+            .Select(Name)
             .ToList();
 
-        return named.Count > 0 ? string.Join(", ", named) : "no profile";
+        return named.Count > 0 ? string.Join(", ", named) : Strings.NetworkNoProfile;
+
+        static string Name(FirewallProfiles profile) => profile switch
+        {
+            FirewallProfiles.Domain => Strings.NetworkProfileDomain,
+            FirewallProfiles.Private => Strings.NetworkProfilePrivate,
+            _ => Strings.NetworkProfilePublic,
+        };
     }
 
     private StackPanel Buttons()
     {
         var clear = new System.Windows.Controls.Button
         {
-            Content = "Remove every rule for this program",
+            Content = Strings.NetworkRemoveAll,
             Padding = new Thickness(12, 6, 12, 6),
             Margin = new Thickness(0, 0, 8, 0),
         };
@@ -379,13 +370,7 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
             // Said in full before anything is elevated. Removal goes by program path, so it takes
             // ours, the ones Windows wrote, and anything built by hand - and "remove" is read as
             // "remove" rather than qualified afterwards.
-            if (Confirm(
-                "Remove every rule for this program?",
-                "Every inbound firewall rule pointing at\n\n"
-                + $"    {Environment.ProcessPath}\n\n"
-                + "will be removed: ours, the ones Windows wrote, and any built by hand. They are "
-                + "listed above.\n\nAfterwards no other machine gets through until a rule is set "
-                + "again."))
+            if (Confirm(Strings.NetworkRemoveTitle, Strings.NetworkRemoveMessage(Environment.ProcessPath)))
             {
                 Elevate("DnDOverlay.FirewallRemove.exe");
             }
@@ -393,7 +378,7 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
 
         var again = new System.Windows.Controls.Button
         {
-            Content = "Check again",
+            Content = Strings.NetworkCheckAgain,
             Padding = new Thickness(12, 6, 12, 6),
         };
 
@@ -422,8 +407,7 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
 
         if (!File.Exists(path))
         {
-            _status.Text = $"{helper} is not next to this program. The rule can be set by hand - "
-                + "the netsh command is in the README.";
+            _status.Text = Strings.NetworkHelperMissing(helper);
             return;
         }
 
@@ -438,14 +422,14 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
             elevated?.WaitForExit();
 
             _status.Text = elevated is null
-                ? "The helper did not start."
-                : string.Create(CultureInfo.InvariantCulture, $"{helper} finished with exit code {elevated.ExitCode}.");
+                ? Strings.NetworkHelperNotStarted
+                : Strings.NetworkHelperFinished(helper, elevated.ExitCode);
         }
         catch (Win32Exception)
         {
             // The elevation prompt was declined. Not a failure of ours, and expressly not fatal:
             // everything else in this view goes on working, and the netsh command is in the README.
-            _status.Text = "The elevation prompt was declined - nothing was changed.";
+            _status.Text = Strings.NetworkElevationDeclined;
         }
 
         Refresh();
@@ -470,7 +454,7 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
             }
             catch (Win32Exception)
             {
-                _status.Text = "Could not open the Windows network settings.";
+                _status.Text = Strings.NetworkSettingsNotOpened;
             }
         };
 
@@ -483,16 +467,15 @@ internal sealed class NetworkPanel : StackPanel, IDisposable
 
         foreach (var step in new[]
         {
-            "1.  Run the display MSI on the display PC - no administrator rights needed.",
-            "2.  It finds this control by itself and appears below as a request.",
-            "3.  Allow it and compare the code with what stands on the table.",
+            Strings.NetworkStepInstall,
+            Strings.NetworkStepRequest,
+            Strings.NetworkStepAllow,
         })
         {
             steps.Children.Add(Line(step));
         }
 
-        steps.Children.Add(Line("Autologon, no lock screen, edge swipes off and Windows Update "
-            + "active hours - the four things on the display PC that the README explains."));
+        steps.Children.Add(Line(Strings.NetworkDisplayPcNote));
 
         return steps;
     }

@@ -268,7 +268,7 @@ internal sealed class StockView : Grid
 
         if (_desk.Open is not { } open)
         {
-            _tiles.Children.Add(new TextBlock { Text = "No campaign open.", Opacity = 0.7, Margin = new Thickness(4) });
+            _tiles.Children.Add(new TextBlock { Text = Strings.StockNoCampaign, Opacity = 0.7, Margin = new Thickness(4) });
             Select([]);
             return;
         }
@@ -304,7 +304,7 @@ internal sealed class StockView : Grid
         {
             _tiles.Children.Add(new TextBlock
             {
-                Text = open.Store.Count == 0 ? "The stock is empty - drop pictures here, paste or fetch an address." : "Nothing matches the filter.",
+                Text = open.Store.Count == 0 ? Strings.StockEmpty : Strings.StockNoMatch,
                 Opacity = 0.7,
                 Margin = new Thickness(4),
                 TextWrapping = TextWrapping.Wrap,
@@ -375,7 +375,7 @@ internal sealed class StockView : Grid
 
             if (missing)
             {
-                marks.Add("missing");
+                marks.Add(Strings.StockMarkMissing);
             }
 
             if (entry.IsAnimated)
@@ -385,14 +385,14 @@ internal sealed class StockView : Grid
 
             if (_lying.GetValueOrDefault(asset) is var on and > 0)
             {
-                marks.Add(string.Create(CultureInfo.CurrentCulture, $"on {on}"));
+                marks.Add(Strings.StockMarkOn(on));
             }
 
             // Whether something saved needs it, before anybody clicks (Part 7): "in 3" is three scenes
             // or layouts. A picture nothing needs carries no mark and looks different for it.
             if (_used.GetValueOrDefault(asset) is var used and > 0)
             {
-                marks.Add(string.Create(CultureInfo.CurrentCulture, $"in {used}"));
+                marks.Add(Strings.StockMarkIn(used));
             }
 
             var top = new DockPanel
@@ -530,10 +530,10 @@ internal sealed class StockView : Grid
         var several = _selection.Count > 1;
         var menu = new ContextMenu();
 
-        menu.Items.Add(Entry("Send to active screen", () => _ = SendAsync(_active(), Chosen.Count > 0 ? Chosen : [Ref(entry)])));
+        menu.Items.Add(Entry(Strings.StockMenuSendActive, () => _ = SendAsync(_active(), Chosen.Count > 0 ? Chosen : [Ref(entry)])));
 
-        var asPicture = new MenuItem { Header = "Send as picture" };
-        var asBackground = new MenuItem { Header = "Send as background", IsEnabled = !several };
+        var asPicture = new MenuItem { Header = Strings.StockMenuSendPicture };
+        var asBackground = new MenuItem { Header = Strings.StockMenuSendBackground, IsEnabled = !several };
 
         foreach (var view in _screens())
         {
@@ -546,9 +546,9 @@ internal sealed class StockView : Grid
         // "To all" is the last entry IN the list of screens, not beside it - the same act with the
         // target "all" (Part 7).
         asPicture.Items.Add(new Separator());
-        asPicture.Items.Add(Entry("To all", () => _ = _session.SendToAllAsync(Chosen.Count > 0 ? Chosen : [Ref(entry)])));
+        asPicture.Items.Add(Entry(Strings.StockMenuToAll, () => _ = _session.SendToAllAsync(Chosen.Count > 0 ? Chosen : [Ref(entry)])));
         asBackground.Items.Add(new Separator());
-        asBackground.Items.Add(Entry("To all", () => _ = _session.SetBackgroundOnAllAsync(Ref(entry))));
+        asBackground.Items.Add(Entry(Strings.StockMenuToAll, () => _ = _session.SetBackgroundOnAllAsync(Ref(entry))));
 
         menu.Items.Add(asPicture);
         menu.Items.Add(asBackground);
@@ -558,18 +558,18 @@ internal sealed class StockView : Grid
 
         menu.Items.Add(new MenuItem
         {
-            Header = several ? "Lies on ..." : lying == 0 ? "Lies on no screen" : string.Create(CultureInfo.CurrentCulture, $"Lies on {lying} screen(s)"),
+            Header = several ? Strings.StockMenuLiesOnSeveral : lying == 0 ? Strings.StockMenuLiesOnNone : Strings.StockMenuLiesOn(lying),
             IsEnabled = false,
         });
 
-        menu.Items.Add(Entry("Show file in folder", () => ShowFile(entry), enabled: !several));
+        menu.Items.Add(Entry(Strings.StockMenuShowFile, () => ShowFile(entry), enabled: !several));
         menu.Items.Add(Used(entry, several));
-        menu.Items.Add(Entry("Rename ...", () => _ = _edits.RenameAsync(Window.GetWindow(this)!, asset), enabled: !several));
+        menu.Items.Add(Entry(Strings.StockMenuRename, () => _ = _edits.RenameAsync(Window.GetWindow(this)!, asset), enabled: !several));
 
         // Set apart at the foot: the one entry here that cannot be taken back.
         menu.Items.Add(new Separator());
         menu.Items.Add(Entry(
-            several ? string.Create(CultureInfo.CurrentCulture, $"Delete {_selection.Count} pictures ...") : "Delete ...",
+            several ? Strings.StockMenuDeleteMany(_selection.Count) : Strings.StockMenuDelete,
             () => _ = DeleteChosenAsync(entry)));
 
         return menu;
@@ -593,26 +593,26 @@ internal sealed class StockView : Grid
     {
         if (several || _desk.Open is not { } open)
         {
-            return new MenuItem { Header = "Used in ...", IsEnabled = false };
+            return new MenuItem { Header = Strings.StockMenuUsedInSeveral, IsEnabled = false };
         }
 
         var usage = open.Shelf.UsageOf(new AssetId(entry.AssetId));
 
         if (!usage.Used)
         {
-            return new MenuItem { Header = "Used in no scene or layout", IsEnabled = false };
+            return new MenuItem { Header = Strings.StockMenuUsedNowhere, IsEnabled = false };
         }
 
-        var used = new MenuItem { Header = "Used in" };
+        var used = new MenuItem { Header = Strings.StockMenuUsedIn };
 
         foreach (var scene in usage.Scenes)
         {
-            used.Items.Add(new MenuItem { Header = $"Scene: {scene}", IsEnabled = false });
+            used.Items.Add(new MenuItem { Header = Strings.StockMenuUsedScene(scene), IsEnabled = false });
         }
 
         foreach (var layout in usage.Layouts)
         {
-            used.Items.Add(new MenuItem { Header = $"Layout: {layout}", IsEnabled = false });
+            used.Items.Add(new MenuItem { Header = Strings.StockMenuUsedLayout(layout), IsEnabled = false });
         }
 
         return used;
@@ -622,7 +622,7 @@ internal sealed class StockView : Grid
     {
         if (screen is not { } target)
         {
-            _say("No screen to send to.");
+            _say(Strings.StockNoScreen);
             return;
         }
 

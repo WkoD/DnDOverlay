@@ -415,11 +415,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         {
             return new IngestResult.Refused(
                 IntakeRejection.NoSpace,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"There is no room left for this picture: {free / (1024 * 1024)} MB free where "
-                    + $"{(source.Length + FreeSpaceReserve) / (1024 * 1024)} MB are needed. "
-                    + $"Clear some space in the campaign at {Directory}."));
+                Strings.NoSpace(free / (1024 * 1024), (source.Length + FreeSpaceReserve) / (1024 * 1024), Directory));
         }
 
         NormalisedImage normalised;
@@ -724,9 +720,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         if (document.SchemaVersion > InventoryDocument.CurrentSchemaVersion)
         {
             throw new CampaignSchemaException(
-                $"The campaign at {path} was written by a newer version of DnDOverlay "
-                + $"(schema {document.SchemaVersion}, this version reads {InventoryDocument.CurrentSchemaVersion}). "
-                + "It is left untouched - opening it here would destroy work.");
+                Strings.CampaignTooNew(path, document.SchemaVersion, InventoryDocument.CurrentSchemaVersion));
         }
 
         return document;

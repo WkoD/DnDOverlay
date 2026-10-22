@@ -43,7 +43,7 @@ internal sealed class PanelHead : Border
 
     private readonly TextBlock _hint = new()
     {
-        Text = "Open one, or add pictures to begin a new one.",
+        Text = Strings.PanelHeadHint,
         VerticalAlignment = VerticalAlignment.Center,
         Margin = new Thickness(0, 0, 12, 0),
         Opacity = 0.75,
@@ -133,8 +133,8 @@ internal sealed class PanelHead : Border
         _redoLabel = redo;
         _undo.IsEnabled = undo is not null;
         _redo.IsEnabled = redo is not null;
-        _undo.ToolTip = undo is null ? "Nothing to undo (Ctrl+Z)" : $"Undo: {undo} (Ctrl+Z)";
-        _redo.ToolTip = redo is null ? "Nothing to redo (Ctrl+Y)" : $"Redo: {redo} (Ctrl+Y)";
+        _undo.ToolTip = undo is null ? Strings.PanelHeadNothingToUndo : Strings.PanelHeadUndoTip(undo);
+        _redo.ToolTip = redo is null ? Strings.PanelHeadNothingToRedo : Strings.PanelHeadRedoTip(redo);
         Label();
     }
 
@@ -144,8 +144,8 @@ internal sealed class PanelHead : Border
     /// </summary>
     private void Label()
     {
-        _undoText.Text = "↶ " + Fitted(_undoLabel, "Undo", _undo.ActualWidth);
-        _redoText.Text = "↷ " + Fitted(_redoLabel, "Redo", _redo.ActualWidth);
+        _undoText.Text = "↶ " + Fitted(_undoLabel, Strings.PanelHeadUndo, _undo.ActualWidth);
+        _redoText.Text = "↷ " + Fitted(_redoLabel, Strings.PanelHeadRedo, _redo.ActualWidth);
     }
 
     private static string Fitted(string? label, string none, double width) =>
@@ -203,7 +203,7 @@ internal sealed class PanelHead : Border
     /// <summary>Which campaign is open, or <see langword="null"/> for none.</summary>
     internal void Campaign(string? label)
     {
-        _campaign.Content = (label ?? "No campaign open") + "  ▾";
+        _campaign.Content = (label ?? Strings.PanelHeadNoCampaign) + "  ▾";
         _hint.Visibility = label is null ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -211,5 +211,5 @@ internal sealed class PanelHead : Border
     /// What the button offers, which is the other view rather than the current one: a button that
     /// named the state it is in reads as a switch that has already been thrown.
     /// </summary>
-    internal void Show(bool single) => _view.Content = single ? "Overview" : "Single view";
+    internal void Show(bool single) => _view.Content = single ? Strings.PanelHeadOverview : Strings.PanelHeadSingleView;
 }

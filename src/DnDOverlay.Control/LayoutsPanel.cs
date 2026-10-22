@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -139,7 +138,7 @@ internal sealed class LayoutsPanel : Grid
 
         if (_desk.Open is not { } open)
         {
-            _empty.Text = "No campaign open.";
+            _empty.Text = Strings.LayoutsNoCampaign;
             _empty.Visibility = Visibility.Visible;
             return;
         }
@@ -163,8 +162,8 @@ internal sealed class LayoutsPanel : Grid
         }
 
         _empty.Text = open.Shelf.Layouts.Count == 0
-            ? "No layout saved yet. \"Save layout ...\" above keeps every screen with something on it."
-            : "Nothing matches the filter.";
+            ? Strings.LayoutsNoneSaved
+            : Strings.LayoutsNoMatch;
         _empty.Visibility = _tiles.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -179,7 +178,7 @@ internal sealed class LayoutsPanel : Grid
     {
         if (_desk.Open is null)
         {
-            _say("No campaign is open - open one, or add pictures to begin one. A layout lives in its campaign.");
+            _say(Strings.LayoutsNoCampaignToSave);
             return;
         }
 
@@ -197,7 +196,7 @@ internal sealed class LayoutsPanel : Grid
 
         if (parts.Count == 0)
         {
-            _say("Nothing lies on any screen - there is no layout to save.");
+            _say(Strings.LayoutsNothingToSave);
             return;
         }
 
@@ -213,9 +212,9 @@ internal sealed class LayoutsPanel : Grid
 
         var name = overwriting ?? NameDialog.Ask(
             owner,
-            "Save layout",
-            $"Name of the layout with {parts.Count} screen(s):",
-            FileNames.Suggest($"Layout {FileNames.Stamp(DateTimeOffset.Now)}"));
+            Strings.LayoutsSaveTitle,
+            Strings.LayoutsSavePrompt(parts.Count),
+            FileNames.Suggest(Strings.LayoutsSuggestedName(FileNames.Stamp(DateTimeOffset.Now))));
 
         if (name is null)
         {
@@ -228,8 +227,8 @@ internal sealed class LayoutsPanel : Grid
         {
             var answer = MessageBox.Show(
                 owner,
-                $"A layout named \"{name}\" exists already. Overwrite it?",
-                "Save layout",
+                Strings.LayoutsOverwriteQuestion(name),
+                Strings.LayoutsSaveTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.No);
@@ -245,7 +244,7 @@ internal sealed class LayoutsPanel : Grid
         if (outcome is ShelfOutcome.Done)
         {
             ControlLog.LayoutSaved(_logger, name, parts.Count);
-            _say($"Saved the layout \"{name}\" with {parts.Count} screen(s).");
+            _say(Strings.LayoutsSaved(name, parts.Count));
             Refresh();
         }
     }
@@ -309,22 +308,22 @@ internal sealed class LayoutsPanel : Grid
         ControlLog.LayoutLoaded(_logger, name, how, laying.Count, skipped, saved.Count, missing);
 
         var said = laying.Count == 0
-            ? $"Nothing of \"{name}\" was laid."
-            : $"Loaded \"{name}\" onto {laying.Select(scene => scene.Screen).Distinct().Count()} screen(s).";
+            ? Strings.LayoutsNothingLaid(name)
+            : Strings.LayoutsLoaded(name, laying.Select(scene => scene.Screen).Distinct().Count());
 
         if (skipped > 0)
         {
-            said += $" {skipped} scene(s) left out.";
+            said += " " + Strings.LayoutsScenesLeftOut(skipped);
         }
 
         if (saved.Count > 0)
         {
-            said += $" Saved as scenes: {string.Join(", ", saved)}.";
+            said += " " + Strings.LayoutsSavedAsScenes(string.Join(", ", saved));
         }
 
         if (missing > 0)
         {
-            said += $" {missing} picture(s) missing, standing as placeholders.";
+            said += " " + Strings.LayoutsPicturesMissing(missing);
         }
 
         _say(said);
@@ -350,7 +349,7 @@ internal sealed class LayoutsPanel : Grid
         foreach (var part in parts)
         {
             var name = FileNames.Numbered(
-                FileNames.Suggest($"Scene {part.ScreenName} {stamp}"),
+                FileNames.Suggest(Strings.LayoutsSceneName(part.ScreenName, stamp)),
                 open.Shelf.Scenes.Select(scene => scene.Name));
 
             if (open.Shelf.SaveScene(name, part.Scene.Origin, part.Scene.Scene, overwrite: false) is ShelfOutcome.Done)
@@ -405,9 +404,7 @@ internal sealed class LayoutsPanel : Grid
             Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)),
             ClipToBounds = true,
             Tag = summary.Name,
-            ToolTip = string.Create(
-                CultureInfo.CurrentCulture,
-                $"{summary.Name} - {string.Join(", ", summary.Screens)}, saved {summary.SavedAt.LocalDateTime:g}"),
+            ToolTip = Strings.LayoutsTileTip(summary.Name, string.Join(", ", summary.Screens), summary.SavedAt.LocalDateTime),
         };
 
         tile.Children.Add(row);
@@ -425,7 +422,7 @@ internal sealed class LayoutsPanel : Grid
 
         tile.Children.Add(new TextBlock
         {
-            Text = string.Create(CultureInfo.CurrentCulture, $"{layout.Parts.Count} screen{(layout.Parts.Count == 1 ? string.Empty : "s")}"),
+            Text = layout.Parts.Count == 1 ? Strings.LayoutsTileScreen(layout.Parts.Count) : Strings.LayoutsTileScreens(layout.Parts.Count),
             Foreground = Brushes.White,
             FontSize = 11,
             Margin = new Thickness(4, 1, 4, 1),
@@ -457,18 +454,18 @@ internal sealed class LayoutsPanel : Grid
     private ContextMenu Menu(string name)
     {
         var menu = new ContextMenu();
-        var load = new MenuItem { Header = "Load" };
+        var load = new MenuItem { Header = Strings.LayoutsMenuLoad };
 
-        load.Items.Add(Entry("Add", () => _ = LoadAsync(name, LayoutLoad.Add)));
-        load.Items.Add(Entry("Replace used screens", () => _ = LoadAsync(name, LayoutLoad.ReplaceUsed)));
-        load.Items.Add(Entry("Replace all screens", () => _ = LoadAsync(name, LayoutLoad.ReplaceAll)));
+        load.Items.Add(Entry(Strings.LayoutsMenuAdd, () => _ = LoadAsync(name, LayoutLoad.Add)));
+        load.Items.Add(Entry(Strings.LayoutsMenuReplaceUsed, () => _ = LoadAsync(name, LayoutLoad.ReplaceUsed)));
+        load.Items.Add(Entry(Strings.LayoutsMenuReplaceAll, () => _ = LoadAsync(name, LayoutLoad.ReplaceAll)));
 
         menu.Items.Add(load);
-        menu.Items.Add(Entry("Save as single scenes", () => SaveAsScenesOf(name)));
-        menu.Items.Add(Entry("Rename ...", () => Rename(name)));
-        menu.Items.Add(Entry("Overwrite with the table", () => _ = SaveAsync(Window.GetWindow(this)!, overwriting: name)));
+        menu.Items.Add(Entry(Strings.LayoutsMenuSaveAsScenes, () => SaveAsScenesOf(name)));
+        menu.Items.Add(Entry(Strings.LayoutsMenuRename, () => Rename(name)));
+        menu.Items.Add(Entry(Strings.LayoutsMenuOverwrite, () => _ = SaveAsync(Window.GetWindow(this)!, overwriting: name)));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Entry("Delete", () => Delete(name)));
+        menu.Items.Add(Entry(Strings.LayoutsMenuDelete, () => Delete(name)));
 
         return menu;
     }
@@ -482,12 +479,12 @@ internal sealed class LayoutsPanel : Grid
 
         var saved = SaveAsScenes(layout.Parts);
 
-        _say(saved.Count == 0 ? "No scene was saved." : $"Saved as scenes: {string.Join(", ", saved)}.");
+        _say(saved.Count == 0 ? Strings.LayoutsNoSceneSaved : Strings.LayoutsSavedAsScenes(string.Join(", ", saved)));
     }
 
     private void Rename(string name)
     {
-        if (NameDialog.Ask(Window.GetWindow(this)!, "Rename layout", "New name of the layout:", name) is not { } typed)
+        if (NameDialog.Ask(Window.GetWindow(this)!, Strings.LayoutsRenameTitle, Strings.LayoutsRenamePrompt, name) is not { } typed)
         {
             return;
         }
@@ -504,7 +501,7 @@ internal sealed class LayoutsPanel : Grid
                 break;
 
             case ShelfOutcome.Taken:
-                _say($"A layout named \"{typed}\" exists already.");
+                _say(Strings.LayoutsRenameTaken(typed));
                 break;
 
             default:
@@ -516,8 +513,8 @@ internal sealed class LayoutsPanel : Grid
     {
         var answer = MessageBox.Show(
             Window.GetWindow(this)!,
-            $"Delete the layout \"{name}\"? The pictures stay in the stock, saved scenes stay as they are.",
-            "Delete layout",
+            Strings.LayoutsDeleteQuestion(name),
+            Strings.LayoutsDeleteTitle,
             MessageBoxButton.YesNo,
             MessageBoxImage.Question,
             MessageBoxResult.No);

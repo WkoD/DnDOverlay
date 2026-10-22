@@ -44,15 +44,15 @@ internal sealed class ScreenTile : Border
     private SceneState _scene = SceneState.Empty;
     private ScreenContext _context = ScreenContext.Default(new PixelSize(1920, 1080), 96);
     private ViewRotation _view;
-    private readonly CheckBox _images = new() { Content = "Images", Margin = new Thickness(0, 0, 12, 0) };
+    private readonly CheckBox _images = new() { Content = Strings.ScreenTileImages, Margin = new Thickness(0, 0, 12, 0) };
 
     /// <summary>
     /// The underground switch (Part 7, row 2): the wireframes of the device's other windows behind the
     /// scene. It asks the device for its window list - per device, so the board decides when to stop.
     /// </summary>
-    private readonly CheckBox _underground = new() { Content = "Windows", Margin = new Thickness(12, 0, 0, 0) };
-    private readonly CheckBox _background = new() { Content = "Background", Margin = new Thickness(0, 0, 12, 0) };
-    private readonly Button _unlock = new() { Content = "Unlock all", Padding = new Thickness(8, 2, 8, 2) };
+    private readonly CheckBox _underground = new() { Content = Strings.ScreenTileWindows, Margin = new Thickness(12, 0, 0, 0) };
+    private readonly CheckBox _background = new() { Content = Strings.ScreenTileBackground, Margin = new Thickness(0, 0, 12, 0) };
+    private readonly Button _unlock = new() { Content = Strings.ScreenTileUnlockAll, Padding = new Thickness(8, 2, 8, 2) };
 
     /// <summary>
     /// The state selector (Part 7): the WISH, permanently labelled - not what gets in the way, which
@@ -109,7 +109,7 @@ internal sealed class ScreenTile : Border
         IsHitTestVisible = false,
         Child = new TextBlock
         {
-            Text = "Background",
+            Text = Strings.ScreenTileBackgroundStrip,
             Foreground = Brushes.White,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -595,13 +595,11 @@ internal sealed class ScreenTile : Border
 
         if (_device is not { Connected: true } device)
         {
-            _diagnosis.Text = "Device not connected.";
+            _diagnosis.Text = Strings.ScreenTileDeviceNotConnected;
             return;
         }
 
-        lines.Add(string.Format(
-            culture,
-            "{0} · {1} · version {2} · {3}",
+        lines.Add(Strings.ScreenTileDiagnosisDevice(
             device.Name,
             device.Address ?? "?",
             device.AppVersion ?? "?",
@@ -609,17 +607,15 @@ internal sealed class ScreenTile : Border
 
         if (_reading is not { } reading)
         {
-            lines.Add("Waiting for the first reading ...");
+            lines.Add(Strings.ScreenTileDiagnosisWaiting);
         }
         else
         {
             lines.Add(reading.MedianMs is { } median
-                ? string.Format(culture, "Frames {0:0.0} / {1:0.0} / {2:0.0} ms ({3}) · {4} stalls", median, reading.P95Ms, reading.MaxMs, reading.Frames, reading.Stalls)
-                : "Frames: too few to say");
-            lines.Add(string.Format(culture, "CPU {0:0.0} % · loading {1}, waiting {2}", reading.CpuPercent, reading.Downloading, reading.Waiting));
-            lines.Add(string.Format(
-                culture,
-                "Store {0} pictures, {1} MB · memory {2} / {3} MB",
+                ? Strings.ScreenTileDiagnosisFrames(median, reading.P95Ms, reading.MaxMs, reading.Frames, reading.Stalls)
+                : Strings.ScreenTileDiagnosisFramesTooFew);
+            lines.Add(Strings.ScreenTileDiagnosisLoad(reading.CpuPercent, reading.Downloading, reading.Waiting));
+            lines.Add(Strings.ScreenTileDiagnosisStore(
                 reading.CachedPictures,
                 reading.CacheBytes / (1024 * 1024),
                 reading.MemoryBytes / (1024 * 1024),
@@ -632,10 +628,10 @@ internal sealed class ScreenTile : Border
     /// <summary>The four states in the selector's words - the enum's names are for files, not for people.</summary>
     private static readonly IReadOnlyList<StateChoice> States =
     [
-        new(ScreenState.Enabled, "Active"),
-        new(ScreenState.Disabled, "Frozen"),
-        new(ScreenState.Diagnostic, "Diagnostic"),
-        new(ScreenState.Inactive, "Inactive"),
+        new(ScreenState.Enabled, Strings.ScreenTileStateActive),
+        new(ScreenState.Disabled, Strings.ScreenTileStateFrozen),
+        new(ScreenState.Diagnostic, Strings.ScreenTileStateDiagnostic),
+        new(ScreenState.Inactive, Strings.ScreenTileStateInactive),
     ];
 
     private sealed record StateChoice(ScreenState State, string Label)

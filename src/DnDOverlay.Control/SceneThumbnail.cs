@@ -146,7 +146,7 @@ internal sealed class SceneThumbnail : FrameworkElement
             drawingContext.DrawRectangle(strip, pen: null, top);
 
             var label = _refused.TryGetValue(window.Handle, out var reason)
-                ? $"{window.Program} - {Reason(reason)}"
+                ? Refused(window.Program, reason)
                 : window.Program;
 
             var text = new FormattedText(
@@ -175,12 +175,12 @@ internal sealed class SceneThumbnail : FrameworkElement
     /// </summary>
     internal static double Strip(Size tile) => Math.Min(0.25, 16 / Math.Max(1, Math.Min(tile.Width, tile.Height)));
 
-    private static string Reason(WindowOutcome outcome) => outcome switch
+    private static string Refused(string program, WindowOutcome outcome) => outcome switch
     {
-        WindowOutcome.Elevated => "runs elevated, cannot be moved",
-        WindowOutcome.Inactive => "screen inactive",
-        WindowOutcome.NotAllowed => "device only reports",
-        _ => outcome.ToString(),
+        WindowOutcome.Elevated => Strings.ThumbnailWindowElevated(program),
+        WindowOutcome.Inactive => Strings.ThumbnailWindowInactive(program),
+        WindowOutcome.NotAllowed => Strings.ThumbnailWindowNotAllowed(program),
+        _ => $"{program} - {outcome}",
     };
 
     protected override void OnRender(DrawingContext drawingContext)

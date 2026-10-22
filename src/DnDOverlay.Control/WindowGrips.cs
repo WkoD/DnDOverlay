@@ -281,7 +281,7 @@ internal sealed class WindowGrips : FrameworkElement
     {
         var menu = new ContextMenu { PlacementTarget = this };
 
-        foreach (var (header, action) in new[] { ("Minimise", WindowAction.Minimize), ("Maximise", WindowAction.Maximize), ("Restore", WindowAction.Restore) })
+        foreach (var (header, action) in new[] { (Strings.GripsMinimise, WindowAction.Minimize), (Strings.GripsMaximise, WindowAction.Maximize), (Strings.GripsRestore, WindowAction.Restore) })
         {
             var item = new MenuItem { Header = header };
 
@@ -291,7 +291,7 @@ internal sealed class WindowGrips : FrameworkElement
 
         menu.Items.Add(new Separator());
 
-        var fill = new MenuItem { Header = "Fill this screen" };
+        var fill = new MenuItem { Header = Strings.GripsFillScreen };
 
         fill.Click += (_, _) => Laid?.Invoke(this, (window, WindowAction.Move, new CoreRect(0, 0, 1, 1)));
         menu.Items.Add(fill);

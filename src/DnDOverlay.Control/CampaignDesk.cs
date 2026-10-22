@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows.Threading;
 using DnDOverlay.Campaign;
 using DnDOverlay.Hub;
@@ -59,12 +58,12 @@ internal sealed class CampaignDesk
         !summary.Unnamed
             ? summary.Name
             : summary.CreatedAt is { } created
-                ? string.Create(CultureInfo.CurrentCulture, $"Unnamed - begun {created.LocalDateTime:d}, {summary.Pictures ?? 0} picture(s)")
-                : "Unnamed";
+                ? Strings.DeskUnnamedBegun(created.LocalDateTime, summary.Pictures ?? 0)
+                : Strings.DeskUnnamed;
 
     /// <summary>The open campaign's name as the head shows it.</summary>
     internal string? OpenLabel => Open is { } open
-        ? open.Unnamed ? string.Create(CultureInfo.CurrentCulture, $"Unnamed campaign (begun {open.Store.CreatedAt.LocalDateTime:d})") : open.Name
+        ? open.Unnamed ? Strings.DeskUnnamedCampaign(open.Store.CreatedAt.LocalDateTime) : open.Name
         : null;
 
     /// <summary>
@@ -249,39 +248,39 @@ internal sealed class CampaignDesk
         var size = campaign.Store.Entries.Sum(entry => entry.Bytes);
         var parts = new List<string>
         {
-            string.Create(
-                CultureInfo.CurrentCulture,
-                $"Campaign \"{campaign.Name}\" opened - {campaign.Store.Count} picture(s), {size / (1024d * 1024):0.#} MB, {campaign.Shelf.Scenes.Count} scene(s)"),
+            Strings.DeskOpened(campaign.Name, campaign.Store.Count, size / (1024d * 1024), campaign.Shelf.Scenes.Count),
         };
 
         if (report.Reconstructed)
         {
-            parts.Add("its inventory could not be read and was rebuilt from the folder");
+            parts.Add(Strings.DeskReconstructed);
         }
 
         if (report.Adopted > 0)
         {
-            parts.Add($"{report.Adopted} picture(s) taken in from the folder");
+            parts.Add(Strings.DeskAdopted(report.Adopted));
         }
 
         if (report.Duplicates > 0)
         {
-            parts.Add($"{report.Duplicates} duplicate(s) removed");
+            parts.Add(Strings.DeskDuplicates(report.Duplicates));
         }
 
         if (report.Missing.Count > 0)
         {
-            parts.Add($"{report.Missing.Count} picture(s) missing: {string.Join(", ", report.Missing.Take(5))}{(report.Missing.Count > 5 ? ", ..." : string.Empty)}");
+            parts.Add(Strings.DeskMissing(
+                report.Missing.Count,
+                string.Join(", ", report.Missing.Take(5)) + (report.Missing.Count > 5 ? ", ..." : string.Empty)));
         }
 
         if (report.Foreign.Count > 0)
         {
-            parts.Add($"{report.Foreign.Count} foreign file(s) left alone");
+            parts.Add(Strings.DeskForeign(report.Foreign.Count));
         }
 
         if (report.UnreadableScenes.Count > 0)
         {
-            parts.Add($"{report.UnreadableScenes.Count} scene file(s) could not be read: {string.Join(", ", report.UnreadableScenes)}");
+            parts.Add(Strings.DeskUnreadableScenes(report.UnreadableScenes.Count, string.Join(", ", report.UnreadableScenes)));
         }
 
         return string.Join(" · ", parts);

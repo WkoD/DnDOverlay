@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="NoSpace" xml:space="preserve">
+    <value>Für dieses Bild ist kein Platz mehr: {0} MB frei, {1} MB nötig. In der Kampagne unter {2} etwas Platz schaffen.</value>
+  </data>
+  <data name="CampaignTooNew" xml:space="preserve">
+    <value>Die Kampagne unter {0} wurde von einer neueren Version von DnDOverlay geschrieben (Schema {1}, diese Version liest {2}). Sie bleibt unberührt - sie hier zu öffnen würde Arbeit zerstören.</value>
+  </data>
+  <data name="SceneFileTooNew" xml:space="preserve">
+    <value>{0} wurde von einer neueren Version geschrieben (Schema {1}, dieser Build liest bis {2}).</value>
+  </data>
+  <data name="NoSuchCampaign" xml:space="preserve">
+    <value>Es gibt keine Kampagne "{0}" in {1}.</value>
+  </data>
+  <data name="MoveFailed" xml:space="preserve">
+    <value>Die Kampagnen ließen sich nicht umziehen.</value>
+  </data>
+  <data name="MoveCollisions" xml:space="preserve">
+    <value>Am neuen Ort liegen schon Kampagnen gleichen Namens: {0}.</value>
+  </data>
+  <data name="MoveNoRoom" xml:space="preserve">
+    <value>Am neuen Ort ist nicht genug Platz: die Kampagnen brauchen {0:0.0} GB, solange sie doppelt liegen, und {1:0.0} GB sind frei.</value>
+  </data>
+  <data name="MoveCampaignFailed" xml:space="preserve">
+    <value>Die Kampagne "{0}" ließ sich nicht umziehen: {1}</value>
+  </data>
+  <data name="MoveCopyMismatch" xml:space="preserve">
+    <value>Die Kopie von "{0}" stimmt in Anzahl oder Größe der Dateien nicht mit dem Original überein.</value>
+  </data>
+  <data name="MoveCopyFailed" xml:space="preserve">
+    <value>Die Kampagnen ließen sich nicht kopieren: {0}</value>
+  </data>
+  <data name="NothingCameOfIt" xml:space="preserve">
+    <value>Daraus wurde nichts.</value>
+  </data>
+</root>

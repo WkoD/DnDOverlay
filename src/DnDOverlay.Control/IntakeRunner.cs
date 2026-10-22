@@ -1,4 +1,3 @@
-using System.Globalization;
 using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Hub;
@@ -46,13 +45,13 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
     {
         if (sources.Count == 0)
         {
-            say("Nothing in that could be taken in.");
+            say(Strings.IntakeNothingUsable);
             return;
         }
 
         if (_running is not null)
         {
-            say("A run is going. Break it off first, or wait for it.");
+            say(Strings.IntakeRunGoing);
             return;
         }
 
@@ -131,9 +130,7 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
 
             return placeable.Count == 1
                 ? null
-                : string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{placeable[0].Name} is the background; the other {placeable.Count - 1} went into the stock only.");
+                : Strings.IntakeBackgroundRest(placeable[0].Name, placeable.Count - 1);
         }
 
         // One picture let go at a place lands there; a run flows from the placement of the screen -
@@ -152,8 +149,8 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
 
     private static string Progressing(IntakeProgress step) =>
         step.Total == 1
-            ? $"Taking {step.Name} in - this can take a few seconds for a large picture ..."
-            : string.Create(CultureInfo.InvariantCulture, $"{step.Done} of {step.Total} ... {step.Name}");
+            ? Strings.IntakeTakingOne(step.Name)
+            : Strings.IntakeProgressOf(step.Done, step.Total, step.Name);
 
     /// <summary>ONE collected message, not one dialogue per file (Part 7).</summary>
     private static string Collected(IntakeReport report)
@@ -162,30 +159,28 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
 
         if (report.Taken.Count > 0)
         {
-            parts.Add(string.Create(CultureInfo.InvariantCulture, $"{report.Taken.Count} taken in"));
+            parts.Add(Strings.IntakeTaken(report.Taken.Count));
         }
 
         if (report.AlreadyPresent.Count > 0)
         {
-            parts.Add(string.Create(CultureInfo.InvariantCulture, $"{report.AlreadyPresent.Count} already in the stock"));
+            parts.Add(Strings.IntakeAlreadyPresent(report.AlreadyPresent.Count));
         }
 
         if (report.Refused.Count > 0)
         {
-            parts.Add(string.Create(
-                CultureInfo.InvariantCulture,
-                $"{report.Refused.Count} refused ({string.Join("; ", report.Refused.Select(f => $"{f.Name}: {f.Detail}"))})"));
+            parts.Add(Strings.IntakeRefused(
+                report.Refused.Count,
+                string.Join("; ", report.Refused.Select(f => $"{f.Name}: {f.Detail}"))));
         }
 
         if (report.Tolerated.Count > 0)
         {
-            parts.Add(string.Create(
-                CultureInfo.InvariantCulture,
-                $"{report.Tolerated.Count} in a format that is not assured ({string.Join(", ", report.Tolerated)})"));
+            parts.Add(Strings.IntakeTolerated(report.Tolerated.Count, string.Join(", ", report.Tolerated)));
         }
 
         return parts.Count == 0
-            ? "Nothing came in."
-            : string.Join(", ", parts) + (report.Cancelled ? " - broken off, what came in stays." : ".");
+            ? Strings.IntakeNothingCame
+            : report.Cancelled ? Strings.IntakeBrokenOff(string.Join(", ", parts)) : string.Join(", ", parts) + ".";
     }
 }

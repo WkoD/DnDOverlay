@@ -36,7 +36,7 @@ internal sealed class LayoutMappingWindow : Window
         Pictures pictures)
     {
         Owner = owner;
-        Title = "Load layout";
+        Title = Strings.LayoutMappingTitle;
         Width = 560;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -46,7 +46,7 @@ internal sealed class LayoutMappingWindow : Window
 
         panel.Children.Add(new TextBlock
         {
-            Text = $"Not every screen of \"{name}\" is here. Choose where each scene goes.",
+            Text = Strings.LayoutMappingIntro(name),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10),
         });
@@ -56,8 +56,8 @@ internal sealed class LayoutMappingWindow : Window
             panel.Children.Add(Row(parts[index], found[index], screens, pictures));
         }
 
-        var load = new Button { Content = "Load", IsDefault = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(16, 4, 16, 4) };
+        var load = new Button { Content = Strings.LayoutMappingLoad, IsDefault = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = Strings.LayoutMappingCancel, IsCancel = true, Padding = new Thickness(16, 4, 16, 4) };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
 
         buttons.Children.Add(load);
@@ -116,8 +116,8 @@ internal sealed class LayoutMappingWindow : Window
             choice.Items.Add(new ComboBoxItem { Content = view.Info.Label, Tag = view.Screen });
         }
 
-        choice.Items.Add(new ComboBoxItem { Content = "Save as scene", Tag = AsScene });
-        choice.Items.Add(new ComboBoxItem { Content = "Don't load", Tag = Skip });
+        choice.Items.Add(new ComboBoxItem { Content = Strings.LayoutMappingAsScene, Tag = AsScene });
+        choice.Items.Add(new ComboBoxItem { Content = Strings.LayoutMappingSkip, Tag = Skip });
 
         choice.SelectedItem = choice.Items.OfType<ComboBoxItem>().First(item =>
             found is { } screen ? item.Tag is ScreenRef target && target == screen : Equals(item.Tag, Skip));
@@ -126,7 +126,7 @@ internal sealed class LayoutMappingWindow : Window
 
         var label = new TextBlock
         {
-            Text = found is null ? $"{part.ScreenName} - not here" : part.ScreenName,
+            Text = found is null ? Strings.LayoutMappingNotHere(part.ScreenName) : part.ScreenName,
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 10, 0),

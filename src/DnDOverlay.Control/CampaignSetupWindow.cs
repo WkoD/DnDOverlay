@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using DnDOverlay.Campaign;
@@ -22,14 +21,14 @@ internal sealed class CampaignSetupWindow : Window
         Owner = owner;
         _desk = desk;
 
-        Title = "Set up campaign";
+        Title = Strings.CampaignSetupTitle;
         Width = 520;
         SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        var apply = new Button { Content = "Apply", Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(8, 0, 0, 0) };
-        var folder = new Button { Content = "Open folder in Explorer", Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
-        var delete = new Button { Content = "Delete campaign ...", Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left };
+        var apply = new Button { Content = Strings.CampaignSetupApply, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(8, 0, 0, 0) };
+        var folder = new Button { Content = Strings.CampaignSetupOpenFolder, Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
+        var delete = new Button { Content = Strings.CampaignSetupDelete, Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left };
 
         var naming = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
 
@@ -38,7 +37,7 @@ internal sealed class CampaignSetupWindow : Window
 
         var panel = new StackPanel { Margin = new Thickness(16) };
 
-        panel.Children.Add(new TextBlock { Text = "Name", FontWeight = FontWeights.Bold });
+        panel.Children.Add(new TextBlock { Text = Strings.CampaignSetupName, FontWeight = FontWeights.Bold });
         panel.Children.Add(naming);
         panel.Children.Add(_said);
         panel.Children.Add(_facts);
@@ -77,9 +76,7 @@ internal sealed class CampaignSetupWindow : Window
 
         var bytes = open.Store.Entries.Sum(entry => entry.Bytes);
 
-        _facts.Text = string.Create(
-            CultureInfo.CurrentCulture,
-            $"{open.Store.Count} picture(s), {bytes / (1024d * 1024):0.#} MB, {open.Shelf.Scenes.Count} scene(s), {open.Shelf.Layouts.Count} layout(s).\n{open.Directory}");
+        _facts.Text = Strings.CampaignSetupFacts(open.Store.Count, bytes / (1024d * 1024), open.Shelf.Scenes.Count, open.Shelf.Layouts.Count, open.Directory);
     }
 
     private void Rename()
@@ -92,9 +89,9 @@ internal sealed class CampaignSetupWindow : Window
 
         _said.Text = _desk.Rename(_name.Text) switch
         {
-            CampaignOutcome.Done => "Renamed.",
-            CampaignOutcome.Taken => $"A campaign named \"{_name.Text}\" exists already.",
-            CampaignOutcome.Busy => "The folder is in use right now - try again in a moment.",
+            CampaignOutcome.Done => Strings.CampaignSetupRenamed,
+            CampaignOutcome.Taken => Strings.CampaignSetupNameTaken(_name.Text),
+            CampaignOutcome.Busy => Strings.CampaignSetupBusy,
             _ => string.Empty,
         };
     }
@@ -112,14 +109,11 @@ internal sealed class CampaignSetupWindow : Window
         }
 
         var bytes = open.Store.Entries.Sum(entry => entry.Bytes);
-        var what = string.Create(
-            CultureInfo.CurrentCulture,
-            $"\"{open.Name}\" - {open.Store.Count} picture(s), {open.Shelf.Scenes.Count} scene(s), {open.Shelf.Layouts.Count} layout(s), {bytes / (1024d * 1024):0.#} MB.");
 
         var typed = NameDialog.Ask(
             this,
-            "Delete campaign",
-            $"This deletes {what}\nUndo cannot bring it back. To keep a copy, copy the folder first:\n{open.Directory}\n\nType the campaign's name to delete it:",
+            Strings.CampaignSetupDeleteTitle,
+            Strings.CampaignSetupDeletePrompt(open.Name, open.Store.Count, open.Shelf.Scenes.Count, open.Shelf.Layouts.Count, bytes / (1024d * 1024), open.Directory),
             string.Empty,
             check: false);
 
@@ -130,7 +124,7 @@ internal sealed class CampaignSetupWindow : Window
 
         if (!string.Equals(typed, open.Name, StringComparison.Ordinal))
         {
-            _said.Text = "The name did not match - nothing was deleted.";
+            _said.Text = Strings.CampaignSetupNoMatch;
             return;
         }
 

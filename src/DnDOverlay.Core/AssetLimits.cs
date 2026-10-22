@@ -48,29 +48,28 @@ public sealed record AssetLimits(
         {
             throw new ImageRejectedException(
                 ImageRejection.TooLarge,
-                $"The file is {sourceBytes / (1024 * 1024)} MB, the limit is {MaxSourceBytes / (1024 * 1024)} MB.");
+                Strings.LimitFileSize(sourceBytes / (1024 * 1024), MaxSourceBytes / (1024 * 1024)));
         }
 
         if (probe.PixelWidth > MaxEdge || probe.PixelHeight > MaxEdge)
         {
             throw new ImageRejectedException(
                 ImageRejection.TooLarge,
-                $"The image is {probe.PixelWidth}x{probe.PixelHeight}, the limit per side is {MaxEdge}.");
+                Strings.LimitEdge(probe.PixelWidth, probe.PixelHeight, MaxEdge));
         }
 
         if (probe.TotalPixels > MaxTotalPixels)
         {
             throw new ImageRejectedException(
                 ImageRejection.TooLarge,
-                $"The image holds {probe.TotalPixels} pixels across {probe.Frames} frame(s), "
-                + $"the limit is {MaxTotalPixels}.");
+                Strings.LimitPixels(probe.TotalPixels, probe.Frames, MaxTotalPixels));
         }
 
         if (probe.Frames > MaxFrames)
         {
             throw new ImageRejectedException(
                 ImageRejection.TooLarge,
-                $"The image has {probe.Frames} frames, the limit is {MaxFrames}.");
+                Strings.LimitFrames(probe.Frames, MaxFrames));
         }
     }
 }

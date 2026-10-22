@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="ParameterPresentation" xml:space="preserve">
+    <value>Angezeigt als</value>
+  </data>
+  <data name="ParameterScaleOnLoad" xml:space="preserve">
+    <value>Ankunftsgröße</value>
+  </data>
+  <data name="ParameterScaleOnLoadUnit" xml:space="preserve">
+    <value>der Bildschirmhöhe</value>
+  </data>
+  <data name="ParameterMaxWidthOnLoad" xml:space="preserve">
+    <value>Ankunftsbreite höchstens</value>
+  </data>
+  <data name="ParameterMaxWidthOnLoadUnit" xml:space="preserve">
+    <value>der Bildschirmbreite</value>
+  </data>
+  <data name="ParameterPlacement" xml:space="preserve">
+    <value>Neue Bilder kommen</value>
+  </data>
+  <data name="ParameterDefaultRotationDeg" xml:space="preserve">
+    <value>Neue Bilder zeigen</value>
+  </data>
+  <data name="ParameterDefaultRotationDegUnit" xml:space="preserve">
+    <value>°</value>
+  </data>
+  <data name="ParameterParkEdge" xml:space="preserve">
+    <value>Geparkte Bilder reihen sich auf</value>
+  </data>
+  <data name="ParameterMinScale" xml:space="preserve">
+    <value>Kleinstes Bild</value>
+  </data>
+  <data name="ParameterMinScaleUnit" xml:space="preserve">
+    <value>DIP an der kürzeren Kante</value>
+  </data>
+  <data name="ParameterMaxScale" xml:space="preserve">
+    <value>Größtes Bild</value>
+  </data>
+  <data name="ParameterMaxScaleUnit" xml:space="preserve">
+    <value>× die Bildschirmhöhe</value>
+  </data>
+  <data name="ParameterMinVisiblePixels" xml:space="preserve">
+    <value>Immer sichtbar von einem Bild</value>
+  </data>
+  <data name="ParameterMinVisiblePixelsUnit" xml:space="preserve">
+    <value>DIP</value>
+  </data>
+  <data name="ParameterImageTextSize" xml:space="preserve">
+    <value>Namensgröße</value>
+  </data>
+  <data name="ParameterImageTextSizeUnit" xml:space="preserve">
+    <value>DIP</value>
+  </data>
+  <data name="ParameterRotationDeadZoneDeg" xml:space="preserve">
+    <value>Drehen beginnt nach</value>
+  </data>
+  <data name="ParameterRotationDeadZoneDegUnit" xml:space="preserve">
+    <value>°</value>
+  </data>
+  <data name="ParameterRotationSnapToleranceDeg" xml:space="preserve">
+    <value>Rastet auf rechte Winkel ein innerhalb</value>
+  </data>
+  <data name="ParameterRotationSnapToleranceDegUnit" xml:space="preserve">
+    <value>° (0 = aus)</value>
+  </data>
+  <data name="ParameterArrivalHighlightSeconds" xml:space="preserve">
+    <value>Hervorhebung bei Ankunft</value>
+  </data>
+  <data name="ParameterArrivalHighlightSecondsUnit" xml:space="preserve">
+    <value>s</value>
+  </data>
+  <data name="ParameterInertia" xml:space="preserve">
+    <value>Bilder gleiten nach einem Stoß weiter</value>
+  </data>
+  <data name="ParameterScrollUpZoomsIn" xml:space="preserve">
+    <value>Nach oben scrollen vergrößert</value>
+  </data>
+  <data name="ParameterDiagnosticEdge" xml:space="preserve">
+    <value>Diagnoseleiste am</value>
+  </data>
+  <data name="ParameterKeepAwake" xml:space="preserve">
+    <value>Bildschirme wach halten</value>
+  </data>
+  <data name="ParameterRescueAfterSeconds" xml:space="preserve">
+    <value>Rettungsmarke nach</value>
+  </data>
+  <data name="ParameterRescueAfterSecondsUnit" xml:space="preserve">
+    <value>s ohne Control</value>
+  </data>
+  <data name="ParameterForeignWindows" xml:space="preserve">
+    <value>Fenster anderer Programme</value>
+  </data>
+  <data name="ParameterLanguage" xml:space="preserve">
+    <value>Sprache</value>
+  </data>
+  <data name="ParameterLanguageUnit" xml:space="preserve">
+    <value>Bildschirme beim nächsten Start</value>
+  </data>
+  <data name="ParameterLevel" xml:space="preserve">
+    <value>Protokollstufe</value>
+  </data>
+  <data name="ParameterForwardAtLeast" xml:space="preserve">
+    <value>An das Control geschickt ab</value>
+  </data>
+  <data name="ChoiceOverlay" xml:space="preserve">
+    <value>Overlay</value>
+  </data>
+  <data name="ChoiceWindow" xml:space="preserve">
+    <value>Fenster</value>
+  </data>
+  <data name="ChoiceFlow" xml:space="preserve">
+    <value>Nebeneinander</value>
+  </data>
+  <data name="ChoiceCascade" xml:space="preserve">
+    <value>Gestaffelt</value>
+  </data>
+  <data name="ChoiceLeft" xml:space="preserve">
+    <value>Links</value>
+  </data>
+  <data name="ChoiceRight" xml:space="preserve">
+    <value>Rechts</value>
+  </data>
+  <data name="ChoiceTop" xml:space="preserve">
+    <value>Oben</value>
+  </data>
+  <data name="ChoiceBottom" xml:space="preserve">
+    <value>Unten</value>
+  </data>
+  <data name="ChoiceAutomatic" xml:space="preserve">
+    <value>Automatisch</value>
+  </data>
+  <data name="ChoiceReportAndControl" xml:space="preserve">
+    <value>Melden und steuern</value>
+  </data>
+  <data name="ChoiceReportOnly" xml:space="preserve">
+    <value>Nur melden</value>
+  </data>
+  <data name="ChoiceOff" xml:space="preserve">
+    <value>Aus</value>
+  </data>
+  <data name="ChoiceEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="ChoiceGerman" xml:space="preserve">
+    <value>Deutsch</value>
+  </data>
+  <data name="ChoiceTrace" xml:space="preserve">
+    <value>Alles (Trace)</value>
+  </data>
+  <data name="ChoiceDebug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="ChoiceInformation" xml:space="preserve">
+    <value>Information</value>
+  </data>
+  <data name="ChoiceWarning" xml:space="preserve">
+    <value>Warnungen</value>
+  </data>
+  <data name="ChoiceError" xml:space="preserve">
+    <value>Fehler</value>
+  </data>
+  <data name="ReasonNotPaired" xml:space="preserve">
+    <value>Nicht gekoppelt - im Fenster Geräte koppeln</value>
+  </data>
+  <data name="ReasonDeviceNotConnected" xml:space="preserve">
+    <value>Gerät nicht verbunden</value>
+  </data>
+  <data name="ReasonScreenUnavailable" xml:space="preserve">
+    <value>Bildschirm nicht verfügbar - Kabel prüfen</value>
+  </data>
+  <data name="ReasonControlWindow" xml:space="preserve">
+    <value>Das Control-Fenster liegt darauf - wegschieben</value>
+  </data>
+  <data name="ReasonHiddenAtDevice" xml:space="preserve">
+    <value>Am Gerät ausgeblendet - kommt mit der nächsten Aktualisierung zurück</value>
+  </data>
+  <data name="ReasonMarkOne" xml:space="preserve">
+    <value>⚠ 1 Grund</value>
+  </data>
+  <data name="ReasonMarkMany" xml:space="preserve">
+    <value>⚠ {0} Gründe</value>
+  </data>
+  <data name="LimitFileSize" xml:space="preserve">
+    <value>Die Datei hat {0} MB, die Grenze ist {1} MB.</value>
+  </data>
+  <data name="LimitEdge" xml:space="preserve">
+    <value>Das Bild ist {0}x{1}, die Grenze je Seite ist {2}.</value>
+  </data>
+  <data name="LimitPixels" xml:space="preserve">
+    <value>Das Bild hat {0} Pixel in {1} Frame(s), die Grenze ist {2}.</value>
+  </data>
+  <data name="LimitFrames" xml:space="preserve">
+    <value>Das Bild hat {0} Frames, die Grenze ist {1}.</value>
+  </data>
+</root>

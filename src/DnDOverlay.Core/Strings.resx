@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="ParameterPresentation" xml:space="preserve">
+    <value>Shown as</value>
+  </data>
+  <data name="ParameterScaleOnLoad" xml:space="preserve">
+    <value>Arrival size</value>
+  </data>
+  <data name="ParameterScaleOnLoadUnit" xml:space="preserve">
+    <value>of the screen height</value>
+  </data>
+  <data name="ParameterMaxWidthOnLoad" xml:space="preserve">
+    <value>Arrival width at most</value>
+  </data>
+  <data name="ParameterMaxWidthOnLoadUnit" xml:space="preserve">
+    <value>of the screen width</value>
+  </data>
+  <data name="ParameterPlacement" xml:space="preserve">
+    <value>New pictures arrive</value>
+  </data>
+  <data name="ParameterDefaultRotationDeg" xml:space="preserve">
+    <value>New pictures face</value>
+  </data>
+  <data name="ParameterDefaultRotationDegUnit" xml:space="preserve">
+    <value>°</value>
+  </data>
+  <data name="ParameterParkEdge" xml:space="preserve">
+    <value>Parked pictures line up at</value>
+  </data>
+  <data name="ParameterMinScale" xml:space="preserve">
+    <value>Smallest picture</value>
+  </data>
+  <data name="ParameterMinScaleUnit" xml:space="preserve">
+    <value>DIP on the shorter edge</value>
+  </data>
+  <data name="ParameterMaxScale" xml:space="preserve">
+    <value>Largest picture</value>
+  </data>
+  <data name="ParameterMaxScaleUnit" xml:space="preserve">
+    <value>× the screen height</value>
+  </data>
+  <data name="ParameterMinVisiblePixels" xml:space="preserve">
+    <value>Always visible of a picture</value>
+  </data>
+  <data name="ParameterMinVisiblePixelsUnit" xml:space="preserve">
+    <value>DIP</value>
+  </data>
+  <data name="ParameterImageTextSize" xml:space="preserve">
+    <value>Name size</value>
+  </data>
+  <data name="ParameterImageTextSizeUnit" xml:space="preserve">
+    <value>DIP</value>
+  </data>
+  <data name="ParameterRotationDeadZoneDeg" xml:space="preserve">
+    <value>Turning starts after</value>
+  </data>
+  <data name="ParameterRotationDeadZoneDegUnit" xml:space="preserve">
+    <value>°</value>
+  </data>
+  <data name="ParameterRotationSnapToleranceDeg" xml:space="preserve">
+    <value>Snaps to right angles within</value>
+  </data>
+  <data name="ParameterRotationSnapToleranceDegUnit" xml:space="preserve">
+    <value>° (0 = off)</value>
+  </data>
+  <data name="ParameterArrivalHighlightSeconds" xml:space="preserve">
+    <value>Arrival highlight</value>
+  </data>
+  <data name="ParameterArrivalHighlightSecondsUnit" xml:space="preserve">
+    <value>s</value>
+  </data>
+  <data name="ParameterInertia" xml:space="preserve">
+    <value>Pictures glide on after a push</value>
+  </data>
+  <data name="ParameterScrollUpZoomsIn" xml:space="preserve">
+    <value>Scrolling up enlarges</value>
+  </data>
+  <data name="ParameterDiagnosticEdge" xml:space="preserve">
+    <value>Diagnostic bar at</value>
+  </data>
+  <data name="ParameterKeepAwake" xml:space="preserve">
+    <value>Keep the screens awake</value>
+  </data>
+  <data name="ParameterRescueAfterSeconds" xml:space="preserve">
+    <value>Rescue mark after</value>
+  </data>
+  <data name="ParameterRescueAfterSecondsUnit" xml:space="preserve">
+    <value>s without a control</value>
+  </data>
+  <data name="ParameterForeignWindows" xml:space="preserve">
+    <value>Windows of other programs</value>
+  </data>
+  <data name="ParameterLanguage" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="ParameterLanguageUnit" xml:space="preserve">
+    <value>screens at the next start</value>
+  </data>
+  <data name="ParameterLevel" xml:space="preserve">
+    <value>Log level</value>
+  </data>
+  <data name="ParameterForwardAtLeast" xml:space="preserve">
+    <value>Sent to the control from</value>
+  </data>
+  <data name="ChoiceOverlay" xml:space="preserve">
+    <value>Overlay</value>
+  </data>
+  <data name="ChoiceWindow" xml:space="preserve">
+    <value>Window</value>
+  </data>
+  <data name="ChoiceFlow" xml:space="preserve">
+    <value>Side by side</value>
+  </data>
+  <data name="ChoiceCascade" xml:space="preserve">
+    <value>Cascading</value>
+  </data>
+  <data name="ChoiceLeft" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="ChoiceRight" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="ChoiceTop" xml:space="preserve">
+    <value>Top</value>
+  </data>
+  <data name="ChoiceBottom" xml:space="preserve">
+    <value>Bottom</value>
+  </data>
+  <data name="ChoiceAutomatic" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="ChoiceReportAndControl" xml:space="preserve">
+    <value>Report and control</value>
+  </data>
+  <data name="ChoiceReportOnly" xml:space="preserve">
+    <value>Report only</value>
+  </data>
+  <data name="ChoiceOff" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="ChoiceEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="ChoiceGerman" xml:space="preserve">
+    <value>Deutsch</value>
+  </data>
+  <data name="ChoiceTrace" xml:space="preserve">
+    <value>Everything (Trace)</value>
+  </data>
+  <data name="ChoiceDebug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="ChoiceInformation" xml:space="preserve">
+    <value>Information</value>
+  </data>
+  <data name="ChoiceWarning" xml:space="preserve">
+    <value>Warnings</value>
+  </data>
+  <data name="ChoiceError" xml:space="preserve">
+    <value>Errors</value>
+  </data>
+  <data name="ReasonNotPaired" xml:space="preserve">
+    <value>Not paired - pair it in the Devices window</value>
+  </data>
+  <data name="ReasonDeviceNotConnected" xml:space="preserve">
+    <value>Device not connected</value>
+  </data>
+  <data name="ReasonScreenUnavailable" xml:space="preserve">
+    <value>Screen not available - check the cable</value>
+  </data>
+  <data name="ReasonControlWindow" xml:space="preserve">
+    <value>The control window lies on it - move it away</value>
+  </data>
+  <data name="ReasonHiddenAtDevice" xml:space="preserve">
+    <value>Hidden at the device - comes back with the next update</value>
+  </data>
+  <data name="ReasonMarkOne" xml:space="preserve">
+    <value>⚠ 1 reason</value>
+  </data>
+  <data name="ReasonMarkMany" xml:space="preserve">
+    <value>⚠ {0} reasons</value>
+  </data>
+  <data name="LimitFileSize" xml:space="preserve">
+    <value>The file is {0} MB, the limit is {1} MB.</value>
+  </data>
+  <data name="LimitEdge" xml:space="preserve">
+    <value>The image is {0}x{1}, the limit per side is {2}.</value>
+  </data>
+  <data name="LimitPixels" xml:space="preserve">
+    <value>The image holds {0} pixels across {1} frame(s), the limit is {2}.</value>
+  </data>
+  <data name="LimitFrames" xml:space="preserve">
+    <value>The image has {0} frames, the limit is {1}.</value>
+  </data>
+</root>

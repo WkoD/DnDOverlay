@@ -125,7 +125,7 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
 
         if (!Directory.Exists(directory))
         {
-            throw new DirectoryNotFoundException($"There is no campaign \"{name}\" in {BasePath}.");
+            throw new DirectoryNotFoundException(Strings.NoSuchCampaign(name, BasePath));
         }
 
         // The scenes first: a newer schema there refuses before the stock is touched.

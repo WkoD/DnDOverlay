@@ -82,11 +82,11 @@ public static class ScreenReasons
     /// </summary>
     public static string Words(ScreenReason reason) => reason switch
     {
-        ScreenReason.NotPaired => "Not paired - pair it in the Devices window",
-        ScreenReason.DeviceNotConnected => "Device not connected",
-        ScreenReason.ScreenUnavailable => "Screen not available - check the cable",
-        ScreenReason.ControlWindow => "The control window lies on it - move it away",
-        ScreenReason.HiddenAtDevice => "Hidden at the device - comes back with the next update",
+        ScreenReason.NotPaired => Strings.ReasonNotPaired,
+        ScreenReason.DeviceNotConnected => Strings.ReasonDeviceNotConnected,
+        ScreenReason.ScreenUnavailable => Strings.ReasonScreenUnavailable,
+        ScreenReason.ControlWindow => Strings.ReasonControlWindow,
+        ScreenReason.HiddenAtDevice => Strings.ReasonHiddenAtDevice,
         _ => reason.ToString(),
     };
 
@@ -98,8 +98,8 @@ public static class ScreenReasons
         return reasons.Count switch
         {
             0 => null,
-            1 => "⚠ 1 reason",
-            var count => $"⚠ {count} reasons",
+            1 => Strings.ReasonMarkOne,
+            var count => Strings.ReasonMarkMany(count),
         };
     }
 }

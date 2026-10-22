@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -31,7 +30,7 @@ internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<s
             {
                 var bytes = current.Store.Entries.Sum(entry => entry.Bytes);
 
-                label += string.Create(CultureInfo.CurrentCulture, $"  - {current.Store.Count} picture(s), {bytes / (1024d * 1024):0.#} MB");
+                label = Strings.CampaignSwitchOpenLabel(label, current.Store.Count, bytes / (1024d * 1024));
             }
 
             var item = new MenuItem
@@ -49,12 +48,12 @@ internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<s
 
         if (campaigns.Count == 0)
         {
-            menu.Items.Add(new MenuItem { Header = "No campaign yet - add pictures to begin one", IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = Strings.CampaignSwitchNone, IsEnabled = false });
         }
 
         menu.Items.Add(new Separator());
 
-        var setup = new MenuItem { Header = "Set up campaign ...", IsEnabled = desk.Open is not null };
+        var setup = new MenuItem { Header = Strings.CampaignSwitchSetUp, IsEnabled = desk.Open is not null };
 
         setup.Click += (_, _) => new CampaignSetupWindow(owner, desk).Show();
         menu.Items.Add(setup);
@@ -75,8 +74,8 @@ internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<s
             // grips that ask nothing (Part 7).
             var answer = MessageBox.Show(
                 owner,
-                $"Switch to \"{name}\"?\n\nThe table is cleared on every screen - its pictures come from \"{open.Name}\" - and undo cannot go back past this.",
-                "Switch campaign",
+                Strings.CampaignSwitchQuestion(name, open.Name),
+                Strings.CampaignSwitchTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.No);

@@ -231,12 +231,12 @@ internal sealed class LogPanel : DockPanel, IDisposable
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = showing is Showing.All && Lightness(color) > 0.6 ? Brushes.Black : showing is Showing.All ? Brushes.White : SystemColors.ControlTextBrush,
             },
-            ToolTip = dim ? $"{label} - not connected" : label,
+            ToolTip = dim ? Strings.LogPanelNotConnected(label) : label,
         };
 
         var menu = new ContextMenu();
-        var onlyThese = new MenuItem { Header = "Only these" };
-        var all = new MenuItem { Header = "Show all" };
+        var onlyThese = new MenuItem { Header = Strings.LogPanelOnlyThese };
+        var all = new MenuItem { Header = Strings.LogPanelShowAll };
 
         onlyThese.Click += (_, _) => Changed(only);
         all.Click += (_, _) => Changed(_filter.ShowAll);
@@ -298,7 +298,7 @@ internal sealed class LogPanel : DockPanel, IDisposable
 
         if (lost > 0)
         {
-            _lines.Children.Add(Plain(string.Create(CultureInfo.InvariantCulture, $"... {lost} lines dropped before this view saw them")));
+            _lines.Children.Add(Plain(Strings.LogPanelLinesDropped(lost)));
         }
 
         foreach (var record in records)

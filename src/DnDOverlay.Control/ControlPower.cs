@@ -106,8 +106,7 @@ internal sealed partial class ControlPower : IDisposable
         _warned = true;
         ControlLog.BatteryLow(_logger, battery.Percent);
 
-        _withdraw = _notify(
-            $"This control's battery is at {battery.Percent} %. When it runs out, every display loses its control - plug it in.");
+        _withdraw = _notify(Strings.PowerBatteryLow(battery.Percent));
     }
 
     [LibraryImport("kernel32.dll")]

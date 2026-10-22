@@ -77,26 +77,26 @@ internal sealed class TileMenus(
         // was already open, which is the one moment a reader needs it to say the opposite
         // (hand-run of M4, second run).
         menu.Items.Add(Entry(
-            single ? "Back to the overview" : "Open single view",
+            single ? Strings.TileMenuBackToOverview : Strings.TileMenuOpenSingle,
             () => Opening?.Invoke(this, EventArgs.Empty)));
-        menu.Items.Add(Entry("Set up screen ...", () => Configuring?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(Entry(Strings.TileMenuSetUpScreen, () => Configuring?.Invoke(this, EventArgs.Empty)));
         menu.Items.Add(Entry(
-            "Identify screens",
+            Strings.TileMenuIdentifyScreens,
             () => _ = session.IdentifyScreensAsync(screen.Device, CancellationToken.None)));
 
         // Saved where the arrangement came into being; LOADED only from the tab "Scenes", where one
         // sees what one loads (Part 7).
-        menu.Items.Add(Entry("Save screen as scene ...", () => Saving?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(Entry(Strings.TileMenuSaveAsScene, () => Saving?.Invoke(this, EventArgs.Empty)));
 
         menu.Items.Add(Turned(view));
 
         // How new pictures arrive on this screen - moved here from the M2 scaffold when the panel
         // took its place (M5b3); the screen's own setting, so it belongs to the screen's menu.
-        var placement = new MenuItem { Header = "Placement" };
+        var placement = new MenuItem { Header = Strings.TileMenuPlacement };
 
         foreach (var mode in Enum.GetValues<PlacementMode>())
         {
-            var item = new MenuItem { Header = mode.ToString(), IsCheckable = true, IsChecked = placing == mode };
+            var item = new MenuItem { Header = Placement(mode), IsCheckable = true, IsChecked = placing == mode };
 
             item.Click += (_, _) => _ = session.ApplyConfigAsync(
                 screen.Device,
@@ -110,7 +110,7 @@ internal sealed class TileMenus(
 
         // Ticked while it stands, and reached from the head as well as the free area: the view
         // replaces the thumbnail, so there is no free area left to switch it off from (Part 7).
-        var diagnosis = new MenuItem { Header = "Diagnostic view", IsCheckable = true, IsChecked = diagnosing };
+        var diagnosis = new MenuItem { Header = Strings.TileMenuDiagnosticView, IsCheckable = true, IsChecked = diagnosing };
 
         diagnosis.Click += (_, _) => Diagnosing?.Invoke(this, !diagnosing);
         menu.Items.Add(diagnosis);
@@ -135,18 +135,18 @@ internal sealed class TileMenus(
         //
         // "Customize" rather than "by hand": it stands beside two names for what the machine does,
         // and the DM asked for the more technical word.
-        var custom = new MenuItem { Header = "Customize" };
+        var custom = new MenuItem { Header = Strings.TileMenuCustomize };
 
         custom.Click += (_, _) => Adjusting?.Invoke(this, !adjusting);
 
-        var background = new MenuItem { Header = "Adjust background", IsEnabled = scene.Background is not null };
+        var background = new MenuItem { Header = Strings.TileMenuAdjustBackground, IsEnabled = scene.Background is not null };
 
         background.Items.Add(custom);
 
         // A mode above, two positions below: two kinds of answer, and the line says so.
         background.Items.Add(new Separator());
-        background.Items.Add(Fitted("Fill screen", BackgroundFit.Cover, scene));
-        background.Items.Add(Fitted("Fit whole on screen", BackgroundFit.Contain, scene));
+        background.Items.Add(Fitted(Strings.TileMenuFillScreen, BackgroundFit.Cover, scene));
+        background.Items.Add(Fitted(Strings.TileMenuFitWhole, BackgroundFit.Contain, scene));
 
         menu.Items.Add(background);
 
@@ -155,7 +155,7 @@ internal sealed class TileMenus(
         // A filled or fitted layer is filled or fitted again at the new angle - one command in the
         // hub, so one patch (TurnBackgroundAsync).
         var turned = Quarters(
-            "Turn background",
+            Strings.TileMenuTurnBackground,
             scene.Background?.RotationDeg,
             angle => session.TurnBackgroundAsync(screen, angle, CancellationToken.None));
 
@@ -164,7 +164,7 @@ internal sealed class TileMenus(
 
         // Last, and on its own: it is the one entry here that throws something away.
         var cleared = Entry(
-            "Remove background",
+            Strings.TileMenuRemoveBackground,
             () => _ = session.ClearBackgroundAsync(screen, CancellationToken.None));
 
         cleared.IsEnabled = scene.Background is not null;
@@ -174,7 +174,7 @@ internal sealed class TileMenus(
         if (scene.Background is { Meta.IsAnimated: true } moving)
         {
             menu.Items.Add(Entry(
-                moving.AnimationPaused ? "Run background animation" : "Hold background animation",
+                moving.AnimationPaused ? Strings.TileMenuRunBackgroundAnimation : Strings.TileMenuHoldBackgroundAnimation,
                 () => _ = session.SetAnimationPausedAsync(screen, null, !moving.AnimationPaused, CancellationToken.None)));
         }
 
@@ -204,7 +204,7 @@ internal sealed class TileMenus(
 
         var menu = new ContextMenu();
 
-        menu.Items.Add(Entry("Turn to me", () => _ = ToMe(many, context, where)));
+        menu.Items.Add(Entry(Strings.TileMenuTurnToMe, () => _ = ToMe(many, context, where)));
 
         // <b>Quarter turns, set and not added</b> (end of M4, 27.09.2026): "90°" means standing at
         // 90° to the screen, the same way "Turn view" means it, so choosing it twice changes nothing.
@@ -215,7 +215,7 @@ internal sealed class TileMenus(
         if (!picture.Parked)
         {
             menu.Items.Add(Quarters(
-                "Turn",
+                Strings.TileMenuTurn,
                 Shared(lying),
                 angle => session.TransformItemsAsync(
                     screen,
@@ -233,7 +233,7 @@ internal sealed class TileMenus(
         if (!picture.Parked)
         {
             menu.Items.Add(Entry(
-                "Park",
+                Strings.TileMenuPark,
                 () => _ = session.ParkItemsAsync(
                     screen, Ids(many), parked: true, CancellationToken.None)));
         }
@@ -241,7 +241,7 @@ internal sealed class TileMenus(
         menu.Items.Add(new Separator());
 
         menu.Items.Add(Entry(
-            picture.Locked ? "Unlock" : "Lock",
+            picture.Locked ? Strings.TileMenuUnlock : Strings.TileMenuLock,
             () => _ = session.SetItemsLockedAsync(
                 screen, Ids(many), !picture.Locked, CancellationToken.None)));
 
@@ -250,13 +250,13 @@ internal sealed class TileMenus(
         if (picture is ImageItem { Meta.IsAnimated: true } animated)
         {
             menu.Items.Add(Entry(
-                animated.AnimationPaused ? "Resume animation" : "Pause animation",
+                animated.AnimationPaused ? Strings.TileMenuResumeAnimation : Strings.TileMenuPauseAnimation,
                 () => _ = session.SetItemsAnimationPausedAsync(
                     screen, Ids(many), !animated.AnimationPaused, CancellationToken.None)));
         }
 
         menu.Items.Add(Entry(
-            picture is ImageItem { ShowName: true } ? "Hide name" : "Show name",
+            picture is ImageItem { ShowName: true } ? Strings.TileMenuHideName : Strings.TileMenuShowName,
             () => _ = session.SetItemsShowNameAsync(
                 screen,
                 Ids(many),
@@ -267,7 +267,7 @@ internal sealed class TileMenus(
         // through the tile is only the shorter one when the picture is in front of the DM anyway.
         if (picture is ImageItem named)
         {
-            menu.Items.Add(Entry("Rename ...", () => Renaming?.Invoke(this, named.AssetId)));
+            menu.Items.Add(Entry(Strings.TileMenuRename, () => Renaming?.Invoke(this, named.AssetId)));
         }
 
         menu.Items.Add(new Separator());
@@ -276,23 +276,23 @@ internal sealed class TileMenus(
         // Mengen, die es auf einem Screen gibt - alles, was offen liegt, und was weggelegt ist -,
         // und sie stehen hier, weil das, was danach kommt, sie braucht: kopieren und verschieben
         // arbeiten auf der ganzen Auswahl (Handlauf M4, dritter Lauf).
-        var choosing = new MenuItem { Header = "Select" };
+        var choosing = new MenuItem { Header = Strings.TileMenuSelect };
 
         choosing.Items.Add(Entry(
-            "All",
+            Strings.TileMenuSelectAll,
             () => selection.Set(scene.Items.Select(item => item.ItemId))));
         choosing.Items.Add(Entry(
-            "On the table",
+            Strings.TileMenuSelectOnTable,
             () => selection.Set(scene.Items.Where(item => !item.Parked).Select(item => item.ItemId))));
         choosing.Items.Add(Entry(
-            "In the fan",
+            Strings.TileMenuSelectInFan,
             () => selection.Set(scene.Items.Where(item => item.Parked).Select(item => item.ItemId))));
 
         menu.Items.Add(choosing);
 
-        menu.Items.Add(Onto("Copy to", target =>
+        menu.Items.Add(Onto(Strings.TileMenuCopyTo, target =>
             session.CopyItemsAsync(screen, target, Ids(many), CancellationToken.None)));
-        menu.Items.Add(Onto("Move to", target =>
+        menu.Items.Add(Onto(Strings.TileMenuMoveTo, target =>
             session.MoveItemsAsync(screen, target, Ids(many), CancellationToken.None)));
 
         // The way back from the table into the stock (Part 7) - for the picture pressed on, even when
@@ -300,20 +300,20 @@ internal sealed class TileMenus(
         if (picture is ImageItem shown)
         {
             menu.Items.Add(new Separator());
-            menu.Items.Add(Entry("Show in stock", () => ShowingInStock?.Invoke(this, shown.AssetId)));
+            menu.Items.Add(Entry(Strings.TileMenuShowInStock, () => ShowingInStock?.Invoke(this, shown.AssetId)));
         }
 
         // Set apart, and expressly NOT beside "move to": in the menu they are neighbours, in effect
         // they are opposites, and a slip there clears a picture off the table (Part 7).
         menu.Items.Add(new Separator());
         var removing = Entry(
-            "Remove",
+            Strings.TileMenuRemove,
             () => _ = session.RemoveItemsAsync(screen, Ids(many), CancellationToken.None));
 
         // The key, written where Windows writes it: right-aligned in the entry, in the text the
         // keyboard shows. InputGestureText only SHOWS it - the key itself is handled by the main
         // window, which is where a key arrives whatever has focus (fourth hand-run, 15.09.2026).
-        removing.InputGestureText = "Del";
+        removing.InputGestureText = Strings.TileMenuRemoveKey;
         menu.Items.Add(removing);
 
         Open(menu, over, at);
@@ -360,7 +360,7 @@ internal sealed class TileMenus(
     /// </summary>
     private MenuItem Turned(ViewRotation view)
     {
-        var turning = new MenuItem { Header = "Turn view" };
+        var turning = new MenuItem { Header = Strings.TileMenuTurnView };
 
         foreach (var choice in Enum.GetValues<ViewRotation>())
         {
@@ -475,6 +475,14 @@ internal sealed class TileMenus(
     /// <summary>The ids the menu acts on, in the order the selection holds them.</summary>
     private static IReadOnlyList<ItemId> Ids(IReadOnlyList<SceneItem> many) =>
         [.. many.Select(item => item.ItemId)];
+
+    /// <summary>A placement mode as the DM reads it; the enum stays what is stored and compared.</summary>
+    private static string Placement(PlacementMode mode) => mode switch
+    {
+        PlacementMode.Flow => Strings.TileMenuPlacementFlow,
+        PlacementMode.Cascade => Strings.TileMenuPlacementCascade,
+        _ => mode.ToString(),
+    };
 
     private static MenuItem Entry(string header, Action what)
     {

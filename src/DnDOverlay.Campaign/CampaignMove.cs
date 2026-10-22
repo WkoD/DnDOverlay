@@ -22,7 +22,7 @@ public sealed record MoveResult(bool Copied, IReadOnlyList<string> SourcesToRemo
 public sealed class CampaignMoveException(string message, Exception? inner = null) : Exception(message, inner)
 {
     public CampaignMoveException()
-        : this("The campaigns could not be moved.")
+        : this(Strings.MoveFailed)
     {
     }
 
@@ -101,7 +101,7 @@ public static class CampaignMove
 
         if (plan.Collisions.Count > 0)
         {
-            throw new CampaignMoveException($"Campaigns of the same name are already at the new place: {string.Join(", ", plan.Collisions)}.");
+            throw new CampaignMoveException(Strings.MoveCollisions(string.Join(", ", plan.Collisions)));
         }
 
         if (plan.Campaigns.Count == 0)
@@ -121,7 +121,7 @@ public static class CampaignMove
         if (free < plan.Bytes + Reserve)
         {
             throw new CampaignMoveException(
-                $"There is not room at the new place: the campaigns need {plan.Bytes / (1024d * 1024 * 1024):0.0} GB while they lie there twice, and {free / (1024d * 1024 * 1024):0.0} GB are free.");
+                Strings.MoveNoRoom(plan.Bytes / (1024d * 1024 * 1024), free / (1024d * 1024 * 1024)));
         }
 
         Copy(from, to, plan, progress, copyFile ?? ((source, target) => File.Copy(source, target)), cancellationToken);
@@ -202,7 +202,7 @@ public static class CampaignMove
                     rename(Path.Combine(to, back), Path.Combine(from, back));
                 }
 
-                throw new CampaignMoveException($"The campaign \"{name}\" could not be moved: {refused.Message}", refused);
+                throw new CampaignMoveException(Strings.MoveCampaignFailed(name, refused.Message), refused);
             }
         }
 
@@ -247,7 +247,7 @@ public static class CampaignMove
 
                 if (Count(source) != Count(target) || Size(source) != Size(target))
                 {
-                    throw new CampaignMoveException($"The copy of \"{name}\" does not match its source in number or size of files.");
+                    throw new CampaignMoveException(Strings.MoveCopyMismatch(name));
                 }
             }
         }
@@ -270,7 +270,7 @@ public static class CampaignMove
                 throw;
             }
 
-            throw ex as CampaignMoveException ?? new CampaignMoveException($"The campaigns could not be copied: {ex.Message}", ex);
+            throw ex as CampaignMoveException ?? new CampaignMoveException(Strings.MoveCopyFailed(ex.Message), ex);
         }
     }
 

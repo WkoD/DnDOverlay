@@ -12,7 +12,7 @@ namespace DnDOverlay.Core.Tests;
 /// </summary>
 public sealed partial class ResourceStringsTests
 {
-    public static TheoryData<string> Applications => ["DnDOverlay.Display"];
+    public static TheoryData<string> Applications => ["DnDOverlay.Display", "DnDOverlay.Control", "DnDOverlay.Core", "DnDOverlay.Campaign", "DnDOverlay.Imaging"];
 
     [Theory]
     [MemberData(nameof(Applications))]

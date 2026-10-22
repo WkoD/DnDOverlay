@@ -276,7 +276,7 @@ internal sealed class Entrances(IAssetSink stock, ControlSettings settings, Time
                 {
                     FetchResult.Fetched got => new IntakeBytes.Ready(got.Bytes),
                     FetchResult.Refused refused => new IntakeBytes.Unavailable(refused.Reason.AsIntake(), refused.Detail),
-                    _ => new IntakeBytes.Unavailable(IntakeRejection.Unreachable, "Nothing came back."),
+                    _ => new IntakeBytes.Unavailable(IntakeRejection.Unreachable, Strings.EntrancesNothingCameBack),
                 };
             });
 

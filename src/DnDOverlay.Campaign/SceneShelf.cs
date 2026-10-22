@@ -478,7 +478,7 @@ public sealed class SceneShelf
         if (file.SchemaVersion > InventoryDocument.CurrentSchemaVersion)
         {
             throw new CampaignSchemaException(
-                $"{path} was written by a newer version (schema {file.SchemaVersion}, this build reads up to {InventoryDocument.CurrentSchemaVersion}).");
+                Strings.SceneFileTooNew(path, file.SchemaVersion, InventoryDocument.CurrentSchemaVersion));
         }
 
         return file;

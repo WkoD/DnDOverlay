@@ -35,8 +35,8 @@ internal sealed class SettingsWindow : Window, IDisposable
     private readonly TextBlock _place = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
     private readonly TextBlock _moving = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
     private readonly ProgressBar _progress = new() { Height = 14, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
-    private readonly Button _breakOff = new() { Content = "Break off", Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Collapsed };
-    private readonly Button _change = new() { Content = "Change place ...", Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 8, 0) };
+    private readonly Button _breakOff = new() { Content = Strings.SettingsBreakOff, Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Collapsed };
+    private readonly Button _change = new() { Content = Strings.SettingsChangePlace, Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 8, 0) };
 
     private CancellationTokenSource? _breaking;
 
@@ -52,28 +52,28 @@ internal sealed class SettingsWindow : Window, IDisposable
         _system = system;
         _network = new NetworkPanel(port, firstRun: false);
 
-        Title = "Settings";
+        Title = Strings.SettingsTitle;
         Width = 720;
         Height = 760;
 
         var panel = new StackPanel { Margin = new Thickness(16) };
 
-        panel.Children.Add(Heading("Language", first: true));
+        panel.Children.Add(Heading(Strings.SettingsHeadingLanguage, first: true));
         panel.Children.Add(Speech());
 
-        panel.Children.Add(Heading("Loading"));
+        panel.Children.Add(Heading(Strings.SettingsHeadingLoading));
         panel.Children.Add(Loading());
 
-        panel.Children.Add(Heading("Pictures"));
+        panel.Children.Add(Heading(Strings.SettingsHeadingPictures));
         panel.Children.Add(Pictures());
 
-        panel.Children.Add(Heading("Campaigns"));
+        panel.Children.Add(Heading(Strings.SettingsHeadingCampaigns));
         panel.Children.Add(Campaigns());
 
-        panel.Children.Add(Heading("Log"));
+        panel.Children.Add(Heading(Strings.SettingsHeadingLog));
         panel.Children.Add(Logging());
 
-        panel.Children.Add(Heading("Network"));
+        panel.Children.Add(Heading(Strings.SettingsHeadingNetwork));
         panel.Children.Add(Port(port));
         panel.Children.Add(_network);
 
@@ -86,7 +86,7 @@ internal sealed class SettingsWindow : Window, IDisposable
             if (_breaking is not null)
             {
                 closing.Cancel = true;
-                _say("The campaigns are being moved - break the move off first, or wait for it.");
+                _say(Strings.SettingsMoveUnderWay);
             }
         };
 
@@ -103,19 +103,19 @@ internal sealed class SettingsWindow : Window, IDisposable
     private Grid Loading()
     {
         var scene = Choice(
-            [("Replace what lies there", SceneLoad.Replace), ("Add to what lies there", SceneLoad.Add)],
+            [(Strings.SettingsSceneReplace, SceneLoad.Replace), (Strings.SettingsSceneAdd, SceneLoad.Add)],
             _settings.Current.SceneLoad,
             chosen => _settings.Update(current => current with { SceneLoad = chosen }));
 
         var layout = Choice(
-            [("Add", LayoutLoad.Add), ("Replace used screens", LayoutLoad.ReplaceUsed), ("Replace all screens", LayoutLoad.ReplaceAll)],
+            [(Strings.SettingsLayoutAdd, LayoutLoad.Add), (Strings.SettingsLayoutReplaceUsed, LayoutLoad.ReplaceUsed), (Strings.SettingsLayoutReplaceAll, LayoutLoad.ReplaceAll)],
             _settings.Current.LayoutLoad,
             chosen => _settings.Update(current => current with { LayoutLoad = chosen }));
 
         return Rows(
-            ("A double tap or drag loads a scene by", scene),
-            ("... and a layout by", layout),
-            (string.Empty, Note("The menu of a scene or layout always offers every way.")));
+            (Strings.SettingsSceneLoadsBy, scene),
+            (Strings.SettingsLayoutLoadsBy, layout),
+            (string.Empty, Note(Strings.SettingsLoadMenuNote)));
     }
 
     /// <summary>The name pattern for pasted pictures and the touch points on the table.</summary>
@@ -130,7 +130,7 @@ internal sealed class SettingsWindow : Window, IDisposable
 
             if (!typed.Contains("{n}", StringComparison.Ordinal))
             {
-                problem.Text = "The name needs {n} where the number goes.";
+                problem.Text = Strings.SettingsPatternNeedsNumber;
                 return;
             }
 
@@ -139,7 +139,7 @@ internal sealed class SettingsWindow : Window, IDisposable
         }
 
         string Next(string typed) =>
-            "{n} becomes a number counting up - \"" + typed.Replace("{n}", _settings.Current.CountedNameNext.ToString(CultureInfo.CurrentCulture), StringComparison.Ordinal) + "\" is next.";
+            Strings.SettingsPatternNext(typed.Replace("{n}", _settings.Current.CountedNameNext.ToString(CultureInfo.CurrentCulture), StringComparison.Ordinal));
 
         pattern.LostFocus += (_, _) => Keep();
         pattern.KeyDown += (_, key) =>
@@ -150,7 +150,7 @@ internal sealed class SettingsWindow : Window, IDisposable
             }
         };
 
-        var touch = new CheckBox { Content = "Show touch points from the tables in the thumbnails", IsChecked = _settings.Current.ShowTouchPoints };
+        var touch = new CheckBox { Content = Strings.SettingsTouchPoints, IsChecked = _settings.Current.ShowTouchPoints };
 
         touch.Click += (_, _) =>
         {
@@ -161,7 +161,7 @@ internal sealed class SettingsWindow : Window, IDisposable
         };
 
         return Rows(
-            ("Name for a pasted picture without one", pattern),
+            (Strings.SettingsPatternLabel, pattern),
             (string.Empty, problem),
             (string.Empty, touch));
     }
@@ -169,7 +169,7 @@ internal sealed class SettingsWindow : Window, IDisposable
     /// <summary>Where the campaigns lie, and the way to move them (Part 7).</summary>
     private StackPanel Campaigns()
     {
-        var open = new Button { Content = "Open folder", Padding = new Thickness(10, 3, 10, 3) };
+        var open = new Button { Content = Strings.SettingsOpenFolder, Padding = new Thickness(10, 3, 10, 3) };
 
         _change.Click += async (_, _) => await ChangePlaceAsync().ConfigureAwait(true);
         _breakOff.Click += (_, _) => _breaking?.Cancel();
@@ -196,9 +196,9 @@ internal sealed class SettingsWindow : Window, IDisposable
     /// </summary>
     private StackPanel Speech()
     {
-        var note = Note("Log lines change at once, windows and menus at the next start.");
+        var note = Note(Strings.SettingsLanguageNote);
         var language = Choice(
-            [("Automatic (as Windows)", UiLanguage.Automatic), ("English", UiLanguage.English), ("Deutsch", UiLanguage.German)],
+            [(Strings.SettingsLanguageAutomatic, UiLanguage.Automatic), ("English", UiLanguage.English), ("Deutsch", UiLanguage.German)],
             _settings.Current.Language,
             chosen =>
             {
@@ -206,14 +206,14 @@ internal sealed class SettingsWindow : Window, IDisposable
                 _settings.Update(current => current with { Language = chosen });
             });
 
-        return new StackPanel { Children = { Rows(("This control speaks", language)), note } };
+        return new StackPanel { Children = { Rows((Strings.SettingsLanguageLabel, language)), note } };
     }
 
     /// <summary>The level of this control's own log - it takes effect at once (Part 8).</summary>
     private Grid Logging()
     {
         var level = Choice(
-            [("Everything (Trace)", LogLevel.Trace), ("Debug", LogLevel.Debug), ("Information", LogLevel.Information), ("Warnings", LogLevel.Warning), ("Errors", LogLevel.Error)],
+            [(Strings.SettingsLogTrace, LogLevel.Trace), (Strings.SettingsLogDebug, LogLevel.Debug), (Strings.SettingsLogInformation, LogLevel.Information), (Strings.SettingsLogWarnings, LogLevel.Warning), (Strings.SettingsLogErrors, LogLevel.Error)],
             _settings.Current.LogLevel,
             chosen =>
             {
@@ -221,7 +221,7 @@ internal sealed class SettingsWindow : Window, IDisposable
                 _settings.Update(current => current with { LogLevel = chosen });
             });
 
-        return Rows(("This control writes", level));
+        return Rows((Strings.SettingsLogLabel, level));
     }
 
     /// <summary>
@@ -231,20 +231,20 @@ internal sealed class SettingsWindow : Window, IDisposable
     private Grid Port(int running)
     {
         var port = new TextBox { Text = _settings.Current.Port.ToString(CultureInfo.InvariantCulture), Padding = new Thickness(4, 2, 4, 2), Width = 90, HorizontalAlignment = HorizontalAlignment.Left };
-        var note = Note(_settings.Current.Port == running ? string.Empty : $"Taken at the next start - {running} until then.");
+        var note = Note(_settings.Current.Port == running ? string.Empty : Strings.SettingsPortLater(running));
 
         void Keep()
         {
             if (!int.TryParse(port.Text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var wanted) || wanted is < 1024 or > 65535)
             {
-                note.Text = "A port is a number from 1024 to 65535.";
+                note.Text = Strings.SettingsPortRange;
                 return;
             }
 
             _settings.Update(current => current with { Port = wanted });
             note.Text = wanted == running
                 ? string.Empty
-                : $"Taken at the next start - {running} until then. A display finds the control again by itself; a firewall rule needs setting up for the new port.";
+                : Strings.SettingsPortChanged(running);
         }
 
         port.LostFocus += (_, _) => Keep();
@@ -256,11 +256,11 @@ internal sealed class SettingsWindow : Window, IDisposable
             }
         };
 
-        return Rows(("Port", port), (string.Empty, note));
+        return Rows((Strings.SettingsPortLabel, port), (string.Empty, note));
     }
 
     private void ShowPlace() =>
-        _place.Text = $"The campaigns lie in {_desk.BasePath}.";
+        _place.Text = Strings.SettingsPlace(_desk.BasePath);
 
     /// <summary>
     /// Moves the campaign folder (Part 7): the question names both places, how many campaigns and how
@@ -269,7 +269,7 @@ internal sealed class SettingsWindow : Window, IDisposable
     /// </summary>
     private async Task ChangePlaceAsync()
     {
-        var picker = new OpenFolderDialog { Title = "New place for the campaigns" };
+        var picker = new OpenFolderDialog { Title = Strings.SettingsPickerTitle };
 
         if (picker.ShowDialog(this) is not true)
         {
@@ -286,7 +286,7 @@ internal sealed class SettingsWindow : Window, IDisposable
 
         if (Inside(to, from) || Inside(from, to))
         {
-            MessageBox.Show(this, "The new place must not lie inside the old one, nor the old inside the new.", "Move campaigns");
+            MessageBox.Show(this, Strings.SettingsMoveInside, Strings.SettingsMoveCaption);
             return;
         }
 
@@ -296,8 +296,8 @@ internal sealed class SettingsWindow : Window, IDisposable
         {
             MessageBox.Show(
                 this,
-                $"Campaigns of the same name are already at the new place: {string.Join(", ", plan.Collisions)}.\n\nNothing was moved. Rename or remove them there first.",
-                "Move campaigns");
+                Strings.SettingsMoveCollisions(string.Join(", ", plan.Collisions)),
+                Strings.SettingsMoveCaption);
             return;
         }
 
@@ -314,8 +314,8 @@ internal sealed class SettingsWindow : Window, IDisposable
         {
             Take(to);
             _say(plan.Campaigns.Count == 0
-                ? $"The campaigns lie in {to} from now on."
-                : $"The campaigns lie in {to} from now on. The {plan.Campaigns.Count} at {from} stay there and no longer appear in the switcher.");
+                ? Strings.SettingsTaken(to)
+                : Strings.SettingsTakenLeftBehind(to, plan.Campaigns.Count, from));
             return;
         }
 
@@ -326,7 +326,7 @@ internal sealed class SettingsWindow : Window, IDisposable
     {
         _breaking = new CancellationTokenSource();
         _change.IsEnabled = false;
-        _moving.Text = "Moving ...";
+        _moving.Text = Strings.SettingsMoving;
 
         var progress = new Progress<(long Done, long Total)>(report =>
         {
@@ -335,7 +335,7 @@ internal sealed class SettingsWindow : Window, IDisposable
             _breakOff.Visibility = Visibility.Visible;
             _progress.Maximum = Math.Max(1, report.Total);
             _progress.Value = report.Done;
-            _moving.Text = string.Create(CultureInfo.CurrentCulture, $"Copying: {report.Done / (1024d * 1024):0} of {report.Total / (1024d * 1024):0} MB.");
+            _moving.Text = Strings.SettingsCopying(report.Done / (1024d * 1024), report.Total / (1024d * 1024));
         });
 
         var token = _breaking.Token;
@@ -353,19 +353,19 @@ internal sealed class SettingsWindow : Window, IDisposable
             ControlLog.CampaignsMoved(_logger, from, to, plan.Campaigns.Count, result.Copied);
 
             _moving.Text = left.Count == 0
-                ? $"Moved {plan.Campaigns.Count} campaign(s) to {to}."
-                : $"Moved {plan.Campaigns.Count} campaign(s) to {to}. Left at the old place, because in use: {string.Join(", ", left.Select(Path.GetFileName))} - delete it by hand.";
+                ? Strings.SettingsMoved(plan.Campaigns.Count, to)
+                : Strings.SettingsMovedLeftBehind(plan.Campaigns.Count, to, string.Join(", ", left.Select(Path.GetFileName)));
             _say(_moving.Text);
         }
         catch (OperationCanceledException)
         {
             ControlLog.CampaignsNotMoved(_logger, from, to, "Broken off.");
-            _moving.Text = $"Broken off. Everything is at {from}, as before.";
+            _moving.Text = Strings.SettingsMoveBrokenOff(from);
         }
         catch (CampaignMoveException refused)
         {
             ControlLog.CampaignsNotMoved(_logger, from, to, refused.Message);
-            _moving.Text = $"{refused.Message} Everything is at {from}, as before.";
+            _moving.Text = Strings.SettingsMoveRefused(refused.Message, from);
         }
         finally
         {
@@ -462,7 +462,7 @@ internal sealed class MoveQuestion : Window
     private MoveQuestion(Window owner, string from, string to, MovePlan plan, bool closing)
     {
         Owner = owner;
-        Title = "Move campaigns";
+        Title = Strings.MoveTitle;
         Width = 560;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -470,26 +470,26 @@ internal sealed class MoveQuestion : Window
 
         var lines = new List<string>
         {
-            $"From: {from}",
-            $"To: {to}",
-            string.Create(CultureInfo.CurrentCulture, $"There are {plan.Campaigns.Count} campaign(s), {plan.Bytes / (1024d * 1024 * 1024):0.0} GB."),
+            Strings.MoveFrom(from),
+            Strings.MoveTo(to),
+            Strings.MoveSize(plan.Campaigns.Count, plan.Bytes / (1024d * 1024 * 1024)),
         };
 
         if (plan.RoomForNames < MovePlan.TightRoom)
         {
-            lines.Add($"The new place is deep: only {plan.RoomForNames} characters remain for a campaign's name and a scene's name together. Longer names cannot be saved there.");
+            lines.Add(Strings.MoveDeep(plan.RoomForNames));
         }
 
         if (closing)
         {
-            lines.Add("The open campaign is closed first: the table is cleared on every screen, and undo cannot go back past this.");
+            lines.Add(Strings.MoveClosing);
         }
 
-        lines.Add("\"Only change the place\" leaves the campaigns where they are - they no longer appear in the switcher.");
+        lines.Add(Strings.MoveOnlyPlaceNote);
 
-        var move = new Button { Content = "Move campaigns", IsDefault = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var only = new Button { Content = "Only change the place", Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
+        var move = new Button { Content = Strings.MoveMove, IsDefault = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var only = new Button { Content = Strings.MoveOnlyPlace, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = Strings.MoveCancel, IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
 
         move.Click += (_, _) => Answer(MoveAnswer.Move);
         only.Click += (_, _) => Answer(MoveAnswer.OnlyPlace);

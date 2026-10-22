@@ -283,7 +283,7 @@ public sealed class Intake(IAssetSink stock, TimeProvider time)
                     .ConfigureAwait(false),
                 IntakeBytes.Unavailable missing =>
                     new IngestResult.Refused(missing.Reason, missing.Detail),
-                _ => new IngestResult.Refused(IntakeRejection.Unreadable, "Nothing came of it."),
+                _ => new IngestResult.Refused(IntakeRejection.Unreadable, Strings.NothingCameOfIt),
             };
         }
         catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)

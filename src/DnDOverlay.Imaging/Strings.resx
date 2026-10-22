@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="NoImage" xml:space="preserve">
+    <value>The file holds no image.</value>
+  </data>
+  <data name="HeicRefused" xml:space="preserve">
+    <value>HEIC/HEIF is not accepted. The reason is the HEVC patent situation rather than a technical one - save the picture as JPEG or PNG and it comes straight in. AVIF is unaffected and is supported.</value>
+  </data>
+  <data name="NotAnImageFormat" xml:space="preserve">
+    <value>This kind of file is not accepted - it is not an image format but a script or a fetching coder.</value>
+  </data>
+  <data name="DecodingStopped" xml:space="preserve">
+    <value>Decoding was stopped: the image needs more memory than is allowed. Its header may have understated its size.</value>
+  </data>
+  <data name="FormatUnreadable" xml:space="preserve">
+    <value>This build cannot read that format.</value>
+  </data>
+  <data name="NotReadableAsImage" xml:space="preserve">
+    <value>The file could not be read as an image: {0}</value>
+  </data>
+  <data name="TokenNoContent" xml:space="preserve">
+    <value>This file is not a MapTool token: it has no content.xml.</value>
+  </data>
+  <data name="TokenSomethingElse" xml:space="preserve">
+    <value>This file is not a MapTool token: its content.xml describes something else.</value>
+  </data>
+  <data name="TokenNoPicture" xml:space="preserve">
+    <value>This token holds no picture that could be read - neither a portrait nor a map token.</value>
+  </data>
+  <data name="ArchiveUnreadable" xml:space="preserve">
+    <value>This file is not a readable archive.</value>
+  </data>
+  <data name="ArchiveTooManyEntries" xml:space="preserve">
+    <value>This archive holds {0} entries, which is beyond anything a token has (limit {1}).</value>
+  </data>
+  <data name="TokenDescriptionUnreadable" xml:space="preserve">
+    <value>The description inside this token could not be read. It is either damaged or it declares a document type, which is not accepted.</value>
+  </data>
+</root>

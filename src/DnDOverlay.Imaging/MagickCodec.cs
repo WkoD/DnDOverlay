@@ -82,7 +82,7 @@ public sealed class MagickCodec : IImageCodec
 
             if (frames.Count == 0)
             {
-                throw new ImageRejectedException(ImageRejection.Unreadable, "The file holds no image.");
+                throw new ImageRejectedException(ImageRejection.Unreadable, Strings.NoImage);
             }
 
             var first = frames[0];
@@ -258,9 +258,7 @@ public sealed class MagickCodec : IImageCodec
         {
             throw new ImageRejectedException(
                 ImageRejection.NotPermitted,
-                "HEIC/HEIF is not accepted. The reason is the HEVC patent situation rather than a "
-                + "technical one - save the picture as JPEG or PNG and it comes straight in. AVIF "
-                + "is unaffected and is supported.");
+                Strings.HeicRefused);
         }
     }
 
@@ -308,8 +306,7 @@ public sealed class MagickCodec : IImageCodec
     {
         MagickPolicyErrorException => new ImageRejectedException(
             ImageRejection.NotPermitted,
-            "This kind of file is not accepted - it is not an image format but a script or a "
-            + "fetching coder.",
+            Strings.NotAnImageFormat,
             ex),
 
         // Both belong to the second net. The cache one is the case that actually occurs, and it
@@ -318,14 +315,13 @@ public sealed class MagickCodec : IImageCodec
         // consulted up front.
         MagickResourceLimitErrorException or MagickCacheErrorException => new ImageRejectedException(
             ImageRejection.Aborted,
-            "Decoding was stopped: the image needs more memory than is allowed. Its header may "
-            + "have understated its size.",
+            Strings.DecodingStopped,
             ex),
 
         MagickMissingDelegateErrorException => new ImageRejectedException(
-            ImageRejection.Unreadable, "This build cannot read that format.", ex),
+            ImageRejection.Unreadable, Strings.FormatUnreadable, ex),
 
         _ => new ImageRejectedException(
-            ImageRejection.Unreadable, "The file could not be read as an image: " + ex.Message, ex),
+            ImageRejection.Unreadable, Strings.NotReadableAsImage(ex.Message), ex),
     };
 }

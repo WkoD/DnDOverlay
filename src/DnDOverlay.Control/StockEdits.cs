@@ -51,7 +51,7 @@ internal sealed class StockEdits
         var old = entry.Name;
         var suggestion = old;
 
-        while (NameDialog.Ask(owner, "Rename picture", "New name of the picture - on every screen and in every scene:", suggestion, check: false) is { } typed)
+        while (NameDialog.Ask(owner, Strings.StockRenameTitle, Strings.StockRenamePrompt, suggestion, check: false) is { } typed)
         {
             switch (open.Store.Rename(asset, typed))
             {
@@ -62,13 +62,13 @@ internal sealed class StockEdits
                     open.Shelf.RenameAsset(asset, name);
 
                     ControlLog.AssetRenamed(_logger, old, name);
-                    _say($"Renamed \"{old}\" to \"{name}\".");
+                    _say(Strings.StockRenamed(old, name));
                     Changed?.Invoke(this, EventArgs.Empty);
 
                     return;
 
                 case NameOutcome.Taken:
-                    MessageBox.Show(owner, $"A picture named \"{typed.Trim()}\" exists already.", "Rename picture");
+                    MessageBox.Show(owner, Strings.StockRenameTaken(typed.Trim()), Strings.StockRenameTitle);
                     suggestion = typed;
                     break;
 
@@ -125,22 +125,22 @@ internal sealed class StockEdits
         var one = entries.Count == 1;
         var lines = new List<string>
         {
-            one ? $"Delete \"{entries[0].Name}\" from the campaign?" : $"Delete {entries.Count} pictures from the campaign?",
+            one ? Strings.StockDeleteOneQuestion(entries[0].Name) : Strings.StockDeleteManyQuestion(entries.Count),
         };
 
         if (lying > 0)
         {
-            lines.Add($"{(one ? "It is" : "They are")} taken off {lying} screen(s).");
+            lines.Add(one ? Strings.StockDeleteTakenOffOne(lying) : Strings.StockDeleteTakenOffMany(lying));
         }
 
         if (scenes.Count > 0)
         {
-            lines.Add($"Removed from the scene(s): {Listed(scenes)}.");
+            lines.Add(Strings.StockDeleteFromScenes(Listed(scenes)));
         }
 
         if (layouts.Count > 0)
         {
-            lines.Add($"Removed from the layout(s): {Listed(layouts)}.");
+            lines.Add(Strings.StockDeleteFromLayouts(Listed(layouts)));
         }
 
         // Undo must never bring back a picture whose file is gone (Part 4), so the timeline is cut up to
@@ -149,15 +149,15 @@ internal sealed class StockEdits
 
         if (lost > 0)
         {
-            lines.Add($"{lost} undo step(s) are lost with it.");
+            lines.Add(Strings.StockDeleteStepsLost(lost));
         }
 
-        lines.Add(one ? "The file is deleted. This cannot be undone." : "The files are deleted. This cannot be undone.");
+        lines.Add(one ? Strings.StockDeleteFileGone : Strings.StockDeleteFilesGone);
 
         var answer = MessageBox.Show(
             owner,
             string.Join("\n\n", lines),
-            one ? "Delete picture" : "Delete pictures",
+            one ? Strings.StockDeleteTitleOne : Strings.StockDeleteTitleMany,
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning,
             MessageBoxResult.No);
@@ -178,7 +178,7 @@ internal sealed class StockEdits
 
         ControlLog.AssetsDeleted(_logger, ids.Count, lying, scenes.Count, layouts.Count);
 
-        var said = one ? $"Deleted \"{entries[0].Name}\"." : $"Deleted {entries.Count} pictures.";
+        var said = one ? Strings.StockDeletedOne(entries[0].Name) : Strings.StockDeletedMany(entries.Count);
 
         if (emptied.Scenes.Count + emptied.Layouts.Count > 0)
         {
@@ -196,25 +196,25 @@ internal sealed class StockEdits
 
         if (emptied.Scenes.Count > 0)
         {
-            lines.Add($"Scene(s): {Listed(emptied.Scenes)}");
+            lines.Add(Strings.StockEmptiedScenes(Listed(emptied.Scenes)));
         }
 
         if (emptied.Layouts.Count > 0)
         {
-            lines.Add($"Layout(s): {Listed(emptied.Layouts)}");
+            lines.Add(Strings.StockEmptiedLayouts(Listed(emptied.Layouts)));
         }
 
         var answer = MessageBox.Show(
             owner,
-            $"These are empty now:\n\n{string.Join("\n", lines)}\n\nDelete them too?",
-            "Empty scenes and layouts",
+            Strings.StockEmptiedQuestion(string.Join("\n", lines)),
+            Strings.StockEmptiedTitle,
             MessageBoxButton.YesNo,
             MessageBoxImage.Question,
             MessageBoxResult.Yes);
 
         if (answer != MessageBoxResult.Yes)
         {
-            return $" {emptied.Scenes.Count + emptied.Layouts.Count} empty scene(s) or layout(s) kept.";
+            return " " + Strings.StockEmptiedKept(emptied.Scenes.Count + emptied.Layouts.Count);
         }
 
         foreach (var scene in emptied.Scenes)
@@ -227,11 +227,11 @@ internal sealed class StockEdits
             shelf.DeleteLayout(layout);
         }
 
-        return $" {emptied.Scenes.Count + emptied.Layouts.Count} empty scene(s) or layout(s) deleted.";
+        return " " + Strings.StockEmptiedDeleted(emptied.Scenes.Count + emptied.Layouts.Count);
     }
 
     private static string Listed(IReadOnlyList<string> names) =>
         names.Count <= NamesShown
             ? string.Join(", ", names)
-            : $"{string.Join(", ", names.Take(NamesShown))} and {names.Count - NamesShown} more";
+            : Strings.StockListedMore(string.Join(", ", names.Take(NamesShown)), names.Count - NamesShown);
 }

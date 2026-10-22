@@ -268,7 +268,7 @@ internal sealed class MainWindow : Window, IDisposable
             pictures.Clear();
             _layouts.Refresh();
             _panelHead.Campaign(desk.OpenLabel);
-            _edgeLabel.Text = desk.OpenLabel ?? "No campaign open";
+            _edgeLabel.Text = desk.OpenLabel ?? Strings.MainNoCampaign;
             _panel.Refresh();
             _ = _stock.CountAsync();
             _ = _board.RefreshAsync(_listening.Token);
@@ -278,7 +278,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said).Open(_panelHead);
         _panelHead.Campaign(desk.OpenLabel);
-        _edgeLabel.Text = desk.OpenLabel ?? "No campaign open";
+        _edgeLabel.Text = desk.OpenLabel ?? Strings.MainNoCampaign;
         _board.ActiveChanged += (_, _) => Remember();
 
         // Whichever of the two ways switched the view - the button here or the tile's own menu -
@@ -544,7 +544,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         var dismiss = new Button
         {
-            Content = "OK",
+            Content = Strings.MainNoticeOk,
             Padding = new Thickness(12, 2, 12, 2),
             VerticalAlignment = VerticalAlignment.Top,
         };
@@ -647,29 +647,29 @@ internal sealed class MainWindow : Window, IDisposable
         };
 
         // Both one action without a question; undo brings them back (Part 7, from M5b6).
-        menu.Items.Add(Item("Clear all", () => _ = _session.ClearAllAsync()));
+        menu.Items.Add(Item(Strings.MainClearAll, () => _ = _session.ClearAllAsync()));
 
         var chosen = _stock.Chosen;
-        var toAll = Item("Send to all", () => _ = _session.SendToAllAsync(chosen));
+        var toAll = Item(Strings.MainSendToAll, () => _ = _session.SendToAllAsync(chosen));
 
         toAll.IsEnabled = chosen.Count > 0;
         menu.Items.Add(toAll);
 
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Devices ...", () => Devices()));
+        menu.Items.Add(Item(Strings.MainDevices, () => Devices()));
 
-        var log = new MenuItem { Header = "Log", IsCheckable = true, IsChecked = _settings.Current.LogPanel is { Shown: true } };
+        var log = new MenuItem { Header = Strings.MainLog, IsCheckable = true, IsChecked = _settings.Current.LogPanel is { Shown: true } };
 
         log.Click += (_, _) => PlaceLog(placement => placement with { Shown = log.IsChecked });
         menu.Items.Add(log);
-        menu.Items.Add(Item("Settings ...", Settings));
+        menu.Items.Add(Item(Strings.MainSettings, Settings));
 
-        var docking = new MenuItem { Header = "Dock panel" };
+        var docking = new MenuItem { Header = Strings.MainDockPanel };
         var side = _settings.Current.Panel?.Side ?? PanelSide.Right;
 
         foreach (var edge in Enum.GetValues<PanelSide>())
         {
-            var item = new MenuItem { Header = edge.ToString(), IsCheckable = true, IsChecked = edge == side };
+            var item = new MenuItem { Header = EdgeLabel(edge), IsCheckable = true, IsChecked = edge == side };
 
             item.Click += (_, _) => Dock(edge, _settings.Current.Panel?.Size ?? (edge is PanelSide.Left or PanelSide.Right ? 380 : 300));
             docking.Items.Add(item);
@@ -677,7 +677,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         docking.Items.Add(new Separator());
 
-        var pinned = new MenuItem { Header = "Pinned", IsCheckable = true, IsChecked = _pinned };
+        var pinned = new MenuItem { Header = Strings.MainPinned, IsCheckable = true, IsChecked = _pinned };
 
         pinned.Click += (_, _) =>
         {
@@ -694,12 +694,12 @@ internal sealed class MainWindow : Window, IDisposable
         menu.Items.Add(docking);
 
         // The campaign panel's edge is taken; docking the log is wanting to see it.
-        var logDocking = new MenuItem { Header = "Dock log" };
+        var logDocking = new MenuItem { Header = Strings.MainDockLog };
         var logSide = LogSide();
 
         foreach (var edge in Enum.GetValues<PanelSide>())
         {
-            var item = new MenuItem { Header = edge.ToString(), IsCheckable = true, IsChecked = edge == logSide, IsEnabled = edge != _side };
+            var item = new MenuItem { Header = EdgeLabel(edge), IsCheckable = true, IsChecked = edge == logSide, IsEnabled = edge != _side };
 
             item.Click += (_, _) => PlaceLog(placement => placement with { Side = edge, Shown = true });
             logDocking.Items.Add(item);
@@ -709,6 +709,16 @@ internal sealed class MainWindow : Window, IDisposable
 
         menu.IsOpen = true;
     }
+
+    /// <summary>An edge in the menu's words - the enum's names are for files, not for people.</summary>
+    private static string EdgeLabel(PanelSide edge) => edge switch
+    {
+        PanelSide.Left => Strings.MainEdgeLeft,
+        PanelSide.Right => Strings.MainEdgeRight,
+        PanelSide.Top => Strings.MainEdgeTop,
+        PanelSide.Bottom => Strings.MainEdgeBottom,
+        _ => edge.ToString(),
+    };
 
     /// <summary>
     /// Puts the panel at an edge, at a size, with the line to drag between it and the stage - and
@@ -1129,7 +1139,7 @@ internal sealed class MainWindow : Window, IDisposable
             // A background layer carries one picture (Part 7).
             if (load.Pictures.Count != 1)
             {
-                _status.Text = "A background takes one picture.";
+                _status.Text = Strings.MainBackgroundOnePicture;
                 return;
             }
 
@@ -1168,7 +1178,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         if (_desk.Open?.Store.Entries.FirstOrDefault(entry => entry.AssetId == asset.Value) is not { } entry)
         {
-            _status.Text = "This picture is not in the stock of the open campaign.";
+            _status.Text = Strings.MainNotInStock;
             return;
         }
 
@@ -1208,7 +1218,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         var label = await _session.UndoAsync().ConfigureAwait(true);
 
-        _status.Text = label is null ? "Nothing to undo." : $"Undone: {label}.";
+        _status.Text = label is null ? Strings.MainNothingToUndo : Strings.MainUndone(label);
     }
 
     /// <summary>Does the last undone act again.</summary>
@@ -1216,7 +1226,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         var label = await _session.RedoAsync().ConfigureAwait(true);
 
-        _status.Text = label is null ? "Nothing to redo." : $"Redone: {label}.";
+        _status.Text = label is null ? Strings.MainNothingToRedo : Strings.MainRedone(label);
     }
 
     private static MenuItem Item(string header, Action chosen)

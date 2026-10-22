@@ -66,30 +66,58 @@ public static class DisplayParameters
     /// <summary>Every parameter, screen ones first, in the order a band lists them.</summary>
     public static IReadOnlyList<DisplayParameter> All { get; } =
     [
-        new(nameof(ScreenSettings.Presentation), "Shown as", ParameterScope.Screen, ParameterKind.Choice, Choices: Enum.GetNames<ScreenPresentation>()),
-        new(nameof(ScreenSettings.ScaleOnLoad), "Arrival size", ParameterScope.Screen, ParameterKind.Number, "of the screen height", 0.05, 1, 2),
-        new(nameof(ScreenSettings.MaxWidthOnLoad), "Arrival width at most", ParameterScope.Screen, ParameterKind.Number, "of the screen width", 0.1, 1, 2),
-        new(nameof(ScreenSettings.Placement), "New pictures arrive", ParameterScope.Screen, ParameterKind.Choice, Choices: Enum.GetNames<PlacementMode>()),
-        new(nameof(ScreenSettings.DefaultRotationDeg), "New pictures face", ParameterScope.Screen, ParameterKind.Number, "°", 0, 359),
-        new(nameof(ScreenSettings.ParkEdge), "Parked pictures line up at", ParameterScope.Screen, ParameterKind.Choice, Choices: Edges),
-        new(nameof(ScreenSettings.MinScale), "Smallest picture", ParameterScope.Screen, ParameterKind.Number, "DIP on the shorter edge", 20, 600),
-        new(nameof(ScreenSettings.MaxScale), "Largest picture", ParameterScope.Screen, ParameterKind.Number, "× the screen height", 1, 50, 1),
-        new(nameof(ScreenSettings.MinVisiblePixels), "Always visible of a picture", ParameterScope.Screen, ParameterKind.Number, "DIP", 16, 400),
-        new(nameof(ScreenSettings.ImageTextSize), "Name size", ParameterScope.Screen, ParameterKind.Number, "DIP", 8, 72),
-        new(nameof(ScreenSettings.RotationDeadZoneDeg), "Turning starts after", ParameterScope.Screen, ParameterKind.Number, "°", 0, 45),
-        new(nameof(ScreenSettings.RotationSnapToleranceDeg), "Snaps to right angles within", ParameterScope.Screen, ParameterKind.Number, "° (0 = off)", 0, 20),
-        new(nameof(ScreenSettings.ArrivalHighlightSeconds), "Arrival highlight", ParameterScope.Screen, ParameterKind.Number, "s", 0, 5, 1),
-        new(nameof(ScreenSettings.Inertia), "Pictures glide on after a push", ParameterScope.Screen, ParameterKind.Toggle),
-        new(nameof(ScreenSettings.ScrollUpZoomsIn), "Scrolling up enlarges", ParameterScope.Screen, ParameterKind.Toggle),
-        new(nameof(ScreenSettings.DiagnosticEdge), "Diagnostic bar at", ParameterScope.Screen, ParameterKind.Choice, Choices: [Automatic, .. Edges]),
+        new(nameof(ScreenSettings.Presentation), Strings.ParameterPresentation, ParameterScope.Screen, ParameterKind.Choice, Choices: Enum.GetNames<ScreenPresentation>()),
+        new(nameof(ScreenSettings.ScaleOnLoad), Strings.ParameterScaleOnLoad, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterScaleOnLoadUnit, 0.05, 1, 2),
+        new(nameof(ScreenSettings.MaxWidthOnLoad), Strings.ParameterMaxWidthOnLoad, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterMaxWidthOnLoadUnit, 0.1, 1, 2),
+        new(nameof(ScreenSettings.Placement), Strings.ParameterPlacement, ParameterScope.Screen, ParameterKind.Choice, Choices: Enum.GetNames<PlacementMode>()),
+        new(nameof(ScreenSettings.DefaultRotationDeg), Strings.ParameterDefaultRotationDeg, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterDefaultRotationDegUnit, 0, 359),
+        new(nameof(ScreenSettings.ParkEdge), Strings.ParameterParkEdge, ParameterScope.Screen, ParameterKind.Choice, Choices: Edges),
+        new(nameof(ScreenSettings.MinScale), Strings.ParameterMinScale, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterMinScaleUnit, 20, 600),
+        new(nameof(ScreenSettings.MaxScale), Strings.ParameterMaxScale, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterMaxScaleUnit, 1, 50, 1),
+        new(nameof(ScreenSettings.MinVisiblePixels), Strings.ParameterMinVisiblePixels, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterMinVisiblePixelsUnit, 16, 400),
+        new(nameof(ScreenSettings.ImageTextSize), Strings.ParameterImageTextSize, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterImageTextSizeUnit, 8, 72),
+        new(nameof(ScreenSettings.RotationDeadZoneDeg), Strings.ParameterRotationDeadZoneDeg, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterRotationDeadZoneDegUnit, 0, 45),
+        new(nameof(ScreenSettings.RotationSnapToleranceDeg), Strings.ParameterRotationSnapToleranceDeg, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterRotationSnapToleranceDegUnit, 0, 20),
+        new(nameof(ScreenSettings.ArrivalHighlightSeconds), Strings.ParameterArrivalHighlightSeconds, ParameterScope.Screen, ParameterKind.Number, Strings.ParameterArrivalHighlightSecondsUnit, 0, 5, 1),
+        new(nameof(ScreenSettings.Inertia), Strings.ParameterInertia, ParameterScope.Screen, ParameterKind.Toggle),
+        new(nameof(ScreenSettings.ScrollUpZoomsIn), Strings.ParameterScrollUpZoomsIn, ParameterScope.Screen, ParameterKind.Toggle),
+        new(nameof(ScreenSettings.DiagnosticEdge), Strings.ParameterDiagnosticEdge, ParameterScope.Screen, ParameterKind.Choice, Choices: [Automatic, .. Edges]),
 
-        new(nameof(DeviceSettings.KeepAwake), "Keep the screens awake", ParameterScope.Device, ParameterKind.Toggle),
-        new(nameof(DeviceSettings.RescueAfterSeconds), "Rescue mark after", ParameterScope.Device, ParameterKind.Number, "s without a control", 10, 3600),
-        new(nameof(DeviceSettings.ForeignWindows), "Windows of other programs", ParameterScope.Device, ParameterKind.Choice, Choices: Enum.GetNames<ForeignWindowsMode>()),
-        new(nameof(DeviceSettings.Language), "Language", ParameterScope.Device, ParameterKind.Choice, "screens at the next start", Choices: Enum.GetNames<UiLanguage>()),
-        new(nameof(DeviceSettings.Level), "Log level", ParameterScope.Device, ParameterKind.Choice, Choices: Levels),
-        new(nameof(DeviceSettings.ForwardAtLeast), "Sent to the control from", ParameterScope.Device, ParameterKind.Choice, Choices: Levels),
+        new(nameof(DeviceSettings.KeepAwake), Strings.ParameterKeepAwake, ParameterScope.Device, ParameterKind.Toggle),
+        new(nameof(DeviceSettings.RescueAfterSeconds), Strings.ParameterRescueAfterSeconds, ParameterScope.Device, ParameterKind.Number, Strings.ParameterRescueAfterSecondsUnit, 10, 3600),
+        new(nameof(DeviceSettings.ForeignWindows), Strings.ParameterForeignWindows, ParameterScope.Device, ParameterKind.Choice, Choices: Enum.GetNames<ForeignWindowsMode>()),
+        new(nameof(DeviceSettings.Language), Strings.ParameterLanguage, ParameterScope.Device, ParameterKind.Choice, Strings.ParameterLanguageUnit, Choices: Enum.GetNames<UiLanguage>()),
+        new(nameof(DeviceSettings.Level), Strings.ParameterLevel, ParameterScope.Device, ParameterKind.Choice, Choices: Levels),
+        new(nameof(DeviceSettings.ForwardAtLeast), Strings.ParameterForwardAtLeast, ParameterScope.Device, ParameterKind.Choice, Choices: Levels),
     ];
+
+    /// <summary>
+    /// The words for one value of a choice - the value itself is what the files and the wire carry and
+    /// stays as it is; only what the band shows is translated (Part 8). An unknown value shows itself.
+    /// </summary>
+    public static string ChoiceLabel(string value) => value switch
+    {
+        nameof(ScreenPresentation.Overlay) => Strings.ChoiceOverlay,
+        nameof(ScreenPresentation.Window) => Strings.ChoiceWindow,
+        nameof(PlacementMode.Flow) => Strings.ChoiceFlow,
+        nameof(PlacementMode.Cascade) => Strings.ChoiceCascade,
+        nameof(ParkEdge.Left) => Strings.ChoiceLeft,
+        nameof(ParkEdge.Right) => Strings.ChoiceRight,
+        nameof(ParkEdge.Top) => Strings.ChoiceTop,
+        nameof(ParkEdge.Bottom) => Strings.ChoiceBottom,
+        Automatic => Strings.ChoiceAutomatic,
+        nameof(ForeignWindowsMode.ReportAndControl) => Strings.ChoiceReportAndControl,
+        nameof(ForeignWindowsMode.ReportOnly) => Strings.ChoiceReportOnly,
+        nameof(ForeignWindowsMode.Off) => Strings.ChoiceOff,
+        nameof(UiLanguage.English) => Strings.ChoiceEnglish,
+        nameof(UiLanguage.German) => Strings.ChoiceGerman,
+        nameof(LogLevel.Trace) => Strings.ChoiceTrace,
+        nameof(LogLevel.Debug) => Strings.ChoiceDebug,
+        nameof(LogLevel.Information) => Strings.ChoiceInformation,
+        nameof(LogLevel.Warning) => Strings.ChoiceWarning,
+        nameof(LogLevel.Error) => Strings.ChoiceError,
+        _ => value,
+    };
 
     /// <summary>The parameters of one band.</summary>
     public static IEnumerable<DisplayParameter> For(ParameterScope scope) => All.Where(parameter => parameter.Scope == scope);

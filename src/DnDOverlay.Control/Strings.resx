@@ -1,0 +1,1577 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    The message catalogue, neutral English (Part 8).
+
+    One entry per event identifier, keyed E<number>_<Name>: the NUMBER is the contract, the name
+    is for reading. Keying by name alone would collide - DataRootChosen is 4001 in the control and
+    4002 in the display, and the two say different things.
+
+    Placeholders are NAMED and must match the [LoggerMessage] declaration exactly; a test in
+    DnDOverlay.Core.Tests compares the two and fails on any entry that is missing, spare or
+    differently spelled. German arrives in M5b as LogMessages.de.resx, against these same keys.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- 1000-1999 · Connection: who is talking to whom, and does it still work? -->
+
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="SettingsBreakOff" xml:space="preserve">
+    <value>Break off</value>
+  </data>
+  <data name="SettingsChangePlace" xml:space="preserve">
+    <value>Change place ...</value>
+  </data>
+  <data name="SettingsHeadingLanguage" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="SettingsHeadingLoading" xml:space="preserve">
+    <value>Loading</value>
+  </data>
+  <data name="SettingsHeadingPictures" xml:space="preserve">
+    <value>Pictures</value>
+  </data>
+  <data name="SettingsHeadingCampaigns" xml:space="preserve">
+    <value>Campaigns</value>
+  </data>
+  <data name="SettingsHeadingLog" xml:space="preserve">
+    <value>Log</value>
+  </data>
+  <data name="SettingsHeadingNetwork" xml:space="preserve">
+    <value>Network</value>
+  </data>
+  <data name="SettingsMoveUnderWay" xml:space="preserve">
+    <value>The campaigns are being moved - break the move off first, or wait for it.</value>
+  </data>
+  <data name="SettingsSceneReplace" xml:space="preserve">
+    <value>Replace what lies there</value>
+  </data>
+  <data name="SettingsSceneAdd" xml:space="preserve">
+    <value>Add to what lies there</value>
+  </data>
+  <data name="SettingsLayoutAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="SettingsLayoutReplaceUsed" xml:space="preserve">
+    <value>Replace used screens</value>
+  </data>
+  <data name="SettingsLayoutReplaceAll" xml:space="preserve">
+    <value>Replace all screens</value>
+  </data>
+  <data name="SettingsSceneLoadsBy" xml:space="preserve">
+    <value>A double tap or drag loads a scene by</value>
+  </data>
+  <data name="SettingsLayoutLoadsBy" xml:space="preserve">
+    <value>... and a layout by</value>
+  </data>
+  <data name="SettingsLoadMenuNote" xml:space="preserve">
+    <value>The menu of a scene or layout always offers every way.</value>
+  </data>
+  <data name="SettingsPatternNeedsNumber" xml:space="preserve">
+    <value>The name needs {n} where the number goes.</value>
+  </data>
+  <data name="SettingsPatternNext" xml:space="preserve">
+    <value>{{n}} becomes a number counting up - "{0}" is next.</value>
+  </data>
+  <data name="SettingsTouchPoints" xml:space="preserve">
+    <value>Show touch points from the tables in the thumbnails</value>
+  </data>
+  <data name="SettingsPatternLabel" xml:space="preserve">
+    <value>Name for a pasted picture without one</value>
+  </data>
+  <data name="SettingsOpenFolder" xml:space="preserve">
+    <value>Open folder</value>
+  </data>
+  <data name="SettingsLanguageNote" xml:space="preserve">
+    <value>Log lines change at once, windows and menus at the next start.</value>
+  </data>
+  <data name="SettingsLanguageAutomatic" xml:space="preserve">
+    <value>Automatic (as Windows)</value>
+  </data>
+  <data name="SettingsLanguageLabel" xml:space="preserve">
+    <value>This control speaks</value>
+  </data>
+  <data name="SettingsLogTrace" xml:space="preserve">
+    <value>Everything (Trace)</value>
+  </data>
+  <data name="SettingsLogDebug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="SettingsLogInformation" xml:space="preserve">
+    <value>Information</value>
+  </data>
+  <data name="SettingsLogWarnings" xml:space="preserve">
+    <value>Warnings</value>
+  </data>
+  <data name="SettingsLogErrors" xml:space="preserve">
+    <value>Errors</value>
+  </data>
+  <data name="SettingsLogLabel" xml:space="preserve">
+    <value>This control writes</value>
+  </data>
+  <data name="SettingsPortLater" xml:space="preserve">
+    <value>Taken at the next start - {0} until then.</value>
+  </data>
+  <data name="SettingsPortRange" xml:space="preserve">
+    <value>A port is a number from 1024 to 65535.</value>
+  </data>
+  <data name="SettingsPortChanged" xml:space="preserve">
+    <value>Taken at the next start - {0} until then. A display finds the control again by itself; a firewall rule needs setting up for the new port.</value>
+  </data>
+  <data name="SettingsPortLabel" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="SettingsPlace" xml:space="preserve">
+    <value>The campaigns lie in {0}.</value>
+  </data>
+  <data name="SettingsPickerTitle" xml:space="preserve">
+    <value>New place for the campaigns</value>
+  </data>
+  <data name="SettingsMoveCaption" xml:space="preserve">
+    <value>Move campaigns</value>
+  </data>
+  <data name="SettingsMoveInside" xml:space="preserve">
+    <value>The new place must not lie inside the old one, nor the old inside the new.</value>
+  </data>
+  <data name="SettingsMoveCollisions" xml:space="preserve">
+    <value>Campaigns of the same name are already at the new place: {0}.
+
+Nothing was moved. Rename or remove them there first.</value>
+  </data>
+  <data name="SettingsTaken" xml:space="preserve">
+    <value>The campaigns lie in {0} from now on.</value>
+  </data>
+  <data name="SettingsTakenLeftBehind" xml:space="preserve">
+    <value>The campaigns lie in {0} from now on. The {1} at {2} stay there and no longer appear in the switcher.</value>
+  </data>
+  <data name="SettingsMoving" xml:space="preserve">
+    <value>Moving ...</value>
+  </data>
+  <data name="SettingsCopying" xml:space="preserve">
+    <value>Copying: {0:0} of {1:0} MB.</value>
+  </data>
+  <data name="SettingsMoved" xml:space="preserve">
+    <value>Moved {0} campaign(s) to {1}.</value>
+  </data>
+  <data name="SettingsMovedLeftBehind" xml:space="preserve">
+    <value>Moved {0} campaign(s) to {1}. Left at the old place, because in use: {2} - delete it by hand.</value>
+  </data>
+  <data name="SettingsMoveBrokenOff" xml:space="preserve">
+    <value>Broken off. Everything is at {0}, as before.</value>
+  </data>
+  <data name="SettingsMoveRefused" xml:space="preserve">
+    <value>{0} Everything is at {1}, as before.</value>
+  </data>
+  <data name="MoveTitle" xml:space="preserve">
+    <value>Move campaigns</value>
+  </data>
+  <data name="MoveFrom" xml:space="preserve">
+    <value>From: {0}</value>
+  </data>
+  <data name="MoveTo" xml:space="preserve">
+    <value>To: {0}</value>
+  </data>
+  <data name="MoveSize" xml:space="preserve">
+    <value>There are {0} campaign(s), {1:0.0} GB.</value>
+  </data>
+  <data name="MoveDeep" xml:space="preserve">
+    <value>The new place is deep: only {0} characters remain for a campaign's name and a scene's name together. Longer names cannot be saved there.</value>
+  </data>
+  <data name="MoveClosing" xml:space="preserve">
+    <value>The open campaign is closed first: the table is cleared on every screen, and undo cannot go back past this.</value>
+  </data>
+  <data name="MoveOnlyPlaceNote" xml:space="preserve">
+    <value>"Only change the place" leaves the campaigns where they are - they no longer appear in the switcher.</value>
+  </data>
+  <data name="MoveMove" xml:space="preserve">
+    <value>Move campaigns</value>
+  </data>
+  <data name="MoveOnlyPlace" xml:space="preserve">
+    <value>Only change the place</value>
+  </data>
+  <data name="MoveCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="NetworkFirstRunHeading" xml:space="preserve">
+    <value>No device yet - here is the way there</value>
+  </data>
+  <data name="NetworkThisControl" xml:space="preserve">
+    <value>This control</value>
+  </data>
+  <data name="NetworkNetworks" xml:space="preserve">
+    <value>Networks</value>
+  </data>
+  <data name="NetworkFirewall" xml:space="preserve">
+    <value>Firewall</value>
+  </data>
+  <data name="NetworkNoAddress" xml:space="preserve">
+    <value>No network address - this machine is reachable over loopback only.</value>
+  </data>
+  <data name="NetworkReachable" xml:space="preserve">
+    <value>Reachable at {0}   (machine name: {1})</value>
+  </data>
+  <data name="NetworkListening" xml:space="preserve">
+    <value>The hub is listening. Whether the port is open cannot be said from here - a request to this machine's own address never passes the firewall.</value>
+  </data>
+  <data name="NetworkNotListening" xml:space="preserve">
+    <value>The hub is NOT answering on this machine. Nothing else here matters until it does.</value>
+  </data>
+  <data name="NetworkFirewallNotAsked" xml:space="preserve">
+    <value>The firewall could not be asked - the service may be off.</value>
+  </data>
+  <data name="NetworkActiveProfiles" xml:space="preserve">
+    <value>Active profiles: {0}</value>
+  </data>
+  <data name="NetworkAllowInForce" xml:space="preserve">
+    <value>Allow for the networks in force</value>
+  </data>
+  <data name="NetworkAllowFor" xml:space="preserve">
+    <value>Allow for {0}</value>
+  </data>
+  <data name="NetworkChangeClassification" xml:space="preserve">
+    <value>Change its classification ...</value>
+  </data>
+  <data name="NetworkPublicTitle" xml:space="preserve">
+    <value>Allow on public networks?</value>
+  </data>
+  <data name="NetworkPublicMessage" xml:space="preserve">
+    <value>This rule also covers PUBLIC networks. It applies in every foreign network this machine joins, until it is removed.
+
+If this is your home network, classify it as private instead - the rule then needs no public part.</value>
+  </data>
+  <data name="NetworkPublicMessageCovering" xml:space="preserve">
+    <value>This rule also covers PUBLIC networks. It applies in every foreign network this machine joins, until it is removed.
+
+If this is your home network, classify it as private instead - the rule then needs no public part.
+
+This rule will apply to: {0}</value>
+  </data>
+  <data name="NetworkRuleBlocks" xml:space="preserve">
+    <value>A rule BLOCKS this program. A block beats every allow, so nothing gets through until it is removed.</value>
+  </data>
+  <data name="NetworkNoRule" xml:space="preserve">
+    <value>No rule of ours, and none for this program. A display on another machine will not get through until one is set.</value>
+  </data>
+  <data name="NetworkNoneLetsThrough" xml:space="preserve">
+    <value>Rules exist, but none of them lets this program through right now.</value>
+  </data>
+  <data name="NetworkRulesFound" xml:space="preserve">
+    <value>{0} rules found - more than one is worth clearing up:</value>
+  </data>
+  <data name="NetworkPublicStanding" xml:space="preserve">
+    <value>One of these rules covers PUBLIC networks. It applies in every foreign network this machine joins.</value>
+  </data>
+  <data name="NetworkVerdictAllows" xml:space="preserve">
+    <value>applies now</value>
+  </data>
+  <data name="NetworkVerdictBlocks" xml:space="preserve">
+    <value>BLOCKS this program - beats every allow</value>
+  </data>
+  <data name="NetworkVerdictOverruled" xml:space="preserve">
+    <value>would allow, but the block above wins</value>
+  </data>
+  <data name="NetworkVerdictOtherProfile" xml:space="preserve">
+    <value>does not cover any profile in force</value>
+  </data>
+  <data name="NetworkVerdictDisabled" xml:space="preserve">
+    <value>disabled</value>
+  </data>
+  <data name="NetworkVerdictOtherProgram" xml:space="preserve">
+    <value>points somewhere else - probably left over</value>
+  </data>
+  <data name="NetworkActionAllow" xml:space="preserve">
+    <value>allow</value>
+  </data>
+  <data name="NetworkActionBlock" xml:space="preserve">
+    <value>block</value>
+  </data>
+  <data name="NetworkNoProgram" xml:space="preserve">
+    <value>(no program)</value>
+  </data>
+  <data name="NetworkAllProfiles" xml:space="preserve">
+    <value>all profiles</value>
+  </data>
+  <data name="NetworkNoProfile" xml:space="preserve">
+    <value>no profile</value>
+  </data>
+  <data name="NetworkProfileDomain" xml:space="preserve">
+    <value>domain</value>
+  </data>
+  <data name="NetworkProfilePrivate" xml:space="preserve">
+    <value>private</value>
+  </data>
+  <data name="NetworkProfilePublic" xml:space="preserve">
+    <value>public</value>
+  </data>
+  <data name="NetworkRemoveAll" xml:space="preserve">
+    <value>Remove every rule for this program</value>
+  </data>
+  <data name="NetworkRemoveTitle" xml:space="preserve">
+    <value>Remove every rule for this program?</value>
+  </data>
+  <data name="NetworkRemoveMessage" xml:space="preserve">
+    <value>Every inbound firewall rule pointing at
+
+    {0}
+
+will be removed: ours, the ones Windows wrote, and any built by hand. They are listed above.
+
+Afterwards no other machine gets through until a rule is set again.</value>
+  </data>
+  <data name="NetworkCheckAgain" xml:space="preserve">
+    <value>Check again</value>
+  </data>
+  <data name="NetworkHelperMissing" xml:space="preserve">
+    <value>{0} is not next to this program. The rule can be set by hand - the netsh command is in the README.</value>
+  </data>
+  <data name="NetworkHelperNotStarted" xml:space="preserve">
+    <value>The helper did not start.</value>
+  </data>
+  <data name="NetworkHelperFinished" xml:space="preserve">
+    <value>{0} finished with exit code {1}.</value>
+  </data>
+  <data name="NetworkElevationDeclined" xml:space="preserve">
+    <value>The elevation prompt was declined - nothing was changed.</value>
+  </data>
+  <data name="NetworkSettingsNotOpened" xml:space="preserve">
+    <value>Could not open the Windows network settings.</value>
+  </data>
+  <data name="NetworkStepInstall" xml:space="preserve">
+    <value>1.  Run the display MSI on the display PC - no administrator rights needed.</value>
+  </data>
+  <data name="NetworkStepRequest" xml:space="preserve">
+    <value>2.  It finds this control by itself and appears below as a request.</value>
+  </data>
+  <data name="NetworkStepAllow" xml:space="preserve">
+    <value>3.  Allow it and compare the code with what stands on the table.</value>
+  </data>
+  <data name="NetworkDisplayPcNote" xml:space="preserve">
+    <value>Autologon, no lock screen, edge swipes off and Windows Update active hours - the four things on the display PC that the README explains.</value>
+  </data>
+  <data name="CampaignSetupTitle" xml:space="preserve">
+    <value>Set up campaign</value>
+  </data>
+  <data name="CampaignSetupApply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="CampaignSetupOpenFolder" xml:space="preserve">
+    <value>Open folder in Explorer</value>
+  </data>
+  <data name="CampaignSetupDelete" xml:space="preserve">
+    <value>Delete campaign ...</value>
+  </data>
+  <data name="CampaignSetupName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="CampaignSetupFacts" xml:space="preserve">
+    <value>{0} picture(s), {1:0.#} MB, {2} scene(s), {3} layout(s).
+{4}</value>
+  </data>
+  <data name="CampaignSetupRenamed" xml:space="preserve">
+    <value>Renamed.</value>
+  </data>
+  <data name="CampaignSetupNameTaken" xml:space="preserve">
+    <value>A campaign named "{0}" exists already.</value>
+  </data>
+  <data name="CampaignSetupBusy" xml:space="preserve">
+    <value>The folder is in use right now - try again in a moment.</value>
+  </data>
+  <data name="CampaignSetupDeleteTitle" xml:space="preserve">
+    <value>Delete campaign</value>
+  </data>
+  <data name="CampaignSetupDeletePrompt" xml:space="preserve">
+    <value>This deletes "{0}" - {1} picture(s), {2} scene(s), {3} layout(s), {4:0.#} MB.
+Undo cannot bring it back. To keep a copy, copy the folder first:
+{5}
+
+Type the campaign's name to delete it:</value>
+  </data>
+  <data name="CampaignSetupNoMatch" xml:space="preserve">
+    <value>The name did not match - nothing was deleted.</value>
+  </data>
+  <data name="NameOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="NameCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="NameEmpty" xml:space="preserve">
+    <value>A name is needed.</value>
+  </data>
+  <data name="NameForbiddenCharacter" xml:space="preserve">
+    <value>A name cannot contain &lt; &gt; : " / \ | ? * - Windows does not allow them in file names.</value>
+  </data>
+  <data name="NameReserved" xml:space="preserve">
+    <value>CON, PRN, AUX, NUL, COM1-9 and LPT1-9 are reserved by Windows.</value>
+  </data>
+  <data name="NameBadEnding" xml:space="preserve">
+    <value>A name cannot end in a dot or a space.</value>
+  </data>
+  <data name="NameTooLong" xml:space="preserve">
+    <value>A name can have at most {0} characters.</value>
+  </data>
+  <data name="AdoptTitle" xml:space="preserve">
+    <value>Assign to a known device</value>
+  </data>
+  <data name="AdoptCandidate" xml:space="preserve">
+    <value>{0} - {1} screen(s), not connected</value>
+  </data>
+  <data name="AdoptIntro" xml:space="preserve">
+    <value>{0} at {1}, code {2}, is to take over the entry of:</value>
+  </data>
+  <data name="AdoptTakesOver" xml:space="preserve">
+    <value>It takes over the name, the remote settings, the screens and what lies on them; the old entry disappears. Screens on the same hardware carry straight on; after new hardware they stand beside the old ones and are mapped with "Take over" in the screen's band.</value>
+  </data>
+  <data name="AdoptRisk" xml:space="preserve">
+    <value>If the old device is not really gone but only switched off, its entry then belongs to the wrong machine, and the real one comes up as new the next time it starts. A wrong screen mapping later puts park edge and rotation on the wrong screen - noticed only at the table.</value>
+  </data>
+  <data name="AdoptNoRestore" xml:space="preserve">
+    <value>This is no restore: the token and the picture store of the old device do not come back.</value>
+  </data>
+  <data name="AdoptAssign" xml:space="preserve">
+    <value>Assign</value>
+  </data>
+  <data name="AdoptCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="LayoutMappingTitle" xml:space="preserve">
+    <value>Load layout</value>
+  </data>
+  <data name="LayoutMappingIntro" xml:space="preserve">
+    <value>Not every screen of "{0}" is here. Choose where each scene goes.</value>
+  </data>
+  <data name="LayoutMappingLoad" xml:space="preserve">
+    <value>Load</value>
+  </data>
+  <data name="LayoutMappingCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="LayoutMappingAsScene" xml:space="preserve">
+    <value>Save as scene</value>
+  </data>
+  <data name="LayoutMappingSkip" xml:space="preserve">
+    <value>Don't load</value>
+  </data>
+  <data name="LayoutMappingNotHere" xml:space="preserve">
+    <value>{0} - not here</value>
+  </data>
+  <data name="DevicesTitle" xml:space="preserve">
+    <value>Devices</value>
+  </data>
+  <data name="DevicesWaitingHeading" xml:space="preserve">
+    <value>Waiting for a decision</value>
+  </data>
+  <data name="DevicesListHeading" xml:space="preserve">
+    <value>Devices</value>
+  </data>
+  <data name="DevicesRefusedHeading" xml:space="preserve">
+    <value>Turned away</value>
+  </data>
+  <data name="DevicesThisControlHeading" xml:space="preserve">
+    <value>This control</value>
+  </data>
+  <data name="DevicesStreamEnded" xml:space="preserve">
+    <value>The event stream ended - close and reopen this window for a fresh picture.</value>
+  </data>
+  <data name="DevicesNonePaired" xml:space="preserve">
+    <value>No device paired yet.</value>
+  </data>
+  <data name="DevicesChooseOnLeft" xml:space="preserve">
+    <value>Choose a device or one of its screens on the left - its settings stand here.</value>
+  </data>
+  <data name="DevicesNoneToAdopt" xml:space="preserve">
+    <value>Every known device is connected - there is none this one could be.</value>
+  </data>
+  <data name="DevicesAllow" xml:space="preserve">
+    <value>Allow</value>
+  </data>
+  <data name="DevicesReject" xml:space="preserve">
+    <value>Reject</value>
+  </data>
+  <data name="DevicesTakeOnAsOwn" xml:space="preserve">
+    <value>Take on as its own device</value>
+  </data>
+  <data name="DevicesAssignToKnown" xml:space="preserve">
+    <value>Assign to a known device ...</value>
+  </data>
+  <data name="DevicesNothingWaiting" xml:space="preserve">
+    <value>Nothing is waiting.</value>
+  </data>
+  <data name="DevicesTakeRejectionBack" xml:space="preserve">
+    <value>Take the rejection back</value>
+  </data>
+  <data name="DevicesNothingRefused" xml:space="preserve">
+    <value>Nothing has been turned away.</value>
+  </data>
+  <data name="DevicesAcceptNew" xml:space="preserve">
+    <value>Accept new devices</value>
+  </data>
+  <data name="DevicesOnlyLogged" xml:space="preserve">
+    <value>Requests are only written to the log from now on.</value>
+  </data>
+  <data name="DevicesSearchOrphans" xml:space="preserve">
+    <value>Search for orphaned devices</value>
+  </data>
+  <data name="DevicesCallingOrphans" xml:space="preserve">
+    <value>Calling for two minutes. Displays that lost their control more than a minute ago appear under Waiting for a decision.</value>
+  </data>
+  <data name="DevicesSuppressUnavailable" xml:space="preserve">
+    <value>unavailable</value>
+  </data>
+  <data name="DevicesSuppressControlWindow" xml:space="preserve">
+    <value>control window</value>
+  </data>
+  <data name="DevicesSuppressHiddenAtDevice" xml:space="preserve">
+    <value>hidden at the device</value>
+  </data>
+  <data name="DevicesRejectionDenied" xml:space="preserve">
+    <value>denied</value>
+  </data>
+  <data name="DevicesRejectionInvalidToken" xml:space="preserve">
+    <value>invalid token</value>
+  </data>
+  <data name="DevicesRejectionLimitExceeded" xml:space="preserve">
+    <value>limit exceeded</value>
+  </data>
+  <data name="DevicesRejectionDuplicateDevice" xml:space="preserve">
+    <value>duplicate DeviceId</value>
+  </data>
+  <data name="DeviceBandChooseScreen" xml:space="preserve">
+    <value>Choose one of its screens on the left for the screen's own settings.</value>
+  </data>
+  <data name="DeviceBandAppliesNoScreen" xml:space="preserve">
+    <value>Applies to the whole device - it has reported no screen yet.</value>
+  </data>
+  <data name="DeviceBandNotConnected" xml:space="preserve">
+    <value>Not connected - what is set here goes out when it connects.</value>
+  </data>
+  <data name="DeviceBandShowNames" xml:space="preserve">
+    <value>Show the screen names</value>
+  </data>
+  <data name="DeviceBandClearStore" xml:space="preserve">
+    <value>Clear the picture store ...</value>
+  </data>
+  <data name="DeviceBandClearStoreTitle" xml:space="preserve">
+    <value>Clear the picture store</value>
+  </data>
+  <data name="DeviceBandRestart" xml:space="preserve">
+    <value>Restart ...</value>
+  </data>
+  <data name="DeviceBandRestartTitle" xml:space="preserve">
+    <value>Restart</value>
+  </data>
+  <data name="DeviceBandUnpair" xml:space="preserve">
+    <value>Unpair ...</value>
+  </data>
+  <data name="DeviceBandResetAll" xml:space="preserve">
+    <value>Reset all to defaults</value>
+  </data>
+  <data name="DeviceBandTakeOver" xml:space="preserve">
+    <value>Take over ...</value>
+  </data>
+  <data name="DeviceBandTakeOverTitle" xml:space="preserve">
+    <value>Take over a missing screen</value>
+  </data>
+  <data name="DeviceBandTakeOverLabel" xml:space="preserve">
+    <value>Take over a missing screen:</value>
+  </data>
+  <data name="DeviceBandEmptyIsDefaultName" xml:space="preserve">
+    <value>empty = the default name</value>
+  </data>
+  <data name="DeviceBandName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="DeviceBandState" xml:space="preserve">
+    <value>State</value>
+  </data>
+  <data name="DeviceBandDefault" xml:space="preserve">
+    <value>default</value>
+  </data>
+  <data name="DeviceBandReset" xml:space="preserve">
+    <value>Reset</value>
+  </data>
+  <data name="DeviceBandResetTip" xml:space="preserve">
+    <value>Back to the default value</value>
+  </data>
+  <data name="DeviceBandStateEnabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="DeviceBandStateDiagnostic" xml:space="preserve">
+    <value>Diagnostic</value>
+  </data>
+  <data name="DeviceBandStateDisabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="DeviceBandStateInactive" xml:space="preserve">
+    <value>Inactive</value>
+  </data>
+  <data name="DevicesUnpairTitle" xml:space="preserve">
+    <value>Unpair</value>
+  </data>
+  <data name="DevicesUnpairSaveAndUnpair" xml:space="preserve">
+    <value>Save scenes and unpair</value>
+  </data>
+  <data name="DevicesUnpairPlain" xml:space="preserve">
+    <value>Unpair</value>
+  </data>
+  <data name="DevicesUnpairWithoutSaving" xml:space="preserve">
+    <value>Unpair without saving</value>
+  </data>
+  <data name="DevicesUnpairCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="DevicesUnpairNoCampaign" xml:space="preserve">
+    <value>No campaign is open - scenes cannot be saved. Open one first, or unpair without saving.</value>
+  </data>
+  <data name="TileMenuBackToOverview" xml:space="preserve">
+    <value>Back to the overview</value>
+  </data>
+  <data name="TileMenuOpenSingle" xml:space="preserve">
+    <value>Open single view</value>
+  </data>
+  <data name="TileMenuSetUpScreen" xml:space="preserve">
+    <value>Set up screen ...</value>
+  </data>
+  <data name="TileMenuIdentifyScreens" xml:space="preserve">
+    <value>Identify screens</value>
+  </data>
+  <data name="TileMenuSaveAsScene" xml:space="preserve">
+    <value>Save screen as scene ...</value>
+  </data>
+  <data name="TileMenuPlacement" xml:space="preserve">
+    <value>Placement</value>
+  </data>
+  <data name="TileMenuPlacementFlow" xml:space="preserve">
+    <value>Side by side</value>
+  </data>
+  <data name="TileMenuPlacementCascade" xml:space="preserve">
+    <value>Cascading</value>
+  </data>
+  <data name="TileMenuDiagnosticView" xml:space="preserve">
+    <value>Diagnostic view</value>
+  </data>
+  <data name="TileMenuCustomize" xml:space="preserve">
+    <value>Customize</value>
+  </data>
+  <data name="TileMenuAdjustBackground" xml:space="preserve">
+    <value>Adjust background</value>
+  </data>
+  <data name="TileMenuFillScreen" xml:space="preserve">
+    <value>Fill screen</value>
+  </data>
+  <data name="TileMenuFitWhole" xml:space="preserve">
+    <value>Fit whole on screen</value>
+  </data>
+  <data name="TileMenuTurnBackground" xml:space="preserve">
+    <value>Turn background</value>
+  </data>
+  <data name="TileMenuRemoveBackground" xml:space="preserve">
+    <value>Remove background</value>
+  </data>
+  <data name="TileMenuRunBackgroundAnimation" xml:space="preserve">
+    <value>Run background animation</value>
+  </data>
+  <data name="TileMenuHoldBackgroundAnimation" xml:space="preserve">
+    <value>Hold background animation</value>
+  </data>
+  <data name="TileMenuTurnToMe" xml:space="preserve">
+    <value>Turn to me</value>
+  </data>
+  <data name="TileMenuTurn" xml:space="preserve">
+    <value>Turn</value>
+  </data>
+  <data name="TileMenuPark" xml:space="preserve">
+    <value>Park</value>
+  </data>
+  <data name="TileMenuUnlock" xml:space="preserve">
+    <value>Unlock</value>
+  </data>
+  <data name="TileMenuLock" xml:space="preserve">
+    <value>Lock</value>
+  </data>
+  <data name="TileMenuResumeAnimation" xml:space="preserve">
+    <value>Resume animation</value>
+  </data>
+  <data name="TileMenuPauseAnimation" xml:space="preserve">
+    <value>Pause animation</value>
+  </data>
+  <data name="TileMenuHideName" xml:space="preserve">
+    <value>Hide name</value>
+  </data>
+  <data name="TileMenuShowName" xml:space="preserve">
+    <value>Show name</value>
+  </data>
+  <data name="TileMenuRename" xml:space="preserve">
+    <value>Rename ...</value>
+  </data>
+  <data name="TileMenuSelect" xml:space="preserve">
+    <value>Select</value>
+  </data>
+  <data name="TileMenuSelectAll" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="TileMenuSelectOnTable" xml:space="preserve">
+    <value>On the table</value>
+  </data>
+  <data name="TileMenuSelectInFan" xml:space="preserve">
+    <value>In the fan</value>
+  </data>
+  <data name="TileMenuCopyTo" xml:space="preserve">
+    <value>Copy to</value>
+  </data>
+  <data name="TileMenuMoveTo" xml:space="preserve">
+    <value>Move to</value>
+  </data>
+  <data name="TileMenuShowInStock" xml:space="preserve">
+    <value>Show in stock</value>
+  </data>
+  <data name="TileMenuRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="TileMenuRemoveKey" xml:space="preserve">
+    <value>Del</value>
+  </data>
+  <data name="TileMenuTurnView" xml:space="preserve">
+    <value>Turn view</value>
+  </data>
+  <data name="DevicesReachableAt" xml:space="preserve">
+    <value>Reachable at {0}. Type that at a display when discovery does not get through.</value>
+  </data>
+  <data name="DevicesNotConnected" xml:space="preserve">
+    <value>{0} - not connected</value>
+  </data>
+  <data name="DevicesDeviceLine" xml:space="preserve">
+    <value>{0} - {1}, {2:F0} ms, version {3} (protocol {4})</value>
+  </data>
+  <data name="DevicesDeviceLineMeasuring" xml:space="preserve">
+    <value>{0} - {1}, measuring, version {2} (protocol {3})</value>
+  </data>
+  <data name="DevicesScreenLineSuppressed" xml:space="preserve">
+    <value>{0} - {1} - {2}, not played on: {3}</value>
+  </data>
+  <data name="DevicesAdopted" xml:space="preserve">
+    <value>{0} came in as {1}. Screens it reports under new ids stand beside the old ones - use "Take over" in a screen's band to map them.</value>
+  </data>
+  <data name="DevicesNotAdopted" xml:space="preserve">
+    <value>{0} could not be assigned - it is no longer waiting, or {1} connected meanwhile.</value>
+  </data>
+  <data name="DevicesDecided" xml:space="preserve">
+    <value>Decided about {0}.</value>
+  </data>
+  <data name="DevicesMayKnockAgain" xml:space="preserve">
+    <value>{0} may knock again - it can take up to five minutes.</value>
+  </data>
+  <data name="DevicesPendingClone" xml:space="preserve">
+    <value>{0} at {1} - same DeviceId as a device that is already connected</value>
+  </data>
+  <data name="DevicesPendingUnknownToken" xml:space="preserve">
+    <value>{0} at {1}, code {2} - brought a token this control does not know</value>
+  </data>
+  <data name="DevicesPending" xml:space="preserve">
+    <value>{0} at {1}, code {2}</value>
+  </data>
+  <data name="DevicesRefused" xml:space="preserve">
+    <value>{0} - {1}, last seen {2:HH:mm}</value>
+  </data>
+  <data name="DeviceBandDeviceHeading" xml:space="preserve">
+    <value>Device {0}</value>
+  </data>
+  <data name="DeviceBandAppliesOneScreen" xml:space="preserve">
+    <value>Applies to the whole device and its one screen: {0}.</value>
+  </data>
+  <data name="DeviceBandAppliesAllScreens" xml:space="preserve">
+    <value>Applies to all {0} screens of this device: {1}.</value>
+  </data>
+  <data name="DeviceBandVersion" xml:space="preserve">
+    <value>Version {0}, protocol {1}.</value>
+  </data>
+  <data name="DeviceBandClearStoreQuestion" xml:space="preserve">
+    <value>Empty the picture store of {0}? It applies to all its screens. What lies on them now is fetched again.</value>
+  </data>
+  <data name="DeviceBandClearingStore" xml:space="preserve">
+    <value>{0} empties its picture store.</value>
+  </data>
+  <data name="DeviceBandRestartQuestion" xml:space="preserve">
+    <value>Restart {0}? Its {1} screen(s) go dark for a moment, {2} of them showing something; it connects again by itself.</value>
+  </data>
+  <data name="DeviceBandRestarting" xml:space="preserve">
+    <value>{0} restarts.</value>
+  </data>
+  <data name="DeviceBandShowingNames" xml:space="preserve">
+    <value>{0} is showing its screen names.</value>
+  </data>
+  <data name="DeviceBandScreenHeading" xml:space="preserve">
+    <value>Screen {0}</value>
+  </data>
+  <data name="DeviceBandAppliesOnlyTo" xml:space="preserve">
+    <value>Applies only to {0}.</value>
+  </data>
+  <data name="DeviceBandTakeOverQuestion" xml:space="preserve">
+    <value>{0} takes over {1}: its state, settings, name and what lies on it, its place among the tiles and the view. What lies on {0} now is replaced. {1} disappears from the list.</value>
+  </data>
+  <data name="DeviceBandTakeOverFailed" xml:space="preserve">
+    <value>{0} could not be taken over - it is there again, or gone.</value>
+  </data>
+  <data name="DeviceBandTookOver" xml:space="preserve">
+    <value>{0} took over {1}.</value>
+  </data>
+  <data name="DeviceBandScreenNameTaken" xml:space="preserve">
+    <value>"{0}" is already the name of another screen or device.</value>
+  </data>
+  <data name="DeviceBandDeviceNameTaken" xml:space="preserve">
+    <value>"{0}" is already the name of another device or screen.</value>
+  </data>
+  <data name="DeviceBandRenamed" xml:space="preserve">
+    <value>{0} is called {1} now.</value>
+  </data>
+  <data name="DeviceBandRenamedLater" xml:space="preserve">
+    <value>{0} is called {1} now - the device hears it when it connects.</value>
+  </data>
+  <data name="DeviceBandNotConnectedSay" xml:space="preserve">
+    <value>{0} is not connected.</value>
+  </data>
+  <data name="DeviceBandUnitDefault" xml:space="preserve">
+    <value>{0} - default</value>
+  </data>
+  <data name="DeviceBandRange" xml:space="preserve">
+    <value>{0} to {1}</value>
+  </data>
+  <data name="DeviceBandUnpaired" xml:space="preserve">
+    <value>{0} is unpaired.</value>
+  </data>
+  <data name="DeviceBandUnpairedSaved" xml:space="preserve">
+    <value>{0} is unpaired. Saved as scenes: {1}.</value>
+  </data>
+  <data name="DevicesUnpairQuestion" xml:space="preserve">
+    <value>Unpair {0}? This control can no longer reach its {1} screen(s); the device has to be paired again to be used.</value>
+  </data>
+  <data name="DevicesUnpairQuestionOccupied" xml:space="preserve">
+    <value>Unpair {0}? This control can no longer reach its {1} screen(s). What lies on them - {2} picture(s) on {3} screen(s) - is gone, and undo cannot go back past this.</value>
+  </data>
+  <data name="DevicesUnpairSceneName" xml:space="preserve">
+    <value>Scene {0} {1}</value>
+  </data>
+  <data name="DevicesUnpairSceneFrom" xml:space="preserve">
+    <value>Scene from {0}:</value>
+  </data>
+  <data name="DevicesUnpairSceneExists" xml:space="preserve">
+    <value>A scene named "{0}" exists already.</value>
+  </data>
+  <data name="CampaignPanelTabPictures" xml:space="preserve">
+    <value>Pictures</value>
+  </data>
+  <data name="CampaignPanelTabScenes" xml:space="preserve">
+    <value>Scenes</value>
+  </data>
+  <data name="CampaignPanelTabLayouts" xml:space="preserve">
+    <value>Layouts</value>
+  </data>
+  <data name="CampaignPanelSaveLayout" xml:space="preserve">
+    <value>Save layout ...</value>
+  </data>
+  <data name="CampaignPanelBreakOff" xml:space="preserve">
+    <value>Break off</value>
+  </data>
+  <data name="CampaignPanelSortOldest" xml:space="preserve">
+    <value>Oldest ↑</value>
+  </data>
+  <data name="CampaignPanelSortNameAscending" xml:space="preserve">
+    <value>Name A–Z</value>
+  </data>
+  <data name="CampaignPanelSortNameDescending" xml:space="preserve">
+    <value>Name Z–A</value>
+  </data>
+  <data name="CampaignPanelSortNewest" xml:space="preserve">
+    <value>Newest ↓</value>
+  </data>
+  <data name="CampaignPanelAddFiles" xml:space="preserve">
+    <value>Add files ...</value>
+  </data>
+  <data name="CampaignPanelPaste" xml:space="preserve">
+    <value>Paste</value>
+  </data>
+  <data name="CampaignPanelFetch" xml:space="preserve">
+    <value>Fetch</value>
+  </data>
+  <data name="CampaignPanelFilesTitle" xml:space="preserve">
+    <value>Pictures for the stock</value>
+  </data>
+  <data name="CampaignPanelFilterPictures" xml:space="preserve">
+    <value>Pictures</value>
+  </data>
+  <data name="CampaignPanelFilterAll" xml:space="preserve">
+    <value>All files</value>
+  </data>
+  <data name="PanelHeadHint" xml:space="preserve">
+    <value>Open one, or add pictures to begin a new one.</value>
+  </data>
+  <data name="PanelHeadNothingToUndo" xml:space="preserve">
+    <value>Nothing to undo (Ctrl+Z)</value>
+  </data>
+  <data name="PanelHeadNothingToRedo" xml:space="preserve">
+    <value>Nothing to redo (Ctrl+Y)</value>
+  </data>
+  <data name="PanelHeadUndo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="PanelHeadRedo" xml:space="preserve">
+    <value>Redo</value>
+  </data>
+  <data name="PanelHeadNoCampaign" xml:space="preserve">
+    <value>No campaign open</value>
+  </data>
+  <data name="PanelHeadOverview" xml:space="preserve">
+    <value>Overview</value>
+  </data>
+  <data name="PanelHeadSingleView" xml:space="preserve">
+    <value>Single view</value>
+  </data>
+  <data name="PanelHeadUndoTip" xml:space="preserve">
+    <value>Undo: {0} (Ctrl+Z)</value>
+  </data>
+  <data name="PanelHeadRedoTip" xml:space="preserve">
+    <value>Redo: {0} (Ctrl+Y)</value>
+  </data>
+  <data name="CampaignSwitchNone" xml:space="preserve">
+    <value>No campaign yet - add pictures to begin one</value>
+  </data>
+  <data name="CampaignSwitchSetUp" xml:space="preserve">
+    <value>Set up campaign ...</value>
+  </data>
+  <data name="CampaignSwitchTitle" xml:space="preserve">
+    <value>Switch campaign</value>
+  </data>
+  <data name="CampaignSwitchOpenLabel" xml:space="preserve">
+    <value>{0}  - {1} picture(s), {2:0.#} MB</value>
+  </data>
+  <data name="CampaignSwitchQuestion" xml:space="preserve">
+    <value>Switch to "{0}"?
+
+The table is cleared on every screen - its pictures come from "{1}" - and undo cannot go back past this.</value>
+  </data>
+  <data name="CampaignNamingTitle" xml:space="preserve">
+    <value>Name the campaign</value>
+  </data>
+  <data name="CampaignNamingPrompt" xml:space="preserve">
+    <value>This campaign has no name yet. Saving needs a named campaign - what is it called?</value>
+  </data>
+  <data name="CampaignNamingBusy" xml:space="preserve">
+    <value>The folder is in use right now - try again in a moment.</value>
+  </data>
+  <data name="CampaignNamingTaken" xml:space="preserve">
+    <value>A campaign named "{0}" exists already.</value>
+  </data>
+  <data name="StockNoCampaign" xml:space="preserve">
+    <value>No campaign open.</value>
+  </data>
+  <data name="StockEmpty" xml:space="preserve">
+    <value>The stock is empty - drop pictures here, paste or fetch an address.</value>
+  </data>
+  <data name="StockNoMatch" xml:space="preserve">
+    <value>Nothing matches the filter.</value>
+  </data>
+  <data name="StockMarkMissing" xml:space="preserve">
+    <value>missing</value>
+  </data>
+  <data name="StockMenuSendActive" xml:space="preserve">
+    <value>Send to active screen</value>
+  </data>
+  <data name="StockMenuSendPicture" xml:space="preserve">
+    <value>Send as picture</value>
+  </data>
+  <data name="StockMenuSendBackground" xml:space="preserve">
+    <value>Send as background</value>
+  </data>
+  <data name="StockMenuToAll" xml:space="preserve">
+    <value>To all</value>
+  </data>
+  <data name="StockMenuLiesOnSeveral" xml:space="preserve">
+    <value>Lies on ...</value>
+  </data>
+  <data name="StockMenuLiesOnNone" xml:space="preserve">
+    <value>Lies on no screen</value>
+  </data>
+  <data name="StockMenuShowFile" xml:space="preserve">
+    <value>Show file in folder</value>
+  </data>
+  <data name="StockMenuRename" xml:space="preserve">
+    <value>Rename ...</value>
+  </data>
+  <data name="StockMenuDelete" xml:space="preserve">
+    <value>Delete ...</value>
+  </data>
+  <data name="StockMenuUsedInSeveral" xml:space="preserve">
+    <value>Used in ...</value>
+  </data>
+  <data name="StockMenuUsedNowhere" xml:space="preserve">
+    <value>Used in no scene or layout</value>
+  </data>
+  <data name="StockMenuUsedIn" xml:space="preserve">
+    <value>Used in</value>
+  </data>
+  <data name="StockNoScreen" xml:space="preserve">
+    <value>No screen to send to.</value>
+  </data>
+  <data name="StockMarkOn" xml:space="preserve">
+    <value>on {0}</value>
+  </data>
+  <data name="StockMarkIn" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="StockMenuLiesOn" xml:space="preserve">
+    <value>Lies on {0} screen(s)</value>
+  </data>
+  <data name="StockMenuDeleteMany" xml:space="preserve">
+    <value>Delete {0} pictures ...</value>
+  </data>
+  <data name="StockMenuUsedScene" xml:space="preserve">
+    <value>Scene: {0}</value>
+  </data>
+  <data name="StockMenuUsedLayout" xml:space="preserve">
+    <value>Layout: {0}</value>
+  </data>
+  <data name="StockRenameTitle" xml:space="preserve">
+    <value>Rename picture</value>
+  </data>
+  <data name="StockRenamePrompt" xml:space="preserve">
+    <value>New name of the picture - on every screen and in every scene:</value>
+  </data>
+  <data name="StockDeleteFileGone" xml:space="preserve">
+    <value>The file is deleted. This cannot be undone.</value>
+  </data>
+  <data name="StockDeleteFilesGone" xml:space="preserve">
+    <value>The files are deleted. This cannot be undone.</value>
+  </data>
+  <data name="StockDeleteTitleOne" xml:space="preserve">
+    <value>Delete picture</value>
+  </data>
+  <data name="StockDeleteTitleMany" xml:space="preserve">
+    <value>Delete pictures</value>
+  </data>
+  <data name="StockEmptiedTitle" xml:space="preserve">
+    <value>Empty scenes and layouts</value>
+  </data>
+  <data name="StockRenamed" xml:space="preserve">
+    <value>Renamed "{0}" to "{1}".</value>
+  </data>
+  <data name="StockRenameTaken" xml:space="preserve">
+    <value>A picture named "{0}" exists already.</value>
+  </data>
+  <data name="StockDeleteOneQuestion" xml:space="preserve">
+    <value>Delete "{0}" from the campaign?</value>
+  </data>
+  <data name="StockDeleteManyQuestion" xml:space="preserve">
+    <value>Delete {0} pictures from the campaign?</value>
+  </data>
+  <data name="StockDeleteTakenOffOne" xml:space="preserve">
+    <value>It is taken off {0} screen(s).</value>
+  </data>
+  <data name="StockDeleteTakenOffMany" xml:space="preserve">
+    <value>They are taken off {0} screen(s).</value>
+  </data>
+  <data name="StockDeleteFromScenes" xml:space="preserve">
+    <value>Removed from the scene(s): {0}.</value>
+  </data>
+  <data name="StockDeleteFromLayouts" xml:space="preserve">
+    <value>Removed from the layout(s): {0}.</value>
+  </data>
+  <data name="StockDeleteStepsLost" xml:space="preserve">
+    <value>{0} undo step(s) are lost with it.</value>
+  </data>
+  <data name="StockDeletedOne" xml:space="preserve">
+    <value>Deleted "{0}".</value>
+  </data>
+  <data name="StockDeletedMany" xml:space="preserve">
+    <value>Deleted {0} pictures.</value>
+  </data>
+  <data name="StockEmptiedScenes" xml:space="preserve">
+    <value>Scene(s): {0}</value>
+  </data>
+  <data name="StockEmptiedLayouts" xml:space="preserve">
+    <value>Layout(s): {0}</value>
+  </data>
+  <data name="StockEmptiedQuestion" xml:space="preserve">
+    <value>These are empty now:
+
+{0}
+
+Delete them too?</value>
+  </data>
+  <data name="StockEmptiedKept" xml:space="preserve">
+    <value>{0} empty scene(s) or layout(s) kept.</value>
+  </data>
+  <data name="StockEmptiedDeleted" xml:space="preserve">
+    <value>{0} empty scene(s) or layout(s) deleted.</value>
+  </data>
+  <data name="StockListedMore" xml:space="preserve">
+    <value>{0} and {1} more</value>
+  </data>
+  <data name="ScenesNoneSaved" xml:space="preserve">
+    <value>No scene saved yet. Save one from a screen's menu: "Save screen as scene ...".</value>
+  </data>
+  <data name="ScenesNoCampaign" xml:space="preserve">
+    <value>No campaign open.</value>
+  </data>
+  <data name="ScenesNoMatch" xml:space="preserve">
+    <value>Nothing matches the filter.</value>
+  </data>
+  <data name="ScenesNoCampaignToSave" xml:space="preserve">
+    <value>No campaign is open - open one, or add pictures to begin one. A scene lives in its campaign.</value>
+  </data>
+  <data name="ScenesSaveTitle" xml:space="preserve">
+    <value>Save screen as scene</value>
+  </data>
+  <data name="ScenesMenuLoad" xml:space="preserve">
+    <value>Load on screen</value>
+  </data>
+  <data name="ScenesMenuReplace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="ScenesMenuAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="ScenesMenuOverwrite" xml:space="preserve">
+    <value>Overwrite with screen</value>
+  </data>
+  <data name="ScenesMenuRename" xml:space="preserve">
+    <value>Rename ...</value>
+  </data>
+  <data name="ScenesMenuDelete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="ScenesNoScreen" xml:space="preserve">
+    <value>No screen to load onto.</value>
+  </data>
+  <data name="ScenesRenameTitle" xml:space="preserve">
+    <value>Rename scene</value>
+  </data>
+  <data name="ScenesRenamePrompt" xml:space="preserve">
+    <value>New name of the scene:</value>
+  </data>
+  <data name="ScenesDeleteTitle" xml:space="preserve">
+    <value>Delete scene</value>
+  </data>
+  <data name="ScenesSavePrompt" xml:space="preserve">
+    <value>Name of the scene from {0}:</value>
+  </data>
+  <data name="ScenesSuggestedName" xml:space="preserve">
+    <value>Scene {0} {1}</value>
+  </data>
+  <data name="ScenesOverwriteQuestion" xml:space="preserve">
+    <value>A scene named "{0}" exists already. Overwrite it?</value>
+  </data>
+  <data name="ScenesSaved" xml:space="preserve">
+    <value>Saved "{0}".</value>
+  </data>
+  <data name="ScenesTileTip" xml:space="preserve">
+    <value>{0} - {1}×{2}, saved {3:g}</value>
+  </data>
+  <data name="ScenesLoaded" xml:space="preserve">
+    <value>Loaded "{0}".</value>
+  </data>
+  <data name="ScenesLoadedMissing" xml:space="preserve">
+    <value>Loaded "{0}" - {1} of {2} pictures are missing and stand as placeholders.</value>
+  </data>
+  <data name="ScenesRenameTaken" xml:space="preserve">
+    <value>A scene named "{0}" exists already.</value>
+  </data>
+  <data name="ScenesDeleteQuestion" xml:space="preserve">
+    <value>Delete the scene "{0}"? The pictures stay in the stock.</value>
+  </data>
+  <data name="LayoutsNoCampaign" xml:space="preserve">
+    <value>No campaign open.</value>
+  </data>
+  <data name="LayoutsNoneSaved" xml:space="preserve">
+    <value>No layout saved yet. "Save layout ..." above keeps every screen with something on it.</value>
+  </data>
+  <data name="LayoutsNoMatch" xml:space="preserve">
+    <value>Nothing matches the filter.</value>
+  </data>
+  <data name="LayoutsNoCampaignToSave" xml:space="preserve">
+    <value>No campaign is open - open one, or add pictures to begin one. A layout lives in its campaign.</value>
+  </data>
+  <data name="LayoutsNothingToSave" xml:space="preserve">
+    <value>Nothing lies on any screen - there is no layout to save.</value>
+  </data>
+  <data name="LayoutsSaveTitle" xml:space="preserve">
+    <value>Save layout</value>
+  </data>
+  <data name="LayoutsMenuLoad" xml:space="preserve">
+    <value>Load</value>
+  </data>
+  <data name="LayoutsMenuAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="LayoutsMenuReplaceUsed" xml:space="preserve">
+    <value>Replace used screens</value>
+  </data>
+  <data name="LayoutsMenuReplaceAll" xml:space="preserve">
+    <value>Replace all screens</value>
+  </data>
+  <data name="LayoutsMenuSaveAsScenes" xml:space="preserve">
+    <value>Save as single scenes</value>
+  </data>
+  <data name="LayoutsMenuRename" xml:space="preserve">
+    <value>Rename ...</value>
+  </data>
+  <data name="LayoutsMenuOverwrite" xml:space="preserve">
+    <value>Overwrite with the table</value>
+  </data>
+  <data name="LayoutsMenuDelete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="LayoutsNoSceneSaved" xml:space="preserve">
+    <value>No scene was saved.</value>
+  </data>
+  <data name="LayoutsRenameTitle" xml:space="preserve">
+    <value>Rename layout</value>
+  </data>
+  <data name="LayoutsRenamePrompt" xml:space="preserve">
+    <value>New name of the layout:</value>
+  </data>
+  <data name="LayoutsDeleteTitle" xml:space="preserve">
+    <value>Delete layout</value>
+  </data>
+  <data name="LayoutsSavePrompt" xml:space="preserve">
+    <value>Name of the layout with {0} screen(s):</value>
+  </data>
+  <data name="LayoutsSuggestedName" xml:space="preserve">
+    <value>Layout {0}</value>
+  </data>
+  <data name="LayoutsOverwriteQuestion" xml:space="preserve">
+    <value>A layout named "{0}" exists already. Overwrite it?</value>
+  </data>
+  <data name="LayoutsSaved" xml:space="preserve">
+    <value>Saved the layout "{0}" with {1} screen(s).</value>
+  </data>
+  <data name="LayoutsNothingLaid" xml:space="preserve">
+    <value>Nothing of "{0}" was laid.</value>
+  </data>
+  <data name="LayoutsLoaded" xml:space="preserve">
+    <value>Loaded "{0}" onto {1} screen(s).</value>
+  </data>
+  <data name="LayoutsScenesLeftOut" xml:space="preserve">
+    <value>{0} scene(s) left out.</value>
+  </data>
+  <data name="LayoutsSavedAsScenes" xml:space="preserve">
+    <value>Saved as scenes: {0}.</value>
+  </data>
+  <data name="LayoutsPicturesMissing" xml:space="preserve">
+    <value>{0} picture(s) missing, standing as placeholders.</value>
+  </data>
+  <data name="LayoutsSceneName" xml:space="preserve">
+    <value>Scene {0} {1}</value>
+  </data>
+  <data name="LayoutsTileTip" xml:space="preserve">
+    <value>{0} - {1}, saved {2:g}</value>
+  </data>
+  <data name="LayoutsTileScreen" xml:space="preserve">
+    <value>{0} screen</value>
+  </data>
+  <data name="LayoutsTileScreens" xml:space="preserve">
+    <value>{0} screens</value>
+  </data>
+  <data name="LayoutsRenameTaken" xml:space="preserve">
+    <value>A layout named "{0}" exists already.</value>
+  </data>
+  <data name="LayoutsDeleteQuestion" xml:space="preserve">
+    <value>Delete the layout "{0}"? The pictures stay in the stock, saved scenes stay as they are.</value>
+  </data>
+  <data name="AppNotKept" xml:space="preserve">
+    <value>(not kept)</value>
+  </data>
+  <data name="AppConfigurationRecovered" xml:space="preserve">
+    <value>control.json was unreadable and was set aside as {0}. The identity of this control was recovered from it, so the paired displays find it again by themselves - they arrive as pairing requests, because their tokens went with the file. Allow them here; nothing has to be done at the devices.</value>
+  </data>
+  <data name="AppConfigurationReplaced" xml:space="preserve">
+    <value>control.json was unreadable and was set aside as {0}. This control started with defaults - and with a new identity, so paired displays discard its announcements and will not appear here by themselves. The pairing has to be reset at each device.</value>
+  </data>
+  <data name="AppPortTaken" xml:space="preserve">
+    <value>Port {0} is already in use.
+
+Another DnDOverlay control is probably running already - look for its window before starting a second one. Otherwise change "Port" in {1} and start again; the displays find the new one by themselves.</value>
+  </data>
+  <data name="PowerBatteryLow" xml:space="preserve">
+    <value>This control's battery is at {0} %. When it runs out, every display loses its control - plug it in.</value>
+  </data>
+  <data name="DeskUnnamed" xml:space="preserve">
+    <value>Unnamed</value>
+  </data>
+  <data name="DeskUnnamedBegun" xml:space="preserve">
+    <value>Unnamed - begun {0:d}, {1} picture(s)</value>
+  </data>
+  <data name="DeskUnnamedCampaign" xml:space="preserve">
+    <value>Unnamed campaign (begun {0:d})</value>
+  </data>
+  <data name="DeskOpened" xml:space="preserve">
+    <value>Campaign "{0}" opened - {1} picture(s), {2:0.#} MB, {3} scene(s)</value>
+  </data>
+  <data name="DeskReconstructed" xml:space="preserve">
+    <value>its inventory could not be read and was rebuilt from the folder</value>
+  </data>
+  <data name="DeskAdopted" xml:space="preserve">
+    <value>{0} picture(s) taken in from the folder</value>
+  </data>
+  <data name="DeskDuplicates" xml:space="preserve">
+    <value>{0} duplicate(s) removed</value>
+  </data>
+  <data name="DeskMissing" xml:space="preserve">
+    <value>{0} picture(s) missing: {1}</value>
+  </data>
+  <data name="DeskForeign" xml:space="preserve">
+    <value>{0} foreign file(s) left alone</value>
+  </data>
+  <data name="DeskUnreadableScenes" xml:space="preserve">
+    <value>{0} scene file(s) could not be read: {1}</value>
+  </data>
+  <data name="IntakeNothingUsable" xml:space="preserve">
+    <value>Nothing in that could be taken in.</value>
+  </data>
+  <data name="IntakeRunGoing" xml:space="preserve">
+    <value>A run is going. Break it off first, or wait for it.</value>
+  </data>
+  <data name="IntakeBackgroundRest" xml:space="preserve">
+    <value>{0} is the background; the other {1} went into the stock only.</value>
+  </data>
+  <data name="IntakeTakingOne" xml:space="preserve">
+    <value>Taking {0} in - this can take a few seconds for a large picture ...</value>
+  </data>
+  <data name="IntakeProgressOf" xml:space="preserve">
+    <value>{0} of {1} ... {2}</value>
+  </data>
+  <data name="IntakeTaken" xml:space="preserve">
+    <value>{0} taken in</value>
+  </data>
+  <data name="IntakeAlreadyPresent" xml:space="preserve">
+    <value>{0} already in the stock</value>
+  </data>
+  <data name="IntakeRefused" xml:space="preserve">
+    <value>{0} refused ({1})</value>
+  </data>
+  <data name="IntakeTolerated" xml:space="preserve">
+    <value>{0} in a format that is not assured ({1})</value>
+  </data>
+  <data name="IntakeNothingCame" xml:space="preserve">
+    <value>Nothing came in.</value>
+  </data>
+  <data name="IntakeBrokenOff" xml:space="preserve">
+    <value>{0} - broken off, what came in stays.</value>
+  </data>
+  <data name="EntrancesNothingCameBack" xml:space="preserve">
+    <value>Nothing came back.</value>
+  </data>
+  <data name="LogPanelNotConnected" xml:space="preserve">
+    <value>{0} - not connected</value>
+  </data>
+  <data name="LogPanelOnlyThese" xml:space="preserve">
+    <value>Only these</value>
+  </data>
+  <data name="LogPanelShowAll" xml:space="preserve">
+    <value>Show all</value>
+  </data>
+  <data name="LogPanelLinesDropped" xml:space="preserve">
+    <value>... {0} lines dropped before this view saw them</value>
+  </data>
+  <data name="MainNoCampaign" xml:space="preserve">
+    <value>No campaign open</value>
+  </data>
+  <data name="MainNoticeOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="MainClearAll" xml:space="preserve">
+    <value>Clear all</value>
+  </data>
+  <data name="MainSendToAll" xml:space="preserve">
+    <value>Send to all</value>
+  </data>
+  <data name="MainDevices" xml:space="preserve">
+    <value>Devices ...</value>
+  </data>
+  <data name="MainLog" xml:space="preserve">
+    <value>Log</value>
+  </data>
+  <data name="MainSettings" xml:space="preserve">
+    <value>Settings ...</value>
+  </data>
+  <data name="MainDockPanel" xml:space="preserve">
+    <value>Dock panel</value>
+  </data>
+  <data name="MainPinned" xml:space="preserve">
+    <value>Pinned</value>
+  </data>
+  <data name="MainDockLog" xml:space="preserve">
+    <value>Dock log</value>
+  </data>
+  <data name="MainEdgeLeft" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="MainEdgeRight" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="MainEdgeTop" xml:space="preserve">
+    <value>Top</value>
+  </data>
+  <data name="MainEdgeBottom" xml:space="preserve">
+    <value>Bottom</value>
+  </data>
+  <data name="MainBackgroundOnePicture" xml:space="preserve">
+    <value>A background takes one picture.</value>
+  </data>
+  <data name="MainNotInStock" xml:space="preserve">
+    <value>This picture is not in the stock of the open campaign.</value>
+  </data>
+  <data name="MainNothingToUndo" xml:space="preserve">
+    <value>Nothing to undo.</value>
+  </data>
+  <data name="MainUndone" xml:space="preserve">
+    <value>Undone: {0}.</value>
+  </data>
+  <data name="MainNothingToRedo" xml:space="preserve">
+    <value>Nothing to redo.</value>
+  </data>
+  <data name="MainRedone" xml:space="preserve">
+    <value>Redone: {0}.</value>
+  </data>
+  <data name="RecordingAddNamed" xml:space="preserve">
+    <value>Add "{0}"</value>
+  </data>
+  <data name="RecordingAddPictures" xml:space="preserve">
+    <value>Add {0} pictures</value>
+  </data>
+  <data name="RecordingRemoveNamed" xml:space="preserve">
+    <value>Remove "{0}"</value>
+  </data>
+  <data name="RecordingRemovePicture" xml:space="preserve">
+    <value>Remove picture</value>
+  </data>
+  <data name="RecordingRemovePictures" xml:space="preserve">
+    <value>Remove {0} pictures</value>
+  </data>
+  <data name="RecordingMoveNamed" xml:space="preserve">
+    <value>Move "{0}" to {1}</value>
+  </data>
+  <data name="RecordingMovePicture" xml:space="preserve">
+    <value>Move picture to {0}</value>
+  </data>
+  <data name="RecordingMovePictures" xml:space="preserve">
+    <value>Move {0} pictures to {1}</value>
+  </data>
+  <data name="RecordingCopyNamed" xml:space="preserve">
+    <value>Copy "{0}" to {1}</value>
+  </data>
+  <data name="RecordingCopyPicture" xml:space="preserve">
+    <value>Copy picture to {0}</value>
+  </data>
+  <data name="RecordingCopyPictures" xml:space="preserve">
+    <value>Copy {0} pictures to {1}</value>
+  </data>
+  <data name="RecordingSendNamed" xml:space="preserve">
+    <value>Send "{0}" to all</value>
+  </data>
+  <data name="RecordingSendPictures" xml:space="preserve">
+    <value>Send {0} pictures to all</value>
+  </data>
+  <data name="RecordingSetBackground" xml:space="preserve">
+    <value>Set background "{0}" on {1}</value>
+  </data>
+  <data name="RecordingSetBackgroundOnAll" xml:space="preserve">
+    <value>Set background "{0}" on all</value>
+  </data>
+  <data name="RecordingRemoveBackground" xml:space="preserve">
+    <value>Remove background from {0}</value>
+  </data>
+  <data name="RecordingClear" xml:space="preserve">
+    <value>Clear {0}</value>
+  </data>
+  <data name="RecordingLoadScene" xml:space="preserve">
+    <value>Load scene onto {0}</value>
+  </data>
+  <data name="RecordingLoadLayout" xml:space="preserve">
+    <value>Load layout</value>
+  </data>
+  <data name="RecordingClearAll" xml:space="preserve">
+    <value>Clear all</value>
+  </data>
+  <data name="ScreenTileImages" xml:space="preserve">
+    <value>Images</value>
+  </data>
+  <data name="ScreenTileWindows" xml:space="preserve">
+    <value>Windows</value>
+  </data>
+  <data name="ScreenTileBackground" xml:space="preserve">
+    <value>Background</value>
+  </data>
+  <data name="ScreenTileUnlockAll" xml:space="preserve">
+    <value>Unlock all</value>
+  </data>
+  <data name="ScreenTileBackgroundStrip" xml:space="preserve">
+    <value>Background</value>
+  </data>
+  <data name="ScreenTileDeviceNotConnected" xml:space="preserve">
+    <value>Device not connected.</value>
+  </data>
+  <data name="ScreenTileDiagnosisDevice" xml:space="preserve">
+    <value>{0} · {1} · version {2} · {3}</value>
+  </data>
+  <data name="ScreenTileDiagnosisWaiting" xml:space="preserve">
+    <value>Waiting for the first reading ...</value>
+  </data>
+  <data name="ScreenTileDiagnosisFrames" xml:space="preserve">
+    <value>Frames {0:0.0} / {1:0.0} / {2:0.0} ms ({3}) · {4} stalls</value>
+  </data>
+  <data name="ScreenTileDiagnosisFramesTooFew" xml:space="preserve">
+    <value>Frames: too few to say</value>
+  </data>
+  <data name="ScreenTileDiagnosisLoad" xml:space="preserve">
+    <value>CPU {0:0.0} % · loading {1}, waiting {2}</value>
+  </data>
+  <data name="ScreenTileDiagnosisStore" xml:space="preserve">
+    <value>Store {0} pictures, {1} MB · memory {2} / {3} MB</value>
+  </data>
+  <data name="ScreenTileStateActive" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="ScreenTileStateFrozen" xml:space="preserve">
+    <value>Frozen</value>
+  </data>
+  <data name="ScreenTileStateDiagnostic" xml:space="preserve">
+    <value>Diagnostic</value>
+  </data>
+  <data name="ScreenTileStateInactive" xml:space="preserve">
+    <value>Inactive</value>
+  </data>
+  <data name="ThumbnailWindowElevated" xml:space="preserve">
+    <value>{0} - runs elevated, cannot be moved</value>
+  </data>
+  <data name="ThumbnailWindowInactive" xml:space="preserve">
+    <value>{0} - screen inactive</value>
+  </data>
+  <data name="ThumbnailWindowNotAllowed" xml:space="preserve">
+    <value>{0} - device only reports</value>
+  </data>
+  <data name="GripsMinimise" xml:space="preserve">
+    <value>Minimise</value>
+  </data>
+  <data name="GripsMaximise" xml:space="preserve">
+    <value>Maximise</value>
+  </data>
+  <data name="GripsRestore" xml:space="preserve">
+    <value>Restore</value>
+  </data>
+  <data name="GripsFillScreen" xml:space="preserve">
+    <value>Fill this screen</value>
+  </data>
+</root>

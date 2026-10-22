@@ -35,19 +35,19 @@ internal sealed class CampaignPanel : Border
     private readonly LayoutsPanel _layouts;
     private readonly IntakeRunner _intake;
 
-    private readonly ToggleButton _picturesTab = Tab("Pictures");
-    private readonly ToggleButton _scenesTab = Tab("Scenes");
-    private readonly ToggleButton _layoutsTab = Tab("Layouts");
+    private readonly ToggleButton _picturesTab = Tab(Strings.CampaignPanelTabPictures);
+    private readonly ToggleButton _scenesTab = Tab(Strings.CampaignPanelTabScenes);
+    private readonly ToggleButton _layoutsTab = Tab(Strings.CampaignPanelTabLayouts);
 
     /// <summary>"Save layout" at the end of the search bar of its tab - where the new entry appears right after (Part 7).</summary>
-    private readonly Button _saveLayout = Small("Save layout ...");
+    private readonly Button _saveLayout = Small(Strings.CampaignPanelSaveLayout);
     private readonly TextBox _search = new() { MinWidth = 120, Padding = new Thickness(4, 2, 4, 2), VerticalContentAlignment = VerticalAlignment.Center };
     private readonly Button _clear = Small("×");
     private readonly Button _sortButton = Small(string.Empty);
     private readonly Button _smaller = Small("−");
     private readonly Button _larger = Small("+");
     private readonly TextBox _address = new() { MinWidth = 140, Padding = new Thickness(4, 2, 4, 2) };
-    private readonly Button _breakOff = Small("Break off");
+    private readonly Button _breakOff = Small(Strings.CampaignPanelBreakOff);
     private readonly StackPanel _grips = new() { Orientation = Orientation.Horizontal };
     private readonly WrapPanel _footer = new() { Margin = new Thickness(0, 6, 0, 0) };
     private readonly DispatcherTimer _typing = new() { Interval = TimeSpan.FromMilliseconds(150) };
@@ -252,10 +252,10 @@ internal sealed class CampaignPanel : Border
     {
         _sortButton.Content = _sort switch
         {
-            PanelSort.Oldest => "Oldest ↑",
-            PanelSort.NameAscending => "Name A–Z",
-            PanelSort.NameDescending => "Name Z–A",
-            _ => "Newest ↓",
+            PanelSort.Oldest => Strings.CampaignPanelSortOldest,
+            PanelSort.NameAscending => Strings.CampaignPanelSortNameAscending,
+            PanelSort.NameDescending => Strings.CampaignPanelSortNameDescending,
+            _ => Strings.CampaignPanelSortNewest,
         };
 
         switch (_open)
@@ -406,17 +406,17 @@ internal sealed class CampaignPanel : Border
     /// <summary>The three entrances besides a drop: files chosen, the clipboard, an address (Part 7).</summary>
     private void BuildFooter()
     {
-        var files = Small("Add files ...");
-        var paste = Small("Paste");
-        var fetch = Small("Fetch");
+        var files = Small(Strings.CampaignPanelAddFiles);
+        var paste = Small(Strings.CampaignPanelPaste);
+        var fetch = Small(Strings.CampaignPanelFetch);
 
         files.Click += async (_, _) =>
         {
             var dialog = new OpenFileDialog
             {
-                Title = "Pictures for the stock",
+                Title = Strings.CampaignPanelFilesTitle,
                 Multiselect = true,
-                Filter = "Pictures|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.avif;*.tif;*.tiff;*.psd;*.rptok|All files|*.*",
+                Filter = $"{Strings.CampaignPanelFilterPictures}|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.avif;*.tif;*.tiff;*.psd;*.rptok|{Strings.CampaignPanelFilterAll}|*.*",
             };
 
             if (dialog.ShowDialog(Window.GetWindow(this)) is true)

@@ -87,66 +87,72 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
     // ---- recorded: what lays, takes or moves a picture
 
     public Task<ItemId> AddItemAsync(ScreenRef screen, AssetRef asset, Point? position, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], _ => $"Add \"{asset.Name}\"", () => _inner.AddItemAsync(screen, asset, position, cancellationToken));
+        RecordAsync([screen], _ => Strings.RecordingAddNamed(asset.Name), () => _inner.AddItemAsync(screen, asset, position, cancellationToken));
 
     public Task<IReadOnlyList<ItemId>> AddItemsAsync(ScreenRef screen, IReadOnlyList<AssetRef> assets, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], _ => Pictures("Add", assets), () => _inner.AddItemsAsync(screen, assets, cancellationToken));
+        RecordAsync(
+            [screen],
+            _ => Pictures(assets, Strings.RecordingAddPictures, Strings.RecordingAddNamed),
+            () => _inner.AddItemsAsync(screen, assets, cancellationToken));
 
     public Task RemoveItemAsync(ScreenRef screen, ItemId item, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], before => Items("Remove", before, screen, [item]), () => _inner.RemoveItemAsync(screen, item, cancellationToken));
+        RecordAsync([screen], before => Removed(before, screen, [item]), () => _inner.RemoveItemAsync(screen, item, cancellationToken));
 
     public Task RemoveItemsAsync(ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], before => Items("Remove", before, screen, items), () => _inner.RemoveItemsAsync(screen, items, cancellationToken));
+        RecordAsync([screen], before => Removed(before, screen, items), () => _inner.RemoveItemsAsync(screen, items, cancellationToken));
 
     public Task MoveItemAsync(ScreenRef source, ScreenRef target, ItemId item, Point? position, CancellationToken cancellationToken = default) =>
         RecordAsync(
             [source, target],
-            before => $"{Items("Move", before, source, [item])} to {Label(target)}",
+            before => Moved(before, source, [item], Label(target)),
             () => _inner.MoveItemAsync(source, target, item, position, cancellationToken));
 
     public Task MoveItemsAsync(ScreenRef source, ScreenRef target, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default) =>
         RecordAsync(
             [source, target],
-            before => $"{Items("Move", before, source, items)} to {Label(target)}",
+            before => Moved(before, source, items, Label(target)),
             () => _inner.MoveItemsAsync(source, target, items, cancellationToken));
 
     public Task<ItemId?> CopyItemAsync(ScreenRef source, ScreenRef target, ItemId item, Point? position, CancellationToken cancellationToken = default) =>
         RecordAsync(
             [source, target],
-            before => $"{Items("Copy", before, source, [item])} to {Label(target)}",
+            before => Copied(before, source, [item], Label(target)),
             () => _inner.CopyItemAsync(source, target, item, position, cancellationToken));
 
     public Task<IReadOnlyList<ItemId>> CopyItemsAsync(ScreenRef source, ScreenRef target, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default) =>
         RecordAsync(
             [source, target],
-            before => $"{Items("Copy", before, source, items)} to {Label(target)}",
+            before => Copied(before, source, items, Label(target)),
             () => _inner.CopyItemsAsync(source, target, items, cancellationToken));
 
     public Task SetBackgroundAsync(ScreenRef screen, AssetRef asset, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], _ => $"Set background \"{asset.Name}\" on {Label(screen)}", () => _inner.SetBackgroundAsync(screen, asset, cancellationToken));
+        RecordAsync([screen], _ => Strings.RecordingSetBackground(asset.Name, Label(screen)), () => _inner.SetBackgroundAsync(screen, asset, cancellationToken));
 
     public Task SetBackgroundOnAllAsync(AssetRef asset, CancellationToken cancellationToken = default) =>
-        RecordAsync(null, _ => $"Set background \"{asset.Name}\" on all", () => _inner.SetBackgroundOnAllAsync(asset, cancellationToken));
+        RecordAsync(null, _ => Strings.RecordingSetBackgroundOnAll(asset.Name), () => _inner.SetBackgroundOnAllAsync(asset, cancellationToken));
 
     public Task ClearBackgroundAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], _ => $"Remove background from {Label(screen)}", () => _inner.ClearBackgroundAsync(screen, cancellationToken));
+        RecordAsync([screen], _ => Strings.RecordingRemoveBackground(Label(screen)), () => _inner.ClearBackgroundAsync(screen, cancellationToken));
 
     public Task ClearItemsAsync(ScreenRef screen, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], _ => $"Clear {Label(screen)}", () => _inner.ClearItemsAsync(screen, cancellationToken));
+        RecordAsync([screen], _ => Strings.RecordingClear(Label(screen)), () => _inner.ClearItemsAsync(screen, cancellationToken));
 
     public Task<IReadOnlyList<ItemId>> LoadSceneAsync(ScreenRef screen, SceneState scene, SceneLoad mode, CancellationToken cancellationToken = default) =>
-        RecordAsync([screen], _ => $"Load scene onto {Label(screen)}", () => _inner.LoadSceneAsync(screen, scene, mode, cancellationToken));
+        RecordAsync([screen], _ => Strings.RecordingLoadScene(Label(screen)), () => _inner.LoadSceneAsync(screen, scene, mode, cancellationToken));
 
     public Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> LoadLayoutAsync(
         IReadOnlyList<LayoutScene> scenes, LayoutLoad mode, CancellationToken cancellationToken = default) =>
-        RecordAsync(null, _ => "Load layout", () => _inner.LoadLayoutAsync(scenes, mode, cancellationToken));
+        RecordAsync(null, _ => Strings.RecordingLoadLayout, () => _inner.LoadLayoutAsync(scenes, mode, cancellationToken));
 
     public Task ClearAllAsync(CancellationToken cancellationToken = default) =>
-        RecordAsync(null, _ => "Clear all", () => _inner.ClearAllAsync(cancellationToken));
+        RecordAsync(null, _ => Strings.RecordingClearAll, () => _inner.ClearAllAsync(cancellationToken));
 
     public Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> SendToAllAsync(
         IReadOnlyList<AssetRef> assets, CancellationToken cancellationToken = default) =>
-        RecordAsync(null, _ => $"{Pictures("Send", assets)} to all", () => _inner.SendToAllAsync(assets, cancellationToken));
+        RecordAsync(
+            null,
+            _ => Pictures(assets, Strings.RecordingSendPictures, Strings.RecordingSendNamed),
+            () => _inner.SendToAllAsync(assets, cancellationToken));
 
     // ---- the two that change the timeline itself
 
@@ -391,18 +397,50 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
     private string Label(ScreenRef screen) =>
         _inner.Screens.FirstOrDefault(view => view.Screen == screen)?.Info.Label ?? screen.Screen.Value;
 
-    private static string Pictures(string verb, IReadOnlyList<AssetRef> assets) =>
-        assets.Count == 1 ? $"{verb} \"{assets[0].Name}\"" : $"{verb} {assets.Count} pictures";
+    /// <summary>
+    /// A step on pictures from the stock in its own words: one by name, several by count. Each verb
+    /// brings its whole sentence, because the languages put the verb in different places.
+    /// </summary>
+    private static string Pictures(IReadOnlyList<AssetRef> assets, Func<int, string> several, Func<string, string> named) =>
+        assets.Count == 1 ? named(assets[0].Name) : several(assets.Count);
 
-    private static string Items(string verb, IReadOnlyDictionary<ScreenRef, SceneState> before, ScreenRef screen, IReadOnlyList<ItemId> items)
+    private static string Removed(IReadOnlyDictionary<ScreenRef, SceneState> before, ScreenRef screen, IReadOnlyList<ItemId> items) =>
+        Items(before, screen, items, Strings.RecordingRemovePictures, Strings.RecordingRemovePicture, Strings.RecordingRemoveNamed);
+
+    private static string Moved(IReadOnlyDictionary<ScreenRef, SceneState> before, ScreenRef source, IReadOnlyList<ItemId> items, string target) =>
+        Items(
+            before,
+            source,
+            items,
+            count => Strings.RecordingMovePictures(count, target),
+            Strings.RecordingMovePicture(target),
+            name => Strings.RecordingMoveNamed(name, target));
+
+    private static string Copied(IReadOnlyDictionary<ScreenRef, SceneState> before, ScreenRef source, IReadOnlyList<ItemId> items, string target) =>
+        Items(
+            before,
+            source,
+            items,
+            count => Strings.RecordingCopyPictures(count, target),
+            Strings.RecordingCopyPicture(target),
+            name => Strings.RecordingCopyNamed(name, target));
+
+    /// <summary>A step on pictures already lying on a screen: one by name, one without a name, several by count.</summary>
+    private static string Items(
+        IReadOnlyDictionary<ScreenRef, SceneState> before,
+        ScreenRef screen,
+        IReadOnlyList<ItemId> items,
+        Func<int, string> several,
+        string unnamed,
+        Func<string, string> named)
     {
         if (items.Count != 1)
         {
-            return $"{verb} {items.Count} pictures";
+            return several(items.Count);
         }
 
-        var named = before.GetValueOrDefault(screen)?.Items.OfType<ImageItem>().FirstOrDefault(item => item.ItemId == items[0]);
+        var found = before.GetValueOrDefault(screen)?.Items.OfType<ImageItem>().FirstOrDefault(item => item.ItemId == items[0]);
 
-        return named is null ? $"{verb} picture" : $"{verb} \"{named.Name}\"";
+        return found is null ? unnamed : named(found.Name);
     }
 }

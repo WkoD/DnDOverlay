@@ -243,8 +243,9 @@ old place. If anything fails, everything stays where it was. The open campaign i
 **Language** is *Automatic* (as Windows), *English* or *Deutsch* — for the control in *Settings*, for
 each display in its device band, independently of one another. Log lines follow a change at once, in
 the panel and in the files under `logs\`, and the file notes where it switched; windows and screens
-take it at the next start. A display's setup screen, rescue mark and diagnostic bar are translated;
-the control's own windows are still English only.
+take it at the next start. Everything the two applications show is translated - windows, menus,
+the device bands, the reasons on a tile, why a picture was refused; names, labels and values the DM
+chose stay as they are.
 
 **The log** (☰ → *Log*) is a panel beside the stage, at another edge than the campaign panel — the
 opposite one unless *Dock log* says otherwise; edge, size and whether it is shown are kept. It shows

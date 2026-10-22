@@ -29,8 +29,8 @@ internal sealed class NameDialog : Window
 
         _name = new TextBox { Text = suggestion, Margin = new Thickness(0, 6, 0, 0), Padding = new Thickness(4) };
 
-        var ok = new Button { Content = "OK", IsDefault = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(16, 4, 16, 4) };
+        var ok = new Button { Content = Strings.NameOk, IsDefault = true, Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = Strings.NameCancel, IsCancel = true, Padding = new Thickness(16, 4, 16, 4) };
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
 
@@ -79,11 +79,11 @@ internal sealed class NameDialog : Window
     /// <summary>What stands in the way, said so the DM knows what to change.</summary>
     internal static string Explain(NameProblem problem) => problem switch
     {
-        NameProblem.Empty => "A name is needed.",
-        NameProblem.ForbiddenCharacter => "A name cannot contain < > : \" / \\ | ? * - Windows does not allow them in file names.",
-        NameProblem.ReservedName => "CON, PRN, AUX, NUL, COM1-9 and LPT1-9 are reserved by Windows.",
-        NameProblem.BadEnding => "A name cannot end in a dot or a space.",
-        NameProblem.TooLong => $"A name can have at most {FileNames.MaxLength} characters.",
+        NameProblem.Empty => Strings.NameEmpty,
+        NameProblem.ForbiddenCharacter => Strings.NameForbiddenCharacter,
+        NameProblem.ReservedName => Strings.NameReserved,
+        NameProblem.BadEnding => Strings.NameBadEnding,
+        NameProblem.TooLong => Strings.NameTooLong(FileNames.MaxLength),
         _ => problem.ToString(),
     };
 }

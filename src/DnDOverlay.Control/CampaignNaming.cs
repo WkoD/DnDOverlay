@@ -12,7 +12,7 @@ internal static class CampaignNaming
     /// <summary>Asks the unnamed campaign for its first name; false when the DM cancelled.</summary>
     internal static bool Ask(Window owner, CampaignDesk desk)
     {
-        while (NameDialog.Ask(owner, "Name the campaign", "This campaign has no name yet. Saving needs a named campaign - what is it called?", string.Empty) is { } typed)
+        while (NameDialog.Ask(owner, Strings.CampaignNamingTitle, Strings.CampaignNamingPrompt, string.Empty) is { } typed)
         {
             switch (desk.Rename(typed))
             {
@@ -20,11 +20,11 @@ internal static class CampaignNaming
                     return true;
 
                 case CampaignOutcome.Taken:
-                    MessageBox.Show(owner, $"A campaign named \"{typed}\" exists already.", "Name the campaign");
+                    MessageBox.Show(owner, Strings.CampaignNamingTaken(typed), Strings.CampaignNamingTitle);
                     break;
 
                 case CampaignOutcome.Busy:
-                    MessageBox.Show(owner, "The folder is in use right now - try again in a moment.", "Name the campaign");
+                    MessageBox.Show(owner, Strings.CampaignNamingBusy, Strings.CampaignNamingTitle);
                     break;
 
                 default:

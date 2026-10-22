@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using DnDOverlay.Core;
+using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
 
 namespace DnDOverlay.Control;
@@ -64,7 +65,7 @@ internal sealed class DevicesWindow : Window, IDisposable
         _bands.Changed += (_, _) => ShowBands(force: true);
         _bands.ScenesSaved += (_, _) => ScenesSaved?.Invoke(this, EventArgs.Empty);
 
-        Title = "Devices";
+        Title = Strings.DevicesTitle;
         Width = 1180;
         Height = 760;
 
@@ -74,21 +75,21 @@ internal sealed class DevicesWindow : Window, IDisposable
         // a table waiting for. There is no badge and no notification for it - pairing is done
         // deliberately and while setting up, so an alarm for something one just triggered oneself
         // would be noise (Part 7).
-        panel.Children.Add(Heading("Waiting for a decision", first: true));
+        panel.Children.Add(Heading(Strings.DevicesWaitingHeading, first: true));
         panel.Children.Add(_waiting);
         panel.Children.Add(Decisions());
 
-        panel.Children.Add(Heading("Devices"));
+        panel.Children.Add(Heading(Strings.DevicesListHeading));
         panel.Children.Add(_tree);
 
-        panel.Children.Add(Heading("Turned away"));
+        panel.Children.Add(Heading(Strings.DevicesRefusedHeading));
         panel.Children.Add(_refused);
         panel.Children.Add(TakeBack());
 
-        panel.Children.Add(Heading("This control"));
+        panel.Children.Add(Heading(Strings.DevicesThisControlHeading));
         panel.Children.Add(new TextBlock
         {
-            Text = $"Reachable at {address}. Type that at a display when discovery does not get through.",
+            Text = Strings.DevicesReachableAt(address),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 8),
         });
@@ -160,7 +161,7 @@ internal sealed class DevicesWindow : Window, IDisposable
             // (Part 4).
             if (!_listening.IsCancellationRequested)
             {
-                _status.Text = "The event stream ended - close and reopen this window for a fresh picture.";
+                _status.Text = Strings.DevicesStreamEnded;
             }
         }
         catch (OperationCanceledException)
@@ -247,7 +248,7 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         if (devices.Count == 0)
         {
-            _tree.Items.Add(new TreeViewItem { Header = "No device paired yet." });
+            _tree.Items.Add(new TreeViewItem { Header = Strings.DevicesNonePaired });
         }
 
         Reach();
@@ -273,7 +274,7 @@ internal sealed class DevicesWindow : Window, IDisposable
             _bandsHost.Children.Clear();
             _bandsHost.Children.Add(new TextBlock
             {
-                Text = "Choose a device or one of its screens on the left - its settings stand here.",
+                Text = Strings.DevicesChooseOnLeft,
                 TextWrapping = TextWrapping.Wrap,
                 Opacity = 0.8,
             });
@@ -344,13 +345,12 @@ internal sealed class DevicesWindow : Window, IDisposable
     {
         if (!device.Connected)
         {
-            return $"{device.Name} - not connected";
+            return Strings.DevicesNotConnected(device.Name);
         }
 
-        var latency = device.RoundTrip is { } trip ? $"{trip.TotalMilliseconds:F0} ms" : "measuring";
-
-        return $"{device.Name} - {device.Address}, {latency}, "
-            + $"version {device.AppVersion} (protocol {device.ProtocolVersion})";
+        return device.RoundTrip is { } trip
+            ? Strings.DevicesDeviceLine(device.Name, device.Address, trip.TotalMilliseconds, device.AppVersion, device.ProtocolVersion)
+            : Strings.DevicesDeviceLineMeasuring(device.Name, device.Address, device.AppVersion, device.ProtocolVersion);
     }
 
     /// <summary>
@@ -363,9 +363,18 @@ internal sealed class DevicesWindow : Window, IDisposable
         var size = $"{screen.Info.Size.Width}x{screen.Info.Size.Height}";
 
         return screen.Suppressed is { } reason
-            ? $"{screen.Info.Label} - {size} - {screen.State}, not played on: {reason}"
-            : $"{screen.Info.Label} - {size} - {screen.State}";
+            ? Strings.DevicesScreenLineSuppressed(screen.Info.Label, size, DeviceBands.StateLabel(screen.State), Reason(reason))
+            : $"{screen.Info.Label} - {size} - {DeviceBands.StateLabel(screen.State)}";
     }
+
+    /// <summary>Why a screen is not played on, as the DM reads it; the enum stays what is stored and compared.</summary>
+    private static string Reason(SuppressReason reason) => reason switch
+    {
+        SuppressReason.Unavailable => Strings.DevicesSuppressUnavailable,
+        SuppressReason.ControlWindow => Strings.DevicesSuppressControlWindow,
+        SuppressReason.HiddenAtDevice => Strings.DevicesSuppressHiddenAtDevice,
+        _ => reason.ToString(),
+    };
 
     private void Show(IReadOnlyList<PendingPairing> pending, IReadOnlyList<RefusedDevice> refused)
     {
@@ -404,7 +413,7 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         if (candidates.Count == 0)
         {
-            _status.Text = "Every known device is connected - there is none this one could be.";
+            _status.Text = Strings.DevicesNoneToAdopt;
             return;
         }
 
@@ -414,16 +423,16 @@ internal sealed class DevicesWindow : Window, IDisposable
         }
 
         _status.Text = await _pairing.AdoptAsync(request, known).ConfigureAwait(true)
-            ? $"{request.Name} came in as {known.Name}. Screens it reports under new ids stand beside the old ones - use \"Take over\" in a screen's band to map them."
-            : $"{request.Name} could not be assigned - it is no longer waiting, or {known.Name} connected meanwhile.";
+            ? Strings.DevicesAdopted(request.Name, known.Name)
+            : Strings.DevicesNotAdopted(request.Name, known.Name);
     }
 
     private WrapPanel Decisions()
     {
-        var allow = new Button { Content = "Allow", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var deny = new Button { Content = "Reject", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var own = new Button { Content = "Take on as its own device", Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
-        var known = new Button { Content = "Assign to a known device ...", Padding = new Thickness(12, 6, 12, 6) };
+        var allow = new Button { Content = Strings.DevicesAllow, Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var deny = new Button { Content = Strings.DevicesReject, Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var own = new Button { Content = Strings.DevicesTakeOnAsOwn, Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var known = new Button { Content = Strings.DevicesAssignToKnown, Padding = new Thickness(12, 6, 12, 6) };
 
         allow.Click += (_, _) => DecideAsync(request => _pairing.AllowAsync(request));
         deny.Click += (_, _) => DecideAsync(request => _pairing.DenyAsync(request));
@@ -444,7 +453,7 @@ internal sealed class DevicesWindow : Window, IDisposable
     {
         if (_waiting.SelectedItem is not PendingEntry entry)
         {
-            _status.Text = "Nothing is waiting.";
+            _status.Text = Strings.DevicesNothingWaiting;
             return;
         }
 
@@ -455,7 +464,7 @@ internal sealed class DevicesWindow : Window, IDisposable
         // A decision that said something of its own keeps it.
         if (_status.Text == before)
         {
-            _status.Text = $"Decided about {entry.Request.Name}.";
+            _status.Text = Strings.DevicesDecided(entry.Request.Name);
         }
     }
 
@@ -467,7 +476,7 @@ internal sealed class DevicesWindow : Window, IDisposable
     {
         var button = new Button
         {
-            Content = "Take the rejection back",
+            Content = Strings.DevicesTakeRejectionBack,
             Padding = new Thickness(12, 6, 12, 6),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
@@ -476,7 +485,7 @@ internal sealed class DevicesWindow : Window, IDisposable
         {
             if (_refused.SelectedItem is not RefusedEntry entry)
             {
-                _status.Text = "Nothing has been turned away.";
+                _status.Text = Strings.DevicesNothingRefused;
                 return;
             }
 
@@ -484,7 +493,7 @@ internal sealed class DevicesWindow : Window, IDisposable
 
             // Said out loud, or the grip looks as if it did nothing: the device only tries again
             // after a deliberate pause (Part 4).
-            _status.Text = $"{entry.Device.Name} may knock again - it can take up to five minutes.";
+            _status.Text = Strings.DevicesMayKnockAgain(entry.Device.Name);
         };
 
         return button;
@@ -498,7 +507,7 @@ internal sealed class DevicesWindow : Window, IDisposable
     {
         var box = new CheckBox
         {
-            Content = "Accept new devices",
+            Content = Strings.DevicesAcceptNew,
             IsChecked = _session.AcceptNewDevices,
             Margin = new Thickness(0, 0, 0, 8),
         };
@@ -507,7 +516,7 @@ internal sealed class DevicesWindow : Window, IDisposable
         box.Unchecked += (_, _) =>
         {
             _session.AcceptNewDevices = false;
-            _status.Text = "Requests are only written to the log from now on.";
+            _status.Text = Strings.DevicesOnlyLogged;
         };
 
         return box;
@@ -522,7 +531,7 @@ internal sealed class DevicesWindow : Window, IDisposable
     {
         var button = new Button
         {
-            Content = "Search for orphaned devices",
+            Content = Strings.DevicesSearchOrphans,
             Padding = new Thickness(12, 6, 12, 6),
             HorizontalAlignment = HorizontalAlignment.Left,
             Margin = new Thickness(0, 0, 0, 8),
@@ -531,8 +540,7 @@ internal sealed class DevicesWindow : Window, IDisposable
         button.Click += async (_, _) =>
         {
             await _session.CallOrphansAsync(_listening.Token).ConfigureAwait(true);
-            _status.Text = "Calling for two minutes. Displays that lost their control more than a minute ago "
-                           + "appear under Waiting for a decision.";
+            _status.Text = Strings.DevicesCallingOrphans;
         };
 
         return button;
@@ -555,17 +563,16 @@ internal sealed class DevicesWindow : Window, IDisposable
         public override string ToString() => Request switch
         {
             { IsClone: true } =>
-                $"{Request.Name} at {Request.Address} - same DeviceId as a device that is already connected",
+                Strings.DevicesPendingClone(Request.Name, Request.Address),
 
             // Said, because it changes what the DM is looking at: this is almost always his own
             // display after the control lost control.json, not a stranger. The code still stands
             // beside it - a device that knows this control is the one an impostor would imitate
             // (Part 4).
             { BroughtUnknownToken: true } =>
-                $"{Request.Name} at {Request.Address}, code {Request.PairingCode} - brought a token "
-                + "this control does not know",
+                Strings.DevicesPendingUnknownToken(Request.Name, Request.Address, Request.PairingCode),
 
-            _ => $"{Request.Name} at {Request.Address}, code {Request.PairingCode}",
+            _ => Strings.DevicesPending(Request.Name, Request.Address, Request.PairingCode),
         };
     }
 
@@ -584,6 +591,16 @@ internal sealed class DevicesWindow : Window, IDisposable
     private sealed record RefusedEntry(RefusedDevice Device)
     {
         public override string ToString() =>
-            $"{Device.Name} - {Device.Reason}, last seen {Device.LastSeen:HH:mm}";
+            Strings.DevicesRefused(Device.Name, Reason(Device.Reason), Device.LastSeen);
+
+        /// <summary>The reason as the DM reads it; the enum stays what is stored and compared.</summary>
+        private static string Reason(RejectionReason reason) => reason switch
+        {
+            RejectionReason.Denied => Strings.DevicesRejectionDenied,
+            RejectionReason.InvalidToken => Strings.DevicesRejectionInvalidToken,
+            RejectionReason.LimitExceeded => Strings.DevicesRejectionLimitExceeded,
+            RejectionReason.DuplicateDevice => Strings.DevicesRejectionDuplicateDevice,
+            _ => reason.ToString(),
+        };
     }
 }

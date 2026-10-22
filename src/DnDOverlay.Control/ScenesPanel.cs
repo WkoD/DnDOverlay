@@ -43,7 +43,7 @@ internal sealed class ScenesPanel : Grid
     private readonly PanelTouch _touch;
     private readonly TextBlock _empty = new()
     {
-        Text = "No scene saved yet. Save one from a screen's menu: \"Save screen as scene ...\".",
+        Text = Strings.ScenesNoneSaved,
         TextWrapping = TextWrapping.Wrap,
         Opacity = 0.7,
         Margin = new Thickness(4),
@@ -141,7 +141,7 @@ internal sealed class ScenesPanel : Grid
 
         if (_desk.Open is not { } open)
         {
-            _empty.Text = "No campaign open.";
+            _empty.Text = Strings.ScenesNoCampaign;
             _empty.Visibility = Visibility.Visible;
             return;
         }
@@ -162,8 +162,8 @@ internal sealed class ScenesPanel : Grid
         }
 
         _empty.Text = open.Shelf.Scenes.Count == 0
-            ? "No scene saved yet. Save one from a screen's menu: \"Save screen as scene ...\"."
-            : "Nothing matches the filter.";
+            ? Strings.ScenesNoneSaved
+            : Strings.ScenesNoMatch;
         _empty.Visibility = _tiles.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -176,7 +176,7 @@ internal sealed class ScenesPanel : Grid
     {
         if (_desk.Open is null)
         {
-            _say("No campaign is open - open one, or add pictures to begin one. A scene lives in its campaign.");
+            _say(Strings.ScenesNoCampaignToSave);
             return;
         }
 
@@ -198,9 +198,9 @@ internal sealed class ScenesPanel : Grid
 
         var name = overwriting ?? NameDialog.Ask(
             owner,
-            "Save screen as scene",
-            $"Name of the scene from {label}:",
-            FileNames.Suggest($"Scene {label} {FileNames.Stamp(DateTimeOffset.Now)}"));
+            Strings.ScenesSaveTitle,
+            Strings.ScenesSavePrompt(label),
+            FileNames.Suggest(Strings.ScenesSuggestedName(label, FileNames.Stamp(DateTimeOffset.Now))));
 
         if (name is null)
         {
@@ -216,8 +216,8 @@ internal sealed class ScenesPanel : Grid
         {
             var answer = MessageBox.Show(
                 owner,
-                $"A scene named \"{name}\" exists already. Overwrite it?",
-                "Save screen as scene",
+                Strings.ScenesOverwriteQuestion(name),
+                Strings.ScenesSaveTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.No);
@@ -233,7 +233,7 @@ internal sealed class ScenesPanel : Grid
         if (outcome is ShelfOutcome.Done)
         {
             ControlLog.SceneSaved(_logger, name, scene.Items.Count);
-            _say($"Saved \"{name}\".");
+            _say(Strings.ScenesSaved(name));
             Refresh();
         }
     }
@@ -265,9 +265,7 @@ internal sealed class ScenesPanel : Grid
             Margin = new Thickness(0, 0, 6, 6),
             Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)),
             ClipToBounds = true,
-            ToolTip = string.Create(
-                CultureInfo.CurrentCulture,
-                $"{summary.Name} - {summary.Origin.Width}×{summary.Origin.Height}, saved {summary.SavedAt.LocalDateTime:g}"),
+            ToolTip = Strings.ScenesTileTip(summary.Name, summary.Origin.Width, summary.Origin.Height, summary.SavedAt.LocalDateTime),
         };
 
         tile.Children.Add(preview);
@@ -319,10 +317,10 @@ internal sealed class ScenesPanel : Grid
     private ContextMenu Menu(string name)
     {
         var menu = new ContextMenu();
-        var load = new MenuItem { Header = "Load on screen" };
-        var replace = new MenuItem { Header = "Replace" };
-        var add = new MenuItem { Header = "Add" };
-        var overwrite = new MenuItem { Header = "Overwrite with screen" };
+        var load = new MenuItem { Header = Strings.ScenesMenuLoad };
+        var replace = new MenuItem { Header = Strings.ScenesMenuReplace };
+        var add = new MenuItem { Header = Strings.ScenesMenuAdd };
+        var overwrite = new MenuItem { Header = Strings.ScenesMenuOverwrite };
 
         foreach (var view in _screens())
         {
@@ -337,10 +335,10 @@ internal sealed class ScenesPanel : Grid
         load.Items.Add(add);
 
         menu.Items.Add(load);
-        menu.Items.Add(Entry("Rename ...", () => Rename(name)));
+        menu.Items.Add(Entry(Strings.ScenesMenuRename, () => Rename(name)));
         menu.Items.Add(overwrite);
         menu.Items.Add(new Separator());
-        menu.Items.Add(Entry("Delete", () => Delete(name)));
+        menu.Items.Add(Entry(Strings.ScenesMenuDelete, () => Delete(name)));
 
         return menu;
     }
@@ -357,7 +355,7 @@ internal sealed class ScenesPanel : Grid
         }
         else
         {
-            _say("No screen to load onto.");
+            _say(Strings.ScenesNoScreen);
         }
     }
 
@@ -413,13 +411,13 @@ internal sealed class ScenesPanel : Grid
         ControlLog.SceneLoaded(_logger, name, how, scene.Items.Count, missing.Count);
 
         _say(missing.Count == 0
-            ? $"Loaded \"{name}\"."
-            : $"Loaded \"{name}\" - {missing.Count} of {pictures} pictures are missing and stand as placeholders.");
+            ? Strings.ScenesLoaded(name)
+            : Strings.ScenesLoadedMissing(name, missing.Count, pictures));
     }
 
     private void Rename(string name)
     {
-        if (NameDialog.Ask(Window.GetWindow(this)!, "Rename scene", "New name of the scene:", name) is not { } typed)
+        if (NameDialog.Ask(Window.GetWindow(this)!, Strings.ScenesRenameTitle, Strings.ScenesRenamePrompt, name) is not { } typed)
         {
             return;
         }
@@ -436,7 +434,7 @@ internal sealed class ScenesPanel : Grid
                 break;
 
             case ShelfOutcome.Taken:
-                _say($"A scene named \"{typed}\" exists already.");
+                _say(Strings.ScenesRenameTaken(typed));
                 break;
 
             default:
@@ -448,8 +446,8 @@ internal sealed class ScenesPanel : Grid
     {
         var answer = MessageBox.Show(
             Window.GetWindow(this)!,
-            $"Delete the scene \"{name}\"? The pictures stay in the stock.",
-            "Delete scene",
+            Strings.ScenesDeleteQuestion(name),
+            Strings.ScenesDeleteTitle,
             MessageBoxButton.YesNo,
             MessageBoxImage.Question,
             MessageBoxResult.No);

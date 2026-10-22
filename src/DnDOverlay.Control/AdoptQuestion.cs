@@ -16,7 +16,7 @@ internal sealed class AdoptQuestion : Window
     private AdoptQuestion(Window owner, PendingPairing request, IReadOnlyList<DeviceView> candidates)
     {
         Owner = owner;
-        Title = "Assign to a known device";
+        Title = Strings.AdoptTitle;
         Width = 560;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -24,21 +24,21 @@ internal sealed class AdoptQuestion : Window
 
         foreach (var device in candidates)
         {
-            _known.Items.Add(new ListBoxItem { Content = $"{device.Name} - {device.Screens.Count} screen(s), not connected", Tag = device });
+            _known.Items.Add(new ListBoxItem { Content = Strings.AdoptCandidate(device.Name, device.Screens.Count), Tag = device });
         }
 
         _known.SelectedIndex = 0;
 
         var panel = new StackPanel { Margin = new Thickness(16) };
 
-        panel.Children.Add(Text($"{request.Name} at {request.Address}, code {request.PairingCode}, is to take over the entry of:"));
+        panel.Children.Add(Text(Strings.AdoptIntro(request.Name, request.Address, request.PairingCode)));
         panel.Children.Add(_known);
-        panel.Children.Add(Text("It takes over the name, the remote settings, the screens and what lies on them; the old entry disappears. Screens on the same hardware carry straight on; after new hardware they stand beside the old ones and are mapped with \"Take over\" in the screen's band."));
-        panel.Children.Add(Text("If the old device is not really gone but only switched off, its entry then belongs to the wrong machine, and the real one comes up as new the next time it starts. A wrong screen mapping later puts park edge and rotation on the wrong screen - noticed only at the table."));
-        panel.Children.Add(Text("This is no restore: the token and the picture store of the old device do not come back."));
+        panel.Children.Add(Text(Strings.AdoptTakesOver));
+        panel.Children.Add(Text(Strings.AdoptRisk));
+        panel.Children.Add(Text(Strings.AdoptNoRestore));
 
-        var assign = new Button { Content = "Assign", IsDefault = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
+        var assign = new Button { Content = Strings.AdoptAssign, IsDefault = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = Strings.AdoptCancel, IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
 
         assign.Click += (_, _) => DialogResult = true;

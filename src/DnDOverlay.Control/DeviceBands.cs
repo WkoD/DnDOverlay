@@ -64,7 +64,7 @@ internal sealed class DeviceBands
         }
         else
         {
-            host.Children.Add(Note("Choose one of its screens on the left for the screen's own settings."));
+            host.Children.Add(Note(Strings.DeviceBandChooseScreen));
         }
     }
 
@@ -73,21 +73,21 @@ internal sealed class DeviceBands
         var band = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
         var labels = device.Screens.Select(screen => screen.Info.Label).ToList();
 
-        band.Children.Add(Heading($"Device {device.Name}"));
+        band.Children.Add(Heading(Strings.DeviceBandDeviceHeading(device.Name)));
         band.Children.Add(Note(labels.Count switch
         {
-            0 => "Applies to the whole device - it has reported no screen yet.",
-            1 => $"Applies to the whole device and its one screen: {labels[0]}.",
-            _ => $"Applies to all {labels.Count} screens of this device: {string.Join(", ", labels)}.",
+            0 => Strings.DeviceBandAppliesNoScreen,
+            1 => Strings.DeviceBandAppliesOneScreen(labels[0]),
+            _ => Strings.DeviceBandAppliesAllScreens(labels.Count, string.Join(", ", labels)),
         }));
 
         if (!device.Connected)
         {
-            band.Children.Add(Note("Not connected - what is set here goes out when it connects."));
+            band.Children.Add(Note(Strings.DeviceBandNotConnected));
         }
         else if (device.AppVersion is { } version)
         {
-            band.Children.Add(Note(string.Create(CultureInfo.CurrentCulture, $"Version {version}, protocol {device.ProtocolVersion}.")));
+            band.Children.Add(Note(Strings.DeviceBandVersion(version, device.ProtocolVersion)));
         }
 
         var effective = _session.DeviceSettingsOf(device.Device);
@@ -111,10 +111,10 @@ internal sealed class DeviceBands
         band.Children.Add(rows);
 
         var buttons = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var identify = Button("Show the screen names");
-        var clear = Button("Clear the picture store ...");
-        var restart = Button("Restart ...");
-        var unpair = Button("Unpair ...");
+        var identify = Button(Strings.DeviceBandShowNames);
+        var clear = Button(Strings.DeviceBandClearStore);
+        var restart = Button(Strings.DeviceBandRestart);
+        var unpair = Button(Strings.DeviceBandUnpair);
 
         identify.IsEnabled = device.Connected;
         clear.IsEnabled = device.Connected;
@@ -122,9 +122,9 @@ internal sealed class DeviceBands
 
         clear.Click += async (_, _) =>
         {
-            if (Ask($"Empty the picture store of {device.Name}? It applies to all its screens. What lies on them now is fetched again.", "Clear the picture store"))
+            if (Ask(Strings.DeviceBandClearStoreQuestion(device.Name), Strings.DeviceBandClearStoreTitle))
             {
-                await CommandAsync(device, DeviceCommand.ClearCache, $"{device.Name} empties its picture store.").ConfigureAwait(true);
+                await CommandAsync(device, DeviceCommand.ClearCache, Strings.DeviceBandClearingStore(device.Name)).ConfigureAwait(true);
             }
         };
 
@@ -140,15 +140,15 @@ internal sealed class DeviceBands
                 showing += scene.Items.Count > 0 || scene.Background is not null ? 1 : 0;
             }
 
-            if (showing == 0 || Ask($"Restart {device.Name}? Its {device.Screens.Count} screen(s) go dark for a moment, {showing} of them showing something; it connects again by itself.", "Restart"))
+            if (showing == 0 || Ask(Strings.DeviceBandRestartQuestion(device.Name, device.Screens.Count, showing), Strings.DeviceBandRestartTitle))
             {
-                await CommandAsync(device, DeviceCommand.Restart, $"{device.Name} restarts.").ConfigureAwait(true);
+                await CommandAsync(device, DeviceCommand.Restart, Strings.DeviceBandRestarting(device.Name)).ConfigureAwait(true);
             }
         };
         identify.Click += async (_, _) =>
         {
             await _session.IdentifyScreensAsync(device.Device).ConfigureAwait(true);
-            _say($"{device.Name} is showing its screen names.");
+            _say(Strings.DeviceBandShowingNames(device.Name));
         };
         unpair.Click += async (_, _) => await UnpairAsync(device).ConfigureAwait(true);
 
@@ -166,8 +166,8 @@ internal sealed class DeviceBands
         var band = new StackPanel();
         var label = screen.Info.Label;
 
-        band.Children.Add(Heading($"Screen {label}"));
-        band.Children.Add(Note($"Applies only to {label}."));
+        band.Children.Add(Heading(Strings.DeviceBandScreenHeading(label)));
+        band.Children.Add(Note(Strings.DeviceBandAppliesOnlyTo(label)));
 
         var context = _session.ContextOf(screen.Screen);
         var rows = new Grid();
@@ -195,7 +195,7 @@ internal sealed class DeviceBands
             TakeOver(band, screen, all);
         }
 
-        var resetAll = Button("Reset all to defaults");
+        var resetAll = Button(Strings.DeviceBandResetAll);
 
         resetAll.Click += async (_, _) =>
         {
@@ -238,7 +238,7 @@ internal sealed class DeviceBands
 
         choice.SelectedIndex = 0;
 
-        var take = Button("Take over ...");
+        var take = Button(Strings.DeviceBandTakeOver);
 
         take.Click += async (_, _) =>
         {
@@ -249,8 +249,8 @@ internal sealed class DeviceBands
 
             var answer = MessageBox.Show(
                 _owner,
-                $"{screen.Info.Label} takes over {old.Info.Label}: its state, settings, name and what lies on it, its place among the tiles and the view. What lies on {screen.Info.Label} now is replaced. {old.Info.Label} disappears from the list.",
-                "Take over a missing screen",
+                Strings.DeviceBandTakeOverQuestion(screen.Info.Label, old.Info.Label),
+                Strings.DeviceBandTakeOverTitle,
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Question,
                 MessageBoxResult.Cancel);
@@ -262,18 +262,18 @@ internal sealed class DeviceBands
 
             if (!await _session.ReassignScreenAsync(old.Screen, screen.Screen).ConfigureAwait(true))
             {
-                _say($"{old.Info.Label} could not be taken over - it is there again, or gone.");
+                _say(Strings.DeviceBandTakeOverFailed(old.Info.Label));
                 return;
             }
 
             Inherit(old.Screen, screen.Screen);
-            _say($"{screen.Info.Label} took over {old.Info.Label}.");
+            _say(Strings.DeviceBandTookOver(screen.Info.Label, old.Info.Label));
             Changed?.Invoke(this, EventArgs.Empty);
         };
 
         var row = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
 
-        row.Children.Add(new TextBlock { Text = "Take over a missing screen:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        row.Children.Add(new TextBlock { Text = Strings.DeviceBandTakeOverLabel, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
         row.Children.Add(choice);
         row.Children.Add(take);
         band.Children.Add(row);
@@ -313,7 +313,7 @@ internal sealed class DeviceBands
     private void NameRow(Grid rows, DeviceView device, ScreenView screen, IReadOnlyList<DeviceView> all)
     {
         var name = new TextBox { Text = screen.Info.CustomName ?? string.Empty, Padding = new Thickness(4, 2, 4, 2), MinWidth = 180 };
-        var hint = new TextBlock { Text = "empty = the default name", Foreground = Receding, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 6) };
+        var hint = new TextBlock { Text = Strings.DeviceBandEmptyIsDefaultName, Foreground = Receding, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 6) };
 
         async Task KeepAsync()
         {
@@ -329,7 +329,7 @@ internal sealed class DeviceBands
 
             if (typed.Length > 0 && taken.Contains(typed, StringComparer.OrdinalIgnoreCase))
             {
-                _say($"\"{typed}\" is already the name of another screen or device.");
+                _say(Strings.DeviceBandScreenNameTaken(typed));
                 name.Text = screen.Info.CustomName ?? string.Empty;
                 return;
             }
@@ -348,7 +348,7 @@ internal sealed class DeviceBands
             }
         };
 
-        Place(rows, "Name", name, hint, reset: null);
+        Place(rows, Strings.DeviceBandName, name, hint, reset: null);
     }
 
     /// <summary>
@@ -375,7 +375,7 @@ internal sealed class DeviceBands
 
             if (taken.Contains(typed, StringComparer.OrdinalIgnoreCase))
             {
-                _say($"\"{typed}\" is already the name of another device or screen.");
+                _say(Strings.DeviceBandDeviceNameTaken(typed));
                 name.Text = device.Name;
                 return;
             }
@@ -391,7 +391,7 @@ internal sealed class DeviceBands
                 KnownDevices = [.. configuration.KnownDevices.Select(known => known.DeviceId == device.Device.Value ? known with { Name = typed } : known)],
             });
 
-            _say(device.Connected ? $"{device.Name} is called {typed} now." : $"{device.Name} is called {typed} now - the device hears it when it connects.");
+            _say(device.Connected ? Strings.DeviceBandRenamed(device.Name, typed) : Strings.DeviceBandRenamedLater(device.Name, typed));
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
@@ -404,14 +404,14 @@ internal sealed class DeviceBands
             }
         };
 
-        Place(rows, "Name", name, null, reset: null);
+        Place(rows, Strings.DeviceBandName, name, null, reset: null);
     }
 
     private async Task CommandAsync(DeviceView device, DeviceCommand command, string done)
     {
         _say(await _session.SendDeviceCommandAsync(device.Device, command).ConfigureAwait(true)
             ? done
-            : $"{device.Name} is not connected.");
+            : Strings.DeviceBandNotConnectedSay(device.Name));
     }
 
     private bool Ask(string question, string title) =>
@@ -423,7 +423,7 @@ internal sealed class DeviceBands
 
         foreach (var wish in new[] { ScreenState.Enabled, ScreenState.Diagnostic, ScreenState.Disabled, ScreenState.Inactive })
         {
-            state.Items.Add(new ComboBoxItem { Content = wish.ToString(), Tag = wish });
+            state.Items.Add(new ComboBoxItem { Content = StateLabel(wish), Tag = wish });
         }
 
         state.SelectedItem = state.Items.OfType<ComboBoxItem>().FirstOrDefault(item => Equals(item.Tag, screen.State));
@@ -436,7 +436,7 @@ internal sealed class DeviceBands
             }
         };
 
-        Place(rows, "State", state, null, reset: null);
+        Place(rows, Strings.DeviceBandState, state, null, reset: null);
     }
 
     /// <summary>One parameter: its label, its value in the editor its kind asks for, the unit, and "Reset" when it was set.</summary>
@@ -458,7 +458,7 @@ internal sealed class DeviceBands
 
         var after = new TextBlock
         {
-            Text = atDefault ? Join(parameter.Unit, "default") : parameter.Unit ?? string.Empty,
+            Text = atDefault ? AtDefault(parameter.Unit) : parameter.Unit ?? string.Empty,
             Foreground = Receding,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(6, 0, 6, 6),
@@ -468,7 +468,7 @@ internal sealed class DeviceBands
 
         if (!atDefault && canReset)
         {
-            back = new Button { Content = "Reset", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 0, 6), ToolTip = "Back to the default value" };
+            back = new Button { Content = Strings.DeviceBandReset, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 0, 6), ToolTip = Strings.DeviceBandResetTip };
             back.Click += async (_, _) => await reset().ConfigureAwait(true);
         }
 
@@ -491,7 +491,7 @@ internal sealed class DeviceBands
             if (!double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out var typed)
                 || typed < parameter.Min || typed > parameter.Max)
             {
-                box.ToolTip = string.Create(CultureInfo.CurrentCulture, $"{parameter.Min.ToString(format, CultureInfo.CurrentCulture)} to {parameter.Max.ToString(format, CultureInfo.CurrentCulture)}");
+                box.ToolTip = Strings.DeviceBandRange(parameter.Min.ToString(format, CultureInfo.CurrentCulture), parameter.Max.ToString(format, CultureInfo.CurrentCulture));
                 box.Text = shown;
                 return;
             }
@@ -525,15 +525,22 @@ internal sealed class DeviceBands
     {
         var box = new ComboBox { MinWidth = 180, HorizontalAlignment = HorizontalAlignment.Left };
 
+        // The words in the language of this control, the value as the files and the wire carry it.
         foreach (var choice in parameter.Choices ?? [])
         {
-            box.Items.Add(choice);
+            var item = new ComboBoxItem { Content = DisplayParameters.ChoiceLabel(choice), Tag = choice };
+
+            box.Items.Add(item);
+
+            if (choice == value)
+            {
+                box.SelectedItem = item;
+            }
         }
 
-        box.SelectedItem = value;
         box.SelectionChanged += async (_, _) =>
         {
-            if (box.SelectedItem is string chosen && chosen != value)
+            if (box.SelectedItem is ComboBoxItem { Tag: string chosen } && chosen != value)
             {
                 await set(chosen).ConfigureAwait(true);
             }
@@ -599,8 +606,8 @@ internal sealed class DeviceBands
         await _session.UnpairAsync(device.Device).ConfigureAwait(true);
 
         _say(answer.Count == 0
-            ? $"{device.Name} is unpaired."
-            : $"{device.Name} is unpaired. Saved as scenes: {string.Join(", ", answer.Select(saved => saved.Name))}.");
+            ? Strings.DeviceBandUnpaired(device.Name)
+            : Strings.DeviceBandUnpairedSaved(device.Name, string.Join(", ", answer.Select(saved => saved.Name))));
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -638,7 +645,17 @@ internal sealed class DeviceBands
         }
     }
 
-    private static string Join(string? unit, string word) => unit is null ? word : $"{unit} - {word}";
+    private static string AtDefault(string? unit) => unit is null ? Strings.DeviceBandDefault : Strings.DeviceBandUnitDefault(unit);
+
+    /// <summary>A screen state as the DM reads it - the enum name stays what is stored and compared.</summary>
+    internal static string StateLabel(ScreenState state) => state switch
+    {
+        ScreenState.Enabled => Strings.DeviceBandStateEnabled,
+        ScreenState.Diagnostic => Strings.DeviceBandStateDiagnostic,
+        ScreenState.Disabled => Strings.DeviceBandStateDisabled,
+        ScreenState.Inactive => Strings.DeviceBandStateInactive,
+        _ => state.ToString(),
+    };
 
     private static Button Button(string text) =>
         new() { Content = text, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(0, 0, 8, 0) };
@@ -665,7 +682,7 @@ internal sealed class UnpairQuestion : Window
     {
         _desk = desk;
         Owner = owner;
-        Title = "Unpair";
+        Title = Strings.DevicesUnpairTitle;
         Width = 560;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -675,32 +692,32 @@ internal sealed class UnpairQuestion : Window
         var panel = new StackPanel { Margin = new Thickness(16) };
 
         panel.Children.Add(Text(occupied.Count == 0
-            ? $"Unpair {device.Name}? This control can no longer reach its {device.Screens.Count} screen(s); the device has to be paired again to be used."
-            : $"Unpair {device.Name}? This control can no longer reach its {device.Screens.Count} screen(s). What lies on them - {pictures} picture(s) on {occupied.Count} screen(s) - is gone, and undo cannot go back past this."));
+            ? Strings.DevicesUnpairQuestion(device.Name, device.Screens.Count)
+            : Strings.DevicesUnpairQuestionOccupied(device.Name, device.Screens.Count, pictures, occupied.Count)));
 
         var stamp = FileNames.Stamp(DateTimeOffset.Now);
 
         foreach (var (screen, scene) in occupied)
         {
-            var name = new TextBox { Text = FileNames.Suggest($"Scene {screen.Info.Label} {stamp}"), Padding = new Thickness(4, 2, 4, 2) };
+            var name = new TextBox { Text = FileNames.Suggest(Strings.DevicesUnpairSceneName(screen.Info.Label, stamp)), Padding = new Thickness(4, 2, 4, 2) };
             var problem = new TextBlock { Foreground = Brushes.Firebrick, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
 
-            panel.Children.Add(Text($"Scene from {screen.Info.Label}:"));
+            panel.Children.Add(Text(Strings.DevicesUnpairSceneFrom(screen.Info.Label)));
             panel.Children.Add(name);
             panel.Children.Add(problem);
             _fields.Add((screen, scene, name, problem));
         }
 
-        var save = new Button { Content = "Save scenes and unpair", IsDefault = occupied.Count > 0, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var plain = new Button { Content = occupied.Count == 0 ? "Unpair" : "Unpair without saving", IsDefault = occupied.Count == 0, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
+        var save = new Button { Content = Strings.DevicesUnpairSaveAndUnpair, IsDefault = occupied.Count > 0, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var plain = new Button { Content = occupied.Count == 0 ? Strings.DevicesUnpairPlain : Strings.DevicesUnpairWithoutSaving, IsDefault = occupied.Count == 0, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = Strings.DevicesUnpairCancel, IsCancel = true, Padding = new Thickness(14, 4, 14, 4) };
 
         save.Visibility = occupied.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (occupied.Count > 0 && desk.Open is null)
         {
             save.IsEnabled = false;
-            panel.Children.Add(Text("No campaign is open - scenes cannot be saved. Open one first, or unpair without saving."));
+            panel.Children.Add(Text(Strings.DevicesUnpairNoCampaign));
         }
 
         save.Click += (_, _) => Save();
@@ -750,7 +767,7 @@ internal sealed class UnpairQuestion : Window
 
             problem.Text = FileNames.Check(typed) is { } bad
                 ? NameDialog.Explain(bad)
-                : !taken.Add(typed) ? $"A scene named \"{typed}\" exists already." : string.Empty;
+                : !taken.Add(typed) ? Strings.DevicesUnpairSceneExists(typed) : string.Empty;
 
             ok &= problem.Text.Length == 0;
         }

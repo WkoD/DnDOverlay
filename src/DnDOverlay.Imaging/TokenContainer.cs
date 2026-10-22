@@ -76,13 +76,13 @@ public sealed class TokenContainer(TokenLimits? limits = null) : IContainerReade
         using var archive = Open(data);
 
         var content = archive.GetEntry(ContentEntry)
-            ?? throw Refuse("This file is not a MapTool token: it has no content.xml.");
+            ?? throw Refuse(Strings.TokenNoContent);
 
         var described = ReadContent(content);
 
         if (!RootElement.Equals(described.Root, StringComparison.Ordinal))
         {
-            throw Refuse("This file is not a MapTool token: its content.xml describes something else.");
+            throw Refuse(Strings.TokenSomethingElse);
         }
 
         // The portrait is what the DM wants to show. Many tokens have none, and a top-down symbol
@@ -99,8 +99,7 @@ public sealed class TokenContainer(TokenLimits? limits = null) : IContainerReade
 
         if (portrait is null)
         {
-            throw Refuse(
-                "This token holds no picture that could be read - neither a portrait nor a map token.");
+            throw Refuse(Strings.TokenNoPicture);
         }
 
         var name = string.IsNullOrWhiteSpace(described.Name) ? "Token" : described.Name;
@@ -135,7 +134,7 @@ public sealed class TokenContainer(TokenLimits? limits = null) : IContainerReade
         catch (InvalidDataException ex)
         {
             throw new ImageRejectedException(
-                ImageRejection.Unreadable, "This file is not a readable archive.", ex);
+                ImageRejection.Unreadable, Strings.ArchiveUnreadable, ex);
         }
 
         // Read BEFORE disposing. Asking a disposed archive for its count throws, and the message
@@ -147,9 +146,7 @@ public sealed class TokenContainer(TokenLimits? limits = null) : IContainerReade
         {
             archive.Dispose();
 
-            throw Refuse(
-                $"This archive holds {entries} entries, which is beyond anything a token has "
-                + $"(limit {_limits.MaxEntries}).");
+            throw Refuse(Strings.ArchiveTooManyEntries(entries, _limits.MaxEntries));
         }
 
         return archive;
@@ -212,8 +209,7 @@ public sealed class TokenContainer(TokenLimits? limits = null) : IContainerReade
             // where a sentence belongs.
             throw new ImageRejectedException(
                 ImageRejection.Unreadable,
-                "The description inside this token could not be read. It is either damaged or it "
-                + "declares a document type, which is not accepted.",
+                Strings.TokenDescriptionUnreadable,
                 ex);
         }
     }
