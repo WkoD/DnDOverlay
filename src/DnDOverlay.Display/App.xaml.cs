@@ -1699,15 +1699,8 @@ public sealed partial class App : Application, IDisposable
     /// A message whose handling threw. Said with the fault, because nothing else shows it: the
     /// connection carries on, and whatever the message should have done is simply missing.
     /// </summary>
-    private void MessageFailed(ProtocolMessage message, Exception fault)
-    {
-        // INTERIM: 4012 is the nearest line there is, and its text ("going down") is wrong here - the
-        // connection carries on. To be replaced by a line of its own (MessageHandlingFailed), which
-        // needs its catalogue entry first.
-        var where = $"the handling of {message.GetType().Name} (the connection carries on)";
-
-        DisplayLog.UnhandledFault(_logger, fault, where);
-    }
+    private void MessageFailed(ProtocolMessage message, Exception fault) =>
+        DisplayLog.MessageHandlingFailed(_logger, fault, message.GetType().Name);
 
     private async Task HandleAsync(ProtocolMessage message)
     {

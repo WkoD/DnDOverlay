@@ -179,7 +179,7 @@ public sealed class ConnectionLoop
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            TransportLog.ConnectFailed(_logger, exception, new UriBuilder(Uri.UriSchemeWs, target.Host, target.Port).Uri);
+            TransportLog.ConnectionFailed(_logger, exception, new UriBuilder(Uri.UriSchemeWs, target.Host, target.Port).Uri);
 
             return Attempt.Fruitless;
         }

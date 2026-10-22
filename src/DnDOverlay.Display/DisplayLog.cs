@@ -582,4 +582,15 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "The control said goodbye - {Screens} screen(s) back to the start state.")]
     internal static partial void WentIdle(ILogger logger, int screens);
+
+    /// <summary>
+    /// The handling of one message from the control threw. Said with the fault, because nothing else
+    /// shows it: the connection carries on, and whatever the message should have done is simply
+    /// missing. Not 4012 - that one says the display is going down, and it is not.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3052,
+        Level = LogLevel.Error,
+        Message = "Handling a {Message} message failed - the connection carries on.")]
+    internal static partial void MessageHandlingFailed(ILogger logger, Exception exception, string message);
 }

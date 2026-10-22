@@ -33,6 +33,18 @@ internal static partial class TransportLog
     internal static partial void ConnectFailed(ILogger logger, Exception exception, Uri hubUri);
 
     /// <summary>
+    /// A connection threw out of its own handling - after it was reached, or on the way there - and
+    /// the loop carries on: waited after like a control that did not answer, and tried again. Not
+    /// 1013: the control may well have been reached, and "could not reach" sent the reader to the
+    /// network when the fault was in this device's handling (review of M5).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 1062,
+        Level = LogLevel.Warning,
+        Message = "The connection to {HubUri} failed - trying again.")]
+    internal static partial void ConnectionFailed(ILogger logger, Exception exception, Uri hubUri);
+
+    /// <summary>
     /// Rule 7 in practice: an unknown message is ignored and logged, never fatal. Without this
     /// line the tolerance would be indistinguishable from a bug.
     /// </summary>

@@ -183,7 +183,8 @@ public sealed class ConnectionLoopTests
             stop.Token);
 
         Assert.Equal(2, connects);
-        Assert.Equal(1, _log.Count(1013));
+        Assert.Equal(1, _log.Count(1062));
+        Assert.Equal(0, _log.Count(1013));
         Assert.InRange(_time.Requested[0], TimeSpan.FromSeconds(0.8), TimeSpan.FromSeconds(1.2));
     }
 
