@@ -16,13 +16,58 @@ namespace DnDOverlay.Display;
 /// appears in no installer and in no file, and it cannot be set remotely - it decides where the
 /// configuration lies, so it could not live in the configuration (Part 9).
 /// </param>
+/// <param name="After">
+/// <c>--after</c>: the process this one replaces, which it waits out before it touches anything -
+/// set by a restart from the control and by nobody else (see <see cref="ForRestart"/>).
+/// </param>
 internal sealed record DisplayOptions(
     string? Host,
     int Port,
     string? DeviceName,
     bool Windowed,
-    string? DataRoot)
+    string? DataRoot,
+    int? After = null)
 {
+    private const string AfterSwitch = "--after";
+
+    /// <summary>
+    /// The arguments a restart from the control starts the new process with: this process's own,
+    /// and the switch that makes the new one wait until this one is gone.
+    /// <para>
+    /// <b>The new process is started first and waits</b>, rather than started last: a start that
+    /// fails - the executable locked mid-update - leaves this one running and connected instead of
+    /// gone. The wait is what keeps the two apart: until the old process ends, its socket still
+    /// answers the hub's pings, so a Hello from the new one within that time would be taken for a
+    /// clone and put before the DM; and the old one empties the picture store on its way out while
+    /// the new one would already be filling it (Part 5, Part 7).
+    /// </para>
+    /// <para>
+    /// An <c>--after</c> from an earlier restart is replaced, not carried along.
+    /// </para>
+    /// </summary>
+    internal static List<string> ForRestart(IReadOnlyList<string> args, int predecessor)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        var kept = new List<string>();
+
+        for (var i = 0; i < args.Count; i++)
+        {
+            if (args[i] == AfterSwitch && i + 1 < args.Count && int.TryParse(args[i + 1], out _))
+            {
+                i++;
+                continue;
+            }
+
+            kept.Add(args[i]);
+        }
+
+        kept.Add(AfterSwitch);
+        kept.Add(predecessor.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        return kept;
+    }
+
     /// <summary>
     /// What the three queues in front of this device's socket may hold. The same shape the hub
     /// uses, with the same numbers, because it is the same rule at the other end of one wire
@@ -43,6 +88,7 @@ internal sealed record DisplayOptions(
         string? name = null;
         var windowed = false;
         string? dataRoot = null;
+        int? after = null;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -72,11 +118,16 @@ internal sealed record DisplayOptions(
                     dataRoot = args[++i];
                     break;
 
+                case AfterSwitch when i + 1 < args.Count && int.TryParse(args[i + 1], out var predecessor):
+                    after = predecessor;
+                    i++;
+                    break;
+
                 default:
                     break;
             }
         }
 
-        return new DisplayOptions(host, port, name, windowed, dataRoot);
+        return new DisplayOptions(host, port, name, windowed, dataRoot, after);
     }
 }

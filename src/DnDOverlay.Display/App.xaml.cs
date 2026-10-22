@@ -144,6 +144,12 @@ public sealed partial class App : Application, IDisposable
     private static readonly TimeSpan EmptyWithin = TimeSpan.FromSeconds(2);
 
     /// <summary>
+    /// How long a restarted display waits for the process it replaces: that one's exit empties the
+    /// store within <see cref="EmptyWithin"/> and closes its socket, with room to spare.
+    /// </summary>
+    private static readonly TimeSpan PredecessorPatience = TimeSpan.FromSeconds(10);
+
+    /// <summary>
     /// How each screen stands right now. Everything starts <see cref="ScreenState.Inactive"/>
     /// and stays that way until a control says otherwise - the silent start (Part 3).
     /// </summary>
@@ -407,6 +413,10 @@ public sealed partial class App : Application, IDisposable
 
         var options = DisplayOptions.Parse(e.Args);
 
+        // Before anything is read or opened: a restart from the control starts this process while
+        // the old one is still emptying its store and holding its socket (DisplayOptions.ForRestart).
+        WaitOut(options.After);
+
         // Handed in, never fetched from inside a library (rule 10). From here every further
         // place - display.json, the image store, the logs - is derived from this one value, and
         // --data moves all of them at once (Part 9).
@@ -627,6 +637,38 @@ public sealed partial class App : Application, IDisposable
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted,
             TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Waits until the process this one replaces has ended - bounded, because a predecessor that
+    /// hangs must not keep the display from ever coming up, and checked by name, because a process
+    /// id can be handed to somebody else once its owner is gone.
+    /// </summary>
+    private static void WaitOut(int? predecessor)
+    {
+        if (predecessor is not { } id)
+        {
+            return;
+        }
+
+        try
+        {
+            using var old = Process.GetProcessById(id);
+            using var self = Process.GetCurrentProcess();
+
+            if (string.Equals(old.ProcessName, self.ProcessName, StringComparison.OrdinalIgnoreCase))
+            {
+                _ = old.WaitForExit(PredecessorPatience);
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Gone already - the ordinary case when the old one was quick.
+        }
+        catch (InvalidOperationException)
+        {
+            // Ended between the two questions.
+        }
     }
 
     /// <summary>
@@ -1854,7 +1896,9 @@ public sealed partial class App : Application, IDisposable
 
                 var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
 
-                foreach (var argument in Environment.GetCommandLineArgs().Skip(1))
+                // The new one waits until this one is gone (DisplayOptions.ForRestart). A start that
+                // throws leaves this process running and connected; the fault is said like any other.
+                foreach (var argument in DisplayOptions.ForRestart([.. Environment.GetCommandLineArgs().Skip(1)], Environment.ProcessId))
                 {
                     start.ArgumentList.Add(argument);
                 }

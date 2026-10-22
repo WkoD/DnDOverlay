@@ -15,6 +15,38 @@ public sealed class DisplayOptionsTests
         Assert.Null(options.DeviceName);
         Assert.False(options.Windowed);
         Assert.Null(options.DataRoot);
+        Assert.Null(options.After);
+    }
+
+    [Fact]
+    public void The_process_to_wait_out_is_read()
+    {
+        var options = DisplayOptions.Parse(["--host", "tisch", "--after", "4711"]);
+
+        Assert.Equal(4711, options.After);
+        Assert.Equal("tisch", options.Host);
+    }
+
+    /// <summary>
+    /// A restart keeps every argument and adds the wait, so the new process does not answer next to
+    /// the old one's socket (Part 7).
+    /// </summary>
+    [Fact]
+    public void A_restart_carries_the_arguments_and_waits_for_this_process()
+    {
+        var args = DisplayOptions.ForRestart(["--host", "tisch", "--windowed"], predecessor: 4711);
+
+        Assert.Equal(["--host", "tisch", "--windowed", "--after", "4711"], args);
+        Assert.Equal(4711, DisplayOptions.Parse(args).After);
+    }
+
+    /// <summary>A second restart replaces the wait of the first rather than piling them up.</summary>
+    [Fact]
+    public void A_second_restart_replaces_the_first_wait()
+    {
+        var args = DisplayOptions.ForRestart(["--after", "4711", "--name", "Beamer"], predecessor: 815);
+
+        Assert.Equal(["--name", "Beamer", "--after", "815"], args);
     }
 
     [Fact]
