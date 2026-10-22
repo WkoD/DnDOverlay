@@ -64,7 +64,7 @@ internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<s
 
         var setup = new MenuItem { Header = Strings.CampaignSwitchSetUp, IsEnabled = desk.Open is not null };
 
-        setup.Click += (_, _) => new CampaignSetupWindow(owner, desk).Show();
+        setup.Click += (_, _) => new CampaignSetupWindow(owner, desk, say, tidy).Show();
         menu.Items.Add(setup);
 
         // For the OPEN campaign, not the one tapped in the list: a closed campaign is not looked into

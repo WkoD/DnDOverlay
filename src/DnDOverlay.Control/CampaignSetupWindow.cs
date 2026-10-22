@@ -7,19 +7,25 @@ namespace DnDOverlay.Control;
 
 /// <summary>
 /// "Set up campaign" (Part 7): what one does once per campaign - rename it with its folder, open the
-/// folder, see how much is in it, delete it. An ordinary window, not modal.
+/// folder, see how much is in it and the way to the tidy-up view beside the number, delete it. An
+/// ordinary window, not modal.
 /// </summary>
 internal sealed class CampaignSetupWindow : Window
 {
     private readonly CampaignDesk _desk;
+    private readonly Action<string> _say;
     private readonly TextBox _name = new() { Padding = new Thickness(4), MinWidth = 260 };
     private readonly TextBlock _facts = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
     private readonly TextBlock _said = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
 
-    internal CampaignSetupWindow(Window owner, CampaignDesk desk)
+    /// <summary>The campaign whose name stands in the box - written again only when it is another one.</summary>
+    private OpenCampaign? _named;
+
+    internal CampaignSetupWindow(Window owner, CampaignDesk desk, Action<string> say, Action tidy)
     {
         Owner = owner;
         _desk = desk;
+        _say = say;
 
         Title = Strings.CampaignSetupTitle;
         Width = 520;
@@ -28,6 +34,7 @@ internal sealed class CampaignSetupWindow : Window
 
         var apply = new Button { Content = Strings.CampaignSetupApply, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(8, 0, 0, 0) };
         var folder = new Button { Content = Strings.CampaignSetupOpenFolder, Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
+        var tidying = new Button { Content = Strings.CampaignSwitchTidy, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(8, 10, 0, 0) };
         var delete = new Button { Content = Strings.CampaignSetupDelete, Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Left };
 
         var naming = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
@@ -41,7 +48,14 @@ internal sealed class CampaignSetupWindow : Window
         panel.Children.Add(naming);
         panel.Children.Add(_said);
         panel.Children.Add(_facts);
-        panel.Children.Add(folder);
+
+        // Number and action side by side (Part 7): beside the count and the room, the way to the view
+        // that shows which pictures take it.
+        var actions = new StackPanel { Orientation = Orientation.Horizontal };
+
+        actions.Children.Add(folder);
+        actions.Children.Add(tidying);
+        panel.Children.Add(actions);
         panel.Children.Add(new Separator { Margin = new Thickness(0, 14, 0, 10) });
         panel.Children.Add(delete);
 
@@ -56,10 +70,17 @@ internal sealed class CampaignSetupWindow : Window
                 Process.Start(new ProcessStartInfo("explorer.exe", $"\"{open.Directory}\"") { UseShellExecute = true });
             }
         };
+        tidying.Click += (_, _) => tidy();
         delete.Click += async (_, _) => await DeleteAsync().ConfigureAwait(true);
 
+        // A picture taken in, renamed or deleted changes the count and the room as much as a switch.
         _desk.Changed += Refresh;
-        Closed += (_, _) => _desk.Changed -= Refresh;
+        _desk.StockChanged += Refresh;
+        Closed += (_, _) =>
+        {
+            _desk.Changed -= Refresh;
+            _desk.StockChanged -= Refresh;
+        };
 
         Refresh(this, EventArgs.Empty);
     }
@@ -72,7 +93,13 @@ internal sealed class CampaignSetupWindow : Window
             return;
         }
 
-        _name.Text = open.Unnamed ? string.Empty : open.Name;
+        // Only for another campaign - a rename is one - so what the DM is typing survives the
+        // adoption after a folder check, which raises the same change.
+        if (!ReferenceEquals(open, _named))
+        {
+            _named = open;
+            _name.Text = open.Unnamed ? string.Empty : open.Name;
+        }
 
         var bytes = open.Store.Entries.Sum(entry => entry.Bytes);
 
@@ -81,6 +108,12 @@ internal sealed class CampaignSetupWindow : Window
 
     private void Rename()
     {
+        if (_desk.Refusal is { } refused)
+        {
+            _said.Text = refused;
+            return;
+        }
+
         if (FileNames.Check(_name.Text) is { } problem)
         {
             _said.Text = NameDialog.Explain(problem);
@@ -128,6 +161,12 @@ internal sealed class CampaignSetupWindow : Window
             return;
         }
 
-        await _desk.DeleteAsync().ConfigureAwait(true);
+        // Said in the window while it is still open, and in the status line: a delete that went
+        // through by half has closed the campaign, and with it this window.
+        if (await _desk.DeleteAsync().ConfigureAwait(true) is { } refused)
+        {
+            _said.Text = refused;
+            _say(refused);
+        }
     }
 }

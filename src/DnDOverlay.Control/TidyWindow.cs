@@ -82,10 +82,14 @@ internal sealed class TidyWindow : Window
 
         Content = layout;
 
+        // Not modal, so it stays open while the DM deletes, renames or takes pictures in - and the
+        // sizes and names it lists follow, or a double click would look for a picture that is gone.
         _desk.Changed += Refreshed;
+        _desk.StockChanged += Refreshed;
         Closed += (_, _) =>
         {
             _desk.Changed -= Refreshed;
+            _desk.StockChanged -= Refreshed;
             _breaking?.Cancel();
         };
 

@@ -60,6 +60,9 @@ internal sealed class CampaignPanel : Border
     private PanelSide _side = PanelSide.Right;
     private string? _narrowedTo;
 
+    /// <summary>The campaign "Show in stock" narrowed in - another one open, and the narrowing is void.</summary>
+    private object? _narrowedIn;
+
     internal CampaignPanel(
         PanelHead head,
         StockView stock,
@@ -165,9 +168,23 @@ internal sealed class CampaignPanel : Border
             _grips.IsEnabled = !running;
             _breakOff.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
 
+            // While pictures come in, no campaign is switched, renamed or deleted under them - the
+            // desk refuses with a reason, wherever the grip is (Part 3).
+            _stock.Desk.Taking = running;
+
             if (!running)
             {
                 _stock.Refresh();
+            }
+        };
+
+        // A narrowing to one campaign's picture means nothing in the next one: it would show "no
+        // match" until the search box was cleared by hand.
+        _stock.Desk.Changed += (_, _) =>
+        {
+            if (_narrowedTo is not null && !ReferenceEquals(_stock.Desk.Open, _narrowedIn))
+            {
+                Unnarrow();
             }
         };
 
@@ -209,7 +226,9 @@ internal sealed class CampaignPanel : Border
     /// name stands in the search bar, so it is visible why the grid shows one picture, and typing
     /// over it filters by text again.
     /// </summary>
-    internal void ShowInStock(Core.AssetId asset, string name)
+    internal void ShowInStock(Core.AssetId asset, string name) => ShowInStock([asset], name);
+
+    private void ShowInStock(IReadOnlyList<Core.AssetId> assets, string label)
     {
         if (!PicturesOpen)
         {
@@ -217,13 +236,25 @@ internal sealed class CampaignPanel : Border
         }
 
         _typing.Stop();
-        _narrowedTo = name;
-        _stock.Narrowing = [asset];
-        _search.Text = name;
+        _narrowedTo = label;
+        _narrowedIn = _stock.Desk.Open;
+        _stock.Narrowing = assets;
+        _search.Text = label;
         _typing.Stop();
 
         Apply();
-        _stock.Reveal([asset]);
+        _stock.Reveal(assets);
+    }
+
+    /// <summary>Back to filtering by text: the narrowing goes, and the name it put in the search box with it.</summary>
+    private void Unnarrow()
+    {
+        _narrowedTo = null;
+        _narrowedIn = null;
+        _stock.Narrowing = null;
+
+        // As if the DM cleared the box: the grid follows with the search's own short wait.
+        _search.Clear();
     }
 
     /// <summary>Draws the open tab again - after a campaign change or a patch.</summary>
@@ -231,6 +262,13 @@ internal sealed class CampaignPanel : Border
 
     private void Show(PanelTab tab)
     {
+        // The search box holds a picture's name only to say why the stock shows one picture; carried
+        // over to the scenes or layouts it would filter them by that name.
+        if (_narrowedTo is not null && tab is not PanelTab.Pictures)
+        {
+            Unnarrow();
+        }
+
         _open = tab;
         Check();
         Arrange();

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows.Threading;
 using DnDOverlay.Campaign;
@@ -24,6 +25,15 @@ internal sealed class CampaignDesk
     private readonly Dispatcher _dispatcher;
     private readonly ILogger _logger;
     private readonly Lock _gate = new();
+
+    /// <summary>
+    /// The folder check running or last run - the opening's or a "Check folder again". The next one
+    /// waits for it: two reconciliations over one folder would move, delete and read the same
+    /// orphan, and one of them would find it gone.
+    /// </summary>
+    private Task _checking = Task.CompletedTask;
+
+    private bool _taking;
 
     /// <param name="stock">
     /// Built before this, because the hub needs its source before there is a session - and handed
@@ -59,6 +69,42 @@ internal sealed class CampaignDesk
     internal event EventHandler<StockMeasure>? Measured;
 
     /// <summary>
+    /// The open campaign's pictures changed without a campaign change - an intake ended, a picture was
+    /// renamed or deleted. What lists the stock beside the panel (the tidy-up view, "Set up campaign")
+    /// draws again. Raised on the UI thread.
+    /// </summary>
+    internal event EventHandler? StockChanged;
+
+    /// <summary>
+    /// Whether an intake is running. Meanwhile no campaign is switched, renamed or deleted: every single
+    /// picture of a run goes to whatever stock is open at that moment (<see cref="OpenStock"/>), so a
+    /// switch would split the run over two campaigns, and a delete would have the next picture create
+    /// an unnamed campaign right after the DM deleted his (Part 3: the first picture creates one "while
+    /// none is open", not after an explicit delete). Set by the panel that runs the intake.
+    /// </summary>
+    internal bool Taking
+    {
+        get => _taking;
+        set
+        {
+            var ended = _taking && !value;
+
+            _taking = value;
+
+            if (ended)
+            {
+                StockChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>Why a campaign may not be switched, renamed or deleted right now, or <see langword="null"/>.</summary>
+    internal string? Refusal => Taking ? Strings.CampaignIntakeRunning : null;
+
+    /// <summary>A picture of the open campaign was renamed or deleted.</summary>
+    internal void StockEdited() => StockChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
     /// Free space on the drive the campaigns lie on, in bytes - one system query. A drive that cannot
     /// be asked reports as roomy rather than as full: a false alarm about the disk would be worse than none.
     /// </summary>
@@ -76,26 +122,11 @@ internal sealed class CampaignDesk
 
     /// <summary>
     /// "Check folder again" (Part 3): the name match of the opening once more - phases 1 and 2 - and
-    /// its report in the box beside the stage. Off the UI thread, like the first one.
+    /// its report in the box beside the stage. Off the UI thread, like the first one, and after it:
+    /// pressed while the opening's check still runs, it waits for that one.
     /// </summary>
-    internal async Task RescanAsync()
-    {
-        if (Open is not { } campaign)
-        {
-            return;
-        }
-
-        var report = await Task.Run(() => Reconciliation.SettleAsync(campaign.Store, campaign.Shelf, Reconciliation.Survey(campaign.Store))).ConfigureAwait(true);
-
-        ControlLog.CampaignReconciled(
-            _logger, report.Adopted, report.Duplicates, report.Missing.Count, report.Foreign.Count, report.Reconstructed);
-        Reported?.Invoke(this, Words(campaign, report));
-
-        if (report.Adopted > 0 && ReferenceEquals(Open, campaign))
-        {
-            Changed?.Invoke(this, EventArgs.Empty);
-        }
-    }
+    internal Task RescanAsync() =>
+        Open is { } campaign ? CheckAsync(campaign, again: true) : Task.CompletedTask;
 
     /// <summary>"Verify stock" (Part 3) for the open campaign - every file against its hash, off the UI thread.</summary>
     internal async Task<StockVerification> VerifyAsync(IProgress<int> progress, CancellationToken cancellationToken)
@@ -133,21 +164,31 @@ internal sealed class CampaignDesk
     /// <returns>Why it would not open, or <see langword="null"/>.</returns>
     internal async Task<string?> SwitchAsync(string name)
     {
+        if (Refusal is { } refused)
+        {
+            return refused;
+        }
+
         OpenCampaign campaign;
 
         try
         {
             campaign = _library.Open(name);
         }
-        catch (CampaignSchemaException refused)
+        catch (CampaignSchemaException newer)
         {
-            ControlLog.CampaignRefused(_logger, name, refused.Message);
+            ControlLog.CampaignRefused(_logger, name, newer.Message);
 
-            return refused.Message;
+            return newer.Message;
         }
-        catch (System.IO.DirectoryNotFoundException gone)
+        catch (DirectoryNotFoundException gone)
         {
             return gone.Message;
+        }
+        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException)
+        {
+            // A file of the campaign held by another program while it opens: said, never a crash.
+            return Strings.CampaignNotOpened(name, unreadable.Message);
         }
 
         if (Open is not null)
@@ -197,6 +238,13 @@ internal sealed class CampaignDesk
             return CampaignOutcome.BadName;
         }
 
+        // The intake writing into the folder holds the old place; a move between two of its writes
+        // would split the pictures over two folders. The folder is in use - which is what Busy says.
+        if (Taking)
+        {
+            return CampaignOutcome.Busy;
+        }
+
         var (outcome, renamed) = _library.Rename(open, newName);
 
         if (outcome is CampaignOutcome.Done)
@@ -212,20 +260,108 @@ internal sealed class CampaignDesk
     /// Deletes the open campaign: the table is cleared everywhere, the folder goes, and no campaign
     /// is open afterwards - the same state as after the start, with the same two ways on (Part 7).
     /// Creating an empty one in its place would be a folder nobody ordered.
+    /// <para>
+    /// <b>All or nothing, as far as the file system lets it</b>: a display still downloading a map, a
+    /// verify reading a file - a recursive delete would stop at the first file held open and leave
+    /// the campaign half gone, the one grip that cannot be taken back done by half (Part 7). So the
+    /// folder is first moved aside and back, which Windows refuses while anything in it is open; then
+    /// the campaign stays as it was, the table too, and the DM is told. What still fails after that
+    /// is said too.
+    /// </para>
     /// </summary>
-    internal async Task DeleteAsync()
+    /// <returns>Why it was not deleted, or not completely, or <see langword="null"/>.</returns>
+    internal async Task<string?> DeleteAsync()
     {
         if (Open is not { } open)
         {
-            return;
+            return null;
+        }
+
+        if (Refusal is { } refused)
+        {
+            return refused;
+        }
+
+        // Asked before the table is cleared: refused, nothing has changed at all - not even the table.
+        if (Held(open.Directory) is { } held)
+        {
+            return Strings.CampaignDeleteHeld(open.Name, held);
         }
 
         await _session.ClearEverywhereAsync(CancellationToken.None).ConfigureAwait(true);
 
         Become(null);
-        _library.Delete(open);
+
+        try
+        {
+            _library.Delete(open);
+        }
+        catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
+        {
+            return Strings.CampaignDeleteIncomplete(open.Name, failed.Message, open.Directory);
+        }
 
         ControlLog.CampaignDeleted(_logger, open.Name);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Runs a write into the open campaign's folder - a scene, a layout, the inventory - and turns
+    /// what the disk refuses (full, a file held by a sync client or a virus scanner) into the
+    /// sentence the DM reads, never a crash out of a menu (<see cref="SceneShelf"/> and
+    /// <see cref="AssetStore"/> catch nothing). <paramref name="refused"/> is the reason, or null.
+    /// </summary>
+    internal static bool Writes<T>(Func<T> write, [MaybeNullWhen(false)] out T result, [NotNullWhen(false)] out string? refused)
+    {
+        ArgumentNullException.ThrowIfNull(write);
+
+        try
+        {
+            result = write();
+            refused = null;
+
+            return true;
+        }
+        catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
+        {
+            result = default;
+            refused = failed.Message;
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether something holds a file in the folder: the folder moved aside and back. Windows refuses
+    /// the move while a file in it is open without sharing delete - exactly what would stop a
+    /// recursive delete halfway. The reason, or <see langword="null"/> when nothing holds it.
+    /// </summary>
+    private static string? Held(string directory)
+    {
+        var aside = directory.TrimEnd(Path.DirectorySeparatorChar) + ".deleting";
+
+        try
+        {
+            Directory.Move(directory, aside);
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            return refused.Message;
+        }
+
+        try
+        {
+            Directory.Move(aside, directory);
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            // Moved aside a moment ago and not back - rare beyond words, and then nothing is deleted:
+            // the folder lies beside its old place, the reason is said.
+            return refused.Message;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -264,32 +400,67 @@ internal sealed class CampaignDesk
 
         // Phase 2 off the UI thread: the campaign is open at once and nothing waits on the check
         // (Part 3). Its report comes when it is done, in the box beside the stage.
-        _ = Task.Run(async () =>
+        _ = CheckAsync(campaign, again: false);
+    }
+
+    /// <summary>
+    /// The folder check - phase 2 of the opening, or "Check folder again" - off the UI thread and after
+    /// the one before it. <b>Never a crash</b>: a file Explorer is still copying in cannot be read yet,
+    /// and that is said in the box beside the stage instead (Part 3: the check reports there and
+    /// destroys nothing). <b>Only for the campaign still open</b>: a switch while the check ran has
+    /// its own report, and the old one's would stand beside the stage under the wrong campaign.
+    /// </summary>
+    private Task CheckAsync(OpenCampaign campaign, bool again)
+    {
+        var before = _checking;
+        var check = Task.Run(async () =>
         {
-            var report = await Reconciliation.SettleAsync(campaign.Store, campaign.Shelf, campaign.Findings).ConfigureAwait(false);
+            await before.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-            ControlLog.CampaignReconciled(
-                _logger, report.Adopted, report.Duplicates, report.Missing.Count, report.Foreign.Count, report.Reconstructed);
+            string words;
+            var adopted = 0;
 
-            var words = Words(campaign, report);
+            try
+            {
+                var findings = again ? Reconciliation.Survey(campaign.Store) : campaign.Findings;
+                var report = await Reconciliation.SettleAsync(campaign.Store, campaign.Shelf, findings).ConfigureAwait(false);
+
+                ControlLog.CampaignReconciled(
+                    _logger, report.Adopted, report.Duplicates, report.Missing.Count, report.Foreign.Count, report.Reconstructed);
+
+                words = Words(campaign, report);
+                adopted = report.Adopted;
+            }
+            catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
+            {
+                words = Strings.CampaignCheckFailed(campaign.Name, failed.Message);
+            }
 
             await _dispatcher.InvokeAsync(() =>
             {
+                if (!ReferenceEquals(Open, campaign))
+                {
+                    return;
+                }
+
                 Reported?.Invoke(this, words);
 
-                // Only for the campaign still open - a switch while the check ran has its own.
-                if (ReferenceEquals(Open, campaign))
+                if (!again)
                 {
                     Measured?.Invoke(this, new StockMeasure(campaign.Store.Count, FreeSpace()));
                 }
 
                 // Pictures taken in from the folder belong in the lists now.
-                if (report.Adopted > 0 && ReferenceEquals(Open, campaign))
+                if (adopted > 0)
                 {
                     Changed?.Invoke(this, EventArgs.Empty);
                 }
             });
         });
+
+        _checking = check;
+
+        return check;
     }
 
     private void Become(OpenCampaign? campaign)
