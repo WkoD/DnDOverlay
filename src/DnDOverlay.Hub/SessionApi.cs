@@ -2174,23 +2174,65 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
-    public Task UnpairAsync(DeviceId device, CancellationToken cancellationToken = default)
+    public async Task UnpairAsync(DeviceId device, CancellationToken cancellationToken = default)
     {
-        if (_pairing.Unpair(device))
+        if (!_pairing.Unpair(device))
         {
-            HubLog.Unpaired(_logger, device);
-
-            // The token is gone, so the next Hello would be refused anyway - but a connection
-            // that is already open would carry on until then. Ending it makes "unpaired" mean
-            // now rather than eventually.
-            if (_connections.TryGet(device, out var connection))
-            {
-                connection.RequestClose();
-            }
+            return;
         }
 
-        return Task.CompletedTask;
+        HubLog.Unpaired(_logger, device);
+
+        // The token is gone, so the next Hello would be refused anyway - but a connection that is
+        // already open would carry on until then. Ending it makes "unpaired" mean now rather than
+        // eventually.
+        //
+        // <b>With the goodbye, not a bare close.</b> A display that loses its connection keeps its
+        // scene (Part 3), so a close left the table lit with pictures nobody could address any more,
+        // until the rescue mark a minute later. GoIdle is the orderly end, as on quitting: the start
+        // state, and no takeover window. Waited for as long as quitting waits, so the forgetting
+        // below cannot race a last report from the device's own read loop.
+        if (_connections.TryGet(device, out var connection))
+        {
+            connection.Finish(new GoIdleMessage());
+
+            await Task.WhenAny(connection.Drained, Task.Delay(UnpairWait, cancellationToken)).ConfigureAwait(false);
+        }
+
+        // "Danach kann der Hub die Screens dieses Geräts nicht mehr adressieren, die Anordnung darauf
+        // ist weg" (Part 7): the scenes go, said to the surfaces as one clearing patch, and with them
+        // the screens, their wishes and the device's settings. The catalogue announces that it is
+        // worth writing, so control.json loses the screens too.
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var cleared = Forget(device)
+                .SelectMany(dropped => (IEnumerable<ScreenOp>)
+                [
+                    .. dropped.Scene.Items.Count > 0 ? [new ScreenOp(dropped.Screen, new ClearItems())] : Array.Empty<ScreenOp>(),
+                    .. dropped.Scene.Background is not null ? [new ScreenOp(dropped.Screen, new ClearBackground())] : Array.Empty<ScreenOp>(),
+                ])
+                .ToList();
+
+            if (cleared.Count > 0)
+            {
+                _events.Publish(new SessionEvent.ScenePatched(new ScenePatch(cleared)));
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        _screens.Forget(device);
+        _ = _renames.TryRemove(device, out _);
+        _ = _diagnosing.TryRemove(device, out _);
+        _ = _windowsWanted.TryRemove(device, out _);
     }
+
+    /// <summary>How long an unpairing waits for the device to take its goodbye - the same as quitting does.</summary>
+    private static readonly TimeSpan UnpairWait = TimeSpan.FromSeconds(2);
 
     /// <inheritdoc />
     public Task ClearRejectionAsync(DeviceId device, CancellationToken cancellationToken = default)

@@ -201,6 +201,38 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// Unpairing clears this device's screens and only these (Part 11): the device gets the goodbye,
+    /// so its table goes dark instead of keeping a scene nobody can address any more, and the hub
+    /// forgets its scenes and its screens. Before, the connection was merely closed and everything
+    /// stayed - on the table until the rescue mark, in the hub for good.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task Unpairing_darkens_that_device_and_forgets_its_screens_and_only_those()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+
+        using var asked = await ConnectAsync(Asked, [Info(First)], cancellationToken);
+        using var bystander = await ConnectAsync(Bystander, [Info(First)], cancellationToken);
+
+        await ReceiveAsync<ConfigUpdateMessage>(asked, cancellationToken);
+        await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
+
+        _ = await session.AddItemAsync(new ScreenRef(Asked, First), Reference(), position: null, cancellationToken);
+        _ = await session.AddItemAsync(new ScreenRef(Bystander, First), Reference(), position: null, cancellationToken);
+
+        await session.UnpairAsync(Asked, cancellationToken);
+
+        await ReceiveAsync<GoIdleMessage>(asked, cancellationToken);
+
+        Assert.Empty((await session.GetSceneAsync(new ScreenRef(Asked, First), cancellationToken)).Items);
+        Assert.DoesNotContain(session.Screens, view => view.Screen.Device == Asked);
+
+        Assert.Single((await session.GetSceneAsync(new ScreenRef(Bystander, First), cancellationToken)).Items);
+        Assert.Contains(session.Screens, view => view.Screen.Device == Bystander);
+    }
+
+    /// <summary>
     /// "Which one are you?" goes to the device that was asked and to no other. With two devices of
     /// two screens each this is the only thing that says which tile is which physical screen, and
     /// a second table lighting up with names would be exactly the confusion it exists to end

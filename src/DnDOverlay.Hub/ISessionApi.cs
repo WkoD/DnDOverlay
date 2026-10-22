@@ -772,9 +772,11 @@ public interface ISessionApi
     Task AcceptAsOwnDeviceAsync(DeviceId device, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Withdraws a token. In M5b this grows the confirmation with consequences, because it also
-    /// discards this device's arrangements - the hub cannot address its screens afterwards
-    /// (Part 3, Part 7).
+    /// Withdraws a token, and with it everything the hub knew about the device (Part 3, Part 7): a
+    /// connected device gets <c>GoIdle</c> before its connection closes, as on quitting, so its tables
+    /// go dark; its scenes are cleared - one patch to the surfaces - and its screens, their wishes and
+    /// its device settings are forgotten. Other devices' screens are untouched. The caller saves what
+    /// is to be kept first, and forgets the device in its own configuration.
     /// </summary>
     Task UnpairAsync(DeviceId device, CancellationToken cancellationToken = default);
 
