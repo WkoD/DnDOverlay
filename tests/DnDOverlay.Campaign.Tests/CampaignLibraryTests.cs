@@ -338,6 +338,77 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.True(after.IsEmpty);
     }
 
+    /// <summary>
+    /// One file that cannot be handled ends nothing: an orphan gone since the first look - the case of
+    /// "check folder again" while the opening's check works through the same files - is named in the
+    /// report, and the files after it are still taken in.
+    /// </summary>
+    [Fact]
+    public async Task A_file_gone_since_the_first_look_is_named_and_the_rest_still_comes_in()
+    {
+        var campaign = Campaign("Sturmküste");
+
+        File.WriteAllBytes(Path.Combine(campaign, "A Weg.png"), Bytes("weg"));
+        File.WriteAllBytes(Path.Combine(campaign, "B Ork.png"), Bytes("ork"));
+
+        var opened = Library().Open("Sturmküste");
+
+        File.Delete(Path.Combine(campaign, "A Weg.png"));
+
+        var report = await Reconciliation.SettleAsync(opened.Store, opened.Shelf, opened.Findings, cancellationToken: Cancellation);
+
+        Assert.Equal(["A Weg.png"], report.Skipped);
+        Assert.Equal(1, report.Adopted);
+        Assert.Equal("B Ork", Assert.Single(opened.Store.Entries).Name);
+    }
+
+    /// <summary>
+    /// A locked file is named and left for the next check; a read-only copy laid in from a share is taken
+    /// in, and because it will not be deleted it stays and is named - on every opening, without an
+    /// exception on any of them.
+    /// </summary>
+    [Fact]
+    public async Task A_locked_file_is_skipped_and_a_read_only_copy_is_kept()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to read a file held without sharing, or to delete a read-only one");
+        }
+
+        var campaign = Campaign("Sturmküste");
+        var locked = Path.Combine(campaign, "Gesperrt.png");
+        var readOnly = Path.Combine(campaign, "Schreibgeschützt.png");
+
+        _codec.PassThrough = true;
+
+        File.WriteAllBytes(locked, Bytes("gesperrt"));
+        File.WriteAllBytes(readOnly, Bytes("nur lesen"));
+        File.SetAttributes(readOnly, FileAttributes.ReadOnly);
+
+        try
+        {
+            CampaignReport report;
+
+            using (File.Open(locked, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                (_, report) = await OpenAndSettle("Sturmküste");
+            }
+
+            Assert.Equal(["Gesperrt.png"], report.Skipped);
+            Assert.Equal(["Schreibgeschützt.png"], report.Kept);
+            Assert.Equal(1, report.Adopted);
+
+            var (_, again) = await OpenAndSettle("Sturmküste");
+
+            Assert.Equal(["Schreibgeschützt.png"], again.Kept);
+            Assert.Empty(again.Skipped);
+        }
+        finally
+        {
+            File.SetAttributes(readOnly, FileAttributes.Normal);
+        }
+    }
+
     /// <summary>A file deleted by hand leaves its entry marked, not removed - and taking the same picture in again heals it.</summary>
     [Fact]
     public async Task A_missing_file_is_marked_and_heals_when_the_picture_comes_back()

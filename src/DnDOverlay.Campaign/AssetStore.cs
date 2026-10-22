@@ -389,7 +389,14 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         {
             if (_removed.RemoveWhere(name => !File.Exists(Path.Combine(Directory, AssetsFolder, name))) > 0)
             {
-                SaveInventory();
+                try
+                {
+                    SaveInventory();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Only notes about files that are gone: the next write of the inventory drops them.
+                }
             }
         }
     }
@@ -799,9 +806,18 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             {
                 // A picture whose thumbnail cannot be made shows a blank tile; its file is still the DM's.
             }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Derived, and tried again on the next check - never a reason to end the one running.
+            }
         }
 
         var folder = Path.Combine(Directory, AssetsFolder, ThumbnailFolder);
+
+        if (!System.IO.Directory.Exists(folder))
+        {
+            return made;
+        }
 
         foreach (var stray in System.IO.Directory.EnumerateFiles(folder, "*.png"))
         {
@@ -810,7 +826,14 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
             if (!known.Contains(id))
             {
-                File.Delete(stray);
+                try
+                {
+                    File.Delete(stray);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Held open by the stock grid's loader, say: gone on a later check.
+                }
             }
         }
 

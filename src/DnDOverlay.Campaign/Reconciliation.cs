@@ -30,14 +30,22 @@ public sealed record CampaignReport(
     /// Pictures that are in the stock but whose file was left where it lies, because what is in
     /// <c>assets\</c> is not byte for byte that file: a token the picture was taken out of (a
     /// <c>.rptok</c> is read, never written, Part 3), or a format converted on the way in. Part 3 removes
-    /// byte-identical copies only; anything else would lose what the stock's copy does not carry.
+    /// byte-identical copies only; anything else would lose what the stock's copy does not carry. Also
+    /// a byte-identical copy the file system would not let go of - read-only, held open.
     /// </summary>
     public IReadOnlyList<string> Kept { get; init; } = [];
+
+    /// <summary>
+    /// Files that could not be read or moved right now - locked, an offline placeholder, gone since the
+    /// first look. Left where they are and tried again on the next check (Part 3, phase 3: a report, not
+    /// an exception).
+    /// </summary>
+    public IReadOnlyList<string> Skipped { get; init; } = [];
 
     /// <summary>Whether there is anything to say at all - a campaign without findings opens without a report.</summary>
     public bool IsEmpty =>
         Adopted == 0 && Duplicates == 0 && Missing.Count == 0 && Foreign.Count == 0 && !Reconstructed && UnreadableScenes.Count == 0
-        && Kept.Count == 0;
+        && Kept.Count == 0 && Skipped.Count == 0;
 }
 
 /// <summary>
@@ -72,7 +80,11 @@ public static partial class Reconciliation
 
         var orphans = new List<string>();
 
-        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        // A subfolder the DM's account may not read is passed over rather than ending the look at the
+        // whole folder. Hidden and system files are listed as before: litter is filtered by name below.
+        var walk = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
+
+        foreach (var file in Directory.EnumerateFiles(root, "*", walk))
         {
             var name = Path.GetFileName(file);
 
@@ -111,10 +123,7 @@ public static partial class Reconciliation
         ArgumentNullException.ThrowIfNull(shelf);
         ArgumentNullException.ThrowIfNull(findings);
 
-        var adopted = 0;
-        var duplicates = 0;
-        var foreign = new List<string>();
-        var kept = new List<string>();
+        var tally = new Tally();
         var done = 0;
 
         // Files in assets\ first: a hash-named file there is the stock's own, and a copy of it somewhere
@@ -125,95 +134,16 @@ public static partial class Reconciliation
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Taken into the stock meanwhile, by an earlier file of this run or a check beside it: it is
-            // the stock's own file now, and nothing below may treat it as a copy.
-            if (store.Keeps(file))
+            try
             {
-                progress?.Report(++done);
-                continue;
+                await SettleOneAsync(store, shelf, findings, file, tally, cancellationToken).ConfigureAwait(false);
             }
-
-            var stem = Path.GetFileNameWithoutExtension(file);
-            var hashNamed = HashName().IsMatch(stem);
-            var bytes = await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
-
-            if (hashNamed && AssetStore.IsDeliveryFormat(Path.GetExtension(file).TrimStart('.')))
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                var asset = new AssetId(stem.ToLowerInvariant());
-
-                if (store.WasRemoved(file))
-                {
-                    // Taken out of the stock while its file could not be deleted: the DM removed it,
-                    // and it must not come back in as a crash's leftover. Named as foreign (M5b5).
-                    foreign.Add(file);
-                }
-                else if (store.Knows(asset))
-                {
-                    // In the stock already. A byte-identical copy goes; the same file coming back heals
-                    // the entry whose file was missing; anything else under its name is not ours to
-                    // judge and stays (Part 3).
-                    if (store.Holds(asset, bytes))
-                    {
-                        if (RemoveCopy(store, file))
-                        {
-                            duplicates++;
-                        }
-                    }
-                    else if (store.Restore(asset, file, bytes))
-                    {
-                        adopted++;
-                    }
-                    else
-                    {
-                        foreign.Add(file);
-                    }
-                }
-                else if (store.AdoptStored(file, NameFromScenes(shelf, stem) ?? stem[..12], AddedAt(file)) is not null)
-                {
-                    adopted++;
-                }
-                else
-                {
-                    foreign.Add(file);
-                }
-            }
-            else
-            {
-                // A hash-named file in a format the stock does not deliver comes through the intake like
-                // any other - converted, limited - and keeps the scene's name for it.
-                var proposed = hashNamed ? NameFromScenes(shelf, stem) ?? stem[..12] : stem;
-                var result = await store.IngestAsync(bytes, proposed, cancellationToken).ConfigureAwait(false);
-
-                if (result is IngestResult.Taken taken)
-                {
-                    // New to the stock - or an entry whose file was missing, healed by this one: that is
-                    // the picture coming back (Part 3), not a copy of something that was there.
-                    var isNew = !taken.AlreadyPresent || findings.Missing.Contains(taken.Asset.AssetId);
-
-                    if (isNew)
-                    {
-                        adopted++;
-                    }
-
-                    // Removed only when its bytes now lie in assets\ unchanged - "renamed to its hash and
-                    // moved", "byte-identical copies removed" (Part 3). A token, or a picture converted on
-                    // the way in, is not what the stock holds, and stays where the DM put it.
-                    if (store.Holds(taken.Asset.AssetId, bytes))
-                    {
-                        if (RemoveCopy(store, file) && !isNew)
-                        {
-                            duplicates++;
-                        }
-                    }
-                    else
-                    {
-                        kept.Add(file);
-                    }
-                }
-                else
-                {
-                    foreign.Add(file);
-                }
+                // Locked, read-only, an offline placeholder, gone since the survey: one file that cannot
+                // be handled right now belongs in the report, not in an exception that takes the rest
+                // of the check with it (Part 3, phase 3). It stays and is tried again next time.
+                tally.Skipped.Add(file);
             }
 
             progress?.Report(++done);
@@ -226,32 +156,138 @@ public static partial class Reconciliation
         var missing = store.Missing.Select(asset => names.GetValueOrDefault(asset.Value, asset.Value)).Order(StringComparer.CurrentCulture).ToList();
 
         return new CampaignReport(
-            adopted,
-            duplicates,
+            tally.Adopted,
+            tally.Duplicates,
             missing,
-            [.. foreign.Select(path => Path.GetRelativePath(store.Directory, path))],
+            Relative(store, tally.Foreign),
             store.Reconstructed,
-            [.. shelf.Unreadable.Select(path => Path.GetRelativePath(store.Directory, path))])
+            Relative(store, shelf.Unreadable))
         {
-            Kept = [.. kept.Select(path => Path.GetRelativePath(store.Directory, path))],
+            Kept = Relative(store, tally.Kept),
+            Skipped = Relative(store, tally.Skipped),
         };
     }
 
+    /// <summary>One orphan of phase 2. I/O failures are the caller's to note.</summary>
+    private static async Task SettleOneAsync(
+        AssetStore store, SceneShelf shelf, CampaignFindings findings, string file, Tally tally, CancellationToken cancellationToken)
+    {
+        // Taken into the stock meanwhile, by an earlier file of this run or a check beside it: it is
+        // the stock's own file now, and nothing below may treat it as a copy.
+        if (store.Keeps(file))
+        {
+            return;
+        }
+
+        var stem = Path.GetFileNameWithoutExtension(file);
+        var hashNamed = HashName().IsMatch(stem);
+        var bytes = await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
+
+        if (hashNamed && AssetStore.IsDeliveryFormat(Path.GetExtension(file).TrimStart('.')))
+        {
+            var asset = new AssetId(stem.ToLowerInvariant());
+
+            if (store.WasRemoved(file))
+            {
+                // Taken out of the stock while its file could not be deleted: the DM removed it, and it
+                // must not come back in as a crash's leftover. Named as foreign (M5b5).
+                tally.Foreign.Add(file);
+            }
+            else if (store.Knows(asset))
+            {
+                // In the stock already. A byte-identical copy goes; the same file coming back heals the
+                // entry whose file was missing; anything else under its name is not ours to judge and
+                // stays (Part 3).
+                if (store.Holds(asset, bytes))
+                {
+                    if (RemoveCopy(store, file, tally))
+                    {
+                        tally.Duplicates++;
+                    }
+                }
+                else if (store.Restore(asset, file, bytes))
+                {
+                    tally.Adopted++;
+                }
+                else
+                {
+                    tally.Foreign.Add(file);
+                }
+            }
+            else if (store.AdoptStored(file, NameFromScenes(shelf, stem) ?? stem[..12], AddedAt(file)) is not null)
+            {
+                tally.Adopted++;
+            }
+            else
+            {
+                tally.Foreign.Add(file);
+            }
+
+            return;
+        }
+
+        // A hash-named file in a format the stock does not deliver comes through the intake like any
+        // other - converted, limited - and keeps the scene's name for it.
+        var proposed = hashNamed ? NameFromScenes(shelf, stem) ?? stem[..12] : stem;
+        var result = await store.IngestAsync(bytes, proposed, cancellationToken).ConfigureAwait(false);
+
+        if (result is not IngestResult.Taken taken)
+        {
+            tally.Foreign.Add(file);
+
+            return;
+        }
+
+        // New to the stock - or an entry whose file was missing, healed by this one: that is the picture
+        // coming back (Part 3), not a copy of something that was there.
+        var isNew = !taken.AlreadyPresent || findings.Missing.Contains(taken.Asset.AssetId);
+
+        if (isNew)
+        {
+            tally.Adopted++;
+        }
+
+        // Removed only when its bytes now lie in assets\ unchanged - "renamed to its hash and moved",
+        // "byte-identical copies removed" (Part 3). A token, or a picture converted on the way in, is not
+        // what the stock holds, and stays where the DM put it.
+        if (!store.Holds(taken.Asset.AssetId, bytes))
+        {
+            tally.Kept.Add(file);
+        }
+        else if (RemoveCopy(store, file, tally) && !isNew)
+        {
+            tally.Duplicates++;
+        }
+    }
+
     /// <summary>
-    /// Removes a byte-identical copy of what the stock holds - and never the stock's own file, which
-    /// is the same bytes by definition. False when it was not removed.
+    /// Removes a byte-identical copy of what the stock holds - and never the stock's own file, which is
+    /// the same bytes by definition. A copy the file system will not let go of - read-only, held open -
+    /// stays and is named with the kept ones. False when it was not removed.
     /// </summary>
-    private static bool RemoveCopy(AssetStore store, string file)
+    private static bool RemoveCopy(AssetStore store, string file, Tally tally)
     {
         if (store.Keeps(file))
         {
             return false;
         }
 
-        File.Delete(file);
+        try
+        {
+            File.Delete(file);
 
-        return true;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            tally.Kept.Add(file);
+
+            return false;
+        }
     }
+
+    private static List<string> Relative(AssetStore store, IEnumerable<string> paths) =>
+        [.. paths.Select(path => Path.GetRelativePath(store.Directory, path))];
 
     /// <summary>When a picture adopted under its hash name came in: its file's time, the only clue left (Part 3).</summary>
     private static DateTimeOffset AddedAt(string file) => new(File.GetLastWriteTimeUtc(file), TimeSpan.Zero);
@@ -279,4 +315,18 @@ public static partial class Reconciliation
 
     [GeneratedRegex("^[0-9a-fA-F]{64}$")]
     private static partial Regex HashName();
+
+    /// <summary>What phase 2 has counted so far.</summary>
+    private sealed class Tally
+    {
+        public int Adopted { get; set; }
+
+        public int Duplicates { get; set; }
+
+        public List<string> Foreign { get; } = [];
+
+        public List<string> Kept { get; } = [];
+
+        public List<string> Skipped { get; } = [];
+    }
 }
