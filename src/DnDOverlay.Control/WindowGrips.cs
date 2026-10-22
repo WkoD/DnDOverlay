@@ -111,10 +111,12 @@ internal sealed class WindowGrips : FrameworkElement
     {
         ArgumentNullException.ThrowIfNull(e);
 
+        // Laid BEFORE the capture is let go: releasing raises LostMouseCapture on the spot, and that
+        // abandons the hold - released first, the move was dropped every time (measured, M5 review).
         if (e.StylusDevice is null && _held is not null && _finger is null)
         {
-            ReleaseMouseCapture();
             End();
+            ReleaseMouseCapture();
             e.Handled = true;
         }
     }
@@ -180,15 +182,35 @@ internal sealed class WindowGrips : FrameworkElement
     {
         ArgumentNullException.ThrowIfNull(e);
 
+        // Laid before the capture goes, for the reason the mouse has (OnMouseLeftButtonUp).
         if (e.TouchDevice.Id == _finger)
         {
             _press.Up();
-            _ = ReleaseTouchCapture(e.TouchDevice);
             _finger = null;
             End();
+            _ = ReleaseTouchCapture(e.TouchDevice);
         }
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// The finger's counterpart of <see cref="OnLostMouseCapture"/>: the capture taken away without a
+    /// <c>TouchUp</c> reaching here - the window deactivated mid-touch, a toast, the long-press menu.
+    /// Without it the held window and the finger stayed set, the layer answered every hit on the face
+    /// and the tile skips what starts on it: no picture, no selection, no menu any more, and the mouse
+    /// grips were refused as well (M5 review).
+    /// </summary>
+    protected override void OnLostTouchCapture(TouchEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+
+        if (e.TouchDevice.Id == _finger)
+        {
+            _press.Up();
+            _finger = null;
+            Abandon();
+        }
     }
 
     /// <summary>The window and grip at a place on the face - topmost first - or none: not on a grip, covered by a picture, or not to be laid.</summary>
