@@ -4,6 +4,22 @@ namespace DnDOverlay.Core.Tests.Scene;
 
 public sealed class SceneReducerTests
 {
+    /// <summary>A free text says something else: words and shape change, its place and height stay; a picture is untouched.</summary>
+    [Fact]
+    public void SetText_changes_a_text_and_nothing_else()
+    {
+        var text = new TextItem(new ItemId(Guid.NewGuid()), 0.4, 0.2, 0.08, 5, 15, 2, Locked: false, Parked: false, Revision: 1, Text: "Kerker");
+        var picture = Build.Item();
+        var scene = Build.SceneWith(text, picture);
+
+        var result = SceneReducer.Apply(scene, new SetText(text.ItemId, "Kerker von Townsvil", 9), Build.Screen());
+        var changed = Assert.IsType<TextItem>(result.Items.Single(item => item.ItemId == text.ItemId));
+
+        Assert.Equal(text with { Text = "Kerker von Townsvil", AspectRatio = 9 }, changed);
+        Assert.Equal(picture, result.Items.Single(item => item.ItemId == picture.ItemId));
+        Assert.Equal(scene, SceneReducer.Apply(scene, new SetText(picture.ItemId, "nichts", 2), Build.Screen()));
+    }
+
     [Fact]
     public void AddItem_puts_the_item_into_the_scene()
     {

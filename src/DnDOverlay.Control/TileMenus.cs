@@ -88,6 +88,9 @@ internal sealed class TileMenus(
         // sees what one loads (Part 7).
         menu.Items.Add(Entry(Strings.TileMenuSaveAsScene, () => Saving?.Invoke(this, EventArgs.Empty)));
 
+        // A free text onto this screen - the caption in place of the background's name (M5b9).
+        menu.Items.Add(Entry(Strings.TileMenuAddText, () => _ = WriteAsync(over, null)));
+
         menu.Items.Add(Turned(view));
 
         // How new pictures arrive on this screen - moved here from the M2 scaffold when the panel
@@ -192,6 +195,29 @@ internal sealed class TileMenus(
         Open(menu, over, at);
     }
 
+    /// <summary>
+    /// Asks for a text and lays it down, or changes the one given. The shape is measured from the
+    /// drawing every surface renders, so the item is exactly as wide as its words.
+    /// </summary>
+    private async Task WriteAsync(UIElement over, TextItem? editing)
+    {
+        if (TextDialog.Ask(Window.GetWindow(over), editing?.Text) is not { } text)
+        {
+            return;
+        }
+
+        var shape = Rendering.Windows.TextCard.AspectRatio(text);
+
+        if (editing is null)
+        {
+            _ = await session.AddTextAsync(screen, text, shape, CancellationToken.None).ConfigureAwait(true);
+        }
+        else
+        {
+            await session.SetTextAsync(screen, editing.ItemId, text, shape, CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
     /// <summary>One picture's menu, and through it the whole selection when it is part of one.</summary>
     internal void ForItem(
         UIElement over,
@@ -283,6 +309,11 @@ internal sealed class TileMenus(
 
         // The same rename as from the stock (Part 7): it changes the name everywhere - the way
         // through the tile is only the shorter one when the picture is in front of the DM anyway.
+        if (picture is TextItem written)
+        {
+            menu.Items.Add(Entry(Strings.TileMenuEditText, () => _ = WriteAsync(over, written)));
+        }
+
         if (picture is ImageItem named)
         {
             menu.Items.Add(Entry(Strings.TileMenuRename, () => Renaming?.Invoke(this, named.AssetId)));

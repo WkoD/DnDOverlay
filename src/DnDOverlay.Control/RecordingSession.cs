@@ -89,6 +89,13 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
     public Task<ItemId> AddItemAsync(ScreenRef screen, AssetRef asset, Point? position, CancellationToken cancellationToken = default) =>
         RecordAsync([screen], _ => Strings.RecordingAddNamed(asset.Name), () => _inner.AddItemAsync(screen, asset, position, cancellationToken));
 
+    public Task<ItemId> AddTextAsync(ScreenRef screen, string text, double aspectRatio, CancellationToken cancellationToken = default) =>
+        RecordAsync([screen], _ => Strings.RecordingAddText(text), () => _inner.AddTextAsync(screen, text, aspectRatio, cancellationToken));
+
+    // Not a step: changing the words is like renaming a picture, which is not one either (Part 7).
+    public Task SetTextAsync(ScreenRef screen, ItemId item, string text, double aspectRatio, CancellationToken cancellationToken = default) =>
+        _inner.SetTextAsync(screen, item, text, aspectRatio, cancellationToken);
+
     public Task<IReadOnlyList<ItemId>> AddItemsAsync(ScreenRef screen, IReadOnlyList<AssetRef> assets, CancellationToken cancellationToken = default) =>
         RecordAsync(
             [screen],

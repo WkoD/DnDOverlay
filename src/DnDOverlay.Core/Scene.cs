@@ -36,6 +36,7 @@ public sealed record AssetMeta(
 /// <param name="Revision">Handed out by the hub alone, which is what makes the order globally unambiguous.</param>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ImageItem), "image")]
+[JsonDerivedType(typeof(TextItem), "text")]
 public abstract record SceneItem(
     ItemId ItemId,
     double CenterX,
@@ -74,6 +75,41 @@ public sealed record ImageItem(
     bool ShowName,
     bool AnimationPaused)
     : SceneItem(ItemId, CenterX, CenterY, Scale, AspectRatio, RotationDeg, ZOrder, Locked, Parked, Revision);
+
+/// <summary>
+/// A free text on a screen - a caption the DM lays wherever it belongs ("The Dungeon of Townsvil"),
+/// handled at the table like a picture: pushed, turned, scaled, locked, parked, focused (M5b9, DM).
+/// The first form of the text cards Part 10 names for M8.
+/// <para>
+/// <b>It has no asset</b>, and that is why <see cref="SceneItem.AspectRatio"/> sits on the item
+/// (Part 3): the shape is the text's own, measured by whoever wrote it, from the same drawing the
+/// table and the thumbnail render - so a caption is exactly as wide as its words wherever it is shown.
+/// </para>
+/// </summary>
+/// <param name="Text">What it says. Line breaks are kept; the length is limited by <see cref="MaxLength"/>.</param>
+public sealed record TextItem(
+    ItemId ItemId,
+    double CenterX,
+    double CenterY,
+    double Scale,
+    double AspectRatio,
+    double RotationDeg,
+    int ZOrder,
+    bool Locked,
+    bool Parked,
+    long Revision,
+    string Text)
+    : SceneItem(ItemId, CenterX, CenterY, Scale, AspectRatio, RotationDeg, ZOrder, Locked, Parked, Revision)
+{
+    /// <summary>How long a text may be - a caption, not a handout. A handout is a picture.</summary>
+    public const int MaxLength = 200;
+
+    /// <summary>
+    /// How high a new text arrives, as a fraction of the screen height - a heading's height, readable
+    /// from the far side of a table without covering what it names.
+    /// </summary>
+    public const double ArrivalScale = 0.08;
+}
 
 /// <summary>
 /// Where an item lies, as an INTENTION - what a display reports after a gesture and what the DM's

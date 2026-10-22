@@ -206,18 +206,26 @@ abstract record SceneItem(ItemId ItemId, double CenterX, double CenterY, double 
 
 record ImageItem(..., AssetId AssetId, AssetMeta Meta, string Name, bool ShowName,
                  bool AnimationPaused) : SceneItem;
+
+record TextItem(..., string Text) : SceneItem;
 ```
 
 - **`AssetMeta` travels with the item**, not only in the stock: the thumbnail and the edge clamp
   compute before the picture has loaded, and `IsAnimated` decides without decoding whether
   "pause animation" is offered.
 - **`AspectRatio` sits on `SceneItem`, not on `AssetMeta`.** Layout, edge clamp, flow placement and
-  thumbnail need the shape of every item, including a future text card without an asset.
+  thumbnail need the shape of every item, including a text without an asset.
 - **`Name` belongs to the asset, `ShowName` to the instance** (below).
 - **`Revision` is handed out by the hub alone** (rule 3). It orders transformations — what a display
   weighs its own running gesture against — and nothing else.
 - **The base type is discriminated over a fixed list** (`kind`), never over a transmitted type
-  name. Text cards will be the second kind.
+  name: `image` and `text`.
+- **A free text is the second kind** (`text`): a caption the DM lays on a screen, handled at the
+  table like a picture. It has no asset; its `AspectRatio` is measured by the sender from the same
+  drawing every surface renders (white words on a dark plate), and `SetText` changes the words and
+  the shape together, keeping place and height. At most 200 characters. It is the first form of the
+  text cards planned for later. A display of protocol version 1 cannot read it, which is why the
+  protocol is at version 2.
 
 ### The background is placed like a picture
 

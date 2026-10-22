@@ -1727,4 +1727,31 @@ Another DnDOverlay control is probably running already - look for its window bef
   <data name="MainQuit" xml:space="preserve">
     <value>Quit ...</value>
   </data>
+  <data name="TileMenuAddText" xml:space="preserve">
+    <value>Add text ...</value>
+  </data>
+  <data name="TileMenuEditText" xml:space="preserve">
+    <value>Change text ...</value>
+  </data>
+  <data name="TextDialogAddTitle" xml:space="preserve">
+    <value>Add text</value>
+  </data>
+  <data name="TextDialogEditTitle" xml:space="preserve">
+    <value>Change text</value>
+  </data>
+  <data name="TextDialogPrompt" xml:space="preserve">
+    <value>What it says - it can be pushed, turned and scaled at the table like a picture:</value>
+  </data>
+  <data name="TextDialogAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="TextDialogChange" xml:space="preserve">
+    <value>Change</value>
+  </data>
+  <data name="TextDialogCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="RecordingAddText" xml:space="preserve">
+    <value>Add text "{0}"</value>
+  </data>
 </root>

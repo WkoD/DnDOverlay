@@ -44,6 +44,21 @@ public sealed class SceneShelfTests : IDisposable
         Assert.Empty(again.Unreadable);
     }
 
+    /// <summary>A free text is saved with its scene and reads back as it was (M5b9).</summary>
+    [Fact]
+    public void A_free_text_is_saved_with_its_scene()
+    {
+        var text = new TextItem(new ItemId(Guid.NewGuid()), 0.5, 0.1, 0.08, 6.5, 0, 3, Locked: true, Parked: false, Revision: 4, Text: "Kerker von Townsvil");
+        var scene = Scene("Grimmbart") with { Items = [.. Scene("Grimmbart").Items, text] };
+
+        Assert.Equal(ShelfOutcome.Done, Shelf().SaveScene("Kerker", Origin, scene, overwrite: false));
+
+        var saved = Shelf().Scene("Kerker");
+
+        Assert.NotNull(saved);
+        Assert.Equal(text, saved.Scene.Items.OfType<TextItem>().Single());
+    }
+
     /// <summary>The folders come with the first save, never by themselves.</summary>
     [Fact]
     public void Opening_creates_nothing()

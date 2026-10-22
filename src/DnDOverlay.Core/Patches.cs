@@ -28,6 +28,7 @@ namespace DnDOverlay.Core;
 [JsonDerivedType(typeof(ParkItem), "parkItem")]
 [JsonDerivedType(typeof(SetFocus), "setFocus")]
 [JsonDerivedType(typeof(ClearItems), "clearItems")]
+[JsonDerivedType(typeof(SetText), "setText")]
 public abstract record PatchOp;
 
 /// <summary>
@@ -185,6 +186,13 @@ public sealed record SetFocus(IReadOnlyList<ItemId> Items) : PatchOp
 /// patch: the two are separate operations so that "empty the lot" has to name both.
 /// </summary>
 public sealed record ClearItems : PatchOp;
+
+/// <summary>
+/// A free text says something else (M5b9). The shape comes along, measured by the sender from the
+/// same drawing every surface renders; the height stays, so the caption keeps its size and only its
+/// width follows the words.
+/// </summary>
+public sealed record SetText(ItemId Item, string Text, double AspectRatio) : PatchOp;
 
 /// <summary>
 /// One operation addressed at one screen. The address is always the full <see cref="ScreenRef"/>,

@@ -265,7 +265,7 @@ internal sealed class SceneThumbnail : FrameworkElement
                 drawingContext,
                 Layout.ItemToRect(shown, _screen),
                 item.RotationDeg,
-                item is ImageItem image ? _pictures.For(image.AssetId) : null,
+                Picture(item),
                 size,
                 item is ImageItem { ShowName: true } named ? named.Name : null,
                 item.Locked,
@@ -285,7 +285,7 @@ internal sealed class SceneThumbnail : FrameworkElement
                     drawingContext,
                     Layout.ItemToRect(item, _screen),
                     item.RotationDeg,
-                    item is ImageItem image ? _pictures.For(image.AssetId) : null,
+                    Picture(item),
                     size,
                     item is ImageItem { ShowName: true } named ? named.Name : null,
                     item.Locked,
@@ -299,6 +299,14 @@ internal sealed class SceneThumbnail : FrameworkElement
             drawingContext.Pop();
         }
     }
+
+    /// <summary>What an item shows: a picture's decoded image, or a free text's drawing (M5b9).</summary>
+    private ImageSource? Picture(SceneItem item) => item switch
+    {
+        ImageItem image => _pictures.For(image.AssetId),
+        TextItem written => TextCard.Draw(written.Text),
+        _ => null,
+    };
 
     /// <summary>
     /// One picture, from normalised scene coordinates into this element. The rectangle turns with

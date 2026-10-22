@@ -1727,4 +1727,31 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   <data name="MainQuit" xml:space="preserve">
     <value>Beenden ...</value>
   </data>
+  <data name="TileMenuAddText" xml:space="preserve">
+    <value>Text hinzufügen ...</value>
+  </data>
+  <data name="TileMenuEditText" xml:space="preserve">
+    <value>Text ändern ...</value>
+  </data>
+  <data name="TextDialogAddTitle" xml:space="preserve">
+    <value>Text hinzufügen</value>
+  </data>
+  <data name="TextDialogEditTitle" xml:space="preserve">
+    <value>Text ändern</value>
+  </data>
+  <data name="TextDialogPrompt" xml:space="preserve">
+    <value>Was dort stehen soll - am Tisch wie ein Bild verschiebbar, drehbar und skalierbar:</value>
+  </data>
+  <data name="TextDialogAdd" xml:space="preserve">
+    <value>Hinzufügen</value>
+  </data>
+  <data name="TextDialogChange" xml:space="preserve">
+    <value>Ändern</value>
+  </data>
+  <data name="TextDialogCancel" xml:space="preserve">
+    <value>Abbrechen</value>
+  </data>
+  <data name="RecordingAddText" xml:space="preserve">
+    <value>Text "{0}" hinzugefügt</value>
+  </data>
 </root>

@@ -337,6 +337,17 @@ public interface ISessionApi
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// A free text onto a screen (M5b9): a heading's height, at the next place the placement gives,
+    /// at the screen's default angle, on top. <paramref name="aspectRatio"/> is the text's shape as the
+    /// sender measured it from the drawing every surface renders. The text is cleaned - control
+    /// characters out, line breaks kept - and cut to <see cref="TextItem.MaxLength"/>.
+    /// </summary>
+    Task<ItemId> AddTextAsync(ScreenRef screen, string text, double aspectRatio, CancellationToken cancellationToken = default);
+
+    /// <summary>A free text says something else; its height stays, its width follows the words.</summary>
+    Task SetTextAsync(ScreenRef screen, ItemId item, string text, double aspectRatio, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// A whole run of arrivals as <b>one</b> command: one patch, one revision, one step in the
     /// timeline, one drawing at each end.
     /// <para>

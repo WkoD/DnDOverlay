@@ -220,6 +220,81 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<ItemId> AddTextAsync(ScreenRef screen, string text, double aspectRatio, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        var written = Written(text);
+        var shape = Shape(aspectRatio);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var context = _screens.ContextFor(screen);
+            var scene = _scenes.Get(screen);
+
+            // A heading's height - but never wider than most of the screen: a long line comes in
+            // lower rather than reaching past both edges.
+            var screenAspect = context.AspectRatio > 0 ? context.AspectRatio : 1;
+            var scale = Math.Min(TextItem.ArrivalScale, 0.9 * screenAspect / shape);
+            var centre = Placement.NextPosition(scene, scale, shape, context);
+
+            var item = new TextItem(
+                ItemId: new ItemId(Guid.NewGuid()),
+                CenterX: centre.X,
+                CenterY: centre.Y,
+                Scale: scale,
+                AspectRatio: shape,
+                RotationDeg: context.DefaultRotationDeg,
+                ZOrder: scene.TopZOrder + 1,
+                Locked: false,
+                Parked: false,
+                Revision: _scenes.NextRevision(),
+                Text: written);
+
+            var op = new AddItem(item);
+
+            _scenes.Set(screen, SceneReducer.Apply(scene, op, context));
+
+            // One command, one patch, the store first - as for a picture (AddItemAsync).
+            var patch = new ScenePatch([new ScreenOp(screen, op)]);
+
+            _connections.Dispatch(patch);
+            _events.Publish(new SessionEvent.ScenePatched(patch));
+
+            return item.ItemId;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public Task SetTextAsync(ScreenRef screen, ItemId item, string text, double aspectRatio, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        return ApplyAsync(screen, new SetText(item, Written(text), Shape(aspectRatio)), cancellationToken);
+    }
+
+    /// <summary>A text as it may stand on a table: control characters out, line breaks kept, trimmed, cut to length.</summary>
+    private static string Written(string text)
+    {
+        var kept = new string([.. text
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\t', ' ')
+            .Where(character => character == '\n' || !char.IsControl(character))]).Trim();
+
+        return kept.Length <= TextItem.MaxLength ? kept : kept[..TextItem.MaxLength];
+    }
+
+    /// <summary>A shape a sender could have got wrong, held to something drawable.</summary>
+    private static double Shape(double aspectRatio) =>
+        double.IsFinite(aspectRatio) && aspectRatio > 0 ? Math.Clamp(aspectRatio, 0.05, 100) : 1;
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ItemId>> AddItemsAsync(
         ScreenRef screen,
         IReadOnlyList<AssetRef> assets,

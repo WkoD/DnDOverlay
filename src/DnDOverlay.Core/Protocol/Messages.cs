@@ -447,8 +447,12 @@ public static class Protocol
     /// The protocol version. It is REPORTED, never enforced: a mismatch rejects nothing in
     /// either direction, because the control is the very path along which a display gets updated
     /// - rejecting it would cut the one wire at the exact moment it is needed (Part 4).
+    /// <para>
+    /// <b>2</b> since M5b9: a scene may hold a free text (<see cref="TextItem"/>), which a display
+    /// of version 1 cannot read.
+    /// </para>
     /// </summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>The WebSocket endpoint a display connects to.</summary>
     public const string DisplayPath = "/ws/display";

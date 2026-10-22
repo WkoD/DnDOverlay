@@ -965,6 +965,12 @@ internal sealed class OverlayWindow : Window
         {
             foreach (var original in scene.Items)
             {
+                if (original is TextItem written)
+                {
+                    Write(written, scene, context, focus, width, height, standing);
+                    continue;
+                }
+
                 if (original is not ImageItem image)
                 {
                     continue;
@@ -1097,6 +1103,59 @@ internal sealed class OverlayWindow : Window
         {
             MoreToShow?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// One free text (M5b9): a place like a picture's - same depth rules, same focus, same fan, the
+    /// same hands - with the text's drawing for a picture. No asset, no decode, no ring, no caption:
+    /// the words ARE the picture.
+    /// </summary>
+    private void Write(
+        TextItem original, SceneState scene, ScreenContext context, IReadOnlyList<SceneItem> focus, double width, double height, HashSet<ItemId> standing)
+    {
+        var inFocus = focus.Any(drawn => drawn.ItemId == original.ItemId);
+        var item = inFocus ? focus.First(drawn => drawn.ItemId == original.ItemId) : original;
+        var mount = _mounts.TryGetValue(item.ItemId, out var known) ? known : Raise(item.ItemId);
+
+        standing.Add(item.ItemId);
+
+        Panel.SetZIndex(
+            mount.Element,
+            inFocus
+                ? FocusAbove + focus.ToList().FindIndex(drawn => drawn.ItemId == item.ItemId)
+                : _held.ContainsKey(item.ItemId) || Shown(item.ItemId)
+                    ? HeldAbove + item.ZOrder
+                    : Parking.Depth(item));
+
+        var drawing = TextCard.Draw(original.Text);
+
+        if (!ReferenceEquals(mount.Applied, drawing))
+        {
+            mount.Picture.Source = drawing;
+            mount.Applied = drawing;
+        }
+
+        Trim(
+            mount,
+            item.Parked && !inFocus && !_held.ContainsKey(item.ItemId) && !Shown(item.ItemId)
+                ? Parking.CutOf(scene, context, item.ItemId)
+                : Parking.Cut.Whole,
+            context);
+
+        if (inFocus || (!_held.ContainsKey(item.ItemId) && !Shown(item.ItemId)))
+        {
+            var moved = inFocus != _focused.Contains(item.ItemId) && mount.Element.Parent is not null;
+            var from = moved ? Where(mount) : default;
+
+            Lay(mount, Layout.ItemToRect(item, context), item.RotationDeg, width, height, name: null, context.ImageTextSize);
+
+            if (moved)
+            {
+                Glide(mount, from);
+            }
+        }
+
+        Latch(mount, item.Locked);
     }
 
     /// <summary>The dimming over the whole surface, faded to its value or away when the focus comes or goes.</summary>

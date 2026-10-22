@@ -43,6 +43,10 @@ public static class SceneReducer
                 },
                 screen),
             ClearItems => scene with { Items = [], FocusItems = [] },
+            SetText text => ApplyToItem(
+                scene,
+                text.Item,
+                item => item is TextItem written ? written with { Text = text.Text, AspectRatio = text.AspectRatio } : item),
             SetFocus focus => scene with
             {
                 FocusItems = [.. focus.Items.Distinct().Where(id => scene.Items.Any(item => item.ItemId == id))],

@@ -884,7 +884,12 @@ internal sealed class TileFace : Panel
             return true;
         }
 
-        var picture = hold.Item is ImageItem image ? _pictures.For(image.AssetId) : null;
+        var picture = hold.Item switch
+        {
+            ImageItem image => _pictures.For(image.AssetId),
+            TextItem written => (System.Windows.Media.ImageSource)Rendering.Windows.TextCard.Draw(written.Text),
+            _ => null,
+        };
 
         _carrying = true;
 

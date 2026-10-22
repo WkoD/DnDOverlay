@@ -36,7 +36,20 @@ public sealed class PatchOpJsonTests
         new ParkItem(Item, Parked: true, ZOrder: 13, Revision: 49),
         new SetFocus([Item, new ItemId(Guid.NewGuid())]),
         new ClearItems(),
+        new SetText(Item, "Kerker von Townsvil\nTief unten", AspectRatio: 4.25),
     ];
+
+    /// <summary>The second item type rides on <c>AddItem</c> - its discriminator is a fixed one too (M5b9).</summary>
+    [Fact]
+    public void A_free_text_survives_the_round_trip()
+    {
+        var text = new TextItem(Item, 0.5, 0.1, 0.08, 6.5, 0, 3, Locked: false, Parked: false, Revision: 50, Text: "Kerker von Townsvil");
+        var message = new ScenePatchMessage(new ScenePatch([new ScreenOp(Screen, new AddItem(text))]));
+        var wire = Encoding.UTF8.GetString(ProtocolJson.Serialise(message));
+
+        Assert.Equal(message, ProtocolJson.Parse(ProtocolJson.Serialise(message)));
+        Assert.Contains("\"kind\":\"text\"", wire, StringComparison.Ordinal);
+    }
 
     public static TheoryData<PatchOp> AllOperations() => [.. Operations];
 
@@ -107,6 +120,12 @@ public sealed class PatchOpJsonTests
     [InlineData(typeof(SetAnimationPaused), "setAnimationPaused")]
     [InlineData(typeof(ToggleItems), "toggleItems")]
     [InlineData(typeof(ToggleBackground), "toggleBackground")]
+    [InlineData(typeof(TransformItem), "transformItem")]
+    [InlineData(typeof(SetLocked), "setLocked")]
+    [InlineData(typeof(ParkItem), "parkItem")]
+    [InlineData(typeof(SetFocus), "setFocus")]
+    [InlineData(typeof(ClearItems), "clearItems")]
+    [InlineData(typeof(SetText), "setText")]
     public void The_wire_name_of_an_operation_is_the_one_promised(Type operation, string wireName)
     {
         var attribute = Assert.Single(

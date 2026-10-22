@@ -370,6 +370,10 @@ it with the same grips as a picture, while the pictures above it turn see-throug
 screen** and **Fit whole on screen** put it back into the two obvious positions, keeping a
 quarter turn; and it turns by the quarter like a picture — filled or fitted, it stays so.
 
+**Text** — *Add text ...* in a screen's menu lays a caption on that screen, such as the name of
+the place the map shows: white words on a dark plate, pushed, turned and scaled at the table like a
+picture, saved with scenes and layouts. *Change text ...* in its menu changes the words.
+
 **Unlock all** is a button on each tile, because a padlock on a picture is set one at a time and
 should not have to be taken off that way.
 
