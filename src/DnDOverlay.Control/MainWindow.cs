@@ -37,6 +37,12 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Uri _address;
     private readonly CancellationTokenSource _listening = new();
 
+    /// <summary>
+    /// The token of <see cref="_listening"/>, taken once. Handlers that run after <c>Closed</c> - a
+    /// late continuation, a desk event - still read it, and asking a disposed source for its token
+    /// throws <see cref="ObjectDisposedException"/> where a cancelled token only says "cancelled".
+    /// </summary>
+    private readonly CancellationToken _closing;
 
     private readonly StageMemory _memory = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
@@ -118,6 +124,7 @@ internal sealed class MainWindow : Window, IDisposable
         CultureInfo system)
     {
         _session = session;
+        _closing = _listening.Token;
         _log = log;
         _system = system;
         _pairing = pairing;
@@ -297,7 +304,7 @@ internal sealed class MainWindow : Window, IDisposable
             _edgeLabel.Text = desk.OpenLabel ?? Strings.MainNoCampaign;
             _panel.Refresh();
             _ = _stock.CountAsync();
-            _ = _board.RefreshAsync(_listening.Token);
+            _ = _board.RefreshAsync(_closing);
         };
 
         desk.Reported += (_, words) => Notify(words);
@@ -433,14 +440,14 @@ internal sealed class MainWindow : Window, IDisposable
             {
                 await ListenOnceAsync().ConfigureAwait(true);
 
-                _listening.Token.ThrowIfCancellationRequested();
+                _closing.ThrowIfCancellationRequested();
 
                 ControlLog.SessionStreamRestarted(_logger, ++_restarts);
 
                 // The opening picture is NOT enough on its own. Show() returns early when the
                 // screens are unchanged - which is precisely this case - so the board would keep
                 // the stale scene it froze on. Asking the hub outright is what puts the tiles right.
-                await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
+                await _board.RefreshAsync(_closing).ConfigureAwait(true);
                 await _stock.CountAsync().ConfigureAwait(true);
             }
         }
@@ -460,8 +467,8 @@ internal sealed class MainWindow : Window, IDisposable
     private async Task ListenOnceAsync()
     {
         await foreach (var change in _session
-                .Subscribe(_listening.Token)
-                .WithCancellation(_listening.Token)
+                .Subscribe(_closing)
+                .WithCancellation(_closing)
                 .ConfigureAwait(true))
         {
             switch (change)
@@ -506,7 +513,7 @@ internal sealed class MainWindow : Window, IDisposable
 
                 case SessionEvent.ScenePatched:
                 case SessionEvent.SceneReplaced:
-                    await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
+                    await _board.RefreshAsync(_closing).ConfigureAwait(true);
                     await _stock.CountAsync().ConfigureAwait(true);
                     await OfferLastCampaignAsync().ConfigureAwait(true);
                     break;
@@ -549,7 +556,7 @@ internal sealed class MainWindow : Window, IDisposable
         _connected = devices.Any(device => device.Connected);
         _logPanel.Know(devices);
 
-        _ = _board.RefreshAsync(_listening.Token);
+        _ = _board.RefreshAsync(_closing);
     }
 
     /// <summary>
@@ -1379,7 +1386,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         foreach (var view in _board.Screens)
         {
-            var scene = await _session.GetSceneAsync(view.Screen, _listening.Token).ConfigureAwait(true);
+            var scene = await _session.GetSceneAsync(view.Screen, _closing).ConfigureAwait(true);
 
             if (scene.Items.Count == 0 && scene.Background is null)
             {
