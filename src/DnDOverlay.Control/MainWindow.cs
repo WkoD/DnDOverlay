@@ -1388,7 +1388,7 @@ internal sealed class MainWindow : Window, IDisposable
         {
             var scene = await _session.GetSceneAsync(view.Screen, _closing).ConfigureAwait(true);
 
-            if (scene.Items.Count == 0 && scene.Background is null)
+            if (!ShowsPictures(scene))
             {
                 continue;
             }
@@ -1413,6 +1413,19 @@ internal sealed class MainWindow : Window, IDisposable
 
             return;
         }
+    }
+
+    /// <summary>
+    /// Whether a scene shows pictures - what the last-campaign offer is about. <b>A free text is not
+    /// one</b>: it needs no stock, so it can be laid with no campaign open, and "the table shows
+    /// pictures from X" would then be said of a table that shows nothing from X (M5b8c: after a
+    /// takeover). A picture with no campaign open can only have come with the table.
+    /// </summary>
+    internal static bool ShowsPictures(SceneState scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        return scene.Background is not null || scene.Items.Any(item => item is ImageItem);
     }
 
     /// <summary>The triggers of the stock notice that already spoke in this run - once per start (Part 7).</summary>
