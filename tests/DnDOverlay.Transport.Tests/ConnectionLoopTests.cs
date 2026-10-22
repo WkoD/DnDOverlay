@@ -154,6 +154,39 @@ public sealed class ConnectionLoopTests
         Assert.Equal(_time.Requested.Count, _log.Count(1042));
     }
 
+    /// <summary>
+    /// A connection that throws is a failed attempt, not the end of the loop: written down, waited
+    /// after like a control that did not answer, and tried again. Before, the fault left the loop and
+    /// the display never looked for a control again until it was restarted - M1b by another door.
+    /// </summary>
+    [Fact(Timeout = 10_000)]
+    public async Task A_connection_that_throws_is_waited_after_and_tried_again()
+    {
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var loop = new ConnectionLoop(_log, _time, new ReconnectBackoff(seed: 7));
+        var connects = 0;
+
+        await loop.RunAsync(
+            preferred: null,
+            _ => Task.FromResult<Sighting?>(Heard),
+            (_, _) =>
+            {
+                if (++connects == 1)
+                {
+                    throw new InvalidOperationException("a branch of the message handling failed");
+                }
+
+                stop.Cancel();
+
+                return Task.FromResult(Attempt.Fruitless);
+            },
+            stop.Token);
+
+        Assert.Equal(2, connects);
+        Assert.Equal(1, _log.Count(1013));
+        Assert.InRange(_time.Requested[0], TimeSpan.FromSeconds(0.8), TimeSpan.FromSeconds(1.2));
+    }
+
     /// <summary>The application going away ends the loop quietly, also in the middle of a wait.</summary>
     [Fact(Timeout = 10_000)]
     public async Task Going_away_ends_the_loop_without_a_fault()

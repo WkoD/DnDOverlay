@@ -128,7 +128,7 @@ public sealed class ConnectionLoop
                     continue;
                 }
 
-                var attempt = await connect(target, cancellationToken).ConfigureAwait(false);
+                var attempt = await ConnectAsync(connect, target, cancellationToken).ConfigureAwait(false);
 
                 if (attempt is Attempt.Worthwhile)
                 {
@@ -155,6 +155,33 @@ public sealed class ConnectionLoop
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // The application is going away; nothing to say.
+        }
+    }
+
+    /// <summary>
+    /// One connection, and whatever it throws is a failed attempt rather than the end of the loop.
+    /// <para>
+    /// <b>The loop outlives the connection it runs.</b> A fault out of one branch of the display's
+    /// message handling used to leave <see cref="RunAsync"/> altogether, and the display never
+    /// looked for a control again until somebody restarted it - the M1b symptom this type exists
+    /// against, reached by another door (review of M5). Only the application going away ends the
+    /// loop; everything else is written down and waited after like a control that did not answer.
+    /// </para>
+    /// </summary>
+    private async Task<Attempt> ConnectAsync(
+        Func<HubAddress, CancellationToken, Task<Attempt>> connect,
+        HubAddress target,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await connect(target, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            TransportLog.ConnectFailed(_logger, exception, new UriBuilder(Uri.UriSchemeWs, target.Host, target.Port).Uri);
+
+            return Attempt.Fruitless;
         }
     }
 
