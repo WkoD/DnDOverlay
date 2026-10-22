@@ -55,6 +55,30 @@ internal sealed class ScreenTile : Border
     private readonly Button _unlock = new() { Content = Strings.ScreenTileUnlockAll, Padding = new Thickness(8, 2, 8, 2) };
 
     /// <summary>
+    /// Sets the selection as the focus, lifts it without one (Part 7). It shows whether a focus lies
+    /// and on how many - filled with the count, or empty - because "everything dimmed" in a small
+    /// thumbnail is no answer to that.
+    /// </summary>
+    private readonly Button _focus = new() { Content = Strings.ScreenTileFocusOff, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(6, 0, 0, 0), ToolTip = Strings.ScreenTileFocusTip };
+
+    /// <summary>
+    /// A short word on the tile that fades by itself - a refused focus is a moment, not a state, so
+    /// it belongs neither in the head nor in the list of reasons (Part 7).
+    /// </summary>
+    private readonly Border _notice = new()
+    {
+        VerticalAlignment = VerticalAlignment.Top,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        Margin = new Thickness(8),
+        Padding = new Thickness(10, 4, 10, 4),
+        CornerRadius = new CornerRadius(4),
+        Background = new SolidColorBrush(Color.FromArgb(0xE0, 0x30, 0x30, 0x30)),
+        IsHitTestVisible = false,
+        Opacity = 0,
+        Child = new TextBlock { Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap },
+    };
+
+    /// <summary>
     /// The state selector (Part 7): the WISH, permanently labelled - not what gets in the way, which
     /// stands in the head. Without the standing label "frozen" would be the one state only found by
     /// trying, because it covers nothing and colours no head.
@@ -147,9 +171,11 @@ internal sealed class ScreenTile : Border
 
         grips.Children.Add(_state);
         grips.Children.Add(_unlock);
+        grips.Children.Add(_focus);
 
         _faceHost.Children.Add(_face);
         _faceHost.Children.Add(_strip);
+        _faceHost.Children.Add(_notice);
 
         _frame = new Border
         {
@@ -284,6 +310,7 @@ internal sealed class ScreenTile : Border
         _menus.Saving += (_, _) => Saving?.Invoke(this, EventArgs.Empty);
         _menus.ShowingInStock += (_, asset) => ShowingInStock?.Invoke(this, asset);
         _menus.Renaming += (_, asset) => Renaming?.Invoke(this, asset);
+        _menus.Focusing += async (_, items) => await FocusAsync(items).ConfigureAwait(true);
 
         _images.Click += async (_, _) => await ToggleAsync(images: true).ConfigureAwait(true);
         _underground.Click += (_, _) =>
@@ -298,6 +325,36 @@ internal sealed class ScreenTile : Border
         _background.Click += async (_, _) => await ToggleAsync(images: false).ConfigureAwait(true);
         _unlock.Click += async (_, _) =>
             await _session.UnlockAllAsync(Screen, CancellationToken.None).ConfigureAwait(true);
+
+        // The selection in the order it was chosen - the order the focus shows them in (Part 3).
+        _focus.Click += async (_, _) => await FocusAsync([.. Selected.Items]).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Sets these pictures as the focus, or lifts it when there are none. More than
+    /// <see cref="Core.Focus.Limit"/> is refused by the hub, and the tile says why.
+    /// </summary>
+    private async Task FocusAsync(IReadOnlyList<ItemId> items)
+    {
+        var outcome = await _session.SetFocusAsync(Screen, items, CancellationToken.None).ConfigureAwait(true);
+
+        if (outcome is FocusOutcome.TooMany)
+        {
+            Briefly(Strings.ScreenTileFocusTooMany(Core.Focus.Limit));
+        }
+    }
+
+    /// <summary>Shows a word on the tile for a moment and lets it fade.</summary>
+    private void Briefly(string words)
+    {
+        ((TextBlock)_notice.Child).Text = words;
+
+        var fade = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames();
+
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(1, TimeSpan.Zero));
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(1, TimeSpan.FromSeconds(2.5)));
+        fade.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0, TimeSpan.FromSeconds(3.5)));
+        _notice.BeginAnimation(OpacityProperty, fade);
     }
 
     /// <summary>Which screen this tile is. It is the address of everything the tile does.</summary>
@@ -460,6 +517,8 @@ internal sealed class ScreenTile : Border
         _images.IsChecked = scene.ItemsVisible;
         _background.IsChecked = scene.BackgroundVisible;
         _setting = false;
+
+        _focus.Content = scene.FocusItems.Count > 0 ? Strings.ScreenTileFocusOn(scene.FocusItems.Count) : Strings.ScreenTileFocusOff;
     }
 
     /// <summary>

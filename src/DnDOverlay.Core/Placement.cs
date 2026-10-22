@@ -80,6 +80,38 @@ public static class Placement
     }
 
     /// <summary>
+    /// "Reset item" (Part 7): place, size and angle back to what the picture would get if it arrived
+    /// on this screen now - the arrival size, the screen's default angle, and the next place the
+    /// placement gives. <b>That is the insertion value</b>: the scene keeps no record of where a
+    /// picture first landed, and a place remembered from an hour ago would be a place the table has
+    /// filled since. Several are placed one after another, each counting the ones before it, and
+    /// none of them counts itself where it lies now.
+    /// </summary>
+    public static IReadOnlyList<ItemTransform> Reset(
+        SceneState scene, IReadOnlyList<SceneItem> items, ScreenContext screen)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(screen);
+
+        var resetting = items.Select(item => item.ItemId).ToHashSet();
+        var placed = scene with { Items = [.. scene.Items.Where(item => !resetting.Contains(item.ItemId))] };
+        var transforms = new List<ItemTransform>(items.Count);
+
+        foreach (var item in items)
+        {
+            var scale = ArrivalScale(item.AspectRatio, screen);
+            var centre = NextPosition(placed, scale, item.AspectRatio, screen);
+            var reset = item with { CenterX = centre.X, CenterY = centre.Y, Scale = scale, RotationDeg = screen.DefaultRotationDeg };
+
+            transforms.Add(new ItemTransform(item.ItemId, reset.CenterX, reset.CenterY, reset.Scale, reset.RotationDeg));
+            placed = placed with { Items = [.. placed.Items, reset] };
+        }
+
+        return transforms;
+    }
+
+    /// <summary>
     /// The shape the grid is measured in. Cells are the same size whatever is put in them, and that
     /// size has to come from somewhere - <c>Scale</c> gives the height, and 4:3 is the shape the
     /// parameter table's numbers were reckoned against.

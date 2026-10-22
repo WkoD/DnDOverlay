@@ -18,13 +18,10 @@ namespace DnDOverlay.Control;
 /// picture somebody is looking at.
 /// </para>
 /// <para>
-/// <b>They are built incomplete, and that is the order of work rather than a gap.</b> Six entries
-/// Part 7 draws have no caller in this milestone - "show in the stock", "rename", "reset item",
-/// "diagnostics", "save screen as scene" and "remove all images", the last of which has no
-/// operation at all yet (<c>ClearItems</c> is M5b). <b>An entry that is there and does nothing is
-/// worse than one that is missing</b>: it reads as built. What is here has a caller; the rest
-/// arrives with what it does, in the places Part 7 already gives them, so nothing has to be
-/// resorted later.
+/// <b>Every entry has a caller.</b> They arrived with what they do, milestone by milestone, in the
+/// places Part 7 gives them - the last were "focus", "reset item" and "remove all pictures" (M5b8).
+/// <b>An entry that is there and does nothing is worse than one that is missing</b>: it reads as
+/// built.
 /// </para>
 /// <para>
 /// <b>The item menu acts on the SELECTION</b> when the picture it was opened on belongs to it, and
@@ -60,6 +57,9 @@ internal sealed class TileMenus(
 
     /// <summary>The DM asked to rename this picture - campaign-wide, the same act as from the stock.</summary>
     internal event EventHandler<AssetId>? Renaming;
+
+    /// <summary>The DM asked for this picture as the focus - the tile sets it and says it if it is refused.</summary>
+    internal event EventHandler<IReadOnlyList<ItemId>>? Focusing;
 
     /// <summary>
     /// The screen's own menu. Reached on free tile area <b>and on the head</b> - the second place
@@ -169,6 +169,14 @@ internal sealed class TileMenus(
 
         cleared.IsEnabled = scene.Background is not null;
 
+        // Beside it, the other entry that throws something away: every picture off this screen, the
+        // background left where it is - one step on the timeline.
+        var emptied = Entry(
+            Strings.TileMenuRemoveAllPictures,
+            () => _ = session.ClearItemsAsync(screen, CancellationToken.None));
+
+        emptied.IsEnabled = scene.Items.Count > 0;
+
         // The background's animation, held or running - the one grip of the scaffold the tile did
         // not have yet. Only for a background that moves.
         if (scene.Background is { Meta.IsAnimated: true } moving)
@@ -179,6 +187,7 @@ internal sealed class TileMenus(
         }
 
         menu.Items.Add(cleared);
+        menu.Items.Add(emptied);
 
         Open(menu, over, at);
     }
@@ -237,6 +246,15 @@ internal sealed class TileMenus(
                 () => _ = session.ParkItemsAsync(
                     screen, Ids(many), parked: true, CancellationToken.None)));
         }
+
+        // Exactly this picture, not the selection: the button under the tile is the grip for a
+        // group (Part 7).
+        menu.Items.Add(Entry(Strings.TileMenuFocus, () => Focusing?.Invoke(this, [picture.ItemId])));
+
+        // Back to what it would get arriving now - for the whole selection, like the entries around it.
+        menu.Items.Add(Entry(
+            Strings.TileMenuResetItem,
+            () => _ = session.TransformItemsAsync(screen, Core.Placement.Reset(scene, many, context), toFront: false, CancellationToken.None)));
 
         menu.Items.Add(new Separator());
 

@@ -420,4 +420,39 @@ public sealed class PlacementTests
 
         Assert.Equal(height + gap, distinct[1] - distinct[0], precision: 9);
     }
+
+    /// <summary>
+    /// "Reset item" gives back what a picture would get arriving now: the arrival size, the
+    /// screen's default angle and the next place - counted without the picture itself (Part 7).
+    /// </summary>
+    [Fact]
+    public void A_reset_picture_gets_what_an_arriving_one_would()
+    {
+        var screen = Build.Screen() with { DefaultRotationDeg = 90 };
+        var other = Build.Item(centerX: 0.1, centerY: 0.1, scale: SmallScale);
+        var moved = Build.Item(centerX: 0.9, centerY: 0.9, scale: 0.8, aspectRatio: Wide, rotationDeg: 33);
+        var scene = Build.SceneWith(other, moved);
+
+        var reset = Placement.Reset(scene, [moved], screen).Single();
+        var scale = Placement.ArrivalScale(Wide, screen);
+        var place = Placement.NextPosition(Build.SceneWith(other), scale, Wide, screen);
+
+        Assert.Equal(moved.ItemId, reset.Item);
+        Assert.Equal(scale, reset.Scale, 9);
+        Assert.Equal(90, reset.RotationDeg);
+        Assert.Equal(place.X, reset.CenterX, 9);
+        Assert.Equal(place.Y, reset.CenterY, 9);
+    }
+
+    /// <summary>Several reset at once take places one after another, not all the same one.</summary>
+    [Fact]
+    public void Several_reset_pictures_take_different_places()
+    {
+        var first = Build.Item(scale: 0.9);
+        var second = Build.Item(scale: 0.9);
+
+        var reset = Placement.Reset(Build.SceneWith(first, second), [first, second], Build.Screen());
+
+        Assert.NotEqual((reset[0].CenterX, reset[0].CenterY), (reset[1].CenterX, reset[1].CenterY));
+    }
 }

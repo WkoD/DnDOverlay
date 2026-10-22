@@ -870,6 +870,15 @@ Type the campaign's name to delete it:</value>
   <data name="DevicesUnpairSceneExists" xml:space="preserve">
     <value>A scene named "{0}" exists already.</value>
   </data>
+  <data name="TileMenuFocus" xml:space="preserve">
+    <value>Focus</value>
+  </data>
+  <data name="TileMenuResetItem" xml:space="preserve">
+    <value>Reset item</value>
+  </data>
+  <data name="TileMenuRemoveAllPictures" xml:space="preserve">
+    <value>Remove all pictures</value>
+  </data>
   <data name="CampaignPanelTabPictures" xml:space="preserve">
     <value>Pictures</value>
   </data>
@@ -1573,5 +1582,17 @@ Another DnDOverlay control is probably running already - look for its window bef
   </data>
   <data name="GripsFillScreen" xml:space="preserve">
     <value>Fill this screen</value>
+  </data>
+  <data name="ScreenTileFocusOff" xml:space="preserve">
+    <value>◻ Focus</value>
+  </data>
+  <data name="ScreenTileFocusTip" xml:space="preserve">
+    <value>Sets the selected pictures as the focus; without a selection it lifts the focus.</value>
+  </data>
+  <data name="ScreenTileFocusOn" xml:space="preserve">
+    <value>◼ Focus {0}</value>
+  </data>
+  <data name="ScreenTileFocusTooMany" xml:space="preserve">
+    <value>A focus holds at most {0} pictures - more would be a second scene.</value>
   </data>
 </root>

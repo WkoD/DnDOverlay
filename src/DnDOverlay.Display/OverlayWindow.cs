@@ -51,6 +51,16 @@ internal sealed class OverlayWindow : Window
     /// </summary>
     private const int HeldAbove = 1 << 20;
 
+    /// <summary>
+    /// The focus lies above everything of the scene - the table, the fan, a held picture - with the
+    /// dimming one step below it (Part 3). Nothing takes a gesture while it lies, so nothing can
+    /// outrank it from the table either.
+    /// </summary>
+    private const int FocusAbove = 1 << 22;
+
+    /// <summary>How long a picture takes into its place in the focus and back - short, both ways (Part 6).</summary>
+    private static readonly Duration FocusTransition = new(TimeSpan.FromMilliseconds(300));
+
     private MonitorInfo _monitor;
     private readonly bool _windowed;
     /// <summary>
@@ -78,6 +88,20 @@ internal sealed class OverlayWindow : Window
     };
 
     private bool _glowing;
+
+    /// <summary>
+    /// The rest of the screen stepping back while a focus lies: a half-transparent black over the
+    /// whole surface, faded in and out (Part 3, Part 6). Hit-testable by nothing, like the band.
+    /// </summary>
+    private readonly System.Windows.Shapes.Rectangle _dim = new()
+    {
+        Fill = Brushes.Black,
+        IsHitTestVisible = false,
+        Opacity = 0,
+    };
+
+    /// <summary>The items in focus at the last render - a change is what starts the transition.</summary>
+    private HashSet<ItemId> _focused = [];
 
     /// <summary>
     /// The progress rings, on a layer of their own above the stage. They belong to the ungoverned
@@ -305,6 +329,9 @@ internal sealed class OverlayWindow : Window
         // so the picture being let go is seen over the glow that says where it will go.
         Panel.SetZIndex(_band, Parking.FanAbove - 1);
         _stage.Children.Add(_band);
+
+        Panel.SetZIndex(_dim, FocusAbove - 1);
+        _stage.Children.Add(_dim);
 
         // Above every picture and below the nameplate, and hit-testable by nothing: a ring that
         // swallowed a touch would take a finger away from the table it is pointing at.
@@ -927,14 +954,24 @@ internal sealed class OverlayWindow : Window
 
         var standing = new HashSet<ItemId>();
 
+        // The focus as it is drawn - from Core, so the thumbnail draws it from the same numbers
+        // (rule 9). The scene keeps every item where it was; only the drawing moves them.
+        var focus = scene.ItemsVisible ? Core.Focus.Arrange(scene, context) : [];
+        var focused = focus.Select(item => item.ItemId).ToHashSet();
+
+        Dim(focus.Count > 0, width, height);
+
         if (scene.ItemsVisible)
         {
-            foreach (var item in scene.Items)
+            foreach (var original in scene.Items)
             {
-                if (item is not ImageItem image)
+                if (original is not ImageItem image)
                 {
                     continue;
                 }
+
+                var inFocus = focused.Contains(image.ItemId);
+                var item = inFocus ? focus.First(drawn => drawn.ItemId == image.ItemId) : original;
 
                 // <b>A picture that is not here yet still has its place</b> (Part 5, Part 7): a frame
                 // with its name, where it lies, as large and as turned as it will be. It is an item
@@ -974,9 +1011,11 @@ internal sealed class OverlayWindow : Window
                 // the table it was tidied off (Parking.Depth).
                 Panel.SetZIndex(
                     mount.Element,
-                    _held.ContainsKey(image.ItemId) || Shown(image.ItemId)
-                        ? HeldAbove + item.ZOrder
-                        : Parking.Depth(item));
+                    inFocus
+                        ? FocusAbove + scene.FocusItems.ToList().IndexOf(image.ItemId)
+                        : _held.ContainsKey(image.ItemId) || Shown(image.ItemId)
+                            ? HeldAbove + item.ZOrder
+                            : Parking.Depth(item));
 
                 // <b>At most one picture is hung up per pass.</b> Twenty arriving at once would
                 // otherwise all be built into the visual tree in one drawing - and that drawing is
@@ -1002,9 +1041,10 @@ internal sealed class OverlayWindow : Window
 
                 // Only a card lying IN the fan is cut. One that is being looked at or carried is a
                 // picture like any other, and unfolding is the whole point of the peek.
+                // A focused card is shown whole - the focus is the one place it is looked at fully.
                 Trim(
                     mount,
-                    item.Parked && !_held.ContainsKey(image.ItemId) && !Shown(image.ItemId)
+                    item.Parked && !inFocus && !_held.ContainsKey(image.ItemId) && !Shown(image.ItemId)
                         ? Parking.CutOf(scene, context, image.ItemId)
                         : Parking.Cut.Whole,
                     context);
@@ -1012,8 +1052,11 @@ internal sealed class OverlayWindow : Window
                 // A held item keeps the geometry the finger gave it. Writing the scene's over it
                 // would drag the picture back to where the hub last knew it, twenty times a second,
                 // for as long as somebody is pushing it (Part 4, conflict rule 3).
-                if (!_held.ContainsKey(image.ItemId) && !Shown(image.ItemId))
+                if (inFocus || (!_held.ContainsKey(image.ItemId) && !Shown(image.ItemId)))
                 {
+                    var moved = inFocus != _focused.Contains(image.ItemId) && mount.Element.Parent is not null;
+                    var from = moved ? Where(mount) : default;
+
                     Lay(
                         mount,
                         Layout.ItemToRect(item, context),
@@ -1022,6 +1065,13 @@ internal sealed class OverlayWindow : Window
                         height,
                         image.ShowName ? image.Name : null,
                         context.ImageTextSize);
+
+                    // Into the focus and back out of it as a short movement, never a jump: a hard
+                    // switch on a large screen reads as a fault (Part 6).
+                    if (moved)
+                    {
+                        Glide(mount, from);
+                    }
                 }
 
                 // The padlock is drawn either way: seeing which pictures are locked is what makes
@@ -1041,10 +1091,56 @@ internal sealed class OverlayWindow : Window
             _mounts.Remove(id);
         }
 
+        _focused = focused;
+
         if (waiting)
         {
             MoreToShow?.Invoke();
         }
+    }
+
+    /// <summary>The dimming over the whole surface, faded to its value or away when the focus comes or goes.</summary>
+    private void Dim(bool on, double width, double height)
+    {
+        _dim.Width = width;
+        _dim.Height = height;
+
+        var target = on ? Core.Focus.Dim : 0;
+
+        if (_dim.Tag is double running && running == target)
+        {
+            return;
+        }
+
+        _dim.Tag = target;
+        _dim.BeginAnimation(OpacityProperty, new DoubleAnimation(target, FocusTransition));
+    }
+
+    /// <summary>Where a place stands now, before it is laid anew.</summary>
+    private static (double Left, double Top, double Width, double Height) Where(Mount mount) =>
+        (Canvas.GetLeft(mount.Element), Canvas.GetTop(mount.Element), mount.Element.Width, mount.Element.Height);
+
+    /// <summary>
+    /// From where a place stood to where it was just laid. The new values are set already; the
+    /// animation only covers them while it runs and then lets them show (<see cref="FillBehavior.Stop"/>),
+    /// so the next render's geometry is never held back by a finished glide.
+    /// </summary>
+    private static void Glide(Mount mount, (double Left, double Top, double Width, double Height) from)
+    {
+        if (double.IsNaN(from.Left) || double.IsNaN(from.Width))
+        {
+            return;
+        }
+
+        var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+        void Run(DependencyProperty property, double start, double end) =>
+            mount.Element.BeginAnimation(property, new DoubleAnimation(start, end, FocusTransition) { EasingFunction = ease, FillBehavior = FillBehavior.Stop });
+
+        Run(Canvas.LeftProperty, from.Left, Canvas.GetLeft(mount.Element));
+        Run(Canvas.TopProperty, from.Top, Canvas.GetTop(mount.Element));
+        Run(WidthProperty, from.Width, mount.Element.Width);
+        Run(HeightProperty, from.Height, mount.Element.Height);
     }
 
     /// <summary>

@@ -198,4 +198,12 @@ internal static partial class Strings
     internal static string GripsRestore => Text[nameof(GripsRestore)];
 
     internal static string GripsFillScreen => Text[nameof(GripsFillScreen)];
+
+    internal static string ScreenTileFocusOff => Text[nameof(ScreenTileFocusOff)];
+
+    internal static string ScreenTileFocusTip => Text[nameof(ScreenTileFocusTip)];
+
+    internal static string ScreenTileFocusOn(int count) => Text.Format(nameof(ScreenTileFocusOn), count);
+
+    internal static string ScreenTileFocusTooMany(int limit) => Text.Format(nameof(ScreenTileFocusTooMany), limit);
 }

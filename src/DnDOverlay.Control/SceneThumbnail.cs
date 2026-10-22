@@ -236,7 +236,12 @@ internal sealed class SceneThumbnail : FrameworkElement
                 ? _peek
                 : null;
 
+        // The focus is drawn from the same arrangement the table uses (rule 9): the rest as it lies,
+        // the dimming over it, the focused pictures on top in the order of the focus (Part 3).
+        var focus = Core.Focus.Arrange(_scene, _screen);
+
         foreach (var item in _scene.Items
+            .Where(item => !focus.Any(focused => focused.ItemId == item.ItemId))
             .OrderBy(item => item.ItemId == peeked ? 1 : 0)
             .ThenBy(item => Parking.Depth(item)))
         {
@@ -266,6 +271,27 @@ internal sealed class SceneThumbnail : FrameworkElement
                 item.Locked,
                 cut,
                 item as ImageItem);
+        }
+
+        if (focus.Count > 0)
+        {
+            drawingContext.PushOpacity(Core.Focus.Dim);
+            drawingContext.DrawRectangle(Brushes.Black, pen: null, new TileRect(0, 0, size.Width, size.Height));
+            drawingContext.Pop();
+
+            foreach (var item in focus)
+            {
+                Draw(
+                    drawingContext,
+                    Layout.ItemToRect(item, _screen),
+                    item.RotationDeg,
+                    item is ImageItem image ? _pictures.For(image.AssetId) : null,
+                    size,
+                    item is ImageItem { ShowName: true } named ? named.Name : null,
+                    item.Locked,
+                    Parking.Cut.Whole,
+                    item as ImageItem);
+            }
         }
 
         if (_faded)

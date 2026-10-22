@@ -870,6 +870,15 @@ Zum Löschen den Namen der Kampagne eintippen:</value>
   <data name="DevicesUnpairSceneExists" xml:space="preserve">
     <value>Eine Szene namens "{0}" gibt es bereits.</value>
   </data>
+  <data name="TileMenuFocus" xml:space="preserve">
+    <value>Fokus</value>
+  </data>
+  <data name="TileMenuResetItem" xml:space="preserve">
+    <value>Zurücksetzen</value>
+  </data>
+  <data name="TileMenuRemoveAllPictures" xml:space="preserve">
+    <value>Alle Bilder entfernen</value>
+  </data>
   <data name="CampaignPanelTabPictures" xml:space="preserve">
     <value>Bilder</value>
   </data>
@@ -1573,5 +1582,17 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   </data>
   <data name="GripsFillScreen" xml:space="preserve">
     <value>Diesen Bildschirm füllen</value>
+  </data>
+  <data name="ScreenTileFocusOff" xml:space="preserve">
+    <value>◻ Fokus</value>
+  </data>
+  <data name="ScreenTileFocusTip" xml:space="preserve">
+    <value>Setzt die ausgewählten Bilder als Fokus; ohne Auswahl hebt es den Fokus auf.</value>
+  </data>
+  <data name="ScreenTileFocusOn" xml:space="preserve">
+    <value>◼ Fokus {0}</value>
+  </data>
+  <data name="ScreenTileFocusTooMany" xml:space="preserve">
+    <value>Ein Fokus fasst höchstens {0} Bilder - mehr wäre eine zweite Szene.</value>
   </data>
 </root>

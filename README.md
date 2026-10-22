@@ -356,6 +356,15 @@ quarter turn; and it turns by the quarter like a picture — filled or fitted, i
 **Unlock all** is a button on each tile, because a padlock on a picture is set one at a time and
 should not have to be taken off that way.
 
+**Focus** — the button beside it — puts the selected pictures large in front of the players: one
+in the middle, two side by side, up to six in a grid, each keeping its angle, in the order they were
+chosen, with the rest of the screen dimmed. Nothing moves in the scene, so pressing it without a
+selection brings back exactly what was there. The button shows how many pictures are in focus;
+more than six are refused, and the tile says so. While a focus lies the table takes no gestures. A
+picture's menu sets that one picture as the focus, and **Reset item** puts it back to the size,
+angle and place a newly arriving picture would get. **Remove all pictures** in the screen menu
+clears the screen and leaves the background — one step to undo.
+
 ## Building
 
 You need the .NET SDK named in `global.json` and nothing else — no Visual Studio, no Windows

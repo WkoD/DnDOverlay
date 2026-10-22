@@ -277,4 +277,10 @@ internal static partial class Strings
     internal static string DevicesUnpairSceneFrom(string screen) => Text.Format(nameof(DevicesUnpairSceneFrom), screen);
 
     internal static string DevicesUnpairSceneExists(string name) => Text.Format(nameof(DevicesUnpairSceneExists), name);
+
+    internal static string TileMenuFocus => Text[nameof(TileMenuFocus)];
+
+    internal static string TileMenuResetItem => Text[nameof(TileMenuResetItem)];
+
+    internal static string TileMenuRemoveAllPictures => Text[nameof(TileMenuRemoveAllPictures)];
 }
