@@ -371,8 +371,8 @@ in the middle, two side by side, up to six in a grid, each keeping its angle, in
 chosen, with the rest of the screen dimmed. Nothing moves in the scene, so pressing it without a
 selection brings back exactly what was there. The button shows how many pictures are in focus;
 more than six are refused, and the tile says so. While a focus lies the table takes no gestures. A
-picture's menu sets that one picture as the focus, and **Reset item** puts it back to the size,
-angle and place a newly arriving picture would get. **Remove all pictures** in the screen menu
+picture's menu sets that one picture as the focus, and **Reset item** puts it back to the size
+and angle a newly arriving picture would get, where it lies. **Remove all pictures** in the screen menu
 clears the screen and leaves the background — one step to undo.
 
 ## Building

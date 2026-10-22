@@ -254,7 +254,7 @@ internal sealed class TileMenus(
         // Back to what it would get arriving now - for the whole selection, like the entries around it.
         menu.Items.Add(Entry(
             Strings.TileMenuResetItem,
-            () => _ = session.TransformItemsAsync(screen, Core.Placement.Reset(scene, many, context), toFront: false, CancellationToken.None)));
+            () => _ = session.TransformItemsAsync(screen, Core.Placement.Reset(many, context), toFront: false, CancellationToken.None)));
 
         menu.Items.Add(new Separator());
 

@@ -80,35 +80,20 @@ public static class Placement
     }
 
     /// <summary>
-    /// "Reset item" (Part 7): place, size and angle back to what the picture would get if it arrived
-    /// on this screen now - the arrival size, the screen's default angle, and the next place the
-    /// placement gives. <b>That is the insertion value</b>: the scene keeps no record of where a
-    /// picture first landed, and a place remembered from an hour ago would be a place the table has
-    /// filled since. Several are placed one after another, each counting the ones before it, and
-    /// none of them counts itself where it lies now.
+    /// "Reset item" (Part 7): size and angle back to what the picture would get if it arrived on this
+    /// screen now - the arrival size and the screen's default angle. <b>The place stays</b> (DM,
+    /// 19.10.2026): the scene keeps no record of where a picture first landed, a place remembered from
+    /// an hour ago would be one the table has filled since, and a picture that jumps somewhere else is
+    /// not what "reset" promises. The hub clamps a grown picture back inside the screen, as it does
+    /// for any transform.
     /// </summary>
-    public static IReadOnlyList<ItemTransform> Reset(
-        SceneState scene, IReadOnlyList<SceneItem> items, ScreenContext screen)
+    public static IReadOnlyList<ItemTransform> Reset(IReadOnlyList<SceneItem> items, ScreenContext screen)
     {
-        ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(screen);
 
-        var resetting = items.Select(item => item.ItemId).ToHashSet();
-        var placed = scene with { Items = [.. scene.Items.Where(item => !resetting.Contains(item.ItemId))] };
-        var transforms = new List<ItemTransform>(items.Count);
-
-        foreach (var item in items)
-        {
-            var scale = ArrivalScale(item.AspectRatio, screen);
-            var centre = NextPosition(placed, scale, item.AspectRatio, screen);
-            var reset = item with { CenterX = centre.X, CenterY = centre.Y, Scale = scale, RotationDeg = screen.DefaultRotationDeg };
-
-            transforms.Add(new ItemTransform(item.ItemId, reset.CenterX, reset.CenterY, reset.Scale, reset.RotationDeg));
-            placed = placed with { Items = [.. placed.Items, reset] };
-        }
-
-        return transforms;
+        return [.. items.Select(item => new ItemTransform(
+            item.ItemId, item.CenterX, item.CenterY, ArrivalScale(item.AspectRatio, screen), screen.DefaultRotationDeg))];
     }
 
     /// <summary>
