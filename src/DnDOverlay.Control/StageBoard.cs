@@ -402,6 +402,7 @@ internal sealed class StageBoard : Panel
         foreach (var gone in _tiles.Keys.Where(screen => !screens.Any(view => view.Screen == screen)).ToList())
         {
             var diagnosed = _tiles[gone].Diagnosed;
+            var underground = _tiles[gone].Underground;
 
             Children.Remove(_tiles[gone]);
             _tiles.Remove(gone);
@@ -410,6 +411,15 @@ internal sealed class StageBoard : Panel
             if (diagnosed)
             {
                 Wanted(gone.Device);
+            }
+
+            // The same for the underground: the hub keeps the wish per device and repeats it on
+            // every connection, so a wish left standing would have the device enumerate and send
+            // its windows for nobody - and the screen coming back would get an unticked tile on a
+            // device that still reports (Part 7).
+            if (underground)
+            {
+                WindowsWanted(gone.Device);
             }
         }
 
