@@ -40,6 +40,24 @@ public sealed class TextItemTests
         Assert.True(Layout.ItemToRect(text, context).Width <= 0.9 + 1e-9);
     }
 
+    /// <summary>
+    /// "Reset item" brings a text back to the size it arrived at - a short one and one held to the
+    /// screen's width alike - because both ask the same rule (Placement.TextArrivalScale).
+    /// </summary>
+    [Theory]
+    [InlineData(3)]
+    [InlineData(25)]
+    public async Task A_reset_text_comes_back_to_the_size_it_arrived_at(double shape)
+    {
+        using var session = Session();
+
+        await session.AddTextAsync(Screen, "Kerker von Townsvil", shape, Cancellation);
+
+        var text = Assert.IsType<TextItem>((await session.GetSceneAsync(Screen, Cancellation)).Items.Single());
+
+        Assert.Equal(text.Scale, Assert.Single(Placement.Reset([text], session.ContextOf(Screen))).Scale, 12);
+    }
+
     [Fact]
     public async Task Changing_the_words_keeps_place_and_height()
     {

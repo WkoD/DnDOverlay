@@ -245,8 +245,9 @@ public sealed class SessionApi : ISessionApi, IDisposable
             var scene = _scenes.Get(screen);
 
             // A heading's height - but never wider than most of the screen: a long line comes in
-            // lower rather than reaching past both edges.
-            var scale = Math.Min(TextItem.ArrivalScale, WidestText(shape, context));
+            // lower rather than reaching past both edges. The same rule "reset item" applies, so a
+            // reset text comes back to the size it arrived at.
+            var scale = Placement.TextArrivalScale(shape, context);
             var centre = Placement.NextPosition(scene, scale, shape, context);
 
             var item = new TextItem(
@@ -308,7 +309,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
                         {
                             Text = written,
                             AspectRatio = shape,
-                            Scale = Math.Min(current.Scale, WidestText(shape, context)),
+                            Scale = Math.Min(current.Scale, Placement.TextWidthCap(shape, context)),
                         },
                         context);
 
@@ -323,10 +324,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
             },
             cancellationToken);
     }
-
-    /// <summary>The largest height at which a text of this shape still lies within most of the screen's width.</summary>
-    private static double WidestText(double shape, ScreenContext context) =>
-        0.9 * (context.AspectRatio > 0 ? context.AspectRatio : 1) / shape;
 
     /// <summary>A text as it may stand on a table: control characters out, line breaks kept, trimmed, cut to length.</summary>
     private static string Written(string text)

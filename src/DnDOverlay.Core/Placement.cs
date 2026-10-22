@@ -116,13 +116,22 @@ public static class Placement
     /// but never wider than most of the screen - a long line comes in lower rather than reaching past
     /// both edges (Part 7, free text).
     /// </summary>
-    public static double TextArrivalScale(double aspectRatio, ScreenContext screen)
+    public static double TextArrivalScale(double aspectRatio, ScreenContext screen) =>
+        Math.Min(TextItem.ArrivalScale, TextWidthCap(aspectRatio, screen));
+
+    /// <summary>
+    /// The largest height at which a text of this shape still lies within most of the screen's width -
+    /// the cap a new text arrives under (<see cref="TextArrivalScale"/>) and a changed text is held to,
+    /// one rule in one place so the two cannot drift apart (Part 7, free text). Unbounded for a shape
+    /// that is no shape.
+    /// </summary>
+    public static double TextWidthCap(double aspectRatio, ScreenContext screen)
     {
         ArgumentNullException.ThrowIfNull(screen);
 
         var screenAspect = screen.AspectRatio > 0 ? screen.AspectRatio : 1;
 
-        return aspectRatio > 0 ? Math.Min(TextItem.ArrivalScale, 0.9 * screenAspect / aspectRatio) : TextItem.ArrivalScale;
+        return aspectRatio > 0 ? 0.9 * screenAspect / aspectRatio : double.PositiveInfinity;
     }
 
     /// <summary>
