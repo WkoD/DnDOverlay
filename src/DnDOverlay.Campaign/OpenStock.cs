@@ -56,6 +56,20 @@ public sealed class OpenStock(Func<AssetStore> ensure) : IAssetSource, IAssetSin
 
     /// <inheritdoc />
     public Task<IngestResult> IngestAsync(
-        ReadOnlyMemory<byte> source, string proposedName, CancellationToken cancellationToken = default) =>
-        (_current ?? ensure()).IngestAsync(source, proposedName, cancellationToken);
+        ReadOnlyMemory<byte> source, string proposedName, CancellationToken cancellationToken = default)
+    {
+        AssetStore store;
+
+        try
+        {
+            store = _current ?? ensure();
+        }
+        catch (CampaignBaseUnreachableException unreachable)
+        {
+            // Nothing is created anywhere instead (Part 3): the picture is refused, with the folder named.
+            return Task.FromResult<IngestResult>(new IngestResult.Refused(IntakeRejection.Unavailable, unreachable.Message));
+        }
+
+        return store.IngestAsync(source, proposedName, cancellationToken);
+    }
 }

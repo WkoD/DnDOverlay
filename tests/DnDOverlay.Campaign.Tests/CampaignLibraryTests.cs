@@ -36,6 +36,50 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.False(Directory.Exists(_base));
     }
 
+    /// <summary>
+    /// Part 3: a campaigns folder that cannot be reached - the stick pulled - is said so, and nothing is
+    /// created: the first picture is refused with the folder named, not taken in somewhere new.
+    /// </summary>
+    [Fact]
+    public async Task An_unreachable_campaigns_folder_creates_nothing_and_refuses_the_first_picture()
+    {
+        var gone = Path.Combine(_base, "Stick", "Kampagnen");
+        var library = new CampaignLibrary(gone, directory => AssetStore.Open(directory, _codec, _time), _time);
+        var stock = new OpenStock(() => library.CreateUnnamed().Store);
+
+        Assert.False(library.Reachable);
+        Assert.Throws<CampaignBaseUnreachableException>(library.CreateUnnamed);
+
+        var refused = Assert.IsType<IngestResult.Refused>(await stock.IngestAsync(Bytes("ork"), "Ork", Cancellation));
+
+        Assert.Contains(gone, refused.Detail, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(_base));
+    }
+
+    /// <summary>
+    /// A place the DM chose existed when it was chosen: gone, it is unreachable although its drive is
+    /// there. The default place comes into being with the first picture.
+    /// </summary>
+    [Fact]
+    public void A_chosen_place_must_exist_and_the_default_one_may_come_into_being()
+    {
+        Directory.CreateDirectory(_base);
+
+        var place = Path.Combine(_base, "Kampagnen");
+
+        Assert.True(new CampaignLibrary(place, directory => AssetStore.Open(directory, _codec, _time), _time).Reachable);
+        Assert.False(new CampaignLibrary(place, directory => AssetStore.Open(directory, _codec, _time), _time, baseIsDefault: false).Reachable);
+
+        var library = Library();
+        var moved = Path.Combine(_base, "Verlegt");
+
+        library.Relocate(moved);
+        Assert.False(library.Reachable);
+
+        Directory.CreateDirectory(moved);
+        Assert.True(library.Reachable);
+    }
+
     /// <summary>An unnamed campaign that exists is not reused - the next one gets the next number.</summary>
     [Fact]
     public void A_new_unnamed_campaign_takes_the_next_number()

@@ -33,4 +33,6 @@ internal static class Strings
     internal static string NothingCameOfIt => Text[nameof(NothingCameOfIt)];
 
     internal static string CampaignClosed => Text[nameof(CampaignClosed)];
+
+    internal static string BaseUnreachable(string path) => Text.Format(nameof(BaseUnreachable), path);
 }

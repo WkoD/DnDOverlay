@@ -71,7 +71,12 @@ public enum CampaignOutcome
 /// </para>
 /// </summary>
 /// <param name="openStore">Opens the stock of a folder - handed in, because the stock needs the codec and the unpacker the control builds.</param>
-public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> openStore, TimeProvider time)
+/// <param name="baseIsDefault">
+/// Whether <paramref name="basePath"/> is the default place, which comes into being with the first
+/// picture. A place the DM chose existed when it was chosen; if it is gone, it is not reachable, and
+/// nothing is created there (<see cref="Reachable"/>).
+/// </param>
+public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> openStore, TimeProvider time, bool baseIsDefault = true)
 {
     /// <summary>
     /// What a campaign is called before the DM names it: <c>~unbenannt</c>, <c>~unbenannt 2</c>, ...
@@ -81,18 +86,52 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
 
     private static readonly System.Text.Json.JsonSerializerOptions Web = new(System.Text.Json.JsonSerializerDefaults.Web);
 
+    private bool _baseIsDefault = baseIsDefault;
+
     /// <summary>Where the campaigns lie.</summary>
     public string BasePath { get; private set; } = basePath;
 
     /// <summary>
+    /// Whether the campaigns folder can be reached: it is there, or it is the default place and the
+    /// folder above it is there. <b>Not</b> reachable is a stick pulled, a network drive gone, a chosen
+    /// folder that no longer exists - and then it is reported and <b>nothing is created</b>: a quiet
+    /// new folder would be a second, empty stock, and the DM would lay pictures into a place he never
+    /// finds again (Part 3). An empty <see cref="List"/> does not tell the two apart; this does.
+    /// </summary>
+    public bool Reachable
+    {
+        get
+        {
+            try
+            {
+                if (Directory.Exists(BasePath))
+                {
+                    return true;
+                }
+
+                // A drive root that is not there has no folder above it - the drive is gone.
+                return _baseIsDefault
+                    && Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(BasePath))) is { } parent
+                    && Directory.Exists(parent);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
     /// Points the library at another base path - after the campaigns were moved there, or when the DM
-    /// chose only to change the place (Part 7). No campaign may be open: the caller closes it first.
+    /// chose only to change the place (Part 7). No campaign may be open: the caller closes it first. A
+    /// place set this way is a chosen one (see <see cref="Reachable"/>).
     /// </summary>
     public void Relocate(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         BasePath = path;
+        _baseIsDefault = false;
     }
 
     /// <summary>Whether this name is a provisional one.</summary>
@@ -149,8 +188,14 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
     /// stand beside the one just pasted; this one gets the next number. Its folder comes into being
     /// with this, which is why this is called by the first picture and not by looking around.
     /// </summary>
+    /// <exception cref="CampaignBaseUnreachableException">The campaigns folder cannot be reached; nothing was created (Part 3).</exception>
     public OpenCampaign CreateUnnamed()
     {
+        if (!Reachable)
+        {
+            throw new CampaignBaseUnreachableException(Strings.BaseUnreachable(BasePath));
+        }
+
         Directory.CreateDirectory(BasePath);
 
         var taken = Directory.EnumerateDirectories(BasePath).Select(Path.GetFileName).OfType<string>().ToList();
@@ -340,5 +385,26 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
         }
 
         return new CampaignSummary(name, Unnamed: true);
+    }
+}
+
+/// <summary>
+/// The campaigns folder cannot be reached - a drive pulled, a network drive gone, a chosen folder
+/// removed. Nothing was created in its place (Part 3); the message names the folder.
+/// </summary>
+public sealed class CampaignBaseUnreachableException : Exception
+{
+    public CampaignBaseUnreachableException(string message)
+        : base(message)
+    {
+    }
+
+    public CampaignBaseUnreachableException(string message, Exception inner)
+        : base(message, inner)
+    {
+    }
+
+    public CampaignBaseUnreachableException()
+    {
     }
 }
