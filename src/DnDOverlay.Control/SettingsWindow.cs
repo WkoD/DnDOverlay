@@ -365,6 +365,14 @@ internal sealed class SettingsWindow : Window, IDisposable
     /// </summary>
     private async Task ChangePlaceAsync()
     {
+        // While pictures come in, nobody moves the folder they are written into (Part 7) - refused
+        // before a place is even picked, with the same reason a switch gets.
+        if (_desk.Refusal is { } running)
+        {
+            _moving.Text = running;
+            return;
+        }
+
         var picker = new OpenFolderDialog { Title = Strings.SettingsPickerTitle };
 
         if (picker.ShowDialog(this) is not true)
@@ -403,7 +411,12 @@ internal sealed class SettingsWindow : Window, IDisposable
                 return;
             }
 
-            await _desk.CloseAsync().ConfigureAwait(true);
+            if (await _desk.CloseAsync().ConfigureAwait(true) is { } stillTaking)
+            {
+                _moving.Text = stillTaking;
+                return;
+            }
+
             Take(to);
             _say(Strings.SettingsTakenUnreachable(to, from));
 
@@ -428,7 +441,12 @@ internal sealed class SettingsWindow : Window, IDisposable
             return;
         }
 
-        await _desk.CloseAsync().ConfigureAwait(true);
+        // An intake begun while the question stood is refused here: the open campaign stays open.
+        if (await _desk.CloseAsync().ConfigureAwait(true) is { } refused)
+        {
+            _moving.Text = refused;
+            return;
+        }
 
         if (answer is MoveAnswer.OnlyPlace || plan.Campaigns.Count == 0)
         {

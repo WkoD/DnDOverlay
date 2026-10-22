@@ -246,18 +246,26 @@ internal sealed class CampaignDesk
     /// <summary>
     /// Closes the open campaign the way a switch does - the table cleared everywhere, undo ended -
     /// and opens none. The condition for moving the campaign folder: nobody moves a folder the hub is
-    /// delivering pictures out of (Part 7).
+    /// delivering pictures out of (Part 7) - nor one an intake is writing into: refused like a switch.
     /// </summary>
-    internal async Task CloseAsync()
+    /// <returns>Why it was not closed, or <see langword="null"/>.</returns>
+    internal async Task<string?> CloseAsync()
     {
         if (Open is null)
         {
-            return;
+            return null;
+        }
+
+        if (Refusal is { } refused)
+        {
+            return refused;
         }
 
         await _session.ClearEverywhereAsync(CancellationToken.None).ConfigureAwait(true);
 
         Become(null);
+
+        return null;
     }
 
     /// <summary>The campaigns lie somewhere else now; the switcher lists what is there.</summary>

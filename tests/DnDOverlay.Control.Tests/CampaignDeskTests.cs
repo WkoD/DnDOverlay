@@ -52,6 +52,9 @@ public sealed class CampaignDeskTests
 
         Assert.Equal(Strings.CampaignIntakeRunning, await bench.Desk.DeleteAsync());
         Assert.Equal(CampaignOutcome.Busy, bench.Desk.Rename("Vinland"));
+
+        // Closing for the move of the campaign folder: nobody moves the folder an intake writes into.
+        Assert.Equal(Strings.CampaignIntakeRunning, await bench.Desk.CloseAsync());
         Assert.True(Directory.Exists(Path.Combine(bench.Base, "Vandalia")));
         Assert.Equal("Vandalia", bench.Desk.Open?.Name);
     }
