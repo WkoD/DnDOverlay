@@ -474,6 +474,14 @@ Type the campaign's name to delete it:</value>
   <data name="SettingsFolderUnreachable" xml:space="preserve">
     <value>{0} cannot be reached - nothing was created there.</value>
   </data>
+  <data name="SettingsOldPlaceUnreachable" xml:space="preserve">
+    <value>The campaigns folder in use, {0}, cannot be reached - its campaigns cannot be moved now and would stay behind there.
+
+Take {1} as the place for campaigns anyway?</value>
+  </data>
+  <data name="SettingsTakenUnreachable" xml:space="preserve">
+    <value>Campaigns are kept in {0} now. Those in {1} stay there - it could not be reached.</value>
+  </data>
   <data name="DevicesTitle" xml:space="preserve">
     <value>Devices</value>
   </data>
@@ -1332,14 +1340,11 @@ Delete them too?</value>
   <data name="CampaignIntakeRunning" xml:space="preserve">
     <value>A picture intake is running - break it off or wait until it is done, then try again.</value>
   </data>
-  <data name="CampaignNotOpened" xml:space="preserve">
-    <value>The campaign "{0}" could not be opened: {1}</value>
-  </data>
   <data name="CampaignDeleteHeld" xml:space="preserve">
-    <value>"{0}" was not deleted - a file in its folder is still in use ({1}). Nothing is gone; try again in a moment.</value>
+    <value>"{0}" was not deleted - a file in its folder is still in use. Nothing is gone; try again in a moment.</value>
   </data>
   <data name="CampaignDeleteIncomplete" xml:space="preserve">
-    <value>"{0}" could not be deleted completely: {1}. What is left lies in {2} - close what holds it and delete it there.</value>
+    <value>"{0}" could not be deleted completely - a file in it was taken hold of while it was being deleted. What is left lies in {1} - close what holds it and delete it there.</value>
   </data>
   <data name="CampaignCheckFailed" xml:space="preserve">
     <value>The folder of "{0}" could not be checked completely: {1}. Check it again once the files are free.</value>
@@ -1373,6 +1378,18 @@ Delete them too?</value>
   </data>
   <data name="StockDeletePartly" xml:space="preserve">
     <value>The pictures are off the screens, but the delete stopped: {0}. What is left of them stays in the stock - delete it again once the files are free.</value>
+  </data>
+  <data name="ShelfRefused" xml:space="preserve">
+    <value>the file system refused - a file held by another program, or a full disk</value>
+  </data>
+  <data name="StockDeleteNotWritten" xml:space="preserve">
+    <value>These could not be written and still show what was deleted, as a placeholder: {0}</value>
+  </data>
+  <data name="CampaignsUnreachable" xml:space="preserve">
+    <value>The campaigns folder {0} cannot be reached - connect its drive, or choose another place in Settings. Nothing is created there meanwhile.</value>
+  </data>
+  <data name="PanelHeadUnreachable" xml:space="preserve">
+    <value>Campaigns folder not reachable</value>
   </data>
   <data name="AppNotKept" xml:space="preserve">
     <value>(not kept)</value>
@@ -1672,6 +1689,39 @@ Another DnDOverlay control is probably running already - look for its window bef
   </data>
   <data name="TileLoadingCount" xml:space="preserve">
     <value>{0} of {1} at the table</value>
+  </data>
+  <data name="DeskSkipped" xml:space="preserve">
+    <value>{0} file(s) could not be read right now and wait for the next check: {1}</value>
+  </data>
+  <data name="DeskOriginals" xml:space="preserve">
+    <value>{0} original(s) moved into originals\: {1}</value>
+  </data>
+  <data name="MainReportNames" xml:space="preserve">
+    <value>Names</value>
+  </data>
+  <data name="MainReportMissing" xml:space="preserve">
+    <value>Missing:</value>
+  </data>
+  <data name="MainReportForeign" xml:space="preserve">
+    <value>Foreign files, left alone:</value>
+  </data>
+  <data name="MainReportOriginals" xml:space="preserve">
+    <value>Moved into originals\:</value>
+  </data>
+  <data name="MainReportSkipped" xml:space="preserve">
+    <value>Not readable right now - tried again on the next check:</value>
+  </data>
+  <data name="MainReportUnreadable" xml:space="preserve">
+    <value>Scene files that could not be read:</value>
+  </data>
+  <data name="MainReportOtherCampaign" xml:space="preserve">
+    <value>That report belongs to a campaign that is no longer open.</value>
+  </data>
+  <data name="MainReportFileGone" xml:space="preserve">
+    <value>{0} is no longer there.</value>
+  </data>
+  <data name="MainVerifyAfterMove" xml:space="preserve">
+    <value>"{0}" was copied to its new place and checked by the number and size of its files. To check every picture byte for byte as well: Verify stock.</value>
   </data>
   <data name="TidyTitle" xml:space="preserve">
     <value>Tidy up campaign</value>

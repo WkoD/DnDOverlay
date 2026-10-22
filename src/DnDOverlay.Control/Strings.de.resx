@@ -474,6 +474,14 @@ Zum Löschen den Namen der Kampagne eintippen:</value>
   <data name="SettingsFolderUnreachable" xml:space="preserve">
     <value>{0} ist nicht erreichbar - dort wurde nichts angelegt.</value>
   </data>
+  <data name="SettingsOldPlaceUnreachable" xml:space="preserve">
+    <value>Der bisherige Kampagnenordner {0} ist nicht erreichbar - seine Kampagnen lassen sich jetzt nicht umziehen und blieben dort zurück.
+
+{1} trotzdem als Ort für Kampagnen nehmen?</value>
+  </data>
+  <data name="SettingsTakenUnreachable" xml:space="preserve">
+    <value>Kampagnen liegen jetzt in {0}. Die in {1} bleiben dort - der Ordner war nicht erreichbar.</value>
+  </data>
   <data name="DevicesTitle" xml:space="preserve">
     <value>Geräte</value>
   </data>
@@ -1332,14 +1340,11 @@ Auch löschen?</value>
   <data name="CampaignIntakeRunning" xml:space="preserve">
     <value>Eine Bildaufnahme läuft - erst abbrechen oder abwarten, dann noch einmal versuchen.</value>
   </data>
-  <data name="CampaignNotOpened" xml:space="preserve">
-    <value>Die Kampagne "{0}" ließ sich nicht öffnen: {1}</value>
-  </data>
   <data name="CampaignDeleteHeld" xml:space="preserve">
-    <value>"{0}" wurde nicht gelöscht - eine Datei im Ordner ist noch in Benutzung ({1}). Nichts ist weg; gleich noch einmal versuchen.</value>
+    <value>"{0}" wurde nicht gelöscht - eine Datei im Ordner ist noch in Benutzung. Nichts ist weg; gleich noch einmal versuchen.</value>
   </data>
   <data name="CampaignDeleteIncomplete" xml:space="preserve">
-    <value>"{0}" ließ sich nicht vollständig löschen: {1}. Was übrig ist, liegt in {2} - schließen, was es festhält, und dort löschen.</value>
+    <value>"{0}" ließ sich nicht vollständig löschen - eine Datei darin wurde während des Löschens festgehalten. Was übrig ist, liegt in {1} - schließen, was es festhält, und dort löschen.</value>
   </data>
   <data name="CampaignCheckFailed" xml:space="preserve">
     <value>Der Ordner von "{0}" ließ sich nicht vollständig prüfen: {1}. Erneut prüfen, sobald die Dateien frei sind.</value>
@@ -1373,6 +1378,18 @@ Auch löschen?</value>
   </data>
   <data name="StockDeletePartly" xml:space="preserve">
     <value>Die Bilder sind von den Bildschirmen, aber das Löschen brach ab: {0}. Was von ihnen übrig ist, bleibt in der Ablage - noch einmal löschen, sobald die Dateien frei sind.</value>
+  </data>
+  <data name="ShelfRefused" xml:space="preserve">
+    <value>das Dateisystem hat abgelehnt - eine Datei von einem anderen Programm belegt oder der Datenträger voll</value>
+  </data>
+  <data name="StockDeleteNotWritten" xml:space="preserve">
+    <value>Diese ließen sich nicht schreiben und zeigen das Gelöschte noch als Platzhalter: {0}</value>
+  </data>
+  <data name="CampaignsUnreachable" xml:space="preserve">
+    <value>Der Kampagnenordner {0} ist nicht erreichbar - sein Laufwerk anschließen oder in den Einstellungen einen anderen Ort wählen. Bis dahin wird dort nichts angelegt.</value>
+  </data>
+  <data name="PanelHeadUnreachable" xml:space="preserve">
+    <value>Kampagnenordner nicht erreichbar</value>
   </data>
   <data name="AppNotKept" xml:space="preserve">
     <value>(nicht aufbewahrt)</value>
@@ -1672,6 +1689,39 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   </data>
   <data name="TileLoadingCount" xml:space="preserve">
     <value>{0} von {1} am Tisch</value>
+  </data>
+  <data name="DeskSkipped" xml:space="preserve">
+    <value>{0} Datei(en) gerade nicht lesbar, beim nächsten Prüfen wieder dran: {1}</value>
+  </data>
+  <data name="DeskOriginals" xml:space="preserve">
+    <value>{0} Original(e) nach originals\ verschoben: {1}</value>
+  </data>
+  <data name="MainReportNames" xml:space="preserve">
+    <value>Namen</value>
+  </data>
+  <data name="MainReportMissing" xml:space="preserve">
+    <value>Fehlen:</value>
+  </data>
+  <data name="MainReportForeign" xml:space="preserve">
+    <value>Fremde Dateien, nicht angerührt:</value>
+  </data>
+  <data name="MainReportOriginals" xml:space="preserve">
+    <value>Nach originals\ verschoben:</value>
+  </data>
+  <data name="MainReportSkipped" xml:space="preserve">
+    <value>Gerade nicht lesbar - beim nächsten Prüfen wieder dran:</value>
+  </data>
+  <data name="MainReportUnreadable" xml:space="preserve">
+    <value>Nicht lesbare Szenendateien:</value>
+  </data>
+  <data name="MainReportOtherCampaign" xml:space="preserve">
+    <value>Dieser Bericht gehört zu einer Kampagne, die nicht mehr offen ist.</value>
+  </data>
+  <data name="MainReportFileGone" xml:space="preserve">
+    <value>{0} ist nicht mehr da.</value>
+  </data>
+  <data name="MainVerifyAfterMove" xml:space="preserve">
+    <value>"{0}" wurde an den neuen Ort kopiert und dabei nach Anzahl und Größe der Dateien geprüft. Um auch jedes Bild Byte für Byte zu prüfen: Ablage prüfen.</value>
   </data>
   <data name="TidyTitle" xml:space="preserve">
     <value>Kampagne aufräumen</value>

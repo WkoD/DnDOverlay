@@ -39,7 +39,7 @@ internal static partial class Strings
 
     internal static string DeskSkipped(int count, string names) => Text.Format(nameof(DeskSkipped), count, names);
 
-    internal static string DeskKept(int count) => Text.Format(nameof(DeskKept), count);
+    internal static string DeskOriginals(int count, string names) => Text.Format(nameof(DeskOriginals), count, names);
 
     internal static string MainReportNames => Text[nameof(MainReportNames)];
 
@@ -47,7 +47,7 @@ internal static partial class Strings
 
     internal static string MainReportForeign => Text[nameof(MainReportForeign)];
 
-    internal static string MainReportKept => Text[nameof(MainReportKept)];
+    internal static string MainReportOriginals => Text[nameof(MainReportOriginals)];
 
     internal static string MainReportSkipped => Text[nameof(MainReportSkipped)];
 

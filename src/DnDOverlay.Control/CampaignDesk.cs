@@ -580,7 +580,7 @@ internal sealed class CampaignDesk
                     .OrderBy(missing => missing.Name, StringComparer.CurrentCulture),
             ],
             Foreign = report.Foreign,
-            Kept = report.Kept,
+            Originals = report.Originals,
             Skipped = report.Skipped,
             UnreadableScenes = report.UnreadableScenes,
         };
@@ -628,9 +628,9 @@ internal sealed class CampaignDesk
             parts.Add(Strings.DeskUnreadableScenes(report.UnreadableScenes.Count, string.Join(", ", report.UnreadableScenes)));
         }
 
-        if (report.Kept.Count > 0)
+        if (report.Originals.Count > 0)
         {
-            parts.Add(Strings.DeskKept(report.Kept.Count));
+            parts.Add(Strings.DeskOriginals(report.Originals.Count, FirstNames(report.Originals)));
         }
 
         // Locked, an offline placeholder, gone since the first look: named, because the DM is the one
@@ -664,8 +664,8 @@ internal sealed record FolderReport(OpenCampaign Campaign, string Line)
     /// <summary>Files that are no picture, left where they are.</summary>
     internal IReadOnlyList<string> Foreign { get; init; } = [];
 
-    /// <summary>Files kept beside the picture taken in from them.</summary>
-    internal IReadOnlyList<string> Kept { get; init; } = [];
+    /// <summary>Originals moved into <c>originals\</c> once their picture was taken in, relative to the campaign folder.</summary>
+    internal IReadOnlyList<string> Originals { get; init; } = [];
 
     /// <summary>Files that could not be read right now, tried again on the next check.</summary>
     internal IReadOnlyList<string> Skipped { get; init; } = [];
@@ -674,7 +674,7 @@ internal sealed record FolderReport(OpenCampaign Campaign, string Line)
     internal IReadOnlyList<string> UnreadableScenes { get; init; } = [];
 
     /// <summary>Whether there are names behind the line - only then can it be expanded.</summary>
-    internal bool HasNames => Missing.Count + Foreign.Count + Kept.Count + Skipped.Count + UnreadableScenes.Count > 0;
+    internal bool HasNames => Missing.Count + Foreign.Count + Originals.Count + Skipped.Count + UnreadableScenes.Count > 0;
 }
 
 /// <summary>A picture of the stock whose file is gone, as the report names it.</summary>

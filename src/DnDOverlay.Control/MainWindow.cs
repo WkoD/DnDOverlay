@@ -755,7 +755,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         foreach (var (heading, names) in new[]
         {
-            (Strings.MainReportKept, report.Kept),
+            (Strings.MainReportOriginals, report.Originals),
             (Strings.MainReportSkipped, report.Skipped),
             (Strings.MainReportUnreadable, report.UnreadableScenes),
         })

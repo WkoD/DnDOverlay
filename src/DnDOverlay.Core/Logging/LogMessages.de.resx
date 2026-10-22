@@ -467,4 +467,10 @@
   <data name="E1062_ConnectionFailed" xml:space="preserve">
     <value>Die Verbindung zu {HubUri} ist fehlgeschlagen - neuer Versuch.</value>
   </data>
+  <data name="E4035_CampaignDeleteIncomplete" xml:space="preserve">
+    <value>Die Kampagne "{Name}" ließ sich nicht vollständig löschen: {Reason}</value>
+  </data>
+  <data name="E4036_CampaignCheckFailed" xml:space="preserve">
+    <value>Die Ordnerprüfung von "{Name}" brach ab: {Reason}</value>
+  </data>
 </root>
