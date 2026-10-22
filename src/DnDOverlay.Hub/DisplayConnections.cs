@@ -16,6 +16,8 @@ namespace DnDOverlay.Hub;
 public sealed class DisplayConnections
 {
     private readonly ConcurrentDictionary<DeviceId, DisplayConnection> _connections = new();
+    private readonly Lock _admission = new();
+    private bool _released;
 
     /// <summary>How many devices are connected right now - the ceiling is checked against this.</summary>
     public int Count => _connections.Count;
@@ -30,13 +32,63 @@ public sealed class DisplayConnections
     /// <summary>Everyone who is here right now.</summary>
     public IReadOnlyCollection<DisplayConnection> All => _connections.Values.ToList();
 
-    public void Add(DisplayConnection connection)
+    public void Add(DisplayConnection connection) => _ = TryAdd(connection);
+
+    /// <summary>
+    /// Registers a connection - unless the screens have been released (<see cref="Release"/>), in
+    /// which case nobody is let in any more and the caller says goodbye instead.
+    /// <para>
+    /// Under the same lock as the release, and that is the point: a connection that was being set up
+    /// while the goodbye went round is either in the release's list or refused here - there is no
+    /// third case in which it slips through and lights the table up again.
+    /// </para>
+    /// </summary>
+    public bool TryAdd(DisplayConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        _connections[connection.Device] = connection;
+        lock (_admission)
+        {
+            if (_released)
+            {
+                return false;
+            }
+
+            _connections[connection.Device] = connection;
+        }
 
         Changed?.Invoke();
+
+        return true;
+    }
+
+    /// <summary>Whether the screens have been released - the control is on its way out.</summary>
+    public bool Released
+    {
+        get
+        {
+            lock (_admission)
+            {
+                return _released;
+            }
+        }
+    }
+
+    /// <summary>
+    /// "Release the screens" (Part 4, Part 7): hands back everyone who is here, and from now on lets
+    /// nobody in. Without the second half a display that took its <c>GoIdle</c> quickly came straight
+    /// back - a welcomed connection that ended is worth a reconnect after a second - while the hub was
+    /// still waiting for a slower one, and was served its wishes and the evening's scene again. The
+    /// rescue mark and the takeover window followed a minute after the control was gone.
+    /// </summary>
+    public IReadOnlyList<DisplayConnection> Release()
+    {
+        lock (_admission)
+        {
+            _released = true;
+
+            return [.. _connections.Values];
+        }
     }
 
     /// <summary>

@@ -1906,7 +1906,10 @@ public sealed class SessionApi : ISessionApi, IDisposable
     /// <inheritdoc />
     public async Task<int> GoIdleAsync(TimeSpan wait, CancellationToken cancellationToken = default)
     {
-        var connections = _connections.All.ToList();
+        // Released, not merely listed: whoever reconnects from here on is told the same goodbye and
+        // served nothing (HubEndpoints), or a fast display would be back on the evening's scene while
+        // a slow one is still draining.
+        var connections = _connections.Release();
 
         foreach (var connection in connections)
         {

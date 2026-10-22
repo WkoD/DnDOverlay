@@ -678,6 +678,8 @@ public interface ISessionApi
     /// the last message of its connection, and back once they are out or <paramref name="wait"/> has
     /// passed - the process is about to end, and a device that does not take it stays lit, which is
     /// harmless. A device that is switched off gets nothing and starts in its start state anyway.
+    /// From then on the hub lets no display in: one that reconnects is told the same goodbye and
+    /// served nothing, so a fast device cannot light the table up again while a slow one drains.
     /// Nothing stored changes.
     /// </summary>
     /// <returns>How many devices it went to.</returns>

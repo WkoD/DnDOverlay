@@ -164,6 +164,43 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// After the goodbye nobody is let back in. A display that took its <c>GoIdle</c> quickly
+    /// reconnects within a second, and the hub is still up while a slower one drains; it used to be
+    /// welcomed and served its wishes and the evening's scene again, and the table lit up after the
+    /// DM had released it. Now it gets the goodbye again, and nothing before it.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_display_that_comes_back_after_the_goodbye_gets_only_the_goodbye()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+
+        using (var asked = await ConnectAsync(Asked, [Info(First)], cancellationToken))
+        {
+            await ReceiveAsync<ConfigUpdateMessage>(asked, cancellationToken);
+            _ = await session.AddItemAsync(new ScreenRef(Asked, First), Reference(), position: null, cancellationToken);
+
+            Assert.Equal(1, await session.GoIdleAsync(TimeSpan.FromSeconds(5), cancellationToken));
+            await ReceiveAsync<GoIdleMessage>(asked, cancellationToken);
+        }
+
+        using var back = await ConnectAsync(Asked, [Info(First)], cancellationToken);
+
+        var buffer = new byte[64 * 1024];
+        ProtocolMessage? first = null;
+
+        while (first is null or PingMessage)
+        {
+            var result = await back.ReceiveAsync(buffer.AsMemory(), cancellationToken);
+
+            Assert.NotEqual(WebSocketMessageType.Close, result.MessageType);
+            first = ProtocolJson.Parse(buffer.AsSpan(0, result.Count));
+        }
+
+        Assert.IsType<GoIdleMessage>(first);
+    }
+
+    /// <summary>
     /// "Which one are you?" goes to the device that was asked and to no other. With two devices of
     /// two screens each this is the only thing that says which tile is which physical screen, and
     /// a second table lighting up with names would be exactly the confusion it exists to end

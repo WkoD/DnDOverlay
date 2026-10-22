@@ -546,13 +546,28 @@ public static class HubEndpoints
         var screenIds = hello.Screens.Select(screen => screen.ScreenId).ToList();
         var connection = new DisplayConnection(device.Device, screenIds, hello, address, outgoing, liveness);
 
+        // The screens have been released and the control is on its way out: this device came back
+        // after its goodbye, and gets the goodbye again - no wishes, no scenes, no welcome that would
+        // make its next loss a reason to open the takeover window (Part 4, GoIdle).
+        if (connections.Released)
+        {
+            await SayGoodbyeAsync(outgoing, logger, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         // Now that this device may be here. The ticket is what tells THIS report from a later one,
         // so that unwinding after a fast reconnect cannot switch off the table that is already back.
         var presence = await InventoryAsync(
             catalog, session, device.Device, hello.Screens, hello.Settings, logger, cancellationToken)
             .ConfigureAwait(false);
 
-        connections.Add(connection);
+        // The same, for one that was being set up while the goodbye went round.
+        if (!connections.TryAdd(connection))
+        {
+            catalog.Departed(device.Device, presence);
+            await SayGoodbyeAsync(outgoing, logger, cancellationToken).ConfigureAwait(false);
+            return;
+        }
 
         // The battery stands in the device tree, so a change has to reach it - from here on, once
         // there is a device to show it on. Unhooked with the connection below.
@@ -916,6 +931,18 @@ public static class HubEndpoints
         CancellationToken cancellationToken)
     {
         outgoing.Finish(new RejectedMessage(reason));
+
+        await outgoing.Drained.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The goodbye of "release the screens", for a display that arrives after it.</summary>
+    private static async Task SayGoodbyeAsync(
+        SendQueues outgoing,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        HubLog.ScreensReleased(logger, 1);
+        outgoing.Finish(new GoIdleMessage());
 
         await outgoing.Drained.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
