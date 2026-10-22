@@ -461,4 +461,10 @@
   <data name="E3051_WentIdle" xml:space="preserve">
     <value>Das Control hat sich verabschiedet - {Screens} Bildschirm(e) zurück im Startzustand.</value>
   </data>
+  <data name="E3052_MessageHandlingFailed" xml:space="preserve">
+    <value>Die Verarbeitung einer {Message}-Nachricht ist fehlgeschlagen - die Verbindung läuft weiter.</value>
+  </data>
+  <data name="E1062_ConnectionFailed" xml:space="preserve">
+    <value>Die Verbindung zu {HubUri} ist fehlgeschlagen - neuer Versuch.</value>
+  </data>
 </root>

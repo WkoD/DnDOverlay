@@ -690,6 +690,7 @@ the same application that draws.
 | 1059 | `DeviceCommandSent` | Information | hub |
 | 1060 | `WindowListRateExceeded` | Warning | hub |
 | 1061 | `ScreensReleased` | Information | hub |
+| 1062 | `ConnectionFailed` | Warning | display |
 
 **1049 is the line that exists because its absence was the fault.** The loop that looks for a
 control runs fire-and-forget; a fault in it takes the reconnect with it and nothing else notices —
@@ -718,7 +719,7 @@ ends and the ordinary reconnect puts the truth back. **The third case, a socket 
 write outright, gets no line here**: the receive side already reports the end, and two lines for
 one event would be noise exactly when the log is being read.
 
-**Next free: 1062.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
+**Next free: 1063.** 1007–1009 stay unassigned so the first block could still grow, 1019 is left
 free at the end of transport's, pairing has 1020–1037, discovery 1038–1041 with the call for
 orphaned displays at 1054–1056, the reconnect
 loop's backoff 1042 (written by `ConnectionLoop` in transport since M5a; the number stayed when
@@ -843,6 +844,7 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3049 | `Restarting` | Information |
 | 3050 | `WindowLaid` | Information |
 | 3051 | `WentIdle` | Information |
+| 3052 | `MessageHandlingFailed` | Error |
 
 **3029 gained two numbers in M3c**, and the second is the one that says anything: touch
 reports sent, and the points inside them. A count of reports cannot tell a working table
@@ -854,7 +856,7 @@ capped at 32; a resting or a swallowed one contributes exactly one. Until the th
 M4 there is nothing to look at, so this ratio is the whole evidence that the trails are
 collected at all.
 
-**Next free: 3052.**
+**Next free: 3053.**
 
 **3036 and 3037 are not 3033 and 3034 with a number added**, and the separation is deliberate.
 3033 answers "where did that picture go?" and is written by a hand dragging one across; the pair
