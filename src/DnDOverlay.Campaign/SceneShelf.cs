@@ -99,6 +99,11 @@ public enum ShelfOutcome
 /// files that would not read: they are kept as work (<see cref="Unreadable"/>), so their names are
 /// taken like any other - a save asks before replacing one, a rename does not land on one.
 /// </para>
+/// <para>
+/// <b>Read from more than one thread.</b> The campaign is open at once and the folder check runs
+/// beside it (Part 3, phase 1), reading the scenes for names while the DM saves, renames or deletes
+/// one. Every member therefore takes one lock, and what is handed out is a copy.
+/// </para>
 /// </summary>
 public sealed class SceneShelf
 {
@@ -111,6 +116,7 @@ public sealed class SceneShelf
     private readonly Dictionary<string, SavedScene> _scenes = new(FileNames.Comparer);
     private readonly Dictionary<string, SavedLayout> _layouts = new(FileNames.Comparer);
     private readonly List<string> _unreadable = [];
+    private readonly Lock _gate = new();
 
     private SceneShelf(string directory, TimeProvider time)
     {
@@ -123,23 +129,23 @@ public sealed class SceneShelf
     /// are left where they are: a scene is work, and a file that does not parse today may be one
     /// half-copied by a sync that is still running (Part 3).
     /// </summary>
-    public IReadOnlyList<string> Unreadable => _unreadable;
+    public IReadOnlyList<string> Unreadable => Locked<IReadOnlyList<string>>(() => [.. _unreadable]);
 
     /// <summary>The scenes, newest first.</summary>
-    public IReadOnlyList<SceneSummary> Scenes =>
+    public IReadOnlyList<SceneSummary> Scenes => Locked<IReadOnlyList<SceneSummary>>(() =>
         [.. _scenes.Select(pair => new SceneSummary(pair.Key, pair.Value.SavedAt, pair.Value.Origin))
-            .OrderByDescending(summary => summary.SavedAt)];
+            .OrderByDescending(summary => summary.SavedAt)]);
 
     /// <summary>The layouts, newest first.</summary>
-    public IReadOnlyList<LayoutSummary> Layouts =>
+    public IReadOnlyList<LayoutSummary> Layouts => Locked<IReadOnlyList<LayoutSummary>>(() =>
         [.. _layouts.Select(pair => new LayoutSummary(
                 pair.Key, pair.Value.SavedAt, [.. pair.Value.Parts.Select(part => part.ScreenName)]))
-            .OrderByDescending(summary => summary.SavedAt)];
+            .OrderByDescending(summary => summary.SavedAt)]);
 
     /// <summary>Every saved scene and every scene inside a layout - what the reference display and the delete cascade read (Part 7).</summary>
-    public IEnumerable<(string Name, bool InLayout, SceneState Scene)> All =>
-        _scenes.Select(pair => (pair.Key, false, pair.Value.Scene))
-            .Concat(_layouts.SelectMany(pair => pair.Value.Parts.Select(part => (pair.Key, true, part.Scene.Scene))));
+    public IEnumerable<(string Name, bool InLayout, SceneState Scene)> All => Locked<IEnumerable<(string Name, bool InLayout, SceneState Scene)>>(() =>
+        [.. _scenes.Select(pair => (pair.Key, false, pair.Value.Scene))
+            .Concat(_layouts.SelectMany(pair => pair.Value.Parts.Select(part => (pair.Key, true, part.Scene.Scene))))]);
 
     /// <summary>
     /// Reads every scene and layout of the campaign at <paramref name="campaignDirectory"/>. The
@@ -181,10 +187,10 @@ public sealed class SceneShelf
     }
 
     /// <summary>One saved scene by name, as it was saved - names are resolved afresh by <see cref="SceneNames"/>.</summary>
-    public SavedScene? Scene(string name) => _scenes.GetValueOrDefault(name);
+    public SavedScene? Scene(string name) => Locked(() => _scenes.GetValueOrDefault(name));
 
     /// <summary>One saved layout by name.</summary>
-    public SavedLayout? Layout(string name) => _layouts.GetValueOrDefault(name);
+    public SavedLayout? Layout(string name) => Locked(() => _layouts.GetValueOrDefault(name));
 
     /// <summary>
     /// Saves a scene under a typed name. The name is checked, never rewritten; a taken name with
@@ -196,12 +202,15 @@ public sealed class SceneShelf
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        if (Refused(name, Taken(ScenesFolder, _scenes), overwrite) is { } refused)
+        lock (_gate)
         {
-            return refused;
-        }
+            if (Refused(name, Taken(ScenesFolder, _scenes), overwrite) is { } refused)
+            {
+                return refused;
+            }
 
-        return Attempt(() => WriteScene(name, new SavedScene(origin, _time.GetLocalNow(), scene with { FocusItems = [] })));
+            return Attempt(() => WriteScene(name, new SavedScene(origin, _time.GetLocalNow(), scene with { FocusItems = [] })));
+        }
     }
 
     /// <summary>Saves a layout under a typed name, with the same rules as a scene.</summary>
@@ -209,41 +218,45 @@ public sealed class SceneShelf
     {
         ArgumentNullException.ThrowIfNull(parts);
 
-        if (Refused(name, Taken(LayoutsFolder, _layouts), overwrite) is { } refused)
+        lock (_gate)
         {
-            return refused;
-        }
+            if (Refused(name, Taken(LayoutsFolder, _layouts), overwrite) is { } refused)
+            {
+                return refused;
+            }
 
-        return Attempt(() => WriteLayout(name, new SavedLayout(
-            _time.GetLocalNow(),
-            [.. parts.Select(part => part with { Scene = part.Scene with { Scene = part.Scene.Scene with { FocusItems = [] } } })])));
+            return Attempt(() => WriteLayout(name, new SavedLayout(
+                _time.GetLocalNow(),
+                [.. parts.Select(part => part with { Scene = part.Scene with { Scene = part.Scene.Scene with { FocusItems = [] } } })])));
+        }
     }
 
     /// <summary>Renames a scene and its file. A change of case only is a rename, not a collision.</summary>
     public ShelfOutcome RenameScene(string name, string newName) =>
-        Rename(ScenesFolder, _scenes, name, newName);
+        Locked(() => Rename(ScenesFolder, _scenes, name, newName));
 
     /// <summary>Renames a layout and its file.</summary>
     public ShelfOutcome RenameLayout(string name, string newName) =>
-        Rename(LayoutsFolder, _layouts, name, newName);
+        Locked(() => Rename(LayoutsFolder, _layouts, name, newName));
 
     /// <summary>Deletes a scene and its file. False when there is none, or its file would not go - then it stays listed.</summary>
-    public bool DeleteScene(string name) => Delete(ScenesFolder, _scenes, name);
+    public bool DeleteScene(string name) => Locked(() => Delete(ScenesFolder, _scenes, name));
 
     /// <summary>Deletes a layout and its file, with the same answer as <see cref="DeleteScene"/>.</summary>
-    public bool DeleteLayout(string name) => Delete(LayoutsFolder, _layouts, name);
+    public bool DeleteLayout(string name) => Locked(() => Delete(LayoutsFolder, _layouts, name));
 
     /// <summary>Which saved scenes and layouts show a picture - the reference display before a delete (Part 7).</summary>
-    public AssetUsage UsageOf(AssetId asset) =>
-        new(
-            [.. _scenes.Where(pair => Shows(pair.Value.Scene, asset)).Select(pair => pair.Key).Order(FileNames.Comparer)],
-            [.. _layouts.Where(pair => pair.Value.Parts.Any(part => Shows(part.Scene.Scene, asset))).Select(pair => pair.Key).Order(FileNames.Comparer)]);
+    public AssetUsage UsageOf(AssetId asset) => Locked(() => new AssetUsage(
+        [.. _scenes.Where(pair => Shows(pair.Value.Scene, asset)).Select(pair => pair.Key).Order(FileNames.Comparer)],
+        [.. _layouts.Where(pair => pair.Value.Parts.Any(part => Shows(part.Scene.Scene, asset))).Select(pair => pair.Key).Order(FileNames.Comparer)]));
 
     /// <summary>
     /// For every picture used anywhere, in how many saved scenes and layouts - one pass over the shelf
     /// for the marks of a whole grid, rather than one per tile.
     /// </summary>
-    public IReadOnlyDictionary<AssetId, int> UseCounts()
+    public IReadOnlyDictionary<AssetId, int> UseCounts() => Locked(CountUses);
+
+    private Dictionary<AssetId, int> CountUses()
     {
         var counts = new Dictionary<AssetId, int>();
 
@@ -282,6 +295,11 @@ public sealed class SceneShelf
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
+        return Locked(() => RenameAssetInFiles(asset, name));
+    }
+
+    private List<string> RenameAssetInFiles(AssetId asset, string name)
+    {
         var notWritten = new List<string>();
 
         foreach (var (key, saved) in _scenes.Where(pair => Shows(pair.Value.Scene, asset)).ToList())
@@ -319,6 +337,11 @@ public sealed class SceneShelf
     {
         ArgumentNullException.ThrowIfNull(assets);
 
+        return Locked(() => RemoveAssetsFromFiles(assets));
+    }
+
+    private EmptiedByDelete RemoveAssetsFromFiles(IReadOnlyCollection<AssetId> assets)
+    {
         var gone = assets.ToHashSet();
         var emptiedScenes = new List<string>();
         var emptiedLayouts = new List<string>();
@@ -374,6 +397,15 @@ public sealed class SceneShelf
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return ShelfOutcome.Failed;
+        }
+    }
+
+    /// <summary>Runs <paramref name="work"/> under the shelf's lock - see the type.</summary>
+    private T Locked<T>(Func<T> work)
+    {
+        lock (_gate)
+        {
+            return work();
         }
     }
 

@@ -389,6 +389,51 @@ public sealed class SceneShelfTests : IDisposable
         Assert.Equal(["dorfkarte"], Shelf().Scenes.Select(scene => scene.Name));
     }
 
+    /// <summary>
+    /// The folder check reads the scenes for names on a pool thread while the DM saves and deletes on
+    /// the UI thread (Part 3: the campaign is open at once). A reading pass never meets "collection was
+    /// modified" - which ended the check on opening and the control on "check folder again".
+    /// </summary>
+    [Fact]
+    public async Task Reading_beside_saving_and_deleting_never_meets_a_changing_list()
+    {
+        var shelf = Shelf();
+
+        for (var number = 0; number < 50; number++)
+        {
+            shelf.SaveScene($"Szene {number}", Origin, Scene("Grimmbart", "Ratsherr", "Händler"), overwrite: false);
+        }
+
+        using var done = new CancellationTokenSource();
+
+        var reader = Task.Run(
+            () =>
+            {
+                var passes = 0;
+
+                while (!done.IsCancellationRequested || passes == 0)
+                {
+                    _ = shelf.All.SelectMany(entry => entry.Scene.Items).Count();
+                    _ = shelf.Scenes.Count;
+                    _ = shelf.UseCounts().Count;
+                    passes++;
+                }
+
+                return passes;
+            },
+            TestContext.Current.CancellationToken);
+
+        for (var round = 0; round < 100; round++)
+        {
+            shelf.SaveScene("Kommt und geht", Origin, Scene("Ork"), overwrite: true);
+            shelf.DeleteScene("Kommt und geht");
+        }
+
+        await done.CancelAsync();
+
+        Assert.True(await reader > 0);
+    }
+
     private SceneShelf Shelf() => SceneShelf.Open(_directory, _time);
 
     private static LayoutPart Part(SceneState scene) =>
