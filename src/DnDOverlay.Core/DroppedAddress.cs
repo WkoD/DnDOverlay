@@ -32,7 +32,29 @@ public static class DroppedAddress
         string? text,
         string? urlFormat,
         string? uriList,
-        string? html)
+        string? html) =>
+        Collect(text, urlFormat, uriList, html, links: true);
+
+    /// <summary>
+    /// The addresses that may be taken as a file on this machine: the same as <see cref="Candidates"/>
+    /// without the links of the HTML fragment. A link on a copied page names what the PAGE points to,
+    /// not the picture that was copied - and since local files are tried before the offer's own bitmap,
+    /// any <c>&lt;a href="file:///…"&gt;</c> that names an existing file would otherwise win over it.
+    /// The VS Code case this exists for carries its picture in the URL format and the <c>&lt;img src&gt;</c>.
+    /// </summary>
+    public static IReadOnlyList<string> FileCandidates(
+        string? text,
+        string? urlFormat,
+        string? uriList,
+        string? html) =>
+        Collect(text, urlFormat, uriList, html, links: false);
+
+    private static List<string> Collect(
+        string? text,
+        string? urlFormat,
+        string? uriList,
+        string? html,
+        bool links)
     {
         var found = new List<string>();
 
@@ -62,7 +84,7 @@ public static class DroppedAddress
 
         if (html is not null)
         {
-            foreach (var value in Values(html, "<img", "src").Concat(Values(html, "<a", "href")))
+            foreach (var value in Values(html, "<img", "src").Concat(links ? Values(html, "<a", "href") : []))
             {
                 Add(WebUtility.HtmlDecode(value));
             }
@@ -75,11 +97,33 @@ public static class DroppedAddress
     /// The local path an address names, or <see langword="null"/> when it names none: a
     /// <c>file:</c> URI, the address VS Code's webviews give a file on disk, or a bare absolute
     /// path. Whether the file exists is the caller's question - this is string work only.
+    /// <para>
+    /// <b>Never a network path.</b> The address comes from whatever page the picture was dragged or
+    /// copied from, and a <c>\\host\share\x.png</c> or <c>file://host/share/x.png</c> there would make
+    /// the caller's existence check open an SMB connection to a host the page chose - Windows sends the
+    /// user's credentials along, and an unreachable host holds the control for the SMB timeout. A local
+    /// path is taken only for the webview case, a file on the DM's own disk; anything on a share is
+    /// dropped by the Explorer as a file, which needs none of this.
+    /// </para>
     /// </summary>
     public static string? LocalPath(string candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
+        var path = Resolve(candidate);
+
+        return path is null || IsNetworkPath(path) ? null : path;
+    }
+
+    /// <summary>
+    /// Two separators at the start - <c>\\host</c>, <c>//host</c>, <c>/\host</c> - are a UNC path to
+    /// Windows, and so are the <c>\\?\UNC\</c> and <c>\\.\</c> device forms.
+    /// </summary>
+    private static bool IsNetworkPath(string path) =>
+        path.Length >= 2 && (path[0] is '\\' or '/') && (path[1] is '\\' or '/');
+
+    private static string? Resolve(string candidate)
+    {
         // Asked before the URI parser, which reads "C:\..." differently on different platforms.
         if (Path.IsPathFullyQualified(candidate))
         {

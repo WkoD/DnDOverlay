@@ -44,6 +44,33 @@ public sealed class DroppedAddressTests : IDisposable
         Assert.Null(DroppedAddress.LocalPath(candidate));
 
     /// <summary>
+    /// A network path is never taken as a local file: the page chose it, and asking whether it exists
+    /// would open an SMB connection to that host with the user's credentials.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\attacker\share\ork.png")]
+    [InlineData("//attacker/share/ork.png")]
+    [InlineData("file://attacker/share/ork.png")]
+    [InlineData(@"\\?\UNC\attacker\share\ork.png")]
+    [InlineData("https://file+.vscode-resource.vscode-cdn.net/%5C%5Cattacker%5Cshare%5Cork.png")]
+    public void A_network_path_names_no_local_file(string candidate) =>
+        Assert.Null(DroppedAddress.LocalPath(candidate));
+
+    /// <summary>
+    /// A link on a copied page names what the page points to, not the copied picture - it must not be
+    /// taken as a local file ahead of the offer's own bitmap. As an address to fetch it stays.
+    /// </summary>
+    [Fact]
+    public void A_link_in_the_fragment_is_no_file_candidate()
+    {
+        var link = new Uri(_picture).AbsoluteUri;
+        var html = $"<a href=\"{link}\">notes</a><img src=\"https://e.example/5.png\">";
+
+        Assert.Equal(["https://e.example/5.png"], DroppedAddress.FileCandidates(text: null, urlFormat: null, uriList: null, html));
+        Assert.Equal(["https://e.example/5.png", link], DroppedAddress.Candidates(text: null, urlFormat: null, uriList: null, html));
+    }
+
+    /// <summary>
     /// A picture dragged out of a Chromium surface: no text, the address in the URL format and in
     /// the <c>src</c> of its HTML fragment. That is the drop that used to be refused outright.
     /// </summary>
