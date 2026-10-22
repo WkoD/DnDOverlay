@@ -34,7 +34,7 @@ public sealed class DisplayOptionsTests
     [Fact]
     public void A_restart_carries_the_arguments_and_waits_for_this_process()
     {
-        var args = DisplayOptions.ForRestart(["--host", "tisch", "--windowed"], predecessor: 4711);
+        var args = DisplayOptions.ForRestart(["--host", "tisch", "--windowed"], predecessor: 4711, deviceName: "Beamer");
 
         Assert.Equal(["--host", "tisch", "--windowed", "--after", "4711"], args);
         Assert.Equal(4711, DisplayOptions.Parse(args).After);
@@ -44,9 +44,25 @@ public sealed class DisplayOptionsTests
     [Fact]
     public void A_second_restart_replaces_the_first_wait()
     {
-        var args = DisplayOptions.ForRestart(["--after", "4711", "--name", "Beamer"], predecessor: 815);
+        var args = DisplayOptions.ForRestart(["--after", "4711", "--name", "Beamer"], predecessor: 815, deviceName: "Beamer");
 
         Assert.Equal(["--name", "Beamer", "--after", "815"], args);
+    }
+
+    /// <summary>
+    /// DM decision of 22.10.2026: a device started with <c>--name</c> and renamed from the control keeps
+    /// its new name across a restart from the control - the restart carries the name it has now, not the
+    /// start argument the rename replaced. Without a <c>--name</c> none is added: display.json has the
+    /// rename.
+    /// </summary>
+    [Fact]
+    public void A_restart_carries_the_current_name_rather_than_the_old_start_argument()
+    {
+        var args = DisplayOptions.ForRestart(["--name", "Beamer", "--windowed"], predecessor: 815, deviceName: "Tisch links");
+
+        Assert.Equal(["--name", "Tisch links", "--windowed", "--after", "815"], args);
+        Assert.Equal("Tisch links", DisplayOptions.Parse(args).DeviceName);
+        Assert.Null(DisplayOptions.Parse(DisplayOptions.ForRestart(["--windowed"], predecessor: 815, deviceName: "Tisch links")).DeviceName);
     }
 
     [Fact]

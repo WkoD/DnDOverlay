@@ -29,6 +29,7 @@ internal sealed record DisplayOptions(
     int? After = null)
 {
     private const string AfterSwitch = "--after";
+    private const string NameSwitch = "--name";
 
     /// <summary>
     /// The arguments a restart from the control starts the new process with: this process's own,
@@ -42,12 +43,17 @@ internal sealed record DisplayOptions(
     /// the new one would already be filling it (Part 5, Part 7).
     /// </para>
     /// <para>
-    /// An <c>--after</c> from an earlier restart is replaced, not carried along.
+    /// An <c>--after</c> from an earlier restart is replaced, not carried along. So is the value of a
+    /// <c>--name</c>: it carries the name the device has NOW (<paramref name="deviceName"/>). Carried
+    /// along, the start argument would beat a rename from the control and give the device its old name
+    /// back with the restart the DM sent (DM decision of 22.10.2026). Without a <c>--name</c> nothing
+    /// is added - a rename is in display.json, which fills the gap.
     /// </para>
     /// </summary>
-    internal static List<string> ForRestart(IReadOnlyList<string> args, int predecessor)
+    internal static List<string> ForRestart(IReadOnlyList<string> args, int predecessor, string deviceName)
     {
         ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(deviceName);
 
         var kept = new List<string>();
 
@@ -55,6 +61,14 @@ internal sealed record DisplayOptions(
         {
             if (args[i] == AfterSwitch && i + 1 < args.Count && int.TryParse(args[i + 1], out _))
             {
+                i++;
+                continue;
+            }
+
+            if (args[i] == NameSwitch && i + 1 < args.Count)
+            {
+                kept.Add(NameSwitch);
+                kept.Add(deviceName);
                 i++;
                 continue;
             }
@@ -110,7 +124,7 @@ internal sealed record DisplayOptions(
                     i++;
                     break;
 
-                case "--name" when i + 1 < args.Count:
+                case NameSwitch when i + 1 < args.Count:
                     name = args[++i];
                     break;
 

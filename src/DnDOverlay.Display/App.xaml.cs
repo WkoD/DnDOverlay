@@ -1931,7 +1931,8 @@ public sealed partial class App : Application, IDisposable
 
                 // The new one waits until this one is gone (DisplayOptions.ForRestart). A start that
                 // throws leaves this process running and connected; the fault is said like any other.
-                foreach (var argument in DisplayOptions.ForRestart([.. Environment.GetCommandLineArgs().Skip(1)], Environment.ProcessId))
+                // It carries the name the device has now, not a --name a rename has since replaced.
+                foreach (var argument in DisplayOptions.ForRestart([.. Environment.GetCommandLineArgs().Skip(1)], Environment.ProcessId, _deviceName))
                 {
                     start.ArgumentList.Add(argument);
                 }
