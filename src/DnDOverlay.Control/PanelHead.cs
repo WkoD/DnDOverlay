@@ -144,14 +144,34 @@ internal sealed class PanelHead : Border
     /// </summary>
     private void Label()
     {
-        _undoText.Text = "↶ " + Fitted(_undoLabel, Strings.PanelHeadUndo, _undo.ActualWidth);
-        _redoText.Text = "↷ " + Fitted(_redoLabel, Strings.PanelHeadRedo, _redo.ActualWidth);
+        var verbLast = bool.TryParse(Strings.PanelHeadVerbLast, out var last) && last;
+
+        _undoText.Text = "↶ " + Fitted(_undoLabel, Strings.PanelHeadUndo, _undo.ActualWidth, verbLast);
+        _redoText.Text = "↷ " + Fitted(_redoLabel, Strings.PanelHeadRedo, _redo.ActualWidth, verbLast);
     }
 
-    private static string Fitted(string? label, string none, double width) =>
-        label is null ? none
-        : width is > 0 and < 150 ? label.Split(' ', 2)[0]
-        : label;
+    /// <summary>
+    /// One line always - a free text brings its line breaks into its label, and the button would grow
+    /// as tall as the text. Narrow, the verb alone, from where the language puts it (Part 7: "cut to
+    /// the verb"): first in English ("Add"), last in German, whose steps end on the participle
+    /// ("hinzugefügt") - the first word there would be the picture's name or a number.
+    /// </summary>
+    internal static string Fitted(string? label, string none, double width, bool verbLast)
+    {
+        if (label is null)
+        {
+            return none;
+        }
+
+        var line = string.Join(' ', label.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        if (width is not (> 0 and < 150))
+        {
+            return line;
+        }
+
+        return verbLast ? line[(line.LastIndexOf(' ') + 1)..] : line.Split(' ', 2)[0];
+    }
 
     private void Times(bool vertical)
     {

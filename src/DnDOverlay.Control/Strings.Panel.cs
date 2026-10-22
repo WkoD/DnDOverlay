@@ -289,6 +289,13 @@ internal static partial class Strings
 
     internal static string CampaignCheckFailed(string name, string reason) => Text.Format(nameof(CampaignCheckFailed), name, reason);
 
+    /// <summary>
+    /// Whether the verb of an undo label stands at its end - "true" in German ("\"Grimmbart\"
+    /// hinzugefügt"), "false" in English ("Add \"Grimmbart\""). A fact of the language, so it lives
+    /// beside its sentences: the narrow button keeps the verb (Part 7), wherever the language puts it.
+    /// </summary>
+    internal static string PanelHeadVerbLast => Text[nameof(PanelHeadVerbLast)];
+
     internal static string ScenesLoadStep(string name) => Text.Format(nameof(ScenesLoadStep), name);
 
     internal static string LayoutsLoadStep(string name) => Text.Format(nameof(LayoutsLoadStep), name);
