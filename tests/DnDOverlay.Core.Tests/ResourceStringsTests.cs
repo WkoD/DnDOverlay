@@ -19,7 +19,9 @@ public sealed partial class ResourceStringsTests
     public void Every_text_is_there_in_both_languages_and_used(string application)
     {
         var directory = Path.Combine(RepositoryLayout.RepositoryRoot.FullName, "src", application);
-        var members = Member().Matches(File.ReadAllText(Path.Combine(directory, "Strings.cs")))
+        // Strings.cs and its partial halves, one per area of the application.
+        var members = Directory.EnumerateFiles(directory, "Strings*.cs")
+            .SelectMany(file => Member().Matches(File.ReadAllText(file)))
             .Select(match => match.Groups[1].Value)
             .ToHashSet(StringComparer.Ordinal);
         var english = Entries(Path.Combine(directory, "Strings.resx"));
