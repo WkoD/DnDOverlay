@@ -613,6 +613,37 @@ public sealed class CampaignLibraryTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Scratch files a crash left between writing and renaming are ours and derived: removed without a
+    /// word - not taken in as a half picture from their partial bytes, not reported as foreign on every
+    /// opening. A DM's own .tmp elsewhere is none of ours.
+    /// </summary>
+    [Fact]
+    public async Task Scratch_files_left_by_a_crash_are_removed_without_a_word()
+    {
+        var campaign = Campaign("Sturmküste");
+        var hash = new string('a', 64);
+        var picture = Path.Combine(campaign, "assets", hash + ".png.12" + AtomicFile.TemporarySuffix);
+        var thumbnail = Path.Combine(campaign, "assets", "thumbs", hash + "_256.png" + AtomicFile.TemporarySuffix);
+        var inventory = Path.Combine(campaign, "inventory.json.7" + AtomicFile.TemporarySuffix);
+        var theirs = Path.Combine(campaign, "Notizen.tmp");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(thumbnail)!);
+        File.WriteAllBytes(picture, Bytes("halb"));
+        File.WriteAllBytes(thumbnail, Bytes("halb"));
+        File.WriteAllText(inventory, "{");
+        File.WriteAllBytes(theirs, FakeImageCodec.Unreadable);
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Empty(opened.Store.Entries);
+        Assert.Equal(["Notizen.tmp"], report.Foreign);
+        Assert.False(File.Exists(picture));
+        Assert.False(File.Exists(thumbnail));
+        Assert.False(File.Exists(inventory));
+        Assert.True(File.Exists(theirs));
+    }
+
     /// <summary>A file deleted by hand leaves its entry marked, not removed - and taking the same picture in again heals it.</summary>
     [Fact]
     public async Task A_missing_file_is_marked_and_heals_when_the_picture_comes_back()

@@ -411,6 +411,34 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         return true;
     }
 
+    /// <summary>
+    /// Removes scratch files a crash left (<see cref="CampaignFindings.Scratch"/>). Under the lock every
+    /// write here takes, so a scratch file still being written is finished and renamed away first -
+    /// nobody's write in progress is pulled from under it.
+    /// </summary>
+    internal void RemoveScratch(IEnumerable<string> files)
+    {
+        lock (_gate)
+        {
+            if (_closed)
+            {
+                return;
+            }
+
+            foreach (var file in files)
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Derived: tried again on the next check.
+                }
+            }
+        }
+    }
+
     /// <summary>Whether this file is the picture of an entry that was removed while its file could not be deleted (M5b5).</summary>
     internal bool WasRemoved(string file)
     {

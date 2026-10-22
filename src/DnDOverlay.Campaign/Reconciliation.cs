@@ -6,7 +6,15 @@ namespace DnDOverlay.Campaign;
 /// <summary>What the first look at a campaign folder found - by names, without a byte read (Part 3, phase 1).</summary>
 /// <param name="Orphans">Files that are not where the stock keeps an entry's picture: a picture laid in by hand, a crash between writing and recording, or a foreign file - which of these only phase 2 can say.</param>
 /// <param name="Missing">Entries whose file is gone.</param>
-public sealed record CampaignFindings(IReadOnlyList<string> Orphans, IReadOnlySet<AssetId> Missing);
+public sealed record CampaignFindings(IReadOnlyList<string> Orphans, IReadOnlySet<AssetId> Missing)
+{
+    /// <summary>
+    /// Our own scratch files, left by a crash between writing and renaming (<see cref="AtomicFile"/>).
+    /// Derived, so removed without a word in phase 2 - neither taken in as a picture from their partial
+    /// bytes nor reported as foreign on every opening (Part 3; Part 11: no <c>.tmp</c> leftovers).
+    /// </summary>
+    public IReadOnlyList<string> Scratch { get; init; } = [];
+}
 
 /// <summary>
 /// The report beside the stage after a campaign opened (Part 3, phase 3) - one report, not twenty
@@ -86,6 +94,7 @@ public static partial class Reconciliation
         };
 
         var orphans = new List<string>();
+        var scratch = new List<string>();
 
         // A subfolder the DM's account may not read is passed over rather than ending the look at the
         // whole folder. Hidden and system files are listed as before: litter is filtered by name below.
@@ -94,6 +103,12 @@ public static partial class Reconciliation
         foreach (var file in Directory.EnumerateFiles(root, "*", walk))
         {
             var name = Path.GetFileName(file);
+
+            if (IsScratch(root, file))
+            {
+                scratch.Add(file);
+                continue;
+            }
 
             if (name.StartsWith("inventory.json", StringComparison.OrdinalIgnoreCase)
                 || Litter.Contains(name)
@@ -106,7 +121,23 @@ public static partial class Reconciliation
             orphans.Add(file);
         }
 
-        return new CampaignFindings(orphans, store.Missing);
+        return new CampaignFindings(orphans, store.Missing) { Scratch = scratch };
+    }
+
+    /// <summary>
+    /// Whether a file is a scratch file the stock writes: the inventory's in the campaign folder, a
+    /// picture's or a thumbnail's in <c>assets\</c> - by name and place, so a DM's own <c>.tmp</c> is
+    /// none of ours.
+    /// </summary>
+    private static bool IsScratch(string root, string file)
+    {
+        var folder = Path.GetDirectoryName(file);
+        var assets = Path.Combine(root, "assets");
+
+        return ScratchName().IsMatch(Path.GetFileName(file))
+            && (string.Equals(folder, root, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(folder, assets, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(folder, Path.Combine(assets, "thumbs"), StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -163,6 +194,7 @@ public static partial class Reconciliation
             progress?.Report(++done);
         }
 
+        store.RemoveScratch(findings.Scratch);
         store.ForgetRemovedGone();
         store.RepairThumbnails();
 
@@ -334,6 +366,10 @@ public static partial class Reconciliation
 
     [GeneratedRegex("^[0-9a-fA-F]{64}$")]
     private static partial Regex HashName();
+
+    /// <summary><c>&lt;hash&gt;.png.12.tmp</c>, <c>&lt;hash&gt;_256.png.tmp</c>, <c>inventory.json.tmp</c> - what <see cref="AtomicFile"/> leaves.</summary>
+    [GeneratedRegex(@"^(?:[0-9a-f]{64}(?:_\d+)?\.[a-z]{3,4}|inventory\.json)(?:\.\d+)?\.tmp$", RegexOptions.IgnoreCase)]
+    private static partial Regex ScratchName();
 
     /// <summary>What phase 2 has counted so far.</summary>
     private sealed class Tally
