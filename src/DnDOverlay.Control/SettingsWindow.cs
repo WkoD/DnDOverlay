@@ -486,6 +486,14 @@ internal sealed class SettingsWindow : Window, IDisposable
             // moment in which the path points at something incomplete.
             Take(to);
 
+            // A copy is checked by number and size, not content - so each copied campaign is offered
+            // "Verify stock" at its next opening, once (Part 7; DM decision). A rename on the same
+            // drive moved no byte and leaves nothing to verify.
+            if (result.Copied)
+            {
+                _settings.Update(current => current with { Stock = current.Stock.Moved(plan.Campaigns) });
+            }
+
             var left = CampaignMove.RemoveSources(result);
 
             ControlLog.CampaignsMoved(_logger, from, to, plan.Campaigns.Count, result.Copied);

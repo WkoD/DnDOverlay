@@ -57,6 +57,8 @@ internal static partial class Strings
 
     internal static string MainReportFileGone(string name) => Text.Format(nameof(MainReportFileGone), name);
 
+    internal static string MainVerifyAfterMove(string name) => Text.Format(nameof(MainVerifyAfterMove), name);
+
     internal static string IntakeNothingUsable => Text[nameof(IntakeNothingUsable)];
 
     internal static string IntakeRunGoing => Text[nameof(IntakeRunGoing)];

@@ -307,7 +307,11 @@ internal sealed class MainWindow : Window, IDisposable
         };
 
         desk.Reported += (_, report) => ShowReport(report);
-        desk.Measured += (_, measure) => Report(measure);
+        desk.Measured += (_, measure) =>
+        {
+            Report(measure);
+            OfferVerify();
+        };
 
         _panelHead.CampaignAsked += (_, _) =>
         {
@@ -1649,6 +1653,38 @@ internal sealed class MainWindow : Window, IDisposable
                         : current.Stock with { PicturesOn = false },
                 }));
         }
+    }
+
+    /// <summary>
+    /// "Verify stock" offered once for a campaign that a move of the campaign folder copied (Part 7: a
+    /// copy is checked by number and size; whoever wants to know exactly is offered the verify) - at its
+    /// next opening, in the box beside the stage, below its report. The button runs the verify of the
+    /// open campaign in the tidy-up view, which has the progress and the way to break it off.
+    /// </summary>
+    private void OfferVerify()
+    {
+        if (_desk.Open is not { } open || !_settings.Current.Stock.VerifyDue(open.Name))
+        {
+            return;
+        }
+
+        _settings.Update(current => current with { Stock = current.Stock.VerifyOffered(open.Name) });
+
+        Notify(
+            Strings.MainVerifyAfterMove(_desk.OpenLabel ?? open.Name),
+            dismissed: null,
+            Strings.TidyVerify,
+            () =>
+            {
+                if (!ReferenceEquals(_desk.Open, open))
+                {
+                    _status.Text = Strings.MainReportOtherCampaign;
+                    return;
+                }
+
+                Tidy();
+                _ = _tidy?.VerifyAsync();
+            });
     }
 
     /// <summary>The tidy-up view of the open campaign - one at a time, brought forward when it is open already.</summary>

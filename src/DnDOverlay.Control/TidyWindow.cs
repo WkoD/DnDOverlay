@@ -139,10 +139,13 @@ internal sealed class TidyWindow : Window
         Refresh();
     }
 
-    /// <summary>"Verify stock" - every byte, with progress and a way to break off, because it is minutes on a large stock.</summary>
-    private async Task VerifyAsync()
+    /// <summary>
+    /// "Verify stock" - every byte, with progress and a way to break off, because it is minutes on a
+    /// large stock. Also started from the offer after a move of the campaign folder; one at a time.
+    /// </summary>
+    internal async Task VerifyAsync()
     {
-        if (_desk.Open is not { } open)
+        if (_desk.Open is not { } open || _breaking is not null)
         {
             return;
         }

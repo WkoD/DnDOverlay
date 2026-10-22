@@ -82,6 +82,28 @@ public sealed class StockReportingTests
         Assert.Empty(reporting.Due(4 * Gigabyte - 1, 500, "Vinland", Nothing));
     }
 
+    /// <summary>
+    /// After a move that copied the campaigns, "Verify stock" is offered once per moved campaign, at its
+    /// next opening (Part 7) - the others are not touched by the offer of one, and a second move adds no
+    /// campaign twice.
+    /// </summary>
+    [Fact]
+    public void A_moved_campaign_is_offered_its_verify_once()
+    {
+        var reporting = new StockReporting().Moved([Campaign, "Vinland"]).Moved(["vinland"]);
+
+        Assert.True(reporting.VerifyDue(Campaign));
+        Assert.True(reporting.VerifyDue("Vinland"));
+        Assert.False(reporting.VerifyDue("Tyranny"));
+        Assert.Equal(2, reporting.MovedUnverified!.Count);
+
+        var offered = reporting.VerifyOffered("sturmküste");
+
+        Assert.False(offered.VerifyDue(Campaign));
+        Assert.True(offered.VerifyDue("Vinland"));
+        Assert.False(new StockReporting().VerifyDue(Campaign));
+    }
+
     /// <summary>"Don't report again" is per trigger: the disk still warns when the count is switched off.</summary>
     [Fact]
     public void Switching_one_off_leaves_the_other()

@@ -41,13 +41,20 @@ public sealed record PicturesHeard(string Campaign, int Pictures);
 /// <c>picturesAcknowledged</c> - still loads: that value is left unread, because nobody can say which
 /// campaign it was clicked away in, and a notice once more is the price of not guessing.
 /// </param>
+/// <param name="MovedUnverified">
+/// Campaigns copied to a new place by a move of the campaign folder and not yet offered "Verify stock"
+/// (Part 7: a copy is checked by number and size, not content - whoever wants to know exactly is
+/// offered the verify after the move). Each is offered once, at its next opening - which may be
+/// evenings later, so it is kept here and not in memory.
+/// </param>
 public sealed record StockReporting(
     long FreeSpaceBelowBytes = StockReporting.DefaultFreeSpaceBelowBytes,
     int PicturesAbove = StockReporting.DefaultPicturesAbove,
     bool FreeSpaceOn = true,
     bool PicturesOn = true,
     long? FreeSpaceAcknowledged = null,
-    IReadOnlyList<PicturesHeard>? PicturesAcknowledgedIn = null)
+    IReadOnlyList<PicturesHeard>? PicturesAcknowledgedIn = null,
+    IReadOnlyList<string>? MovedUnverified = null)
 {
     /// <summary>5 GB - below it the next intake may fail in the middle of preparing (Part 7).</summary>
     public const long DefaultFreeSpaceBelowBytes = 5L * 1024 * 1024 * 1024;
@@ -111,6 +118,25 @@ public sealed record StockReporting(
             ],
         };
     }
+
+    /// <summary>The same, with these campaigns copied by a move and their verify still to be offered.</summary>
+    public StockReporting Moved(IEnumerable<string> campaigns)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+
+        var waiting = (MovedUnverified ?? []).ToList();
+
+        waiting.AddRange(campaigns.Where(campaign => !waiting.Any(known => Same(known, campaign))));
+
+        return this with { MovedUnverified = waiting };
+    }
+
+    /// <summary>Whether this campaign was copied by a move and has not been offered "Verify stock" since.</summary>
+    public bool VerifyDue(string campaign) => MovedUnverified?.Any(moved => Same(moved, campaign)) is true;
+
+    /// <summary>The same, with this campaign's verify offered - once is the offer, the answer is the DM's.</summary>
+    public StockReporting VerifyOffered(string campaign) =>
+        this with { MovedUnverified = [.. (MovedUnverified ?? []).Where(moved => !Same(moved, campaign))] };
 
     /// <summary>Campaign names name folders, and Windows does not tell <c>Sturmküste</c> from <c>sturmküste</c>.</summary>
     private static bool Same(string? one, string? other) => string.Equals(one, other, StringComparison.OrdinalIgnoreCase);

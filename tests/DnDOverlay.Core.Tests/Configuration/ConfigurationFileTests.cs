@@ -141,7 +141,8 @@ public sealed class ConfigurationFileTests : IDisposable
     {
         var stock = new StockReporting(3L * 1024 * 1024 * 1024, 1500, FreeSpaceOn: false, PicturesOn: true, FreeSpaceAcknowledged: 42)
             .AcknowledgePictures("Sturmküste", 1800)
-            .AcknowledgePictures("Vinland", 2500);
+            .AcknowledgePictures("Vinland", 2500)
+            .Moved(["Tyranny"]);
 
         using (var file = Store(TimeProvider.System))
         {
@@ -154,8 +155,9 @@ public sealed class ConfigurationFileTests : IDisposable
         var loaded = reopened.Load(() => new ControlConfiguration()).Value.Stock;
 
         // A record compares its lists by reference; the lists are compared by content beside it.
-        Assert.Equal(stock with { PicturesAcknowledgedIn = null }, loaded with { PicturesAcknowledgedIn = null });
+        Assert.Equal(stock with { PicturesAcknowledgedIn = null, MovedUnverified = null }, loaded with { PicturesAcknowledgedIn = null, MovedUnverified = null });
         Assert.Equal(stock.PicturesAcknowledgedIn, loaded.PicturesAcknowledgedIn);
+        Assert.Equal(stock.MovedUnverified, loaded.MovedUnverified);
         Assert.Equal(new StockReporting(), new ControlConfiguration().Stock);
     }
 
