@@ -293,6 +293,13 @@ public sealed partial class App : Application, IDisposable
 
     private sealed record Offer(Guid Caller, string Name, CancellationTokenSource Withdraw);
 
+    /// <summary>
+    /// Whether the connection standing right now is an answer to a call - its pairing request puts
+    /// no setup screen over the rescue mark (<see cref="SetupScreen"/>). Kept for the whole
+    /// connection, unlike <see cref="_offer"/>, which a veto takes back.
+    /// </summary>
+    private volatile bool _answeringCall;
+
     private long _peakBytes;
 
     /// <summary>
@@ -1385,6 +1392,8 @@ public sealed partial class App : Application, IDisposable
         using var abandon = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
         var welcomed = 0;
 
+        _answeringCall = answeringFor is not null;
+
         // Offering itself to a caller: the rescue mark says so, and can take it back (Part 6).
         if (answeringFor is not null && heardControl is { } caller)
         {
@@ -1518,6 +1527,7 @@ public sealed partial class App : Application, IDisposable
         await ownSearch.ConfigureAwait(false);
 
         _offer = null;
+        _answeringCall = false;
 
         // Dropped for its own control: worth starting from the top at once, the beacon is there.
         return abandon.IsCancellationRequested && !_shutdown.IsCancellationRequested ? Attempt.Worthwhile : attempt;
@@ -1631,9 +1641,15 @@ public sealed partial class App : Application, IDisposable
 
             case PairingPendingMessage pending:
                 // The setup screen: name, address and code, large enough to read from two metres -
-                // exactly while the request lies before the DM (Part 4, Part 6).
+                // exactly while the request lies before the DM (Part 4, Part 6). Not for an answer
+                // to a call: there the rescue mark shows it and carries the veto (SetupScreen).
                 DisplayLog.PairingPending(_logger, pending.PairingCode);
-                await Dispatcher.InvokeAsync(() => ShowSetup(pending.PairingCode));
+
+                if (SetupScreen.Wanted(_answeringCall))
+                {
+                    await Dispatcher.InvokeAsync(() => ShowSetup(pending.PairingCode));
+                }
+
                 break;
 
             case RejectedMessage rejected:
