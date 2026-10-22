@@ -1791,6 +1791,11 @@ public sealed partial class App : Application, IDisposable
                 _takeover.SaidGoodbye();
                 _scenes.Clear();
                 await Dispatcher.InvokeAsync(GoIdle);
+
+                // And the pictures go with the scenes (Part 6: a bitmap is let go when the last item
+                // using it is). Otherwise only the next fetch let go of them - after the next control
+                // came, which on an autostarted display PC may be days, with up to the memory cap held.
+                LetGoOfWhatNoSceneNeeds();
                 break;
 
             case DiagnosticsRequestMessage request:
