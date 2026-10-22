@@ -143,12 +143,6 @@ public sealed partial class App : Application, IDisposable
     private static readonly TimeSpan PulseEvery = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Below half a device-independent pixel the two ends agree. Anything a hand or an eye could
-    /// notice is above it by a wide margin.
-    /// </summary>
-    private const double DriftWorthSaying = 0.5;
-
-    /// <summary>
     /// How long an exit may spend emptying the picture store. Windows gives a shutdown a few seconds
     /// in all, and the rest of the exit needs some of them.
     /// </summary>
@@ -227,24 +221,11 @@ public sealed partial class App : Application, IDisposable
     private readonly SemaphoreSlim _sharpener = new(1, 1);
 
     /// <summary>
-    /// Gestures this device has let go of and the hub has not answered yet, with the place they
-    /// were let go at and the moment they were sent. It is what makes <c>3028</c> possible.
-    /// <para>
-    /// <b>A queue per item, not one slot</b>, and the first run of this line is why: it kept one
-    /// entry per picture, a second push replaced the first, and the answer to the first was then
-    /// measured against the second's place. It reported drifts of up to 918 DIP where the two ends
-    /// in fact agreed - the instrument's own fault, and exactly the sort of number that would have
-    /// been chased for an evening. Answers come back in the order they were sent, so the oldest
-    /// entry is the one being answered.
-    /// </para>
+    /// Gestures this device has grabbed or let go of and the hub has not answered yet. It is what
+    /// makes <c>3028</c> possible, and what keeps a late answer to a grab from pulling the picture
+    /// back (<see cref="OwnGestures"/>).
     /// </summary>
-    private readonly ConcurrentDictionary<ItemId, ConcurrentQueue<(ItemTransform Where, long AtMs)>> _awaiting = new();
-
-    /// <summary>
-    /// Where each picture was when this device took hold of it, until the hub has answered that
-    /// grab - see <see cref="LateAnswerToOwnGrab"/>.
-    /// </summary>
-    private readonly ConcurrentDictionary<ItemId, ItemTransform> _grabbedAt = new();
+    private readonly OwnGestures _own = new();
 
     /// <summary>
     /// What only means something over hours - the numbers <c>3029</c> carries. They are counted
@@ -2045,7 +2026,7 @@ public sealed partial class App : Application, IDisposable
 
                 foreach (var op in ops)
                 {
-                    if (op is TransformItem moved && LateAnswerToOwnGrab(moved, scene, context) is { } depthOnly)
+                    if (op is TransformItem moved && _own.LateAnswerToGrab(moved, scene, context) is { } depthOnly)
                     {
                         // Not measured as the answer to the release either: it answers the grab, and
                         // pairing it with the release is what made the evening's log read 886 DIP.
@@ -2072,7 +2053,7 @@ public sealed partial class App : Application, IDisposable
                         // throttle that nothing would ever clear again - its binding report is the
                         // one that never comes (Part 4, conflict rule 4).
                         _throttle.Forget(removed.Item);
-                        _grabbedAt.TryRemove(removed.Item, out _);
+                        _own.Removed(removed.Item);
                     }
                 }
 
@@ -3074,22 +3055,12 @@ public sealed partial class App : Application, IDisposable
         if (reported.Binding)
         {
             _gestures++;
-
-            var queue = _awaiting.GetOrAdd(reported.Transform.Item, _ => new ConcurrentQueue<(ItemTransform, long)>());
-
-            // Bounded, because an operation the hub never answers - the item was gone, or locked -
-            // would otherwise leave an entry that every later answer is measured against.
-            while (queue.Count >= 16)
-            {
-                _ = queue.TryDequeue(out _);
-            }
-
-            queue.Enqueue((reported.Transform, Environment.TickCount64));
+            _own.LetGo(reported.Transform, Environment.TickCount64);
         }
 
         if (reported.Grabbed && !reported.Binding)
         {
-            _grabbedAt[reported.Transform.Item] = reported.Transform;
+            _own.Grabbed(reported.Transform);
         }
 
         if (reported.Grabbed)
@@ -3136,92 +3107,19 @@ public sealed partial class App : Application, IDisposable
     /// actually waited for. An operation for an item nobody here moved is a stranger's and passes
     /// without a word.
     /// </summary>
-    /// <summary>
-    /// The hub's answer to this device's own GRAB, arriving after the hand has already let go -
-    /// returned as depth only, with this device's own place kept; <see langword="null"/> for every
-    /// other operation, which is applied as it comes.
-    /// <para>
-    /// <b>Found at a game session (18.10.2026), and it is a picture jumping back.</b> The hub answers
-    /// a grab with the place the picture had when it was taken - it has to, the operation carries
-    /// one - and sends that answer back to the grabbing device, because it carries the binding
-    /// depth. On a quiet link it arrives while the hand is still on the picture and the hold keeps
-    /// the finger's geometry. While the table was loading a 32 MB picture over Wi-Fi it arrived
-    /// 1.6 s late, after the release: the picture sprang back to where it had arrived, and forward
-    /// again when the answer to the release came round.
-    /// </para>
-    /// <para>
-    /// Told apart by what it says, not by where it came from, because a patch carries no sender
-    /// (Guide F9): an operation that names exactly the place this device sent with its grab, for a
-    /// picture whose release is still unanswered. Anything else - the DM moving it, the hub
-    /// clamping it - is a correction and wins, as conflict rule 2 says.
-    /// </para>
-    /// </summary>
-    private TransformItem? LateAnswerToOwnGrab(TransformItem moved, SceneState scene, ScreenContext context)
-    {
-        if (!_grabbedAt.TryGetValue(moved.Item, out var grab) || !SamePlace(moved, grab, context))
-        {
-            // Somebody else's move, or the hub's own clamping: a correction, applied as it is
-            // (conflict rule 2).
-            return null;
-        }
-
-        _ = _grabbedAt.TryRemove(moved.Item, out _);
-
-        // Nothing let go yet: the answer is in time, and the hold keeps the finger's geometry anyway.
-        if (!_awaiting.TryGetValue(moved.Item, out var released) || released.IsEmpty
-            || scene.Items.FirstOrDefault(item => item.ItemId == moved.Item) is not { } mine)
-        {
-            return null;
-        }
-
-        return moved with
-        {
-            CenterX = mine.CenterX,
-            CenterY = mine.CenterY,
-            Scale = mine.Scale,
-            RotationDeg = mine.RotationDeg,
-        };
-    }
-
-    /// <summary>
-    /// Whether an answer carries the very place a report sent - within the half pixel that counts
-    /// as agreement everywhere else here.
-    /// </summary>
-    private static bool SamePlace(TransformItem answer, ItemTransform sent, ScreenContext context)
-    {
-        var dx = (answer.CenterX - sent.CenterX) * context.Size.Width;
-        var dy = (answer.CenterY - sent.CenterY) * context.Size.Height;
-
-        return Math.Sqrt((dx * dx) + (dy * dy)) <= DriftWorthSaying
-            && Math.Abs(answer.Scale - sent.Scale) < 0.0005
-            && Math.Abs(answer.RotationDeg - sent.RotationDeg) < 0.05;
-    }
-
     private void Confirmed(TransformItem moved, ScreenContext context, SceneState scene)
     {
-        if (!_awaiting.TryGetValue(moved.Item, out var queue) || !queue.TryDequeue(out var mine))
+        if (_own.Answered(moved, context, Environment.TickCount64) is not { } answer)
         {
             return;
         }
 
-        // In DIP rather than in the normalised fractions, because a thousandth of a screen means
-        // nothing to a reader and two pixels do. The two axes are separate fractions of two
-        // different edges, so each is converted with its own (Part 3).
-        var dx = (moved.CenterX - mine.Where.CenterX) * context.Size.Width;
-        var dy = (moved.CenterY - mine.Where.CenterY) * context.Size.Height;
-
-        var drift = Math.Round(Math.Sqrt((dx * dx) + (dy * dy)), 1);
-        var spent = Environment.TickCount64 - mine.AtMs;
-
         var name = scene.Items.OfType<ImageItem>().FirstOrDefault(item => item.ItemId == moved.Item)?.Name
             ?? moved.Item.Value.ToString()[..8];
 
-        // Half a pixel is agreement. The values travel as doubles and come back through the same
-        // arithmetic on both ends, so the ordinary case is exactly nothing - measured over an
-        // evening, 120 of 123 gestures came back at 0.
-        if (drift <= DriftWorthSaying)
+        if (answer.Agrees)
         {
-            DisplayLog.GestureConfirmed(_logger, name, spent, drift);
+            DisplayLog.GestureConfirmed(_logger, name, answer.SpentMs, answer.DriftDip);
 
             return;
         }
@@ -3232,11 +3130,11 @@ public sealed partial class App : Application, IDisposable
         DisplayLog.GestureCorrected(
             _logger,
             name,
-            drift,
-            spent,
-            Math.Round(mine.Where.CenterX, 3),
-            Math.Round(mine.Where.CenterY, 3),
-            Math.Round(mine.Where.Scale, 3),
+            answer.DriftDip,
+            answer.SpentMs,
+            Math.Round(answer.Sent.CenterX, 3),
+            Math.Round(answer.Sent.CenterY, 3),
+            Math.Round(answer.Sent.Scale, 3),
             Math.Round(moved.CenterX, 3),
             Math.Round(moved.CenterY, 3),
             Math.Round(moved.Scale, 3));
