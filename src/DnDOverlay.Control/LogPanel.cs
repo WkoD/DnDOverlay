@@ -93,6 +93,17 @@ internal sealed class LogPanel : DockPanel, IDisposable
 
         _scroll.ScrollChanged += OnScrolled;
 
+        // Shown again after the sources changed behind it: the bar and the lines catch up once.
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible && _stale)
+            {
+                _stale = false;
+                Bubbles();
+                Refilter();
+            }
+        };
+
         // At the head and not scrolling with the lines - it wraps between groups when the panel is narrow.
         SetDock(_bar, Dock.Top);
         Children.Add(_bar);
@@ -124,6 +135,12 @@ internal sealed class LogPanel : DockPanel, IDisposable
     /// The devices, for the bubbles: every known source, not only the ones that spoke - a bar that grew
     /// with each line would jump under the finger. Dimmed is only what is not connected.
     /// </summary>
+    /// <remarks>
+    /// <b>Drawn again only when what it shows changed</b>, and only while it is shown. The window hands
+    /// over every device event - a battery tick, a round trip - and rebuilding up to 512 lines on each
+    /// of them, hidden or not, was UI-thread work on the battery machine for nothing: a view of the load
+    /// must not become part of it (Part 1, M5 review).
+    /// </remarks>
     internal void Know(IReadOnlyList<DeviceView> devices)
     {
         _devices = devices;
@@ -133,8 +150,58 @@ internal sealed class LogPanel : DockPanel, IDisposable
             _hueOf[device.Device] = _hueOf.Count;
         }
 
+        var sources = Sources(devices);
+
+        if (string.Equals(sources, _sources, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _sources = sources;
+
+        if (!IsVisible)
+        {
+            _stale = true;
+            return;
+        }
+
         Bubbles();
         Refilter();
+    }
+
+    /// <summary>What the bar and the lines take from the device list, as one comparable value.</summary>
+    private string _sources = string.Empty;
+
+    /// <summary>The sources changed while the panel was hidden - drawn when it is shown again.</summary>
+    private bool _stale;
+
+    /// <summary>
+    /// The part of the device list the panel shows: every device with its name and whether it is
+    /// connected, and its screens with their labels - and nothing that changes on a beat, like the
+    /// battery or the round trip. Equal for two lists the panel would draw alike.
+    /// </summary>
+    internal static string Sources(IReadOnlyList<DeviceView> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+
+        var text = new StringBuilder();
+
+        foreach (var device in devices)
+        {
+            text.Append(device.Device.Value.ToString("N", CultureInfo.InvariantCulture))
+                .Append('\u001F').Append(device.Name)
+                .Append('\u001F').Append(device.Connected ? '1' : '0');
+
+            foreach (var screen in device.Screens)
+            {
+                text.Append('\u001F').Append(screen.Screen.Screen.Value)
+                    .Append('\u001F').Append(screen.Info.Label);
+            }
+
+            text.Append('\u001E');
+        }
+
+        return text.ToString();
     }
 
     private void Bubbles()
