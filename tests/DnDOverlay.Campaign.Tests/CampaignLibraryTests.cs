@@ -170,6 +170,56 @@ public sealed class CampaignLibraryTests : IDisposable
         await Ingest(campaign.Store, "eins");
     }
 
+    /// <summary>
+    /// The folder moved, but the campaign could not be read at its new place right now: it goes back
+    /// under its old name and the rename answers "busy", instead of an exception with the folder moved
+    /// and the open campaign still pointing at the old path.
+    /// </summary>
+    [Fact]
+    public async Task A_rename_whose_new_place_cannot_be_read_puts_the_folder_back()
+    {
+        var refuse = false;
+        var library = new CampaignLibrary(
+            _base,
+            directory => refuse ? throw new IOException("held by a sync client") : AssetStore.Open(directory, _codec, _time),
+            _time);
+        var campaign = library.CreateUnnamed();
+
+        refuse = true;
+
+        var (outcome, after) = library.Rename(campaign, "Kerkerwelt");
+
+        Assert.Equal(CampaignOutcome.Busy, outcome);
+        Assert.Same(campaign, after);
+        Assert.True(Directory.Exists(Path.Combine(_base, "~unbenannt")));
+        Assert.False(Directory.Exists(Path.Combine(_base, "Kerkerwelt")));
+        Assert.False(campaign.Store.IsClosed);
+        await Ingest(campaign.Store, "eins");
+    }
+
+    /// <summary>
+    /// A rename by case only whose second step is refused takes the first back: the folder does not stay
+    /// under "<c>.renaming</c>", listed as a campaign of its own. Staged with a folder of the target
+    /// spelling beside it, which only a case-sensitive file system allows.
+    /// </summary>
+    [Fact]
+    public void A_case_only_rename_whose_second_step_fails_leaves_the_folder_where_it_was()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("needs a case-sensitive file system to stage the refused second step");
+        }
+
+        var library = Library();
+        var campaign = library.Open(Path.GetFileName(Campaign("Kerkerwelt")));
+
+        Directory.CreateDirectory(Path.Combine(_base, "kerkerwelt", "besetzt"));
+
+        Assert.Equal(CampaignOutcome.Busy, library.Rename(campaign, "kerkerwelt").Outcome);
+        Assert.True(Directory.Exists(Path.Combine(_base, "Kerkerwelt")));
+        Assert.False(Directory.Exists(Path.Combine(_base, "Kerkerwelt.renaming")));
+    }
+
     [Fact]
     public void Deleting_takes_the_folder()
     {

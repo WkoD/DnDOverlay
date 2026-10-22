@@ -197,19 +197,7 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
 
         try
         {
-            if (sameOne)
-            {
-                // Only the case changes: through a temporary name, or a case-insensitive file
-                // system calls it a move onto itself.
-                var between = from + ".renaming";
-
-                Directory.Move(from, between);
-                Directory.Move(between, to);
-            }
-            else
-            {
-                Directory.Move(from, to);
-            }
+            MoveFolder(from, to, caseOnly: sameOne);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -218,7 +206,56 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
             return (CampaignOutcome.Busy, campaign);
         }
 
-        return (CampaignOutcome.Done, Open(newName));
+        try
+        {
+            return (CampaignOutcome.Done, Open(newName));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CampaignSchemaException)
+        {
+            // Moved, but not readable at the new place right now - a sync client took the inventory the
+            // moment it arrived. Back under the old name, so the folder and the campaign the desk holds
+            // agree again; the DM tries once more.
+            try
+            {
+                MoveFolder(to, from, caseOnly: sameOne);
+                campaign.Store.Reopen();
+            }
+            catch (Exception back) when (back is IOException or UnauthorizedAccessException)
+            {
+            }
+
+            return (CampaignOutcome.Busy, campaign);
+        }
+    }
+
+    /// <summary>
+    /// Moves a campaign folder. A change of case only goes through a temporary name, or a
+    /// case-insensitive file system calls it a move onto itself - and if the second step is refused,
+    /// the first is taken back, so the folder never stays behind under the temporary name, where the
+    /// switcher would list it as a campaign of its own and the open one would point at nothing.
+    /// </summary>
+    private static void MoveFolder(string from, string to, bool caseOnly)
+    {
+        if (!caseOnly)
+        {
+            Directory.Move(from, to);
+
+            return;
+        }
+
+        var between = from + ".renaming";
+
+        Directory.Move(from, between);
+
+        try
+        {
+            Directory.Move(between, to);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Directory.Move(between, from);
+            throw;
+        }
     }
 
     /// <summary>
