@@ -347,6 +347,53 @@ internal sealed class CampaignDesk
     }
 
     /// <summary>
+    /// A save or rename on the shelf, the same way: the shelf states the disk's refusal as
+    /// <see cref="ShelfOutcome.Failed"/> rather than throwing, and that becomes the sentence too - a
+    /// Failed taken for "nothing to say" would be a scene the DM believes saved. Any other outcome is
+    /// the caller's (Taken asks, Done says so).
+    /// </summary>
+    internal static bool Shelves(Func<ShelfOutcome> write, out ShelfOutcome outcome, [NotNullWhen(false)] out string? refused)
+    {
+        if (!Writes(write, out outcome, out refused))
+        {
+            return false;
+        }
+
+        if (outcome is ShelfOutcome.Failed)
+        {
+            refused = Strings.ShelfRefused;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// A delete on the shelf: it answers false both for a name that is not there and for a file that
+    /// would not go - the second one stays listed, and that is the refusal. <paramref name="listed"/>
+    /// asks the shelf afterwards.
+    /// </summary>
+    internal static bool Removes(Func<bool> delete, Func<bool> listed, [NotNullWhen(false)] out string? refused)
+    {
+        ArgumentNullException.ThrowIfNull(listed);
+
+        if (!Writes(delete, out var deleted, out refused))
+        {
+            return false;
+        }
+
+        if (!deleted && listed())
+        {
+            refused = Strings.ShelfRefused;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// The first picture while none is open: a new unnamed campaign, opened (Part 3). Called from the
     /// ingest, which may run off the UI thread - the change is announced on it.
     /// </summary>

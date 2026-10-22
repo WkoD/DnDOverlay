@@ -202,7 +202,7 @@ internal sealed class LayoutsPanel : Grid
 
         // The window closes after this, so a disk that refuses is said in front of it, not in a status
         // line nobody will read.
-        if (!CampaignDesk.Writes(() => open.Shelf.SaveLayout(name, parts, overwrite: false), out var outcome, out var refused))
+        if (!CampaignDesk.Shelves(() => open.Shelf.SaveLayout(name, parts, overwrite: false), out var outcome, out var refused))
         {
             MessageBox.Show(owner, Strings.LayoutsWriteFailed(name, refused), Strings.LayoutsSaveTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
             return null;
@@ -275,7 +275,7 @@ internal sealed class LayoutsPanel : Grid
             return;
         }
 
-        if (!CampaignDesk.Writes(() => open.Shelf.SaveLayout(name, parts, overwrite: overwriting is not null), out var outcome, out var refused))
+        if (!CampaignDesk.Shelves(() => open.Shelf.SaveLayout(name, parts, overwrite: overwriting is not null), out var outcome, out var refused))
         {
             _say(Strings.LayoutsWriteFailed(name, refused));
             return;
@@ -296,7 +296,7 @@ internal sealed class LayoutsPanel : Grid
                 return;
             }
 
-            if (!CampaignDesk.Writes(() => open.Shelf.SaveLayout(name, parts, overwrite: true), out outcome, out refused))
+            if (!CampaignDesk.Shelves(() => open.Shelf.SaveLayout(name, parts, overwrite: true), out outcome, out refused))
             {
                 _say(Strings.LayoutsWriteFailed(name, refused));
                 return;
@@ -414,7 +414,7 @@ internal sealed class LayoutsPanel : Grid
                 FileNames.Suggest(Strings.LayoutsSceneName(part.ScreenName, stamp)),
                 open.Shelf.Scenes.Select(scene => scene.Name));
 
-            if (!CampaignDesk.Writes(() => open.Shelf.SaveScene(name, part.Scene.Origin, part.Scene.Scene, overwrite: false), out var outcome, out var refused))
+            if (!CampaignDesk.Shelves(() => open.Shelf.SaveScene(name, part.Scene.Origin, part.Scene.Scene, overwrite: false), out var outcome, out var refused))
             {
                 _say(Strings.ScenesWriteFailed(name, refused));
                 break;
@@ -562,7 +562,7 @@ internal sealed class LayoutsPanel : Grid
             return;
         }
 
-        if (!CampaignDesk.Writes(() => open.Shelf.RenameLayout(name, typed), out var outcome, out var refused))
+        if (!CampaignDesk.Shelves(() => open.Shelf.RenameLayout(name, typed), out var outcome, out var refused))
         {
             _say(Strings.LayoutsWriteFailed(name, refused));
             return;
@@ -598,11 +598,11 @@ internal sealed class LayoutsPanel : Grid
             return;
         }
 
-        if (!CampaignDesk.Writes(() => open.Shelf.DeleteLayout(name), out var deleted, out var refused))
+        if (!CampaignDesk.Removes(() => open.Shelf.DeleteLayout(name), () => open.Shelf.Layout(name) is not null, out var refused))
         {
             _say(Strings.LayoutsDeleteFailed(name, refused));
         }
-        else if (deleted)
+        else
         {
             Refresh();
         }

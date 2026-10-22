@@ -70,9 +70,11 @@ internal sealed class StockEdits
 
                     // The scenes and layouts last: one that cannot be written keeps the old name in its
                     // file - loading resolves names afresh anyway (Part 3) - and the DM is told which.
-                    var said = CampaignDesk.Writes(() => Done(() => open.Shelf.RenameAsset(asset, name)), out _, out var unwritten)
-                        ? Strings.StockRenamed(old, name)
-                        : Strings.StockRenamePartly(old, name, unwritten);
+                    var said = !CampaignDesk.Writes(() => open.Shelf.RenameAsset(asset, name), out var unwritten, out var stopped)
+                        ? Strings.StockRenamePartly(old, name, stopped)
+                        : unwritten.Count > 0
+                            ? Strings.StockRenamePartly(old, name, Listed(unwritten))
+                            : Strings.StockRenamed(old, name);
 
                     ControlLog.AssetRenamed(_logger, old, name);
                     _say(said);
@@ -199,6 +201,13 @@ internal sealed class StockEdits
 
         var said = one ? Strings.StockDeletedOne(entries[0].Name) : Strings.StockDeletedMany(entries.Count);
 
+        // A scene or layout the disk would not rewrite still shows what was deleted - as a placeholder
+        // when loaded. Named, so the DM knows where (the shelf goes on with the others).
+        if (emptied.NotWritten.Count > 0)
+        {
+            said += " " + Strings.StockDeleteNotWritten(Listed(emptied.NotWritten));
+        }
+
         if (emptied.Scenes.Count + emptied.Layouts.Count > 0)
         {
             said += OfferEmptied(owner, open.Shelf, emptied);
@@ -220,13 +229,6 @@ internal sealed class StockEdits
         }
 
         return emptied;
-    }
-
-    private static bool Done(Action write)
-    {
-        write();
-
-        return true;
     }
 
     /// <summary>The scenes and layouts that held nothing but what was deleted - named, and offered for deletion.</summary>
@@ -259,7 +261,7 @@ internal sealed class StockEdits
 
         foreach (var scene in emptied.Scenes)
         {
-            if (!CampaignDesk.Writes(() => shelf.DeleteScene(scene), out _, out var refused))
+            if (!CampaignDesk.Removes(() => shelf.DeleteScene(scene), () => shelf.Scene(scene) is not null, out var refused))
             {
                 return " " + Strings.ScenesDeleteFailed(scene, refused);
             }
@@ -267,7 +269,7 @@ internal sealed class StockEdits
 
         foreach (var layout in emptied.Layouts)
         {
-            if (!CampaignDesk.Writes(() => shelf.DeleteLayout(layout), out _, out var refused))
+            if (!CampaignDesk.Removes(() => shelf.DeleteLayout(layout), () => shelf.Layout(layout) is not null, out var refused))
             {
                 return " " + Strings.LayoutsDeleteFailed(layout, refused);
             }

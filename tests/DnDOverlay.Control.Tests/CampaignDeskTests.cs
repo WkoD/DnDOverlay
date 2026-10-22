@@ -255,4 +255,58 @@ public sealed class CampaignDeskTests
         Assert.True(CampaignDesk.Writes(() => 3, out var result, out _));
         Assert.Equal(3, result);
     }
+
+    /// <summary>
+    /// The shelf states the disk's refusal as Failed instead of throwing: that is a reason to say too,
+    /// not an outcome to pass over as if nothing had been asked. Taken stays the caller's question.
+    /// </summary>
+    [Fact]
+    public void A_shelf_that_failed_becomes_a_reason()
+    {
+        Assert.False(CampaignDesk.Shelves(() => ShelfOutcome.Failed, out _, out var refused));
+        Assert.Equal(Strings.ShelfRefused, refused);
+        Assert.False(CampaignDesk.Shelves(() => throw new IOException("Datenträger voll"), out _, out refused));
+        Assert.Equal("Datenträger voll", refused);
+        Assert.True(CampaignDesk.Shelves(() => ShelfOutcome.Taken, out var outcome, out _));
+        Assert.Equal(ShelfOutcome.Taken, outcome);
+    }
+
+    /// <summary>A shelf delete answering false while the entry is still listed was refused; not listed, there was nothing to delete.</summary>
+    [Fact]
+    public void A_shelf_delete_that_left_its_entry_becomes_a_reason()
+    {
+        Assert.False(CampaignDesk.Removes(() => false, () => true, out var refused));
+        Assert.Equal(Strings.ShelfRefused, refused);
+        Assert.True(CampaignDesk.Removes(() => false, () => false, out _));
+        Assert.True(CampaignDesk.Removes(() => true, () => true, out _));
+    }
+
+    /// <summary>
+    /// End to end on a real shelf: a scene whose file another program holds is not deleted, stays
+    /// listed - and the helper turns that into the stated reason the panels show.
+    /// </summary>
+    [Fact]
+    public async Task A_scene_whose_file_is_held_is_not_deleted_and_says_why()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+
+        var shelf = bench.Desk.Open!.Shelf;
+
+        Assert.Equal(ShelfOutcome.Done, shelf.SaveScene("Taverne", new PixelSize(1920, 1080), SceneState.Empty, overwrite: false));
+
+        bool deleted;
+        string? refused;
+
+        using (new FileStream(Path.Combine(bench.Desk.Open.Directory, "scenes", "Taverne.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            deleted = CampaignDesk.Removes(() => shelf.DeleteScene("Taverne"), () => shelf.Scene("Taverne") is not null, out refused);
+        }
+
+        Assert.False(deleted);
+        Assert.Equal(Strings.ShelfRefused, refused);
+        Assert.NotNull(shelf.Scene("Taverne"));
+    }
 }

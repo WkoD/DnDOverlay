@@ -311,4 +311,8 @@ internal static partial class Strings
     internal static string StockRenamePartly(string old, string name, string reason) => Text.Format(nameof(StockRenamePartly), old, name, reason);
 
     internal static string StockDeletePartly(string reason) => Text.Format(nameof(StockDeletePartly), reason);
+
+    internal static string ShelfRefused => Text[nameof(ShelfRefused)];
+
+    internal static string StockDeleteNotWritten(string names) => Text.Format(nameof(StockDeleteNotWritten), names);
 }

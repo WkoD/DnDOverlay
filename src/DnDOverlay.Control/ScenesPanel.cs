@@ -214,7 +214,7 @@ internal sealed class ScenesPanel : Grid
         var scene = await _session.GetSceneAsync(screen, CancellationToken.None).ConfigureAwait(true);
         var origin = view?.Info.Size ?? new PixelSize(1920, 1080);
 
-        if (!CampaignDesk.Writes(() => shelf.SaveScene(name, origin, scene, overwrite: overwriting is not null), out var outcome, out var refused))
+        if (!CampaignDesk.Shelves(() => shelf.SaveScene(name, origin, scene, overwrite: overwriting is not null), out var outcome, out var refused))
         {
             _say(Strings.ScenesWriteFailed(name, refused));
             return;
@@ -235,7 +235,7 @@ internal sealed class ScenesPanel : Grid
                 return;
             }
 
-            if (!CampaignDesk.Writes(() => shelf.SaveScene(name, origin, scene, overwrite: true), out outcome, out refused))
+            if (!CampaignDesk.Shelves(() => shelf.SaveScene(name, origin, scene, overwrite: true), out outcome, out refused))
             {
                 _say(Strings.ScenesWriteFailed(name, refused));
                 return;
@@ -439,7 +439,7 @@ internal sealed class ScenesPanel : Grid
             return;
         }
 
-        if (!CampaignDesk.Writes(() => open.Shelf.RenameScene(name, typed), out var outcome, out var refused))
+        if (!CampaignDesk.Shelves(() => open.Shelf.RenameScene(name, typed), out var outcome, out var refused))
         {
             _say(Strings.ScenesWriteFailed(name, refused));
             return;
@@ -475,11 +475,11 @@ internal sealed class ScenesPanel : Grid
             return;
         }
 
-        if (!CampaignDesk.Writes(() => open.Shelf.DeleteScene(name), out var deleted, out var refused))
+        if (!CampaignDesk.Removes(() => open.Shelf.DeleteScene(name), () => open.Shelf.Scene(name) is not null, out var refused))
         {
             _say(Strings.ScenesDeleteFailed(name, refused));
         }
-        else if (deleted)
+        else
         {
             Refresh();
         }

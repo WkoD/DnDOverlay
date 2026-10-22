@@ -647,9 +647,12 @@ internal sealed class DeviceBands
         if (answer.Count > 0 && _desk.Open is { } open)
         {
             // Each one checked: an unpair takes the arrangement for good, so a scene that was not
-            // written - a name taken in the meantime - stops it rather than vanishing unsaid (M5 review).
+            // written - a name taken in the meantime, a disk that refused - stops it rather than
+            // vanishing unsaid (M5 review).
             var unsaved = answer
-                .Where(saved => open.Shelf.SaveScene(saved.Name, saved.Screen.Info.Size, saved.Scene, overwrite: false) is not ShelfOutcome.Done)
+                .Where(saved => !CampaignDesk.Shelves(
+                        () => open.Shelf.SaveScene(saved.Name, saved.Screen.Info.Size, saved.Scene, overwrite: false), out var outcome, out _)
+                    || outcome is not ShelfOutcome.Done)
                 .Select(saved => saved.Name)
                 .ToList();
 
