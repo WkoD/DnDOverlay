@@ -26,6 +26,12 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
     /// <summary>A run started or ended - the grips that start one go dead meanwhile, the break-off comes alive.</summary>
     internal event EventHandler<bool>? RunningChanged;
 
+    /// <summary>
+    /// A run found pictures that were in the stock already - raised after the run, with the entries
+    /// as the stock has them (their names stay, Part 7), for the stock to narrow to them.
+    /// </summary>
+    internal event EventHandler<IReadOnlyList<AssetRef>>? AlreadyThere;
+
     /// <summary>Whether a run is going.</summary>
     internal bool Running => _running is not null;
 
@@ -108,6 +114,11 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
         var unused = target is { } screen ? await ShowAsync(screen, report, at, background).ConfigureAwait(true) : null;
 
         say(unused is null ? Collected(report) : Collected(report) + " " + unused);
+
+        if (report.AlreadyPresent.Count > 0)
+        {
+            AlreadyThere?.Invoke(this, report.AlreadyPresent);
+        }
     }
 
     /// <summary>

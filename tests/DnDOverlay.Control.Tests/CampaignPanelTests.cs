@@ -37,6 +37,41 @@ public sealed class CampaignPanelTests
         });
     }
 
+    /// <summary>
+    /// A picture pulled in that is already in the stock: the stock narrows to it and picks it out
+    /// (Part 7: "filters to this picture, highlights it briefly").
+    /// </summary>
+    [Fact]
+    public async Task A_picture_already_in_the_stock_is_shown_there()
+    {
+        using var thread = new DispatcherThread();
+
+        await thread.On(async () =>
+        {
+            using var bench = new CampaignBench(thread.Dispatcher);
+
+            await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+
+            var known = await bench.PictureAsync("Grimmbart", 3);
+
+            await bench.PictureAsync("Ork", 4);
+
+            var file = Path.Combine(bench.Base, "ork_04.png");
+
+            await File.WriteAllBytesAsync(file, CampaignBench.Png(3), Cancellation);
+
+            var parts = bench.Parts();
+            var panel = new CampaignPanel(new PanelHead(), parts.Stock, parts.Scenes, parts.Layouts, parts.Intake, bench.Settings);
+
+            await parts.Intake.RunAsync(parts.Intake.Entrances.FromFiles([file]), target: null);
+
+            Assert.Equal([known.AssetId], parts.Stock.Narrowing);
+            Assert.Single(StockViewTests.Cards(parts.Stock));
+            Assert.Equal([known], parts.Stock.Chosen);
+            GC.KeepAlive(panel);
+        });
+    }
+
     /// <summary>While pictures come in, the desk knows it - and refuses to switch, rename or delete under them.</summary>
     [Fact]
     public async Task The_desk_knows_while_an_intake_runs()

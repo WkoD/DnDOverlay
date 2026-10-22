@@ -178,6 +178,12 @@ internal sealed class CampaignPanel : Border
             }
         };
 
+        // A picture that is already there gets no second entry, it gets shown: the stock narrows to
+        // it, highlights it, and the run's message says it is in the stock already (Part 7). Also when
+        // it was aimed at a screen - it is shown there too.
+        _intake.AlreadyThere += (_, known) =>
+            ShowInStock([.. known.Select(asset => asset.AssetId)], string.Join(", ", known.Select(asset => asset.Name)));
+
         // A narrowing to one campaign's picture means nothing in the next one: it would show "no
         // match" until the search box was cleared by hand.
         _stock.Desk.Changed += (_, _) =>
