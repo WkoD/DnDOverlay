@@ -65,6 +65,27 @@ public sealed class DisplayOptionsTests
         Assert.Null(DisplayOptions.Parse(DisplayOptions.ForRestart(["--windowed"], predecessor: 815, deviceName: "Tisch links")).DeviceName);
     }
 
+    /// <summary>
+    /// A switch left without its value at the end of the command line is passed over at the start -
+    /// and must not take the restart's wait as its value. Carried along as it stood, <c>--host</c>
+    /// would connect to a host called "--after", <c>--data</c> would move every file there, and the
+    /// new process would no longer wait for this one to be gone (Part 5, Part 7).
+    /// </summary>
+    [Theory]
+    [InlineData("--host")]
+    [InlineData("--name")]
+    [InlineData("--data")]
+    [InlineData("--port")]
+    [InlineData("--after")]
+    public void A_switch_left_without_its_value_does_not_swallow_the_wait(string dangling)
+    {
+        var args = DisplayOptions.ForRestart(["--windowed", dangling], predecessor: 815, deviceName: "Beamer");
+        var restarted = DisplayOptions.Parse(args);
+
+        Assert.Equal(815, restarted.After);
+        Assert.Equal(DisplayOptions.Parse(["--windowed", dangling]) with { After = 815 }, restarted);
+    }
+
     [Fact]
     public void Every_switch_is_read()
     {

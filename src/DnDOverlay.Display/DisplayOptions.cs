@@ -31,6 +31,9 @@ internal sealed record DisplayOptions(
     private const string AfterSwitch = "--after";
     private const string NameSwitch = "--name";
 
+    /// <summary>The switches that take the next argument as their value - see <see cref="Parse"/>.</summary>
+    private static readonly string[] ValueSwitches = ["--host", "--port", NameSwitch, "--data", AfterSwitch];
+
     /// <summary>
     /// The arguments a restart from the control starts the new process with: this process's own,
     /// and the switch that makes the new one wait until this one is gone.
@@ -70,6 +73,14 @@ internal sealed record DisplayOptions(
                 kept.Add(NameSwitch);
                 kept.Add(deviceName);
                 i++;
+                continue;
+            }
+
+            // A switch left without its value at the very end was passed over at this start; carried
+            // along, it would take the wait added below as its value - a host or a data root called
+            // "--after", and a new process that no longer waits for this one.
+            if (i == args.Count - 1 && ValueSwitches.Contains(args[i]))
+            {
                 continue;
             }
 
