@@ -468,6 +468,12 @@ Zum Löschen den Namen der Kampagne eintippen:</value>
   <data name="LayoutMappingNotHere" xml:space="preserve">
     <value>{0} - nicht da</value>
   </data>
+  <data name="SettingsStockThresholdInvalid" xml:space="preserve">
+    <value>Erwartet eine Zahl über 0 - der geltende Wert steht wieder da.</value>
+  </data>
+  <data name="SettingsFolderUnreachable" xml:space="preserve">
+    <value>{0} ist nicht erreichbar - dort wurde nichts angelegt.</value>
+  </data>
   <data name="DevicesTitle" xml:space="preserve">
     <value>Geräte</value>
   </data>
@@ -887,6 +893,21 @@ Zum Löschen den Namen der Kampagne eintippen:</value>
   </data>
   <data name="DeviceBandSpreadArrivalSizeDone" xml:space="preserve">
     <value>Ankunftsgröße {0:0.00} auf {1} Bildschirm(e) übertragen.</value>
+  </data>
+  <data name="DeviceBandAutomaticRefused" xml:space="preserve">
+    <value>"Automatisch" lässt sich nach einer gesetzten Kante nicht wieder wählen - die Kante selbst wählen.</value>
+  </data>
+  <data name="DevicesPairNameTitle" xml:space="preserve">
+    <value>Name für das Gerät</value>
+  </data>
+  <data name="DevicesPairNamePrompt" xml:space="preserve">
+    <value>"{0}" trägt schon ein anderes Gerät oder ein Bildschirm - ein geklonter Display-PC bringt den Namen des Originals mit. Das Gerät wird unter diesem Namen gekoppelt und so umbenannt:</value>
+  </data>
+  <data name="DevicesPairedAs" xml:space="preserve">
+    <value>"{0}" ist als "{1}" gekoppelt.</value>
+  </data>
+  <data name="DeviceBandUnpairNotSaved" xml:space="preserve">
+    <value>Nicht als Szene gespeichert: {0}. Das Gerät bleibt gekoppelt.</value>
   </data>
   <data name="CampaignPanelTabPictures" xml:space="preserve">
     <value>Bilder</value>
@@ -1308,6 +1329,51 @@ Auch löschen?</value>
   <data name="LayoutsDeleteQuestion" xml:space="preserve">
     <value>Den Aufbau "{0}" löschen? Die Bilder bleiben in der Ablage, gespeicherte Szenen bleiben, wie sie sind.</value>
   </data>
+  <data name="CampaignIntakeRunning" xml:space="preserve">
+    <value>Eine Bildaufnahme läuft - erst abbrechen oder abwarten, dann noch einmal versuchen.</value>
+  </data>
+  <data name="CampaignNotOpened" xml:space="preserve">
+    <value>Die Kampagne "{0}" ließ sich nicht öffnen: {1}</value>
+  </data>
+  <data name="CampaignDeleteHeld" xml:space="preserve">
+    <value>"{0}" wurde nicht gelöscht - eine Datei im Ordner ist noch in Benutzung ({1}). Nichts ist weg; gleich noch einmal versuchen.</value>
+  </data>
+  <data name="CampaignDeleteIncomplete" xml:space="preserve">
+    <value>"{0}" ließ sich nicht vollständig löschen: {1}. Was übrig ist, liegt in {2} - schließen, was es festhält, und dort löschen.</value>
+  </data>
+  <data name="CampaignCheckFailed" xml:space="preserve">
+    <value>Der Ordner von "{0}" ließ sich nicht vollständig prüfen: {1}. Erneut prüfen, sobald die Dateien frei sind.</value>
+  </data>
+  <data name="PanelHeadVerbLast" xml:space="preserve">
+    <value>true</value>
+  </data>
+  <data name="ScenesLoadStep" xml:space="preserve">
+    <value>"{0}" geladen</value>
+  </data>
+  <data name="LayoutsLoadStep" xml:space="preserve">
+    <value>Aufbau "{0}" geladen</value>
+  </data>
+  <data name="ScenesWriteFailed" xml:space="preserve">
+    <value>Die Szene "{0}" ließ sich nicht schreiben: {1}</value>
+  </data>
+  <data name="ScenesDeleteFailed" xml:space="preserve">
+    <value>Die Szene "{0}" ließ sich nicht löschen: {1}</value>
+  </data>
+  <data name="LayoutsWriteFailed" xml:space="preserve">
+    <value>Der Aufbau "{0}" ließ sich nicht schreiben: {1}</value>
+  </data>
+  <data name="LayoutsDeleteFailed" xml:space="preserve">
+    <value>Der Aufbau "{0}" ließ sich nicht löschen: {1}</value>
+  </data>
+  <data name="StockRenameFailed" xml:space="preserve">
+    <value>"{0}" ließ sich nicht umbenennen: {1}</value>
+  </data>
+  <data name="StockRenamePartly" xml:space="preserve">
+    <value>"{0}" in "{1}" umbenannt, aber nicht jede Szene und jeder Aufbau ließ sich schreiben: {2}</value>
+  </data>
+  <data name="StockDeletePartly" xml:space="preserve">
+    <value>Die Bilder sind von den Bildschirmen, aber das Löschen brach ab: {0}. Was von ihnen übrig ist, bleibt in der Ablage - noch einmal löschen, sobald die Dateien frei sind.</value>
+  </data>
   <data name="AppNotKept" xml:space="preserve">
     <value>(nicht aufbewahrt)</value>
   </data>
@@ -1603,6 +1669,9 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   </data>
   <data name="ScreenTileFocusTooMany" xml:space="preserve">
     <value>Ein Fokus fasst höchstens {0} Bilder - mehr wäre eine zweite Szene.</value>
+  </data>
+  <data name="TileLoadingCount" xml:space="preserve">
+    <value>{0} von {1} am Tisch</value>
   </data>
   <data name="TidyTitle" xml:space="preserve">
     <value>Kampagne aufräumen</value>

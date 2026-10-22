@@ -468,6 +468,12 @@ Type the campaign's name to delete it:</value>
   <data name="LayoutMappingNotHere" xml:space="preserve">
     <value>{0} - not here</value>
   </data>
+  <data name="SettingsStockThresholdInvalid" xml:space="preserve">
+    <value>Takes a number above 0 - the value in force is shown again.</value>
+  </data>
+  <data name="SettingsFolderUnreachable" xml:space="preserve">
+    <value>{0} cannot be reached - nothing was created there.</value>
+  </data>
   <data name="DevicesTitle" xml:space="preserve">
     <value>Devices</value>
   </data>
@@ -887,6 +893,21 @@ Type the campaign's name to delete it:</value>
   </data>
   <data name="DeviceBandSpreadArrivalSizeDone" xml:space="preserve">
     <value>Arrival size {0:0.00} copied to {1} screen(s).</value>
+  </data>
+  <data name="DeviceBandAutomaticRefused" xml:space="preserve">
+    <value>"Automatic" cannot be chosen again once an edge is set - choose the edge itself.</value>
+  </data>
+  <data name="DevicesPairNameTitle" xml:space="preserve">
+    <value>Name for the device</value>
+  </data>
+  <data name="DevicesPairNamePrompt" xml:space="preserve">
+    <value>"{0}" is taken by another device or screen - a cloned display PC brings the original's name. The device is paired under this name and renamed to it:</value>
+  </data>
+  <data name="DevicesPairedAs" xml:space="preserve">
+    <value>"{0}" is paired as "{1}".</value>
+  </data>
+  <data name="DeviceBandUnpairNotSaved" xml:space="preserve">
+    <value>Not saved as a scene: {0}. The device stays paired.</value>
   </data>
   <data name="CampaignPanelTabPictures" xml:space="preserve">
     <value>Pictures</value>
@@ -1308,6 +1329,51 @@ Delete them too?</value>
   <data name="LayoutsDeleteQuestion" xml:space="preserve">
     <value>Delete the layout "{0}"? The pictures stay in the stock, saved scenes stay as they are.</value>
   </data>
+  <data name="CampaignIntakeRunning" xml:space="preserve">
+    <value>A picture intake is running - break it off or wait until it is done, then try again.</value>
+  </data>
+  <data name="CampaignNotOpened" xml:space="preserve">
+    <value>The campaign "{0}" could not be opened: {1}</value>
+  </data>
+  <data name="CampaignDeleteHeld" xml:space="preserve">
+    <value>"{0}" was not deleted - a file in its folder is still in use ({1}). Nothing is gone; try again in a moment.</value>
+  </data>
+  <data name="CampaignDeleteIncomplete" xml:space="preserve">
+    <value>"{0}" could not be deleted completely: {1}. What is left lies in {2} - close what holds it and delete it there.</value>
+  </data>
+  <data name="CampaignCheckFailed" xml:space="preserve">
+    <value>The folder of "{0}" could not be checked completely: {1}. Check it again once the files are free.</value>
+  </data>
+  <data name="PanelHeadVerbLast" xml:space="preserve">
+    <value>false</value>
+  </data>
+  <data name="ScenesLoadStep" xml:space="preserve">
+    <value>Load "{0}"</value>
+  </data>
+  <data name="LayoutsLoadStep" xml:space="preserve">
+    <value>Load layout "{0}"</value>
+  </data>
+  <data name="ScenesWriteFailed" xml:space="preserve">
+    <value>The scene "{0}" could not be written: {1}</value>
+  </data>
+  <data name="ScenesDeleteFailed" xml:space="preserve">
+    <value>The scene "{0}" could not be deleted: {1}</value>
+  </data>
+  <data name="LayoutsWriteFailed" xml:space="preserve">
+    <value>The layout "{0}" could not be written: {1}</value>
+  </data>
+  <data name="LayoutsDeleteFailed" xml:space="preserve">
+    <value>The layout "{0}" could not be deleted: {1}</value>
+  </data>
+  <data name="StockRenameFailed" xml:space="preserve">
+    <value>"{0}" could not be renamed: {1}</value>
+  </data>
+  <data name="StockRenamePartly" xml:space="preserve">
+    <value>Renamed "{0}" to "{1}", but not every scene and layout could be written: {2}</value>
+  </data>
+  <data name="StockDeletePartly" xml:space="preserve">
+    <value>The pictures are off the screens, but the delete stopped: {0}. What is left of them stays in the stock - delete it again once the files are free.</value>
+  </data>
   <data name="AppNotKept" xml:space="preserve">
     <value>(not kept)</value>
   </data>
@@ -1603,6 +1669,9 @@ Another DnDOverlay control is probably running already - look for its window bef
   </data>
   <data name="ScreenTileFocusTooMany" xml:space="preserve">
     <value>A focus holds at most {0} pictures - more would be a second scene.</value>
+  </data>
+  <data name="TileLoadingCount" xml:space="preserve">
+    <value>{0} of {1} at the table</value>
   </data>
   <data name="TidyTitle" xml:space="preserve">
     <value>Tidy up campaign</value>
