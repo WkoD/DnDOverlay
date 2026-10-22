@@ -172,8 +172,18 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
     private void OnDevicesChanged() => _events.Publish(new SessionEvent.DevicesChanged(Devices()));
 
-    private void OnPairingChanged() =>
+    /// <summary>
+    /// The pairing desk, and the device tree with it: the tree is built from the PAIRED devices
+    /// (<see cref="Devices"/>), so a rename, an unpairing or an adoption changes it although no
+    /// connection and no screen moved. Publishing only the desk left a device renamed while it was
+    /// switched off under its old name in the Devices window - the band was redrawn from the stale
+    /// list - and the uniqueness check read that stale list too (Part 7, Part 3).
+    /// </summary>
+    private void OnPairingChanged()
+    {
         _events.Publish(new SessionEvent.PairingChanged(_pairing.Pending, _pairing.Refused));
+        OnDevicesChanged();
+    }
 
     private void OnLogged(LogRecord record) => _events.Publish(new SessionEvent.Logged(record));
 

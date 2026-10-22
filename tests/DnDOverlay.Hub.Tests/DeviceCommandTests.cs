@@ -30,6 +30,35 @@ public sealed class DeviceCommandTests
         Assert.Null(session.TakeRename(Device));
     }
 
+    /// <summary>
+    /// The device tree is built from the paired devices, so a rename of a device that is switched off
+    /// has to reach it although no connection and no screen moved. Before, only the pairing desk was
+    /// published, and the Devices window redrew the band under the old name.
+    /// </summary>
+    [Fact(Timeout = 10_000)]
+    public async Task A_rename_while_off_reaches_the_device_tree_at_once()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var session = Session();
+
+        await using var stream = session.Subscribe(cancellationToken).GetAsyncEnumerator(cancellationToken);
+
+        Assert.True(await stream.MoveNextAsync());
+        Assert.IsType<SessionEvent.Opening>(stream.Current);
+
+        Assert.True(await session.SendDeviceCommandAsync(Device, DeviceCommand.Rename, "Beamer", cancellationToken));
+
+        SessionEvent.DevicesChanged? devices = null;
+
+        while (devices is null && await stream.MoveNextAsync())
+        {
+            devices = stream.Current as SessionEvent.DevicesChanged;
+        }
+
+        Assert.Equal("Beamer", Assert.Single(devices!.Devices).Name);
+    }
+
     /// <summary>Clearing the store and restarting reach a connected device only - and say so, rather than vanishing.</summary>
     [Fact]
     public async Task Clearing_and_restarting_need_the_device_connected()
