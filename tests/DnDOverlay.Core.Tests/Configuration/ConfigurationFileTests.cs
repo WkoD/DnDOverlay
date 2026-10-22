@@ -153,6 +153,22 @@ public sealed class ConfigurationFileTests : IDisposable
         Assert.Equal(new StockReporting(), new ControlConfiguration().Stock);
     }
 
+    /// <summary>The campaign open last comes back - it is never opened by it, only offered (Part 4).</summary>
+    [Fact]
+    public void The_last_campaign_comes_back()
+    {
+        using (var file = Store(TimeProvider.System))
+        {
+            file.Save(new ControlConfiguration { LastCampaign = "Sturmküste" });
+            file.Flush();
+        }
+
+        using var reopened = Store(TimeProvider.System);
+
+        Assert.Equal("Sturmküste", reopened.Load(() => new ControlConfiguration()).Value.LastCampaign);
+        Assert.Null(new ControlConfiguration().LastCampaign);
+    }
+
     /// <summary>The control's language comes back; a file without one follows Windows (Part 8).</summary>
     [Fact]
     public void The_language_comes_back_and_defaults_to_automatic()

@@ -1682,4 +1682,13 @@ Another DnDOverlay control is probably running already - look for its window bef
   <data name="SettingsStockNote" xml:space="preserve">
     <value>Measured when a campaign opens. Once per start, and again only when it is a quarter worse.</value>
   </data>
+  <data name="MainTableFromCampaign" xml:space="preserve">
+    <value>The table shows pictures from {0} - open the campaign?</value>
+  </data>
+  <data name="MainOpenCampaign" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="CampaignSwitchLastOpen" xml:space="preserve">
+    <value>{0}  (last open)</value>
+  </data>
 </root>

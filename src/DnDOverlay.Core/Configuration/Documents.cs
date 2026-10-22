@@ -198,6 +198,13 @@ public sealed record ControlConfiguration : IConfigurationDocument
 
     /// <summary>When the stock reports itself, and what the DM has already acknowledged (Part 7).</summary>
     public StockReporting Stock { get; set; } = new();
+
+    /// <summary>
+    /// The campaign open last - <b>not opened at the start</b>, which stays empty (Part 3). Its one
+    /// purpose: after a restart that took a full table over from the displays, the control can name
+    /// the campaign those pictures come from and offer to open it, and the switcher marks it (Part 4).
+    /// </summary>
+    public string? LastCampaign { get; set; }
 }
 
 /// <summary>Which edge of the window the campaign panel lies against (Part 7).</summary>

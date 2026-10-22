@@ -1,6 +1,6 @@
 namespace DnDOverlay.Control;
 
-/// <summary>The texts of the tidy-up view and the stock notice (M5b8b).</summary>
+/// <summary>The texts of the tidy-up view, the stock notice and the offer of the last campaign (M5b8).</summary>
 internal static partial class Strings
 {
     internal static string TidyTitle => Text[nameof(TidyTitle)];
@@ -60,4 +60,10 @@ internal static partial class Strings
     internal static string SettingsStockPicturesUnit => Text[nameof(SettingsStockPicturesUnit)];
 
     internal static string SettingsStockNote => Text[nameof(SettingsStockNote)];
+
+    internal static string MainTableFromCampaign(string campaign) => Text.Format(nameof(MainTableFromCampaign), campaign);
+
+    internal static string MainOpenCampaign => Text[nameof(MainOpenCampaign)];
+
+    internal static string CampaignSwitchLastOpen(string label) => Text.Format(nameof(CampaignSwitchLastOpen), label);
 }

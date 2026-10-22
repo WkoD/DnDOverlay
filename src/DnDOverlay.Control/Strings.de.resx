@@ -1682,4 +1682,13 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   <data name="SettingsStockNote" xml:space="preserve">
     <value>Gemessen beim Öffnen einer Kampagne. Einmal je Start, danach erst wieder, wenn es um ein Viertel schlimmer ist.</value>
   </data>
+  <data name="MainTableFromCampaign" xml:space="preserve">
+    <value>Der Tisch zeigt Bilder aus {0} - Kampagne öffnen?</value>
+  </data>
+  <data name="MainOpenCampaign" xml:space="preserve">
+    <value>Öffnen</value>
+  </data>
+  <data name="CampaignSwitchLastOpen" xml:space="preserve">
+    <value>{0}  (zuletzt offen)</value>
+  </data>
 </root>

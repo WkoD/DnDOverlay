@@ -13,7 +13,7 @@ namespace DnDOverlay.Control;
 /// cleared, because its pictures come from the stock that closes, and undo does not reach past it.
 /// </para>
 /// </summary>
-internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<string> say, Action tidy)
+internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<string> say, Action tidy, string? lastOpen)
 {
     /// <summary>Opens the list under the campaign button.</summary>
     internal void Open(UIElement under)
@@ -33,11 +33,20 @@ internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<s
                 label = Strings.CampaignSwitchOpenLabel(label, current.Store.Count, bytes / (1024d * 1024));
             }
 
+            // With nothing open, the campaign open last stands out: a table taken over after a restart
+            // most likely comes from it (Part 4).
+            var wasOpen = desk.Open is null && string.Equals(lastOpen, summary.Name, StringComparison.OrdinalIgnoreCase);
+
+            if (wasOpen)
+            {
+                label = Strings.CampaignSwitchLastOpen(label);
+            }
+
             var item = new MenuItem
             {
                 Header = label,
                 IsChecked = isOpen,
-                FontWeight = isOpen ? FontWeights.SemiBold : FontWeights.Normal,
+                FontWeight = isOpen || wasOpen ? FontWeights.SemiBold : FontWeights.Normal,
             };
 
             var name = summary.Name;

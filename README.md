@@ -302,7 +302,9 @@ you type its name. Each campaign is a folder under `%LOCALAPPDATA%\DnDOverlay\ca
 against its inventory: pictures laid into it by hand are taken in, a byte-identical copy is
 removed, a picture deleted by hand is marked missing (taking it in again heals it), other files
 are left alone, and an inventory that cannot be read is rebuilt from the folder. One note beside
-the stage says what was found.
+the stage says what was found. The control remembers the campaign open last without opening it:
+the switcher marks it, and when the control restarts while the displays still show their pictures,
+the note beside the stage names that campaign and offers to open it.
 
 **Tidy up campaign ...** in the campaign menu lists the open campaign's pictures, largest first,
 with their size and where they are used; a double click shows one in the stock, where pictures are

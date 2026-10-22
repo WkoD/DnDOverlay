@@ -265,6 +265,19 @@ internal sealed class MainWindow : Window, IDisposable
         // tab shows other scenes, and the head says which one (Part 3, Part 7).
         desk.Changed += (_, _) =>
         {
+            // The campaign open last, for the offer after a restart (Part 4) - and an offer standing
+            // is answered by any campaign that opens.
+            if (desk.Open is { } now)
+            {
+                if (!string.Equals(_settings.Current.LastCampaign, now.Name, StringComparison.Ordinal))
+                {
+                    _settings.Update(current => current with { LastCampaign = now.Name });
+                }
+
+                _withdrawOffer?.Invoke();
+                _withdrawOffer = null;
+            }
+
             pictures.Clear();
             _layouts.Refresh();
             _panelHead.Campaign(desk.OpenLabel);
@@ -277,7 +290,7 @@ internal sealed class MainWindow : Window, IDisposable
         desk.Reported += (_, words) => Notify(words);
         desk.Measured += (_, measure) => Report(measure);
 
-        _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said, Tidy).Open(_panelHead);
+        _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said, Tidy, _settings.Current.LastCampaign).Open(_panelHead);
         _panelHead.Campaign(desk.OpenLabel);
         _edgeLabel.Text = desk.OpenLabel ?? Strings.MainNoCampaign;
         _board.ActiveChanged += (_, _) => Remember();
@@ -477,6 +490,7 @@ internal sealed class MainWindow : Window, IDisposable
                 case SessionEvent.SceneReplaced:
                     await _board.RefreshAsync(_listening.Token).ConfigureAwait(true);
                     await _stock.CountAsync().ConfigureAwait(true);
+                    await OfferLastCampaignAsync().ConfigureAwait(true);
                     break;
 
                 default:
@@ -1225,6 +1239,61 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         _panel.ShowInStock(asset, entry.Name);
+    }
+
+    /// <summary>Whether the last campaign has been offered in this run - once is enough.</summary>
+    private bool _offered;
+
+    /// <summary>Takes the offer away again - a campaign opened by any way answers it.</summary>
+    private Action? _withdrawOffer;
+
+    /// <summary>
+    /// After a restart the hub takes the table over from the displays, and with no campaign open the
+    /// thumbnails show placeholders with names (Part 4). The campaign those pictures come from is
+    /// the one open last - so the box beside the stage names it and offers to open it, once per run.
+    /// A campaign that is gone from the list is not offered.
+    /// </summary>
+    private async Task OfferLastCampaignAsync()
+    {
+        if (_offered || _desk.Open is not null || _settings.Current.LastCampaign is not { } last)
+        {
+            return;
+        }
+
+        if (_desk.List().FirstOrDefault(summary => string.Equals(summary.Name, last, StringComparison.OrdinalIgnoreCase)) is not { } known)
+        {
+            return;
+        }
+
+        foreach (var view in _board.Screens)
+        {
+            var scene = await _session.GetSceneAsync(view.Screen, _listening.Token).ConfigureAwait(true);
+
+            if (scene.Items.Count == 0 && scene.Background is null)
+            {
+                continue;
+            }
+
+            if (_offered || _desk.Open is not null)
+            {
+                return;
+            }
+
+            _offered = true;
+            _withdrawOffer = Notify(
+                Strings.MainTableFromCampaign(CampaignDesk.Label(known)),
+                dismissed: null,
+                Strings.MainOpenCampaign,
+                async () =>
+                {
+                    if (await _desk.SwitchAsync(known.Name).ConfigureAwait(true) is { } refused)
+                    {
+                        _status.Text = refused;
+                    }
+                });
+
+            return;
+        }
     }
 
     /// <summary>The triggers of the stock notice that already spoke in this run - once per start (Part 7).</summary>
