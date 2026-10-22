@@ -226,6 +226,16 @@ internal sealed class TileMenus(
         SceneItem picture,
         ScreenContext context,
         Selection selection,
+        CorePoint where) =>
+        Open(ItemMenu(over, scene, picture, context, selection, where), over, at);
+
+    /// <summary>The entries of one picture's menu, built without opening it.</summary>
+    internal ContextMenu ItemMenu(
+        UIElement over,
+        SceneState scene,
+        SceneItem picture,
+        ScreenContext context,
+        Selection selection,
         CorePoint where)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -278,9 +288,14 @@ internal sealed class TileMenus(
         menu.Items.Add(Entry(Strings.TileMenuFocus, () => Focusing?.Invoke(this, [picture.ItemId])));
 
         // Back to what it would get arriving now - for the whole selection, like the entries around it.
-        menu.Items.Add(Entry(
-            Strings.TileMenuResetItem,
-            () => _ = session.TransformItemsAsync(screen, Core.Placement.Reset(many, context), toFront: false, CancellationToken.None)));
+        // Offered only for what lies out, like "Turn" and "Park": the fan owns a parked card's place and
+        // angle, and a reset given to a card there would be a second truth beside it.
+        if (!picture.Parked)
+        {
+            menu.Items.Add(Entry(
+                Strings.TileMenuResetItem,
+                () => _ = session.TransformItemsAsync(screen, Core.Placement.Reset(lying, context), toFront: false, CancellationToken.None)));
+        }
 
         menu.Items.Add(new Separator());
 
@@ -365,7 +380,7 @@ internal sealed class TileMenus(
         removing.InputGestureText = Strings.TileMenuRemoveKey;
         menu.Items.Add(removing);
 
-        Open(menu, over, at);
+        return menu;
     }
 
     /// <summary>
