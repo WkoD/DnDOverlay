@@ -575,4 +575,11 @@ internal static partial class DisplayLog
         Level = LogLevel.Information,
         Message = "Diagnostics stream to the control: {On}.")]
     internal static partial void DiagnosticsRequested(ILogger logger, bool on);
+
+    /// <summary>The control said goodbye on quitting - back to the start state (Part 4).</summary>
+    [LoggerMessage(
+        EventId = 3051,
+        Level = LogLevel.Information,
+        Message = "The control said goodbye - {Screens} screen(s) back to the start state.")]
+    internal static partial void WentIdle(ILogger logger, int screens);
 }

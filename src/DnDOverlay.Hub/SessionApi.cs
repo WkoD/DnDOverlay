@@ -1790,6 +1790,25 @@ public sealed class SessionApi : ISessionApi, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<int> GoIdleAsync(TimeSpan wait, CancellationToken cancellationToken = default)
+    {
+        var connections = _connections.All.ToList();
+
+        foreach (var connection in connections)
+        {
+            connection.Finish(new GoIdleMessage());
+        }
+
+        HubLog.ScreensReleased(_logger, connections.Count);
+
+        await Task.WhenAny(
+            Task.WhenAll(connections.Select(connection => connection.Drained)),
+            Task.Delay(wait, cancellationToken)).ConfigureAwait(false);
+
+        return connections.Count;
+    }
+
+    /// <inheritdoc />
     public Task SpotlightAsync(ScreenRef screen, Point at, CancellationToken cancellationToken = default)
     {
         // No gate and no catalogue, for the reason IdentifyScreens gives: there is nothing here to

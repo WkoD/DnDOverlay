@@ -319,6 +319,9 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
     public Task<bool> SendDeviceCommandAsync(DeviceId device, DeviceCommand command, string? name = null, CancellationToken cancellationToken = default) =>
         _inner.SendDeviceCommandAsync(device, command, name, cancellationToken);
 
+    public Task<int> GoIdleAsync(TimeSpan wait, CancellationToken cancellationToken = default) =>
+        _inner.GoIdleAsync(wait, cancellationToken);
+
     public IAsyncEnumerable<SessionEvent> Subscribe(CancellationToken cancellationToken = default) => _inner.Subscribe(cancellationToken);
 
     public Task ApprovePairingAsync(DeviceId device, string token, PairingRole role = PairingRole.Display, CancellationToken cancellationToken = default) =>

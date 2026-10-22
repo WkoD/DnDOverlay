@@ -240,6 +240,12 @@ the place. On the same drive the move is a rename, over in an instant; to anothe
 campaigns are copied with progress and a way to break off, checked, and only then removed from the
 old place. If anything fails, everything stays where it was. The open campaign is closed first.
 
+**Quitting** — the window's X or ☰ → *Quit ...* — asks first. *Save layout* keeps what lies on the
+screens under today's date, without asking for a name. *Release the screens*, checked while devices
+are connected, puts every connected display back into how it starts: nothing shown until the
+control comes back, and nothing it was told is forgotten. Leave it unchecked for a quick restart,
+and the next control takes the tables over.
+
 **Language** is *Automatic* (as Windows), *English* or *Deutsch* — for the control in *Settings*, for
 each display in its device band, independently of one another. Log lines follow a change at once, in
 the panel and in the files under `logs\`, and the file notes where it switched; windows and screens

@@ -455,4 +455,10 @@
   <data name="E4034_StockNoticed" xml:space="preserve">
     <value>Bestandsmeldung für "{Name}": {Trigger} bei {Value}.</value>
   </data>
+  <data name="E1061_ScreensReleased" xml:space="preserve">
+    <value>Bildschirme beim Beenden freigegeben: GoIdle an {Devices} Gerät(e).</value>
+  </data>
+  <data name="E3051_WentIdle" xml:space="preserve">
+    <value>Das Control hat sich verabschiedet - {Screens} Bildschirm(e) zurück im Startzustand.</value>
+  </data>
 </root>

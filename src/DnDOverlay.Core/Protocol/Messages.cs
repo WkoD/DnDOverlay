@@ -32,6 +32,7 @@ namespace DnDOverlay.Core.Protocol;
 [JsonDerivedType(typeof(ConfigUpdateMessage), "ConfigUpdate")]
 [JsonDerivedType(typeof(IdentifyScreensMessage), "IdentifyScreens")]
 [JsonDerivedType(typeof(DeviceCommandMessage), "DeviceCommand")]
+[JsonDerivedType(typeof(GoIdleMessage), "GoIdle")]
 [JsonDerivedType(typeof(WindowsRequestMessage), "WindowsRequest")]
 [JsonDerivedType(typeof(WindowListMessage), "WindowList")]
 [JsonDerivedType(typeof(WindowCommandMessage), "WindowCommand")]
@@ -388,6 +389,15 @@ public enum DeviceCommand
 /// </summary>
 /// <param name="Name">The new name, for <see cref="DeviceCommand.Rename"/>; nothing otherwise.</param>
 public sealed record DeviceCommandMessage(DeviceCommand Command, string? Name = null) : ProtocolMessage;
+
+/// <summary>
+/// "Go to your start state" (Part 4): overlays closed, scenes dropped, every screen
+/// <see cref="ScreenState.Inactive"/> - exactly what a display that was just switched on looks like.
+/// The control's orderly goodbye when the DM quits with "Release the screens". <b>It changes nothing
+/// stored</b>: the screen wishes stay in <c>control.json</c> and come back with the next connection.
+/// The last message of its connection, and the reason the takeover window stays shut afterwards.
+/// </summary>
+public sealed record GoIdleMessage : ProtocolMessage;
 
 /// <summary>
 /// Switches the window list on or off, per device (Part 4) - bound to the tile's "underground" switch,

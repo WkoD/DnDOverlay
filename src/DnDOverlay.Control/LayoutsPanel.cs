@@ -174,14 +174,41 @@ internal sealed class LayoutsPanel : Grid
     /// clear silently, and the absence says that better. The suggestion is <c>Layout &lt;time&gt;</c>;
     /// a taken name asks before it overwrites.
     /// </summary>
-    internal async Task SaveAsync(Window owner, string? overwriting = null)
+    /// <summary>
+    /// "Save layout" in the quit dialog (Part 7): kept under the default name <c>Layout &lt;stamp&gt;</c>
+    /// <b>without asking for one</b> - whoever quits does not want to name; renaming is for later, in
+    /// the tab. An unnamed campaign is still asked for its name, as for any first save.
+    /// </summary>
+    /// <returns>The name it was kept under, or <see langword="null"/> when nothing was saved.</returns>
+    internal async Task<string?> SaveOnQuitAsync(Window owner)
     {
         if (_desk.Open is null)
         {
-            _say(Strings.LayoutsNoCampaignToSave);
-            return;
+            return null;
         }
 
+        var parts = await PartsAsync().ConfigureAwait(true);
+
+        if (parts.Count == 0 || (_desk.Open.Unnamed && !CampaignNaming.Ask(owner, _desk)) || _desk.Open is not { } open)
+        {
+            return null;
+        }
+
+        var name = FileNames.Suggest(Strings.LayoutsSuggestedName(FileNames.Stamp(DateTimeOffset.Now)));
+
+        if (open.Shelf.SaveLayout(name, parts, overwrite: false) is not ShelfOutcome.Done)
+        {
+            return null;
+        }
+
+        ControlLog.LayoutSaved(_logger, name, parts.Count);
+
+        return name;
+    }
+
+    /// <summary>Every screen with something on it, as the parts of a layout.</summary>
+    private async Task<List<LayoutPart>> PartsAsync()
+    {
         var parts = new List<LayoutPart>();
 
         foreach (var view in _screens())
@@ -193,6 +220,19 @@ internal sealed class LayoutsPanel : Grid
                 parts.Add(new LayoutPart(view.Screen, view.Info.Label, new SavedScene(view.Info.Size, DateTimeOffset.Now, scene)));
             }
         }
+
+        return parts;
+    }
+
+    internal async Task SaveAsync(Window owner, string? overwriting = null)
+    {
+        if (_desk.Open is null)
+        {
+            _say(Strings.LayoutsNoCampaignToSave);
+            return;
+        }
+
+        var parts = await PartsAsync().ConfigureAwait(true);
 
         if (parts.Count == 0)
         {

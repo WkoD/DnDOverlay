@@ -123,6 +123,8 @@ public sealed class ProtocolJsonTests
         new PairingPendingMessage("482 913"),
         new RejectedMessage(RejectionReason.Denied),
         new PingMessage(RoundTripMs: 12),
+
+        new GoIdleMessage(),
         new PongMessage(),
         new PongMessage(new BatteryInfo(47, PluggedIn: true)),
         new LogEntryMessage(

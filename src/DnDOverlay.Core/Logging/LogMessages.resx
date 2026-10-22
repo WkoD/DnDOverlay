@@ -462,4 +462,10 @@
   <data name="E4034_StockNoticed" xml:space="preserve">
     <value>Stock notice for "{Name}": {Trigger} at {Value}.</value>
   </data>
+  <data name="E1061_ScreensReleased" xml:space="preserve">
+    <value>Released the screens on quitting: GoIdle to {Devices} device(s).</value>
+  </data>
+  <data name="E3051_WentIdle" xml:space="preserve">
+    <value>The control said goodbye - {Screens} screen(s) back to the start state.</value>
+  </data>
 </root>

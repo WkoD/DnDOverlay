@@ -663,6 +663,16 @@ public interface ISessionApi
     Task<bool> SendDeviceCommandAsync(DeviceId device, DeviceCommand command, string? name = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// "Release the screens" on quitting (Part 4, Part 7): <c>GoIdle</c> to every connected device as
+    /// the last message of its connection, and back once they are out or <paramref name="wait"/> has
+    /// passed - the process is about to end, and a device that does not take it stays lit, which is
+    /// harmless. A device that is switched off gets nothing and starts in its start state anyway.
+    /// Nothing stored changes.
+    /// </summary>
+    /// <returns>How many devices it went to.</returns>
+    Task<int> GoIdleAsync(TimeSpan wait, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Everything a surface shows, as one stream: the device tree, the scenes, the pairing desk and
     /// the log.
     /// <para>

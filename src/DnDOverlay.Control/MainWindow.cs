@@ -359,6 +359,7 @@ internal sealed class MainWindow : Window, IDisposable
             _settings.Flush();
         };
 
+        Closing += OnClosing;
         Closed += (_, _) => Dispose();
 
         _ = ListenAsync();
@@ -528,6 +529,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         _board.Show([.. devices.SelectMany(device => device.Screens)]);
         _board.Know(devices);
+        _connected = devices.Any(device => device.Connected);
         _logPanel.Know(devices);
 
         _ = _board.RefreshAsync(_listening.Token);
@@ -714,6 +716,9 @@ internal sealed class MainWindow : Window, IDisposable
         log.Click += (_, _) => PlaceLog(placement => placement with { Shown = log.IsChecked });
         menu.Items.Add(log);
         menu.Items.Add(Item(Strings.MainSettings, Settings));
+
+        // The same question as the X - quitting asks wherever it starts (Part 7).
+        menu.Items.Add(Item(Strings.MainQuit, Close));
 
         var docking = new MenuItem { Header = Strings.MainDockPanel };
         var side = _settings.Current.Panel?.Side ?? PanelSide.Right;
@@ -1239,6 +1244,48 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         _panel.ShowInStock(asset, entry.Name);
+    }
+
+    /// <summary>Whether any device is connected - "Release the screens" is checked only then.</summary>
+    private bool _connected;
+
+    /// <summary>The quit was answered and its work done; the next close goes through.</summary>
+    private bool _quitting;
+
+    /// <summary>Windows is ending the session: no question then - nobody is there to answer it (Part 7).</summary>
+    internal bool SessionEnding { get; set; }
+
+    /// <summary>
+    /// The X asks instead of deciding (Part 7): quit, with "Save layout" and "Release the screens", or
+    /// cancel. The work of the answer is done first - the layout written, <c>GoIdle</c> out to the
+    /// devices - and then the window closes for real.
+    /// </summary>
+    private async void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_quitting || SessionEnding)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+
+        if (QuitDialog.Ask(this, _desk.Open is not null, _connected) is not { } answer)
+        {
+            return;
+        }
+
+        if (answer.SaveLayout)
+        {
+            _ = await _layouts.SaveOnQuitAsync(this).ConfigureAwait(true);
+        }
+
+        if (answer.ReleaseScreens)
+        {
+            await _session.GoIdleAsync(TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(true);
+        }
+
+        _quitting = true;
+        Close();
     }
 
     /// <summary>Whether the last campaign has been offered in this run - once is enough.</summary>

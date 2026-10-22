@@ -303,6 +303,12 @@ public sealed partial class App : Application, IDisposable
     {
         _settings?.Flush();
 
+        // The window's X asks before quitting; at the end of a Windows session nobody is there to answer.
+        if (MainWindow is MainWindow window)
+        {
+            window.SessionEnding = true;
+        }
+
         if (_host?.Services.GetService<ILogger<App>>() is { } logger)
         {
             ControlLog.SessionEnding(logger, e?.ReasonSessionEnding);

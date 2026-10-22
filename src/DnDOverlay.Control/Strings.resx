@@ -1691,4 +1691,31 @@ Another DnDOverlay control is probably running already - look for its window bef
   <data name="CampaignSwitchLastOpen" xml:space="preserve">
     <value>{0}  (last open)</value>
   </data>
+  <data name="QuitTitle" xml:space="preserve">
+    <value>Quit DnDOverlay</value>
+  </data>
+  <data name="QuitQuestion" xml:space="preserve">
+    <value>Quit the control?</value>
+  </data>
+  <data name="QuitSaveLayout" xml:space="preserve">
+    <value>Save layout - what lies on the screens now, kept under today's date</value>
+  </data>
+  <data name="QuitNoCampaign" xml:space="preserve">
+    <value>No campaign is open - a layout belongs to one.</value>
+  </data>
+  <data name="QuitReleaseScreens" xml:space="preserve">
+    <value>Release the screens</value>
+  </data>
+  <data name="QuitReleaseNote" xml:space="preserve">
+    <value>The displays go back to how they start: nothing shown, until the control comes back. Leave it off for a quick restart, and the next control takes the tables over.</value>
+  </data>
+  <data name="QuitQuit" xml:space="preserve">
+    <value>Quit</value>
+  </data>
+  <data name="QuitCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="MainQuit" xml:space="preserve">
+    <value>Quit ...</value>
+  </data>
 </root>

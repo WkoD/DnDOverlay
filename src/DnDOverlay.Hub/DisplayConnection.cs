@@ -94,6 +94,12 @@ public sealed class DisplayConnection
     /// </summary>
     public void RequestClose() => _outgoing.RequestClose();
 
+    /// <summary>Sends a last message and closes once it is out - the goodbye of a connection (Part 4).</summary>
+    public void Finish(ProtocolMessage last) => _outgoing.Finish(last);
+
+    /// <summary>Completes once nothing more goes out on this connection, drained or given up.</summary>
+    public Task Drained => _outgoing.Drained;
+
     /// <summary>Asks whether this connection is still there. See <see cref="Liveness.ProbeAsync"/>.</summary>
     internal Task<bool> ProbeAsync(TimeSpan grace, CancellationToken cancellationToken) =>
         _liveness.ProbeAsync(grace, cancellationToken);

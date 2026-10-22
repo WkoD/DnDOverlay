@@ -1647,6 +1647,14 @@ public sealed partial class App : Application, IDisposable
                 await Dispatcher.InvokeAsync(() => Obey(command));
                 break;
 
+            case GoIdleMessage:
+                // The control's orderly goodbye: the start state, and no takeover window for its
+                // successor - the DM ended the evening rather than losing the control (Part 4).
+                _takeover.SaidGoodbye();
+                _scenes.Clear();
+                await Dispatcher.InvokeAsync(GoIdle);
+                break;
+
             case DiagnosticsRequestMessage request:
                 // Said when it changes, so "switching the view off stops the device sending" can
                 // be read off this device's log (step 37a).
@@ -1721,6 +1729,24 @@ public sealed partial class App : Application, IDisposable
     /// up at once -, the picture store emptied and refilled for what lies on the screens, or a restart
     /// of this application, which connects again by itself.
     /// </summary>
+    /// <summary>
+    /// The start state, as after switching on (Part 3): every screen <see cref="ScreenState.Inactive"/>,
+    /// so <see cref="Show"/> closes every overlay. Nothing stored changes - the next control sets the
+    /// states again from its wishes.
+    /// </summary>
+    private void GoIdle()
+    {
+        foreach (var screen in _states.Keys.ToList())
+        {
+            _states[screen] = new ScreenCommand(ScreenState.Inactive);
+            Show(screen);
+        }
+
+        _windowsWanted = false;
+        _diagnosing = false;
+        DisplayLog.WentIdle(_logger, _states.Count);
+    }
+
     private void Obey(DeviceCommandMessage command)
     {
         switch (command.Command)

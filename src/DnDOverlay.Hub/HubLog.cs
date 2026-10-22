@@ -520,4 +520,11 @@ internal static partial class HubLog
         Level = LogLevel.Warning,
         Message = "{DeviceName} is sending more than {Limit} window lists a second; the rest are refused.")]
     internal static partial void WindowListRateExceeded(ILogger logger, string deviceName, int limit);
+
+    /// <summary>The DM quit with "Release the screens" - <c>GoIdle</c> went to every connected device (Part 4).</summary>
+    [LoggerMessage(
+        EventId = 1061,
+        Level = LogLevel.Information,
+        Message = "Released the screens on quitting: GoIdle to {Devices} device(s).")]
+    internal static partial void ScreensReleased(ILogger logger, int devices);
 }

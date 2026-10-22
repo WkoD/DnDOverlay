@@ -1691,4 +1691,31 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   <data name="CampaignSwitchLastOpen" xml:space="preserve">
     <value>{0}  (zuletzt offen)</value>
   </data>
+  <data name="QuitTitle" xml:space="preserve">
+    <value>DnDOverlay beenden</value>
+  </data>
+  <data name="QuitQuestion" xml:space="preserve">
+    <value>Das Control beenden?</value>
+  </data>
+  <data name="QuitSaveLayout" xml:space="preserve">
+    <value>Aufbau speichern - was jetzt auf den Bildschirmen liegt, unter dem heutigen Datum</value>
+  </data>
+  <data name="QuitNoCampaign" xml:space="preserve">
+    <value>Keine Kampagne offen - ein Aufbau gehört zu einer.</value>
+  </data>
+  <data name="QuitReleaseScreens" xml:space="preserve">
+    <value>Bildschirme freigeben</value>
+  </data>
+  <data name="QuitReleaseNote" xml:space="preserve">
+    <value>Die Displays gehen in ihren Startzustand: nichts zu sehen, bis das Control wiederkommt. Für einen kurzen Neustart aus lassen, dann übernimmt das nächste Control die Tische.</value>
+  </data>
+  <data name="QuitQuit" xml:space="preserve">
+    <value>Beenden</value>
+  </data>
+  <data name="QuitCancel" xml:space="preserve">
+    <value>Abbrechen</value>
+  </data>
+  <data name="MainQuit" xml:space="preserve">
+    <value>Beenden ...</value>
+  </data>
 </root>

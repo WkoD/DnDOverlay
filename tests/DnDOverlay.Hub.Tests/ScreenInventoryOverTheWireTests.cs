@@ -129,6 +129,41 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// "Release the screens" on quitting: <c>GoIdle</c> reaches every connected device as the last
+    /// message of its connection, and the connection ends after it (Part 4, Part 7).
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task Going_idle_reaches_every_device_and_ends_its_connection()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var asked = await ConnectAsync(Asked, [Info(First)], cancellationToken);
+        using var bystander = await ConnectAsync(Bystander, [Info(First)], cancellationToken);
+
+        await ReceiveAsync<ConfigUpdateMessage>(asked, cancellationToken);
+        await ReceiveAsync<ConfigUpdateMessage>(bystander, cancellationToken);
+
+        var session = _app.Services.GetRequiredService<ISessionApi>();
+
+        Assert.Equal(2, await session.GoIdleAsync(TimeSpan.FromSeconds(5), cancellationToken));
+
+        foreach (var socket in new[] { asked, bystander })
+        {
+            await ReceiveAsync<GoIdleMessage>(socket, cancellationToken);
+
+            // Nothing but a heartbeat may still come before the close; the test's timeout says it never did.
+            var buffer = new byte[64 * 1024];
+            ValueWebSocketReceiveResult result;
+
+            do
+            {
+                result = await socket.ReceiveAsync(buffer.AsMemory(), cancellationToken);
+            }
+            while (result.MessageType != WebSocketMessageType.Close);
+        }
+    }
+
+    /// <summary>
     /// "Which one are you?" goes to the device that was asked and to no other. With two devices of
     /// two screens each this is the only thing that says which tile is which physical screen, and
     /// a second table lighting up with names would be exactly the confusion it exists to end
