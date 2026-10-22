@@ -688,6 +688,21 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.True(File.Exists(theirs));
     }
 
+    /// <summary>The campaign folder removed by hand while open: "check folder again" reports every picture missing instead of throwing.</summary>
+    [Fact]
+    public async Task A_folder_removed_while_open_is_checked_without_an_exception()
+    {
+        var campaign = Campaign("Sturmküste");
+        var opened = Library().Open("Sturmküste");
+
+        await Ingest(opened.Store, "ork");
+        Directory.Delete(campaign, recursive: true);
+
+        var report = await Reconciliation.SettleAsync(opened.Store, opened.Shelf, Reconciliation.Survey(opened.Store), cancellationToken: Cancellation);
+
+        Assert.Equal(["Ork"], report.Missing);
+    }
+
     /// <summary>A file deleted by hand leaves its entry marked, not removed - and taking the same picture in again heals it.</summary>
     [Fact]
     public async Task A_missing_file_is_marked_and_heals_when_the_picture_comes_back()

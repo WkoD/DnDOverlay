@@ -96,6 +96,13 @@ public static partial class Reconciliation
         var orphans = new List<string>();
         var scratch = new List<string>();
 
+        // The folder removed by hand while the campaign is open: nothing to walk, and every entry is
+        // missing - said in the report, not thrown out of "check folder again".
+        if (!Directory.Exists(root))
+        {
+            return new CampaignFindings(orphans, store.Missing);
+        }
+
         // A subfolder the DM's account may not read is passed over rather than ending the look at the
         // whole folder. Hidden and system files are listed as before: litter is filtered by name below.
         var walk = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
