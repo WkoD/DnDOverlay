@@ -26,9 +26,18 @@ public sealed record CampaignReport(
     bool Reconstructed,
     IReadOnlyList<string> UnreadableScenes)
 {
+    /// <summary>
+    /// Pictures that are in the stock but whose file was left where it lies, because what is in
+    /// <c>assets\</c> is not byte for byte that file: a token the picture was taken out of (a
+    /// <c>.rptok</c> is read, never written, Part 3), or a format converted on the way in. Part 3 removes
+    /// byte-identical copies only; anything else would lose what the stock's copy does not carry.
+    /// </summary>
+    public IReadOnlyList<string> Kept { get; init; } = [];
+
     /// <summary>Whether there is anything to say at all - a campaign without findings opens without a report.</summary>
     public bool IsEmpty =>
-        Adopted == 0 && Duplicates == 0 && Missing.Count == 0 && Foreign.Count == 0 && !Reconstructed && UnreadableScenes.Count == 0;
+        Adopted == 0 && Duplicates == 0 && Missing.Count == 0 && Foreign.Count == 0 && !Reconstructed && UnreadableScenes.Count == 0
+        && Kept.Count == 0;
 }
 
 /// <summary>
@@ -85,7 +94,9 @@ public static partial class Reconciliation
     /// Phase 2: what happens by itself. Orphaned pictures come in without a question, through the
     /// same ingest as a drop - renamed to their hash and moved into <c>assets\</c>, because the folder
     /// is our stock and not a letterbox, and without the rename the same file would look orphaned on
-    /// every opening. Byte-identical copies of what is there are removed. A picture already named by
+    /// every opening. Byte-identical copies of what is there are removed. <b>Only</b> a file whose bytes
+    /// now lie in <c>assets\</c> unchanged goes: a token or a converted picture stays and is named
+    /// (<see cref="CampaignReport.Kept"/>), because the check is non-destructive (Part 3). A picture already named by
     /// its hash keeps that identity and takes its name from the scene that uses it. Foreign files
     /// stay untouched, missing entries stay marked, thumbnails are repaired.
     /// </summary>
@@ -103,6 +114,7 @@ public static partial class Reconciliation
         var adopted = 0;
         var duplicates = 0;
         var foreign = new List<string>();
+        var kept = new List<string>();
         var done = 0;
 
         foreach (var file in findings.Orphans)
@@ -132,24 +144,40 @@ public static partial class Reconciliation
             }
             else
             {
-                var result = await store.IngestAsync(await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false), stem, cancellationToken)
-                    .ConfigureAwait(false);
+                var bytes = await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
+                var result = await store.IngestAsync(bytes, stem, cancellationToken).ConfigureAwait(false);
 
-                switch (result)
+                if (result is IngestResult.Taken taken)
                 {
-                    case IngestResult.Taken { AlreadyPresent: true }:
-                        File.Delete(file);
-                        duplicates++;
-                        break;
+                    // New to the stock - or an entry whose file was missing, healed by this one: that is
+                    // the picture coming back (Part 3), not a copy of something that was there.
+                    var isNew = !taken.AlreadyPresent || findings.Missing.Contains(taken.Asset.AssetId);
 
-                    case IngestResult.Taken:
-                        File.Delete(file);
+                    if (isNew)
+                    {
                         adopted++;
-                        break;
+                    }
 
-                    default:
-                        foreign.Add(file);
-                        break;
+                    // Removed only when its bytes now lie in assets\ unchanged - "renamed to its hash and
+                    // moved", "byte-identical copies removed" (Part 3). A token, or a picture converted on
+                    // the way in, is not what the stock holds, and stays where the DM put it.
+                    if (store.Holds(taken.Asset.AssetId, bytes) && !store.Keeps(file))
+                    {
+                        File.Delete(file);
+
+                        if (!isNew)
+                        {
+                            duplicates++;
+                        }
+                    }
+                    else
+                    {
+                        kept.Add(file);
+                    }
+                }
+                else
+                {
+                    foreign.Add(file);
                 }
             }
 
@@ -167,7 +195,10 @@ public static partial class Reconciliation
             missing,
             [.. foreign.Select(path => Path.GetRelativePath(store.Directory, path))],
             store.Reconstructed,
-            [.. shelf.Unreadable.Select(path => Path.GetRelativePath(store.Directory, path))]);
+            [.. shelf.Unreadable.Select(path => Path.GetRelativePath(store.Directory, path))])
+        {
+            Kept = [.. kept.Select(path => Path.GetRelativePath(store.Directory, path))],
+        };
     }
 
     /// <summary>The name a scene of this campaign gives a picture known only by its hash (Part 3).</summary>

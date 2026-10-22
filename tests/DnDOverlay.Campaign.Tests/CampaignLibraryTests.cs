@@ -104,6 +104,8 @@ public sealed class CampaignLibraryTests : IDisposable
     {
         var campaign = Campaign("Sturmküste");
 
+        _codec.PassThrough = true;
+
         Directory.CreateDirectory(Path.Combine(campaign, "Meine Bilder"));
         File.WriteAllBytes(Path.Combine(campaign, "Ork.png"), Bytes("ork"));
         File.WriteAllBytes(Path.Combine(campaign, "Meine Bilder", "Goblin.png"), Bytes("goblin"));
@@ -122,6 +124,8 @@ public sealed class CampaignLibraryTests : IDisposable
         var campaign = Campaign("Sturmküste");
         var library = Library();
 
+        _codec.PassThrough = true;
+
         await Ingest(library.Open("Sturmküste").Store, "ork");
         File.WriteAllBytes(Path.Combine(campaign, "Ork Kopie.png"), Bytes("ork"));
 
@@ -130,6 +134,64 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.Equal(1, report.Duplicates);
         Assert.Single(opened.Store.Entries);
         Assert.False(File.Exists(Path.Combine(campaign, "Ork Kopie.png")));
+    }
+
+    /// <summary>
+    /// A picture converted on the way in - a WebP that became a PNG, an animation that became a GIF - is
+    /// taken in, and its original STAYS: what lies in assets\ is not that file, and Part 3 removes
+    /// byte-identical copies only. On the next opening it is neither adopted again nor called a duplicate.
+    /// </summary>
+    [Fact]
+    public async Task A_picture_converted_on_the_way_in_keeps_its_original()
+    {
+        var campaign = Campaign("Sturmküste");
+        var original = Path.Combine(campaign, "Drache.webp");
+
+        File.WriteAllBytes(original, Bytes("drache"));
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(1, report.Adopted);
+        Assert.Equal(["Drache.webp"], report.Kept);
+        Assert.Equal("Drache", Assert.Single(opened.Store.Entries).Name);
+        Assert.Equal(Bytes("drache"), File.ReadAllBytes(original));
+
+        var (_, again) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(0, again.Adopted);
+        Assert.Equal(0, again.Duplicates);
+        Assert.Equal(["Drache.webp"], again.Kept);
+        Assert.True(File.Exists(original));
+    }
+
+    /// <summary>
+    /// The picture coming back heals its entry, and that is counted as taken in - not as "a duplicate
+    /// removed", which is what the report said while the healing branch answered "already present".
+    /// </summary>
+    [Fact]
+    public async Task A_picture_laid_back_into_the_folder_heals_its_entry_and_counts_as_taken_in()
+    {
+        var campaign = Campaign("Sturmküste");
+        var library = Library();
+
+        _codec.PassThrough = true;
+
+        var taken = await Ingest(library.Open("Sturmküste").Store, "ork");
+
+        foreach (var file in Directory.GetFiles(Path.Combine(campaign, "assets"), taken.Asset.AssetId.Value + ".*"))
+        {
+            File.Delete(file);
+        }
+
+        File.WriteAllBytes(Path.Combine(campaign, "Ork.png"), Bytes("ork"));
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(1, report.Adopted);
+        Assert.Equal(0, report.Duplicates);
+        Assert.Empty(report.Missing);
+        Assert.Empty(opened.Store.Missing);
+        Assert.False(File.Exists(Path.Combine(campaign, "Ork.png")));
     }
 
     /// <summary>A file deleted by hand leaves its entry marked, not removed - and taking the same picture in again heals it.</summary>

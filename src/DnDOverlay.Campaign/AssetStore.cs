@@ -706,6 +706,38 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         return made;
     }
 
+    /// <summary>
+    /// Whether the stock's file for this picture holds exactly these bytes - the one condition under
+    /// which the reconciliation may remove the file they were read from. Part 3 removes
+    /// "<b>byte-identical</b> copies" and nothing else: a token the picture was taken out of, or a WebP
+    /// that became a PNG on the way in, is not what lies in <c>assets\</c>, and deleting it would lose
+    /// what the copy does not carry. Compared against the file on disk, not against the recorded hash,
+    /// so a damaged stock file never costs the good original.
+    /// </summary>
+    public bool Holds(AssetId asset, ReadOnlySpan<byte> bytes)
+    {
+        InventoryEntry? entry;
+
+        lock (_gate)
+        {
+            if (!_entries.TryGetValue(asset.Value, out entry))
+            {
+                return false;
+            }
+        }
+
+        try
+        {
+            var file = new FileInfo(FileOf(entry));
+
+            return file.Exists && file.Length == bytes.Length && File.ReadAllBytes(file.FullName).AsSpan().SequenceEqual(bytes);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Whether this file is where the stock keeps an entry's picture - by name, without opening it.</summary>
     public bool Keeps(string file)
     {

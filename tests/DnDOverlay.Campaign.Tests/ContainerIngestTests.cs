@@ -158,6 +158,38 @@ public sealed class ContainerIngestTests(TestDataFixture fixture) : IDisposable
         Assert.Equal("Dorfkarte", taken.Asset.Name);
     }
 
+    /// <summary>
+    /// The folder check meets the unpacker. A token the DM laid into the campaign folder is read and
+    /// its portrait taken in - and the token STAYS: a <c>.rptok</c> is read, never written (Part 3),
+    /// and the stock holds one picture out of it, not the portrait, handout and macros beside it. It
+    /// stays on the second opening too, when its picture is "already present" - the case in which
+    /// it used to be deleted as a duplicate although it matched nothing byte for byte.
+    /// </summary>
+    [Fact]
+    public async Task ATokenLaidIntoTheCampaignFolderIsReadAndNeverDeleted()
+    {
+        var store = Open();
+        var shelf = SceneShelf.Open(_directory, TimeProvider.System);
+        var token = await File.ReadAllBytesAsync(_assets.Tokens.WithPortrait, TestContext.Current.CancellationToken);
+        var path = Path.Combine(_directory, "Ork.rptok");
+
+        await File.WriteAllBytesAsync(path, token, TestContext.Current.CancellationToken);
+
+        var first = await Reconciliation.SettleAsync(
+            store, shelf, Reconciliation.Survey(store), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, first.Adopted);
+        Assert.Equal(["Ork.rptok"], first.Kept);
+        Assert.Equal("Testfigur", Assert.Single(store.Entries).Name);
+
+        var second = await Reconciliation.SettleAsync(
+            store, shelf, Reconciliation.Survey(store), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, second.Duplicates);
+        Assert.Equal(["Ork.rptok"], second.Kept);
+        Assert.Equal(token, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
+    }
+
     /// <summary>The real codec and the real unpacker - the point of this class is that they meet.</summary>
     private AssetStore Open() =>
         AssetStore.Open(

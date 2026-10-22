@@ -43,6 +43,13 @@ internal sealed class FakeImageCodec : IImageCodec
     /// <summary>How many times bytes were normalised - the counter that shows dedup did its job.</summary>
     internal int Normalisations { get; private set; }
 
+    /// <summary>
+    /// Set to hand the source through untouched, as the real codec does with JPEG and PNG since M2b.
+    /// Off, every picture is "converted" - which is the case the reconciliation must NOT delete the
+    /// original for, so the tests that expect a byte-identical copy to go have to say so.
+    /// </summary>
+    internal bool PassThrough { get; set; }
+
     /// <summary>Whether the source format counts as promised or as merely tolerated.</summary>
     internal FormatStanding Standing { get; set; } = FormatStanding.Promised;
 
@@ -69,6 +76,12 @@ internal sealed class FakeImageCodec : IImageCodec
         }
 
         Normalisations++;
+
+        if (PassThrough)
+        {
+            return new NormalisedImage(
+                source.ToArray(), "png", Claims.PixelWidth, Claims.PixelHeight, Claims.Frames > 1, Claims.Format, Standing);
+        }
 
         // Not byte-stable on purpose - see the type's remarks.
         var body = Encoding.UTF8.GetBytes($"normalised-{_salt}-{Interlocked.Increment(ref _writes)}-");
