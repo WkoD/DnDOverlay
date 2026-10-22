@@ -28,6 +28,12 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     private const string ThumbnailFolder = "thumbs";
 
     /// <summary>
+    /// Where the folder check puts a file it took a picture out of but does not hold byte for byte (see
+    /// <see cref="KeepOriginal"/>). The check passes over it like scenes\ and layouts\.
+    /// </summary>
+    internal const string OriginalsFolder = "originals";
+
+    /// <summary>
     /// The width thumbnails are made at. Two steps are foreseen for the stock grid (Part 7); the
     /// second joins with the grid itself, and adding it later costs one more file per image rather
     /// than a migration.
@@ -381,9 +387,10 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// Takes a picture out of the stock: the entry, the file and its thumbnail. <b>Only this</b> - the
     /// screens and the saved scenes are the caller's to clear first (Part 7: what is deleted
     /// disappears everywhere), and the order matters: the reference goes before the bytes. A file
-    /// that cannot be deleted right now - open in a viewer - stays behind as a foreign file the next
-    /// reconciliation names (M5b5) - noted in the inventory, or it would come back in as a picture
-    /// without an entry; the entry is gone either way. False when there was no such entry, or the
+    /// that cannot be deleted right now - open in a viewer - stays behind, noted in the inventory, or it
+    /// would come back in as a picture without an entry (M5b5); the next reconciliation deletes it, and
+    /// names it as foreign only while it is still held (<see cref="DeleteRemoved"/>). The entry is gone
+    /// either way. False when there was no such entry, or the
     /// stock is closed: its path may name another campaign's folder by now.
     /// </summary>
     public bool Remove(AssetId asset)
@@ -454,6 +461,86 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         lock (_gate)
         {
             return _removed.Contains(Path.GetFileName(file));
+        }
+    }
+
+    /// <summary>
+    /// Deletes the file of a removed picture that could not be deleted at the time (<see cref="Remove"/>),
+    /// now that it may be free: the delete the DM asked for, finished late and without a word (DM
+    /// decision of 22.10.2026). Only the file in <c>assets\</c> the note was written for - a copy of it
+    /// elsewhere in the folder is the DM's. Under the lock every write takes, so the same picture taken in
+    /// again meanwhile - written to this very name, its note dropped - is never deleted as a leftover. The
+    /// note itself goes with <see cref="ForgetRemovedGone"/>.
+    /// </summary>
+    /// <returns>Whether the file is gone; false while it is still held, for a copy elsewhere, or once the stock is closed.</returns>
+    internal bool DeleteRemoved(string file)
+    {
+        var name = Path.GetFileName(file);
+
+        lock (_gate)
+        {
+            if (_closed
+                || !_removed.Contains(name)
+                || !string.Equals(Path.GetFullPath(file), Path.GetFullPath(Path.Combine(Directory, AssetsFolder, name)), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Moves a file the stock took a picture out of, but does not hold byte for byte - a <c>.rptok</c>, a
+    /// format converted on the way in, a JPEG or PNG whose metadata the intake stripped - into
+    /// <c>originals\</c> (DM decision of 22.10.2026). Part 3 removes byte-identical copies only, and left
+    /// where it lay the file was named again on every opening. <b>Never over a file</b>: a name taken in
+    /// <c>originals\</c> is numbered, <c>Ork (2).rptok</c>. Under the lock, so a closed stock - whose path
+    /// may name another campaign's folder by now - creates no folder there.
+    /// </summary>
+    /// <returns>Where the file lies now, or <see langword="null"/> when the stock is closed and it was left.</returns>
+    /// <exception cref="IOException">Held open, or a file appeared under the chosen name meanwhile; the file stays where it is.</exception>
+    internal string? KeepOriginal(string file)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+
+        var stem = Path.GetFileNameWithoutExtension(file);
+        var extension = Path.GetExtension(file);
+
+        lock (_gate)
+        {
+            if (_closed)
+            {
+                return null;
+            }
+
+            var folder = System.IO.Directory.CreateDirectory(Path.Combine(Directory, OriginalsFolder)).FullName;
+
+            for (var number = 1; ; number++)
+            {
+                var target = Path.Combine(
+                    folder,
+                    number == 1 ? stem + extension : string.Create(CultureInfo.InvariantCulture, $"{stem} ({number}){extension}"));
+
+                if (File.Exists(target) || System.IO.Directory.Exists(target))
+                {
+                    continue;
+                }
+
+                // Without overwrite: a file laid there between the look and the move throws rather than being replaced.
+                File.Move(file, target);
+
+                return target;
+            }
         }
     }
 

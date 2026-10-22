@@ -35,18 +35,19 @@ public sealed record CampaignReport(
     IReadOnlyList<string> UnreadableScenes)
 {
     /// <summary>
-    /// Pictures that are in the stock but whose file was left where it lies, because what is in
-    /// <c>assets\</c> is not byte for byte that file: a token the picture was taken out of (a
-    /// <c>.rptok</c> is read, never written, Part 3), or a format converted on the way in. Part 3 removes
-    /// byte-identical copies only; anything else would lose what the stock's copy does not carry. Also
-    /// a byte-identical copy the file system would not let go of - read-only, held open.
+    /// Files a picture was taken out of that are not byte for byte what now lies in <c>assets\</c> - a
+    /// token (a <c>.rptok</c> is read, never written, Part 3), a format converted on the way in, a JPEG or
+    /// PNG whose metadata the intake stripped - moved into <c>originals\</c> in the campaign folder, by
+    /// the path they lie at now (<c>originals\Ork.rptok</c>, numbered when the name was taken there).
+    /// Part 3 removes byte-identical copies only; anything else would lose what the stock's copy does not
+    /// carry. Named once: the check passes over <c>originals\</c> (DM decision of 22.10.2026).
     /// </summary>
-    public IReadOnlyList<string> Kept { get; init; } = [];
+    public IReadOnlyList<string> Originals { get; init; } = [];
 
     /// <summary>
-    /// Files that could not be read or moved right now - locked, an offline placeholder, gone since the
-    /// first look. Left where they are and tried again on the next check (Part 3, phase 3: a report, not
-    /// an exception).
+    /// Files that could not be read, moved or removed right now - locked, read-only, an offline
+    /// placeholder, gone since the first look. Left where they are and tried again on the next check
+    /// (Part 3, phase 3: a report, not an exception).
     /// </summary>
     public IReadOnlyList<string> Skipped { get; init; } = [];
 
@@ -60,7 +61,7 @@ public sealed record CampaignReport(
     /// <summary>Whether there is anything to say at all - a campaign without findings opens without a report.</summary>
     public bool IsEmpty =>
         Adopted == 0 && Duplicates == 0 && Missing.Count == 0 && Foreign.Count == 0 && !Reconstructed && UnreadableScenes.Count == 0
-        && Kept.Count == 0 && Skipped.Count == 0;
+        && Originals.Count == 0 && Skipped.Count == 0;
 }
 
 /// <summary>
@@ -91,6 +92,7 @@ public static partial class Reconciliation
             Path.Combine(root, "scenes"),
             Path.Combine(root, "layouts"),
             Path.Combine(root, "assets", "thumbs"),
+            Path.Combine(root, AssetStore.OriginalsFolder),
         };
 
         var orphans = new List<string>();
@@ -152,8 +154,9 @@ public static partial class Reconciliation
     /// same ingest as a drop - renamed to their hash and moved into <c>assets\</c>, because the folder
     /// is our stock and not a letterbox, and without the rename the same file would look orphaned on
     /// every opening. Byte-identical copies of what is there are removed. <b>Only</b> a file whose bytes
-    /// now lie in <c>assets\</c> unchanged goes: a token or a converted picture stays and is named
-    /// (<see cref="CampaignReport.Kept"/>), because the check is non-destructive (Part 3). A picture already named by
+    /// now lie in <c>assets\</c> unchanged goes: a token or a converted picture is moved into
+    /// <c>originals\</c> and named once (<see cref="CampaignReport.Originals"/>), because the check is
+    /// non-destructive (Part 3). A picture already named by
     /// its hash keeps that identity and takes its name from the scene that uses it. Foreign files
     /// stay untouched, missing entries stay marked, thumbnails are repaired.
     /// </summary>
@@ -216,7 +219,7 @@ public static partial class Reconciliation
             store.Reconstructed,
             Relative(store, shelf.Unreadable))
         {
-            Kept = Relative(store, tally.Kept),
+            Originals = Relative(store, tally.Originals),
             Skipped = Relative(store, tally.Skipped),
             Interrupted = store.IsClosed,
         };
@@ -233,6 +236,21 @@ public static partial class Reconciliation
             return;
         }
 
+        // Taken out of the stock while its file could not be deleted: the DM removed it, and it must not
+        // come back in as a crash's leftover (M5b5). Deleted now, without a word - the delete he asked
+        // for, finished late - and named as foreign only while it is still held (DM decision of
+        // 22.10.2026). Asked before the read, which a held file would fail. A copy of it elsewhere in the
+        // folder is not deleted and stays foreign.
+        if (store.WasRemoved(file))
+        {
+            if (!store.DeleteRemoved(file) && !store.IsClosed)
+            {
+                tally.Foreign.Add(file);
+            }
+
+            return;
+        }
+
         var stem = Path.GetFileNameWithoutExtension(file);
         var hashNamed = HashName().IsMatch(stem);
         var bytes = await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
@@ -241,13 +259,7 @@ public static partial class Reconciliation
         {
             var asset = new AssetId(stem.ToLowerInvariant());
 
-            if (store.WasRemoved(file))
-            {
-                // Taken out of the stock while its file could not be deleted: the DM removed it, and it
-                // must not come back in as a crash's leftover. Named as foreign (M5b5).
-                tally.Foreign.Add(file);
-            }
-            else if (store.Knows(asset))
+            if (store.Knows(asset))
             {
                 // In the stock already. A byte-identical copy goes; the same file coming back heals the
                 // entry whose file was missing; anything else under its name is not ours to judge and
@@ -307,10 +319,14 @@ public static partial class Reconciliation
 
         // Removed only when its bytes now lie in assets\ unchanged - "renamed to its hash and moved",
         // "byte-identical copies removed" (Part 3). A token, or a picture converted on the way in, is not
-        // what the stock holds, and stays where the DM put it.
+        // what the stock holds: it is kept, in originals\, where the next check no longer meets it (DM
+        // decision of 22.10.2026). One that cannot be moved right now is skipped and moved next time.
         if (!store.Holds(taken.Asset.AssetId, bytes))
         {
-            tally.Kept.Add(file);
+            if (store.KeepOriginal(file) is { } moved)
+            {
+                tally.Originals.Add(moved);
+            }
         }
         else if (RemoveCopy(store, file, tally) && !isNew)
         {
@@ -321,7 +337,7 @@ public static partial class Reconciliation
     /// <summary>
     /// Removes a byte-identical copy of what the stock holds - and never the stock's own file, which is
     /// the same bytes by definition. A copy the file system will not let go of - read-only, held open -
-    /// stays and is named with the kept ones. False when it was not removed.
+    /// stays and is named with the skipped ones, tried again next time. False when it was not removed.
     /// </summary>
     private static bool RemoveCopy(AssetStore store, string file, Tally tally)
     {
@@ -338,7 +354,7 @@ public static partial class Reconciliation
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            tally.Kept.Add(file);
+            tally.Skipped.Add(file);
 
             return false;
         }
@@ -387,7 +403,7 @@ public static partial class Reconciliation
 
         public List<string> Foreign { get; } = [];
 
-        public List<string> Kept { get; } = [];
+        public List<string> Originals { get; } = [];
 
         public List<string> Skipped { get; } = [];
     }

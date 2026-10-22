@@ -37,8 +37,9 @@ public sealed class InventoryDocument
     /// <summary>
     /// File names in <c>assets\</c> of pictures taken out of the stock whose file could not be deleted at
     /// the time - open in a viewer, being sent. Without this note the next folder check would see a
-    /// hash-named picture without an entry and take it back in; with it, the file is named as foreign
-    /// (M5b5). An addition a schema-1 reader skips, so the version stays.
+    /// hash-named picture without an entry and take it back in; with it, the file is deleted then, and
+    /// named as foreign only while it is still held (M5b5; DM decision of 22.10.2026). An addition a
+    /// schema-1 reader skips, so the version stays.
     /// </summary>
     public List<string> Removed { get; set; } = [];
 }

@@ -386,30 +386,57 @@ public sealed class CampaignLibraryTests : IDisposable
 
     /// <summary>
     /// A picture converted on the way in - a WebP that became a PNG, an animation that became a GIF - is
-    /// taken in, and its original STAYS: what lies in assets\ is not that file, and Part 3 removes
-    /// byte-identical copies only. On the next opening it is neither adopted again nor called a duplicate.
+    /// taken in, and its original is KEPT: what lies in assets\ is not that file, and Part 3 removes
+    /// byte-identical copies only. It is moved into originals\ and named once (DM decision of
+    /// 22.10.2026); the next opening does not meet it again.
     /// </summary>
     [Fact]
-    public async Task A_picture_converted_on_the_way_in_keeps_its_original()
+    public async Task A_picture_converted_on_the_way_in_has_its_original_moved_into_originals_and_named_once()
     {
         var campaign = Campaign("Sturmküste");
         var original = Path.Combine(campaign, "Drache.webp");
+        var kept = Path.Combine(campaign, "originals", "Drache.webp");
 
         File.WriteAllBytes(original, Bytes("drache"));
 
         var (opened, report) = await OpenAndSettle("Sturmküste");
 
         Assert.Equal(1, report.Adopted);
-        Assert.Equal(["Drache.webp"], report.Kept);
+        Assert.Equal([Path.Combine("originals", "Drache.webp")], report.Originals);
+        Assert.Empty(report.Foreign);
         Assert.Equal("Drache", Assert.Single(opened.Store.Entries).Name);
-        Assert.Equal(Bytes("drache"), File.ReadAllBytes(original));
+        Assert.False(File.Exists(original));
+        Assert.Equal(Bytes("drache"), File.ReadAllBytes(kept));
 
-        var (_, again) = await OpenAndSettle("Sturmküste");
+        var (reopened, again) = await OpenAndSettle("Sturmküste");
 
-        Assert.Equal(0, again.Adopted);
-        Assert.Equal(0, again.Duplicates);
-        Assert.Equal(["Drache.webp"], again.Kept);
-        Assert.True(File.Exists(original));
+        Assert.True(again.IsEmpty);
+        Assert.Single(reopened.Store.Entries);
+        Assert.Equal(Bytes("drache"), File.ReadAllBytes(kept));
+    }
+
+    /// <summary>
+    /// originals\ never loses a file: an original whose name is taken there - the same token laid in
+    /// twice, a picture of that name kept earlier - is numbered, and what lay there stays as it was. A
+    /// picture the DM puts into originals\ himself is not taken in: the check passes over the folder.
+    /// </summary>
+    [Fact]
+    public async Task An_original_whose_name_is_taken_in_originals_is_numbered_and_overwrites_nothing()
+    {
+        var campaign = Campaign("Sturmküste");
+        var originals = Directory.CreateDirectory(Path.Combine(campaign, "originals")).FullName;
+
+        File.WriteAllBytes(Path.Combine(originals, "Drache.webp"), Bytes("früher"));
+        File.WriteAllBytes(Path.Combine(originals, "Drache (2).webp"), Bytes("auch früher"));
+        File.WriteAllBytes(Path.Combine(campaign, "Drache.webp"), Bytes("drache"));
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal([Path.Combine("originals", "Drache (3).webp")], report.Originals);
+        Assert.Equal(Bytes("früher"), File.ReadAllBytes(Path.Combine(originals, "Drache.webp")));
+        Assert.Equal(Bytes("auch früher"), File.ReadAllBytes(Path.Combine(originals, "Drache (2).webp")));
+        Assert.Equal(Bytes("drache"), File.ReadAllBytes(Path.Combine(originals, "Drache (3).webp")));
+        Assert.Equal("Drache", Assert.Single(opened.Store.Entries).Name);
     }
 
     /// <summary>
@@ -520,14 +547,15 @@ public sealed class CampaignLibraryTests : IDisposable
 
     /// <summary>
     /// A hash name does not get a file past the intake either: one in a format the stock does not
-    /// deliver is converted like any other (and its original stays), and one beyond the limits is not
-    /// taken in at all.
+    /// deliver is converted like any other (and its original is kept in originals\), and one beyond the
+    /// limits is not taken in at all.
     /// </summary>
     [Fact]
     public async Task A_hash_named_file_in_another_format_or_beyond_the_limits_does_not_bypass_the_intake()
     {
         var campaign = Campaign("Sturmküste");
-        var webp = Path.Combine(campaign, Hash(Bytes("drache")) + ".webp");
+        var name = Hash(Bytes("drache")) + ".webp";
+        var webp = Path.Combine(campaign, name);
 
         File.WriteAllBytes(webp, Bytes("drache"));
 
@@ -535,7 +563,7 @@ public sealed class CampaignLibraryTests : IDisposable
 
         Assert.Equal("png", Assert.Single(opened.Store.Entries).Extension);
         Assert.Equal(1, report.Adopted);
-        Assert.True(File.Exists(webp));
+        Assert.True(File.Exists(Path.Combine(campaign, "originals", name)));
 
         var huge = Path.Combine(campaign, "assets", Hash(Bytes("riese")) + ".png");
 
@@ -550,11 +578,13 @@ public sealed class CampaignLibraryTests : IDisposable
 
     /// <summary>
     /// M5b5: a picture file that cannot be deleted right now - a display still downloading it - stays,
-    /// the entry goes, and the next folder check names the file as foreign instead of taking it back
-    /// into the stock under its hash. Taken in again on purpose, it is a picture like any other.
+    /// the entry goes, and the next folder check does not take it back into the stock under its hash.
+    /// While it is still held it is named as foreign; once free, it is deleted without a word - the
+    /// delete the DM asked for, finished late (DM decision of 22.10.2026). Taken in again on purpose, it
+    /// is a picture like any other.
     /// </summary>
     [Fact]
-    public async Task A_removed_picture_whose_file_was_held_open_is_named_foreign_not_taken_back()
+    public async Task A_removed_picture_whose_file_was_held_open_is_deleted_quietly_once_free_and_named_foreign_while_held()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -566,24 +596,68 @@ public sealed class CampaignLibraryTests : IDisposable
         var taken = await Ingest(store, "ork");
         var file = Assert.Single(Directory.GetFiles(Path.Combine(campaign, "assets"), taken.Asset.AssetId.Value + ".*"));
 
+        CampaignReport held;
+
+        using (File.Open(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.True(store.Remove(taken.Asset.AssetId));
+            Assert.True(File.Exists(file));
+
+            (var opened, held) = await OpenAndSettle("Sturmküste");
+
+            Assert.Empty(opened.Store.Entries);
+        }
+
+        Assert.Equal(0, held.Adopted);
+        Assert.Equal([Path.Combine("assets", Path.GetFileName(file))], held.Foreign);
+        Assert.True(File.Exists(file));
+
+        var (free, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.True(report.IsEmpty);
+        Assert.False(File.Exists(file));
+        Assert.Empty(free.Store.Entries);
+        Assert.DoesNotContain(Path.GetFileName(file), File.ReadAllText(Path.Combine(campaign, "inventory.json")), StringComparison.OrdinalIgnoreCase);
+
+        await Ingest(free.Store, "ork");
+
+        var (_, after) = await OpenAndSettle("Sturmküste");
+
+        Assert.True(after.IsEmpty);
+        Assert.True(File.Exists(file));
+    }
+
+    /// <summary>
+    /// Only the removed picture's own file in assets\ is deleted late: a copy of it in a backup folder is
+    /// the DM's, stays, and is named as foreign as before.
+    /// </summary>
+    [Fact]
+    public async Task A_copy_of_a_removed_picture_elsewhere_in_the_folder_is_not_deleted()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to delete a file that somebody holds open");
+        }
+
+        var campaign = Campaign("Sturmküste");
+        var store = Library().Open("Sturmküste").Store;
+        var taken = await Ingest(store, "ork");
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(campaign, "assets"), taken.Asset.AssetId.Value + ".*"));
+        var copy = Path.Combine(Directory.CreateDirectory(Path.Combine(campaign, "Sicherung")).FullName, Path.GetFileName(file));
+
+        File.Copy(file, copy);
+
         using (File.Open(file, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             Assert.True(store.Remove(taken.Asset.AssetId));
         }
 
-        Assert.True(File.Exists(file));
-
         var (opened, report) = await OpenAndSettle("Sturmküste");
 
+        Assert.False(File.Exists(file));
+        Assert.True(File.Exists(copy));
+        Assert.Equal([Path.Combine("Sicherung", Path.GetFileName(file))], report.Foreign);
         Assert.Empty(opened.Store.Entries);
-        Assert.Equal(0, report.Adopted);
-        Assert.Equal([Path.Combine("assets", Path.GetFileName(file))], report.Foreign);
-
-        await Ingest(opened.Store, "ork");
-
-        var (_, after) = await OpenAndSettle("Sturmküste");
-
-        Assert.True(after.IsEmpty);
     }
 
     /// <summary>
@@ -612,11 +686,11 @@ public sealed class CampaignLibraryTests : IDisposable
 
     /// <summary>
     /// A locked file is named and left for the next check; a read-only copy laid in from a share is taken
-    /// in, and because it will not be deleted it stays and is named - on every opening, without an
-    /// exception on any of them.
+    /// in, and because it will not be deleted it stays and is named with the skipped ones - on every
+    /// opening, without an exception on any of them.
     /// </summary>
     [Fact]
-    public async Task A_locked_file_is_skipped_and_a_read_only_copy_is_kept()
+    public async Task A_locked_file_and_a_read_only_copy_are_skipped()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -642,14 +716,14 @@ public sealed class CampaignLibraryTests : IDisposable
                 (_, report) = await OpenAndSettle("Sturmküste");
             }
 
-            Assert.Equal(["Gesperrt.png"], report.Skipped);
-            Assert.Equal(["Schreibgeschützt.png"], report.Kept);
+            Assert.Equal(["Gesperrt.png", "Schreibgeschützt.png"], report.Skipped.Order(StringComparer.Ordinal));
+            Assert.Empty(report.Originals);
             Assert.Equal(1, report.Adopted);
 
             var (_, again) = await OpenAndSettle("Sturmküste");
 
-            Assert.Equal(["Schreibgeschützt.png"], again.Kept);
-            Assert.Empty(again.Skipped);
+            Assert.Equal(["Schreibgeschützt.png"], again.Skipped);
+            Assert.True(File.Exists(readOnly));
         }
         finally
         {

@@ -160,10 +160,11 @@ public sealed class ContainerIngestTests(TestDataFixture fixture) : IDisposable
 
     /// <summary>
     /// The folder check meets the unpacker. A token the DM laid into the campaign folder is read and
-    /// its portrait taken in - and the token STAYS: a <c>.rptok</c> is read, never written (Part 3),
-    /// and the stock holds one picture out of it, not the portrait, handout and macros beside it. It
-    /// stays on the second opening too, when its picture is "already present" - the case in which
-    /// it used to be deleted as a duplicate although it matched nothing byte for byte.
+    /// its portrait taken in - and the token is KEPT, unchanged, in originals\ (DM decision of
+    /// 22.10.2026): a <c>.rptok</c> is read, never written (Part 3), and the stock holds one picture out
+    /// of it, not the portrait, handout and macros beside it. It used to be deleted as a duplicate on
+    /// the second opening, when its picture is "already present", although it matched nothing byte for
+    /// byte; now the second opening does not meet it at all.
     /// </summary>
     [Fact]
     public async Task ATokenLaidIntoTheCampaignFolderIsReadAndNeverDeleted()
@@ -178,16 +179,18 @@ public sealed class ContainerIngestTests(TestDataFixture fixture) : IDisposable
         var first = await Reconciliation.SettleAsync(
             store, shelf, Reconciliation.Survey(store), cancellationToken: TestContext.Current.CancellationToken);
 
+        var kept = Path.Combine(_directory, "originals", "Ork.rptok");
+
         Assert.Equal(1, first.Adopted);
-        Assert.Equal(["Ork.rptok"], first.Kept);
+        Assert.Equal([Path.Combine("originals", "Ork.rptok")], first.Originals);
         Assert.Equal("Testfigur", Assert.Single(store.Entries).Name);
+        Assert.False(File.Exists(path));
 
         var second = await Reconciliation.SettleAsync(
             store, shelf, Reconciliation.Survey(store), cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(0, second.Duplicates);
-        Assert.Equal(["Ork.rptok"], second.Kept);
-        Assert.Equal(token, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
+        Assert.True(second.IsEmpty);
+        Assert.Equal(token, await File.ReadAllBytesAsync(kept, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The real codec and the real unpacker - the point of this class is that they meet.</summary>
