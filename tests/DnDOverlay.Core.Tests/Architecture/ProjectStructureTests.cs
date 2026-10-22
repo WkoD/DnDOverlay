@@ -315,13 +315,22 @@ public sealed class ProjectStructureTests
     /// No test project may depend on Control or Display: the Linux job does not build them,
     /// and a test tree that needs them would fail there for a reason nobody would look for
     /// in the test tree (Part 2, Part 11).
+    /// <para>
+    /// <b>One exception, and it keeps the reason intact</b> (DM, 22.10.2026): an application's OWN
+    /// test project, for its window-free parts. It is Windows-bound and therefore not in the Linux
+    /// filter (<see cref="RepositoryLayout.WindowsBoundTests"/>), so the Linux job never meets it -
+    /// exactly as with the platform's test project. Any other test project reaching an application
+    /// is still an offender, and so is an application test project outside the Windows-bound list.
+    /// </para>
     /// </summary>
     [Fact]
     public void No_test_project_depends_on_an_application()
     {
         var offenders = RepositoryLayout.TestProjects.Values
-            .Where(project => project.ProjectReferences.Intersect(
-                RepositoryLayout.Applications, StringComparer.Ordinal).Any())
+            .Where(project => project.ProjectReferences
+                .Intersect(RepositoryLayout.Applications, StringComparer.Ordinal)
+                .Any(application => !(application == RepositoryLayout.SubjectOf(project.Name)
+                    && RepositoryLayout.WindowsBoundTests.Contains(project.Name, StringComparer.Ordinal))))
             .Select(project => project.Name)
             .ToList();
 

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The display's window-free parts - the handling of what the hub sends, the screen states, the
+       picture store's lifetime: what the application decides rather than draws (DM,
+       22.10.2026). No window is brought up here; what a window shows is the hand-run's.
+
+       Windows-bound because the application is, so it stays out of the Linux filter. It reaches
+       into its own subject only (RepositoryLayout.SubjectOf) - Platform.Windows comes along
+       through the application, never by a reference of its own. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DnDOverlay.Display\DnDOverlay.Display.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

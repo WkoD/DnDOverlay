@@ -117,6 +117,11 @@ internal static class RepositoryLayout
     [
         "DnDOverlay.Platform.Windows.Tests",
         "DnDOverlay.Rendering.Windows.Tests",
+
+        // The applications' window-free parts (DM, 22.10.2026): each reaches into its own
+        // application only, and Platform.Windows comes along through it.
+        "DnDOverlay.Control.Tests",
+        "DnDOverlay.Display.Tests",
     ];
 
     /// <summary>

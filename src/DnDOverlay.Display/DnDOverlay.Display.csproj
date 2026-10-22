@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <!-- The display PC: transparent always-on-top overlay per screen, gestures, tray.
        It deliberately does not reference Imaging - the display only ever sees PNG, JPEG
@@ -14,6 +14,11 @@
          is merely asked moved to Platform.Windows (Part 2). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <!-- Its window-free parts are tested in its own test project (DM, 22.10.2026). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="DnDOverlay.Display.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" />

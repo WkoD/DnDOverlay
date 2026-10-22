@@ -16,6 +16,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- Its window-free parts are tested in its own test project (DM, 22.10.2026). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="DnDOverlay.Control.Tests" />
+  </ItemGroup>
+
   <!-- Build order only - the control does not reference their code, and must not: what a helper
        is for is the NAME in the elevation prompt, and calling into it as a library would give
        that up. It does ship them, though, so they have to land beside DnDOverlay.Control.exe:

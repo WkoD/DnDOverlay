@@ -15,7 +15,9 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DnDOverlay.Campaign.Tests/DnDOverlay.Campaign.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.Control.Tests/DnDOverlay.Control.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Core.Tests/DnDOverlay.Core.Tests.csproj" />
+    <Project Path="tests/DnDOverlay.Display.Tests/DnDOverlay.Display.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Hub.Tests/DnDOverlay.Hub.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Imaging.Tests/DnDOverlay.Imaging.Tests.csproj" />
     <Project Path="tests/DnDOverlay.Platform.Windows.Tests/DnDOverlay.Platform.Windows.Tests.csproj" />
