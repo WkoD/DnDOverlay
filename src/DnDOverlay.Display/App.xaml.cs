@@ -30,7 +30,13 @@ namespace DnDOverlay.Display;
 /// </summary>
 public sealed partial class App : Application, IDisposable
 {
-    private readonly Dictionary<ScreenId, OverlayWindow> _windows = [];
+    /// <summary>
+    /// The open window of each screen. Written on the UI thread only, but <b>concurrent because it is
+    /// walked from elsewhere</b>: the loader asks before every picture whether a hand is on the table,
+    /// and the ring loop takes the screen list - both on background threads, and a plain table walked
+    /// while a window opens or closes throws, which ended the load run or kept the rings turning.
+    /// </summary>
+    private readonly ConcurrentDictionary<ScreenId, OverlayWindow> _windows = new();
 
     /// <summary>
     /// The touch log of every open screen, kept beside <see cref="_windows"/> because it is read
@@ -46,7 +52,12 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private readonly Dictionary<ScreenId, string> _names = [];
     private readonly SceneBook _scenes = new();
-    private readonly Dictionary<ScreenId, ScreenContext> _contexts = [];
+
+    /// <summary>
+    /// The parameters of each screen. Written on the UI thread (survey, <c>ConfigUpdate</c>), read by
+    /// the patch on the connection task and the fetch on its own - concurrent for those readers.
+    /// </summary>
+    private readonly ConcurrentDictionary<ScreenId, ScreenContext> _contexts = new();
     private readonly Dictionary<ScreenId, MonitorInfo> _monitors = [];
 
     /// <summary>
@@ -922,7 +933,9 @@ public sealed partial class App : Application, IDisposable
         {
             Screens =
             [
-                .. _contexts.Select(pair => new ScreenPreferences(
+                // In a fixed order: a concurrent table has none of its own, and the file would
+                // otherwise shuffle its screens from one start to the next.
+                .. _contexts.OrderBy(pair => pair.Key.Value, StringComparer.Ordinal).Select(pair => new ScreenPreferences(
                     pair.Key.Value,
 
                     // The OPINION, not the full set: a value nobody ever touched is not written, so
@@ -1095,7 +1108,7 @@ public sealed partial class App : Application, IDisposable
     {
         _ = _touching.TryRemove(screen, out _);
 
-        if (!_windows.Remove(screen, out var window))
+        if (!_windows.TryRemove(screen, out var window))
         {
             return;
         }
@@ -1112,7 +1125,7 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        _ = _windows.Remove(screen);
+        _ = _windows.TryRemove(screen, out _);
         _ = _touching.TryRemove(screen, out _);
         DisplayLog.OverlayClosed(_logger, screen);
     }
@@ -1703,8 +1716,16 @@ public sealed partial class App : Application, IDisposable
             case WelcomeMessage welcome:
                 _assetPath = welcome.AssetPath;
                 _connections++;
-                Remember(welcome);
-                await Dispatcher.InvokeAsync(CloseSetup);
+
+                // On the UI thread, like every other change of _settings: a window dragged in
+                // windowed mode rewrites them there, and a copy taken on each side drops the other's.
+                // Awaited, so the token is in place before the first scene asks for a picture.
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    Remember(welcome);
+                    CloseSetup();
+                });
+
                 break;
 
             case PairingPendingMessage pending:
@@ -1721,8 +1742,14 @@ public sealed partial class App : Application, IDisposable
                 break;
 
             case RejectedMessage rejected:
-                await Dispatcher.InvokeAsync(CloseSetup);
-                Refused(rejected.Reason);
+                // On the UI thread for the same reason as the Welcome: a fresh identity rewrites
+                // _settings.
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    CloseSetup();
+                    Refused(rejected.Reason);
+                });
+
                 break;
 
             case SceneSnapshotMessage snapshot:
@@ -2824,7 +2851,15 @@ public sealed partial class App : Application, IDisposable
                     continue;
                 }
 
-                await Dispatcher.InvokeAsync(SendWindows);
+                // Only the monitor list needs the UI thread, and it is taken there at Input priority,
+                // behind the hand. The survey itself - a process opened and asked per visible window,
+                // up to two hundred - runs here: at Normal on the UI thread it went ahead of every
+                // touch waiting, once a second for as long as the wireframes were shown (Part 1).
+                var monitors = await Dispatcher.InvokeAsync(
+                    () => _monitors.Values.ToList(),
+                    System.Windows.Threading.DispatcherPriority.Input);
+
+                SendWindows(monitors);
             }
         }
         catch (OperationCanceledException)
@@ -2833,8 +2868,8 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    private void SendWindows() =>
-        _outbox?.TrySend(new WindowListMessage(ForeignWindowSurvey.Survey([.. _monitors.Values], Environment.ProcessId)));
+    private void SendWindows(IReadOnlyList<MonitorInfo> monitors) =>
+        _outbox?.TrySend(new WindowListMessage(ForeignWindowSurvey.Survey(monitors, Environment.ProcessId)));
 
     /// <summary>
     /// A command for a foreign window (Part 6): refused where this device only reports, and on an
@@ -2858,7 +2893,7 @@ public sealed partial class App : Application, IDisposable
 
         if (_windowsWanted)
         {
-            SendWindows();
+            SendWindows([.. _monitors.Values]);
         }
     }
 
