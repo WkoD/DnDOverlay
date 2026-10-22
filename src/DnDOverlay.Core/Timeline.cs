@@ -70,15 +70,48 @@ public sealed record TimelineStep(string Label, IReadOnlyList<ScreenChange> Chan
         [.. Changes.SelectMany(change => Ops(change.Screen, change.Removed, change.Added, change.BackgroundChanged, change.BackgroundAfter))];
 
     /// <summary>Whether undoing or redoing this step could bring one of these pictures onto a screen.</summary>
+    /// <remarks>
+    /// The backgrounds count only when the step changed them: a step stores both whatever happened,
+    /// and thirty tokens laid on a map would otherwise each "show" the map and be cut with it,
+    /// although none of their ops ever sets it (Part 7: cut up to the oldest entry that still holds
+    /// the picture).
+    /// </remarks>
     public bool Shows(IReadOnlySet<AssetId> assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
 
         return Changes.Any(change =>
             change.Added.Concat(change.Removed).OfType<ImageItem>().Any(item => assets.Contains(item.AssetId))
-            || (change.BackgroundBefore is { } before && assets.Contains(before.AssetId))
-            || (change.BackgroundAfter is { } after && assets.Contains(after.AssetId)));
+            || (change.BackgroundChanged
+                && ((change.BackgroundBefore is { } before && assets.Contains(before.AssetId))
+                    || (change.BackgroundAfter is { } after && assets.Contains(after.AssetId)))));
     }
+
+    /// <summary>
+    /// The same step with a picture's new name in every item and background it would bring back -
+    /// a rename in the stock changes the name everywhere (Part 3, "one picture, one name"), and an
+    /// undo must not lay the picture down under the name it had when the step was recorded.
+    /// </summary>
+    public TimelineStep Renamed(AssetId asset, string name) =>
+        this with
+        {
+            Changes =
+            [
+                .. Changes.Select(change => change with
+                {
+                    Added = Renamed(change.Added, asset, name),
+                    Removed = Renamed(change.Removed, asset, name),
+                    BackgroundBefore = Renamed(change.BackgroundBefore, asset, name),
+                    BackgroundAfter = Renamed(change.BackgroundAfter, asset, name),
+                }),
+            ],
+        };
+
+    private static List<SceneItem> Renamed(IReadOnlyList<SceneItem> items, AssetId asset, string name) =>
+        [.. items.Select(item => item is ImageItem image && image.AssetId == asset ? image with { Name = name } : item)];
+
+    private static BackgroundItem? Renamed(BackgroundItem? background, AssetId asset, string name) =>
+        background is { } found && found.AssetId == asset ? found with { Name = name } : background;
 
     private static IEnumerable<ScreenOp> Ops(
         ScreenRef screen, IReadOnlyList<SceneItem> going, IReadOnlyList<SceneItem> coming, bool background, BackgroundItem? backgroundTo)
@@ -112,71 +145,145 @@ public sealed record TimelineStep(string Label, IReadOnlyList<ScreenChange> Chan
 /// undo simply no longer reaches all the way back. A new step drops what was undone - the next act
 /// discards redo, as everywhere.
 /// </para>
+/// <para>
+/// <b>Every member takes one lock.</b> The recording session writes from the thread pool (under its
+/// own gate, after <c>ConfigureAwait(false)</c>), while the buttons read the labels and the delete
+/// question counts the lost steps on the UI thread - without the lock, a <see cref="Record"/> in
+/// the middle of a <see cref="CountLost"/> ends the enumeration with "collection was modified".
+/// </para>
 /// </summary>
 public sealed class Timeline
 {
     /// <summary>How many steps are kept. Steps are small; the cap is against an evening that never ends, not against memory.</summary>
     public const int Limit = 500;
 
+    private readonly Lock _lock = new();
     private readonly LinkedList<TimelineStep> _done = new();
     private readonly Stack<TimelineStep> _undone = new();
 
     /// <summary>What the next undo takes back - the label the button carries (Part 7). None when there is nothing.</summary>
-    public string? UndoLabel => _done.Last?.Value.Label;
+    public string? UndoLabel
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _done.Last?.Value.Label;
+            }
+        }
+    }
 
     /// <summary>What the next redo does again.</summary>
-    public string? RedoLabel => _undone.Count > 0 ? _undone.Peek().Label : null;
+    public string? RedoLabel
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _undone.TryPeek(out var step) ? step.Label : null;
+            }
+        }
+    }
 
     /// <summary>How many steps undo can go back.</summary>
-    public int Depth => _done.Count;
+    public int Depth
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _done.Count;
+            }
+        }
+    }
 
     /// <summary>A new act. Whatever was undone cannot be redone any more.</summary>
     public void Record(TimelineStep step)
     {
         ArgumentNullException.ThrowIfNull(step);
 
-        _done.AddLast(step);
-        _undone.Clear();
-
-        if (_done.Count > Limit)
+        lock (_lock)
         {
-            _done.RemoveFirst();
+            _done.AddLast(step);
+            _undone.Clear();
+
+            if (_done.Count > Limit)
+            {
+                _done.RemoveFirst();
+            }
         }
     }
 
     /// <summary>The step to take back, now moved to redo - or none at the start of the session.</summary>
     public TimelineStep? Undo()
     {
-        if (_done.Last is not { } last)
+        lock (_lock)
         {
-            return null;
+            if (_done.Last is not { } last)
+            {
+                return null;
+            }
+
+            _done.RemoveLast();
+            _undone.Push(last.Value);
+
+            return last.Value;
         }
-
-        _done.RemoveLast();
-        _undone.Push(last.Value);
-
-        return last.Value;
     }
 
     /// <summary>The step to do again, now back in undo - or none.</summary>
     public TimelineStep? Redo()
     {
-        if (!_undone.TryPop(out var step))
+        lock (_lock)
         {
-            return null;
+            if (!_undone.TryPop(out var step))
+            {
+                return null;
+            }
+
+            _done.AddLast(step);
+
+            return step;
         }
+    }
 
-        _done.AddLast(step);
+    /// <summary>
+    /// Gives a picture its new name in every step - called with the rename from the stock, so that
+    /// undo and redo bring it back under the name the stock, the scenes and the table carry
+    /// (Part 3, "one picture, one name"). The labels stay as they were: they tell what was done.
+    /// </summary>
+    public void Rename(AssetId asset, string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        return step;
+        lock (_lock)
+        {
+            for (var node = _done.First; node is not null; node = node.Next)
+            {
+                node.Value = node.Value.Renamed(asset, name);
+            }
+
+            // A stack enumerates from the top; pushed back from the bottom up, the order holds.
+            var undone = _undone.ToArray();
+
+            _undone.Clear();
+
+            for (var index = undone.Length - 1; index >= 0; index--)
+            {
+                _undone.Push(undone[index].Renamed(asset, name));
+            }
+        }
     }
 
     /// <summary>How many steps <see cref="Truncate"/> would cost - the number the delete question names (Part 7).</summary>
     public int CountLost(IReadOnlySet<AssetId> assets)
     {
-        var (done, undone) = Lost(assets);
+        lock (_lock)
+        {
+            var (done, undone) = Lost(assets);
 
-        return done + undone;
+            return done + undone;
+        }
     }
 
     /// <summary>
@@ -188,26 +295,32 @@ public sealed class Timeline
     /// </summary>
     public int Truncate(IReadOnlySet<AssetId> assets)
     {
-        var (done, undone) = Lost(assets);
-
-        for (var index = 0; index < done; index++)
+        lock (_lock)
         {
-            _done.RemoveFirst();
-        }
+            var (done, undone) = Lost(assets);
 
-        if (undone > 0)
-        {
-            _undone.Clear();
-        }
+            for (var index = 0; index < done; index++)
+            {
+                _done.RemoveFirst();
+            }
 
-        return done + undone;
+            if (undone > 0)
+            {
+                _undone.Clear();
+            }
+
+            return done + undone;
+        }
     }
 
     /// <summary>Empties the timeline - a campaign switch or delete, behind which lie pictures the hub can no longer deliver.</summary>
     public void Clear()
     {
-        _done.Clear();
-        _undone.Clear();
+        lock (_lock)
+        {
+            _done.Clear();
+            _undone.Clear();
+        }
     }
 
     private (int Done, int Undone) Lost(IReadOnlySet<AssetId> assets)

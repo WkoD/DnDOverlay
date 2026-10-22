@@ -209,6 +209,27 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
         }
     }
 
+    /// <summary>
+    /// A rename from the stock: not a step (Part 7), but it reaches into the steps - the name goes
+    /// with the picture everywhere (Part 3, "one picture, one name"), so an undo or redo must lay it
+    /// down under the new name and not under the one it carried when the step was recorded. Under
+    /// the gate, so no recorded command takes its two pictures across the rename.
+    /// </summary>
+    public async Task RenameAssetAsync(AssetId asset, string name, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await _inner.RenameAssetAsync(asset, name, cancellationToken).ConfigureAwait(false);
+            Timeline.Rename(asset, name);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     // ---- passed through: no picture laid, taken or moved
 
     public IReadOnlyList<ScreenView> Screens => _inner.Screens;
@@ -243,9 +264,6 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
 
     public Task<FocusOutcome> SetFocusAsync(ScreenRef screen, IReadOnlyList<ItemId> items, CancellationToken cancellationToken = default) =>
         _inner.SetFocusAsync(screen, items, cancellationToken);
-
-    public Task RenameAssetAsync(AssetId asset, string name, CancellationToken cancellationToken = default) =>
-        _inner.RenameAssetAsync(asset, name, cancellationToken);
 
     public Task ApplyStepAsync(IReadOnlyList<ScreenOp> ops, CancellationToken cancellationToken = default) =>
         _inner.ApplyStepAsync(ops, cancellationToken);

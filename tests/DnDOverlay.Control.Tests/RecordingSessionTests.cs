@@ -41,6 +41,26 @@ public sealed class RecordingSessionTests
         Assert.Equal("Add \"Grimmbart\"", session.Timeline.UndoLabel);
     }
 
+    /// <summary>
+    /// "Krieger" laid and taken off, then renamed to "Grimmbart" in the stock: undo brings it back as
+    /// "Grimmbart" - one picture, one name (Part 3) - not under the name the step recorded.
+    /// </summary>
+    [Fact]
+    public async Task Undo_after_a_rename_brings_the_picture_back_under_its_new_name()
+    {
+        using var session = Recording();
+        var picture = Picture("Krieger");
+
+        var item = await session.AddItemAsync(Screen, picture, position: null, Cancellation);
+        await session.RemoveItemAsync(Screen, item, Cancellation);
+        await session.RenameAssetAsync(picture.AssetId, "Grimmbart", Cancellation);
+        await session.UndoAsync();
+
+        var back = Assert.IsType<ImageItem>(Assert.Single((await session.GetSceneAsync(Screen, Cancellation)).Items));
+
+        Assert.Equal("Grimmbart", back.Name);
+    }
+
     private static AssetRef Picture(string name) =>
         new(new AssetId(new string('a', 64)), new AssetMeta(800, 600, "png", 1024, IsAnimated: false, new string('b', 64)), name);
 

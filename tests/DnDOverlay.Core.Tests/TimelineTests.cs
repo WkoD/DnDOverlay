@@ -161,6 +161,96 @@ public sealed class TimelineTests
         Assert.Equal("Undone", timeline.RedoLabel);
     }
 
+    /// <summary>
+    /// Tokens laid on a map keep the map as their background before and after, unchanged - deleting
+    /// the map must not cut them: none of their ops could bring it back (Part 7).
+    /// </summary>
+    [Fact]
+    public void A_background_the_step_did_not_change_does_not_tie_it_to_the_map()
+    {
+        var map = SceneState.Empty with { Background = Background() };
+        var timeline = new Timeline();
+
+        timeline.Record(Step("Set map", (Table, SceneState.Empty), (Table, map)));
+        timeline.Record(Step("Token 1", (Table, map), (Table, map with { Items = [Item(0.2)] })));
+        timeline.Record(Step("Token 2", (Table, map), (Table, map with { Items = [Item(0.4)] })));
+
+        var gone = new HashSet<AssetId> { map.Background!.AssetId };
+
+        Assert.Equal(1, timeline.CountLost(gone));
+        Assert.Equal(1, timeline.Truncate(gone));
+        Assert.Equal(2, timeline.Depth);
+    }
+
+    /// <summary>
+    /// A rename in the stock reaches the steps (Part 3, "one picture, one name"): undo and redo lay
+    /// the picture down under its new name - items and background alike - not under the recorded one.
+    /// </summary>
+    [Fact]
+    public void A_rename_reaches_what_undo_and_redo_bring_back()
+    {
+        var krieger = Item(0.3) with { Name = "Krieger" };
+        var other = Item(0.6, asset: 'b') with { Name = "Ork" };
+        var map = Background();
+        var timeline = new Timeline();
+
+        timeline.Record(Step("Remove", (Table, Scene(krieger, other) with { Background = map }), (Table, SceneState.Empty)));
+        timeline.Record(Step("Add", (Table, SceneState.Empty), (Table, Scene(krieger))));
+        timeline.Undo();
+
+        timeline.Rename(krieger.AssetId, "Grimmbart");
+        timeline.Rename(map.AssetId, "Weltkarte");
+
+        var redo = timeline.Redo()!.RedoOps();
+        var undo = timeline.Undo()!.UndoOps();
+        var older = timeline.Undo()!.UndoOps();
+
+        Assert.Contains(redo, op => op.Op is AddItem { Item: ImageItem { Name: "Grimmbart" } });
+        Assert.Contains(older, op => op.Op is AddItem { Item: ImageItem { Name: "Grimmbart" } });
+        Assert.Contains(older, op => op.Op is AddItem { Item: ImageItem { Name: "Ork" } });
+        Assert.Contains(older, op => op.Op is SetBackground { Background.Name: "Weltkarte" });
+        Assert.DoesNotContain(undo.Concat(redo).Concat(older), op => op.Op is AddItem { Item: ImageItem { Name: "Krieger" } });
+
+        // Renamed with two steps waiting for redo: they come back in the order they were undone.
+        timeline.Rename(other.AssetId, "Orkhäuptling");
+
+        Assert.Equal("Remove", timeline.Redo()!.Label);
+        Assert.Equal("Add", timeline.Redo()!.Label);
+    }
+
+    /// <summary>
+    /// The recording session writes from the thread pool while the buttons and the delete question
+    /// read on the UI thread: reading while another thread records never fails.
+    /// </summary>
+    [Fact]
+    public async Task Reading_while_another_thread_records_never_fails()
+    {
+        var timeline = new Timeline();
+        var gone = new HashSet<AssetId> { new(new string('z', 64)) };
+        using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+
+        var writer = Task.Run(
+            () =>
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    timeline.Record(Added("Step"));
+                    timeline.Undo();
+                    timeline.Redo();
+                }
+            },
+            TestContext.Current.CancellationToken);
+
+        while (!writer.IsCompleted)
+        {
+            _ = timeline.CountLost(gone);
+            _ = timeline.RedoLabel;
+            _ = timeline.UndoLabel;
+        }
+
+        await writer;
+    }
+
     private static TimelineStep Added(string label) =>
         Step(label, (Table, SceneState.Empty), (Table, Scene(Item(0.5))));
 
