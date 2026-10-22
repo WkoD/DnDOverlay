@@ -360,7 +360,11 @@ internal sealed class MainWindow : Window, IDisposable
         };
 
         Closing += OnClosing;
-        Closed += (_, _) => Dispose();
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            Dispose();
+        };
 
         _ = ListenAsync();
     }
@@ -1249,28 +1253,63 @@ internal sealed class MainWindow : Window, IDisposable
     /// <summary>Whether any device is connected - "Release the screens" is checked only then.</summary>
     private bool _connected;
 
-    /// <summary>The quit was answered and its work done; the next close goes through.</summary>
-    private bool _quitting;
+    /// <summary>Where quitting stands: nobody asked, the question or its work is under way, or it is done.</summary>
+    private QuitStage _quit;
+
+    /// <summary>The window has closed - a quit whose work was still running has nothing left to close.</summary>
+    private bool _closed;
 
     /// <summary>Windows is ending the session: no question then - nobody is there to answer it (Part 7).</summary>
     internal bool SessionEnding { get; set; }
 
     /// <summary>
     /// The X asks instead of deciding (Part 7): quit, with "Save layout" and "Release the screens", or
-    /// cancel. The work of the answer is done first - the layout written, <c>GoIdle</c> out to the
-    /// devices - and then the window closes for real.
+    /// cancel. This close is always refused; the question is asked AFTER it, and the window closes for
+    /// real once the work of the answer is done.
+    /// <para>
+    /// <b>Never asked inside this event.</b> WPF refuses a <c>Close</c> - and a <c>Shutdown</c>, which
+    /// closes every window - while a window is still in its own <c>Closing</c>, and throws. Asked in
+    /// here, the second close came while the first was still running whenever the answer's work
+    /// finished without yielding: nothing ticked, "Save layout" (an uncontended scene read), "Release"
+    /// with no device left. Every quit then ended as an unhandled fault, without <c>Closed</c> and
+    /// without <c>OnExit</c>; and the end of a Windows session during the open question did the same
+    /// (M5 review, measured with a minimal WPF program).
+    /// </para>
+    /// <para>
+    /// <b>One question at a time</b>: an X while the question or its work is under way is refused and
+    /// asks nothing - otherwise a second dialog, a second <c>GoIdle</c> and a second layout under the
+    /// same stamp could follow while the first waited for the devices (Part 7, quitting asks once).
+    /// </para>
     /// </summary>
-    private async void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_quitting || SessionEnding)
+        if (_quit is QuitStage.Done || SessionEnding)
         {
             return;
         }
 
         e.Cancel = true;
 
-        if (QuitDialog.Ask(this, _desk.Open is not null, _connected) is not { } answer)
+        if (_quit is QuitStage.Asking)
         {
+            return;
+        }
+
+        _quit = QuitStage.Asking;
+        Dispatcher.BeginInvoke(QuitAsked);
+    }
+
+    /// <summary>
+    /// The question behind the X, outside the <c>Closing</c> that asked for it (see <see cref="OnClosing"/>).
+    /// The work of the answer is done first - the layout written, <c>GoIdle</c> out to the devices -
+    /// then the window closes.
+    /// </summary>
+    private async void QuitAsked()
+    {
+        if (_closed || QuitDialog.Ask(this, _desk.Open is not null, _connected) is not { } answer || _closed)
+        {
+            // Cancelled - or the window went meanwhile, at the end of a Windows session.
+            _quit = QuitStage.Open;
             return;
         }
 
@@ -1284,8 +1323,21 @@ internal sealed class MainWindow : Window, IDisposable
             await _session.GoIdleAsync(TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(true);
         }
 
-        _quitting = true;
+        if (_closed)
+        {
+            return;
+        }
+
+        _quit = QuitStage.Done;
         Close();
+    }
+
+    /// <summary>The three stages of quitting (see <see cref="OnClosing"/>).</summary>
+    private enum QuitStage
+    {
+        Open,
+        Asking,
+        Done,
     }
 
     /// <summary>Whether the last campaign has been offered in this run - once is enough.</summary>
