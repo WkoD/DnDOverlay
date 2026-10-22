@@ -1,5 +1,7 @@
+using DnDOverlay.Campaign;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
+using DnDOverlay.Core.Protocol;
 using DnDOverlay.Hub;
 
 namespace DnDOverlay.Control;
@@ -66,11 +68,39 @@ internal sealed class PairingDesk
         return new Restored(devices, dropped);
     }
 
+    /// <summary>
+    /// The names a device coming in must not carry: every OTHER device's name and every screen label
+    /// of the other devices - device and screen names are unique across all devices (Part 3). The
+    /// device's own screens are left out, because their default labels follow its name.
+    /// </summary>
+    internal static IReadOnlyList<string> TakenNames(IReadOnlyList<DeviceView> devices, DeviceId except)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+
+        var others = devices.Where(device => device.Device != except).ToList();
+
+        return [.. others.Select(device => device.Name), .. others.SelectMany(device => device.Screens).Select(screen => screen.Info.Label)];
+    }
+
+    /// <summary>
+    /// The name a device is paired under when its own is taken - <c>TISCH-PC (2)</c>, numbered the way
+    /// the application names things where it cannot ask (Part 3). A cloned display PC boots with the
+    /// original's machine name, and two devices called alike confuse the tiles, the target lists,
+    /// the log bubbles and the layout matching.
+    /// </summary>
+    internal static string FreeName(string wanted, IEnumerable<string> taken) => FileNames.Numbered(wanted, taken);
+
     /// <summary>Lets a waiting device in: token to disk first, hub second.</summary>
-    internal async Task AllowAsync(PendingPairing request)
+    /// <param name="request">The device knocking.</param>
+    /// <param name="name">
+    /// The name it is paired under - its own, or a free one when that is taken (<see cref="FreeName"/>).
+    /// A name other than its own is sent to the device as a rename, so its screens' labels follow it.
+    /// </param>
+    internal async Task AllowAsync(PendingPairing request, string? name = null)
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var named = string.IsNullOrWhiteSpace(name) ? request.Name : name.Trim();
         var token = DeviceTokens.Create();
 
         _settings.Update(configuration => configuration with
@@ -80,7 +110,7 @@ internal sealed class PairingDesk
                 .. configuration.KnownDevices.Where(device => device.DeviceId != request.Device.Value),
                 new KnownDevice(
                     request.Device.Value,
-                    request.Name,
+                    named,
                     PairingRole.Display,
                     DeviceTokens.Store(_secrets, token),
                     _time.GetLocalNow()),
@@ -94,6 +124,35 @@ internal sealed class PairingDesk
         // The hub writes the log line for this (event 1021). A second one from here would say the
         // same thing twice - and the range that owns it is connection, not operations (Part 8).
         await _session.ApprovePairingAsync(request.Device, token).ConfigureAwait(true);
+
+        // The device carries the name too: it is what it reports, and its screens' default labels
+        // are built from it (Part 7). The same command as a rename in the device band.
+        if (!string.Equals(named, request.Name, StringComparison.Ordinal))
+        {
+            _ = await _session.SendDeviceCommandAsync(request.Device, DeviceCommand.Rename, named).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Unpairs (Part 7): the device leaves <c>control.json</c> first, then the hub withdraws its token.
+    /// <para>
+    /// <b>Forgotten on disk, and first.</b> The entry used to stay: the hub took the token for this
+    /// run, and the next start handed it back from <see cref="Restore"/> - the device was paired again
+    /// without a question, and the unpair did not survive a restart (M5 review). Disk first for the
+    /// reason an approval writes first: a control that died in between must not come back holding a
+    /// pairing the DM took away.
+    /// </para>
+    /// </summary>
+    internal async Task UnpairAsync(DeviceId device)
+    {
+        _settings.Update(configuration => configuration with
+        {
+            KnownDevices = [.. configuration.KnownDevices.Where(known => known.DeviceId != device.Value)],
+        });
+
+        _settings.Flush();
+
+        await _session.UnpairAsync(device).ConfigureAwait(true);
     }
 
     /// <summary>

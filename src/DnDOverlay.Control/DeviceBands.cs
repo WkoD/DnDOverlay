@@ -36,9 +36,11 @@ internal sealed class DeviceBands
     private readonly Action<string> _say;
     private readonly Window _owner;
     private readonly ControlSettings _settings;
+    private readonly PairingDesk _pairing;
 
-    internal DeviceBands(ISessionApi session, CampaignDesk desk, ControlSettings settings, Action<string> say, Window owner)
+    internal DeviceBands(ISessionApi session, PairingDesk pairing, CampaignDesk desk, ControlSettings settings, Action<string> say, Window owner)
     {
+        _pairing = pairing;
         _settings = settings;
         _session = session;
         _desk = desk;
@@ -644,15 +646,25 @@ internal sealed class DeviceBands
 
         if (answer.Count > 0 && _desk.Open is { } open)
         {
-            foreach (var (screen, scene, name) in answer)
-            {
-                open.Shelf.SaveScene(name, screen.Info.Size, scene, overwrite: false);
-            }
+            // Each one checked: an unpair takes the arrangement for good, so a scene that was not
+            // written - a name taken in the meantime - stops it rather than vanishing unsaid (M5 review).
+            var unsaved = answer
+                .Where(saved => open.Shelf.SaveScene(saved.Name, saved.Screen.Info.Size, saved.Scene, overwrite: false) is not ShelfOutcome.Done)
+                .Select(saved => saved.Name)
+                .ToList();
 
             ScenesSaved?.Invoke(this, EventArgs.Empty);
+
+            if (unsaved.Count > 0)
+            {
+                _say(Strings.DeviceBandUnpairNotSaved(string.Join(", ", unsaved)));
+                return;
+            }
         }
 
-        await _session.UnpairAsync(device.Device).ConfigureAwait(true);
+        // Through the desk, which forgets the device in control.json as well - the hub alone gave
+        // the pairing back at the next start (M5 review).
+        await _pairing.UnpairAsync(device.Device).ConfigureAwait(true);
 
         _say(answer.Count == 0
             ? Strings.DeviceBandUnpaired(device.Name)

@@ -291,4 +291,12 @@ internal static partial class Strings
     internal static string DeviceBandSpreadArrivalSizeDone(double size, int screens) => Text.Format(nameof(DeviceBandSpreadArrivalSizeDone), size, screens);
 
     internal static string DeviceBandAutomaticRefused => Text[nameof(DeviceBandAutomaticRefused)];
+
+    internal static string DevicesPairNameTitle => Text[nameof(DevicesPairNameTitle)];
+
+    internal static string DevicesPairNamePrompt(string name) => Text.Format(nameof(DevicesPairNamePrompt), name);
+
+    internal static string DevicesPairedAs(string asked, string paired) => Text.Format(nameof(DevicesPairedAs), asked, paired);
+
+    internal static string DeviceBandUnpairNotSaved(string scenes) => Text.Format(nameof(DeviceBandUnpairNotSaved), scenes);
 }

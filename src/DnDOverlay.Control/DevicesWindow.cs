@@ -61,7 +61,7 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         _session = session;
         _pairing = pairing;
-        _bands = new DeviceBands(session, desk, settings, said => _status.Text = said, this);
+        _bands = new DeviceBands(session, pairing, desk, settings, said => _status.Text = said, this);
         _bands.Changed += (_, _) => ShowBands(force: true);
         _bands.ScenesSaved += (_, _) => ScenesSaved?.Invoke(this, EventArgs.Empty);
 
@@ -414,24 +414,70 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// connected one is demonstrably somebody else, and offering it would be the one wrong grip that
     /// throws two devices onto one entry. The question says what can go wrong rather than only warning.
     /// </summary>
-    private async Task AdoptAsync(PendingPairing request)
+    private async Task<bool> AdoptAsync(PendingPairing request)
     {
         var candidates = _devices.Where(device => !device.Connected && device.Device != request.Device).ToList();
 
         if (candidates.Count == 0)
         {
             _status.Text = Strings.DevicesNoneToAdopt;
-            return;
+            return false;
         }
 
         if (AdoptQuestion.Ask(this, request, candidates) is not { } known)
         {
-            return;
+            return false;
         }
 
         _status.Text = await _pairing.AdoptAsync(request, known).ConfigureAwait(true)
             ? Strings.DevicesAdopted(request.Name, known.Name)
             : Strings.DevicesNotAdopted(request.Name, known.Name);
+
+        return true;
+    }
+
+    /// <summary>
+    /// "Allow" (Part 3): a name that is taken is refused before anything happens - a cloned display PC
+    /// boots with the original's name. Then the question stands with a free suggestion pre-filled
+    /// (<c>TISCH-PC (2)</c>) that the DM may overwrite; a typed name that is taken as well is refused,
+    /// naming it, and nothing is paired.
+    /// </summary>
+    private async Task<bool> AllowAsync(PendingPairing request)
+    {
+        var taken = PairingDesk.TakenNames(_devices, request.Device);
+        var name = request.Name;
+
+        if (taken.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            var typed = NameDialog.Ask(
+                this,
+                Strings.DevicesPairNameTitle,
+                Strings.DevicesPairNamePrompt(request.Name),
+                PairingDesk.FreeName(request.Name, taken),
+                check: false)?.Trim();
+
+            if (string.IsNullOrEmpty(typed))
+            {
+                return false;
+            }
+
+            if (taken.Contains(typed, StringComparer.OrdinalIgnoreCase))
+            {
+                _status.Text = Strings.DeviceBandDeviceNameTaken(typed);
+                return false;
+            }
+
+            name = typed;
+        }
+
+        await _pairing.AllowAsync(request, name).ConfigureAwait(true);
+
+        if (!string.Equals(name, request.Name, StringComparison.Ordinal))
+        {
+            _status.Text = Strings.DevicesPairedAs(request.Name, name);
+        }
+
+        return true;
     }
 
     private WrapPanel Decisions()
@@ -441,9 +487,17 @@ internal sealed class DevicesWindow : Window, IDisposable
         var own = new Button { Content = Strings.DevicesTakeOnAsOwn, Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 0) };
         var known = new Button { Content = Strings.DevicesAssignToKnown, Padding = new Thickness(12, 6, 12, 6) };
 
-        allow.Click += (_, _) => DecideAsync(request => _pairing.AllowAsync(request));
-        deny.Click += (_, _) => DecideAsync(request => _pairing.DenyAsync(request));
-        own.Click += (_, _) => DecideAsync(request => _pairing.AcceptAsOwnAsync(request));
+        allow.Click += (_, _) => DecideAsync(AllowAsync);
+        deny.Click += (_, _) => DecideAsync(async request =>
+        {
+            await _pairing.DenyAsync(request).ConfigureAwait(true);
+            return true;
+        });
+        own.Click += (_, _) => DecideAsync(async request =>
+        {
+            await _pairing.AcceptAsOwnAsync(request).ConfigureAwait(true);
+            return true;
+        });
         known.Click += (_, _) => DecideAsync(AdoptAsync);
 
         var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
@@ -456,7 +510,8 @@ internal sealed class DevicesWindow : Window, IDisposable
         return row;
     }
 
-    private async void DecideAsync(Func<PendingPairing, Task> decision)
+    /// <param name="decision">The decision; false when nothing was decided after all - a question cancelled.</param>
+    private async void DecideAsync(Func<PendingPairing, Task<bool>> decision)
     {
         if (_waiting.SelectedItem is not PendingEntry entry)
         {
@@ -466,7 +521,10 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         var before = _status.Text;
 
-        await decision(entry.Request).ConfigureAwait(true);
+        if (!await decision(entry.Request).ConfigureAwait(true))
+        {
+            return;
+        }
 
         // A decision that said something of its own keeps it.
         if (_status.Text == before)
