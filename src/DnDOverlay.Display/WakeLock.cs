@@ -38,14 +38,24 @@ internal sealed partial class WakeLock : IDisposable
 
     private readonly Action<bool> _report;
 
+    /// <summary>The one call to the operating system: hold the screens on, or let them go.</summary>
+    private readonly Action<bool> _request;
+
     private bool _connected;
     private bool _wanted = true;
     private bool _held;
 
     internal WakeLock(Dispatcher dispatcher, Action<bool> report)
+        : this(dispatcher, report, Request)
+    {
+    }
+
+    /// <param name="request">The call to the operating system - handed in by a test, which has no screen to keep on.</param>
+    internal WakeLock(Dispatcher dispatcher, Action<bool> report, Action<bool> request)
     {
         _dispatcher = dispatcher;
         _report = report;
+        _request = request;
     }
 
     /// <summary>Whether a control is on the other end right now.</summary>
@@ -99,10 +109,13 @@ internal sealed partial class WakeLock : IDisposable
 
         // Invoke rather than InvokeAsync on purpose: after this returns the state IS what it says,
         // so a Dispose that follows straight away cannot overtake the acquisition it is undoing.
-        _ = _dispatcher.Invoke(() => SetThreadExecutionState(hold ? Continuous | DisplayRequired : Continuous));
+        _dispatcher.Invoke(() => _request(hold));
 
         _report(hold);
     }
+
+    private static void Request(bool hold) =>
+        _ = SetThreadExecutionState(hold ? Continuous | DisplayRequired : Continuous);
 
     [LibraryImport("kernel32.dll")]
     private static partial uint SetThreadExecutionState(uint flags);
