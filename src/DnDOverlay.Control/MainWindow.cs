@@ -275,8 +275,9 @@ internal sealed class MainWindow : Window, IDisposable
         };
 
         desk.Reported += (_, words) => Notify(words);
+        desk.Measured += (_, measure) => Report(measure);
 
-        _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said).Open(_panelHead);
+        _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said, Tidy).Open(_panelHead);
         _panelHead.Campaign(desk.OpenLabel);
         _edgeLabel.Text = desk.OpenLabel ?? Strings.MainNoCampaign;
         _board.ActiveChanged += (_, _) => Remember();
@@ -533,7 +534,13 @@ internal sealed class MainWindow : Window, IDisposable
     /// </para>
     /// </summary>
     /// <returns>How to take the notice away again, for one that stops being true by itself.</returns>
-    internal Action Notify(string text)
+    internal Action Notify(string text) => Notify(text, dismissed: null);
+
+    /// <summary>
+    /// A notice whose dismissal means something - <paramref name="dismissed"/> runs on "OK" - and
+    /// that may carry one more answer beside it, which dismisses it too.
+    /// </summary>
+    private Action Notify(string text, Action? dismissed, string? otherLabel = null, Action? other = null)
     {
         var message = new TextBlock
         {
@@ -553,6 +560,23 @@ internal sealed class MainWindow : Window, IDisposable
 
         DockPanel.SetDock(dismiss, System.Windows.Controls.Dock.Right);
         row.Children.Add(dismiss);
+
+        Button? second = null;
+
+        if (otherLabel is not null)
+        {
+            second = new Button
+            {
+                Content = otherLabel,
+                Padding = new Thickness(12, 2, 12, 2),
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Top,
+            };
+
+            DockPanel.SetDock(second, System.Windows.Controls.Dock.Right);
+            row.Children.Add(second);
+        }
+
         row.Children.Add(message);
 
         var notice = new Border
@@ -565,7 +589,20 @@ internal sealed class MainWindow : Window, IDisposable
             Child = row,
         };
 
-        dismiss.Click += (_, _) => _notices.Children.Remove(notice);
+        dismiss.Click += (_, _) =>
+        {
+            _notices.Children.Remove(notice);
+            dismissed?.Invoke();
+        };
+
+        if (second is not null)
+        {
+            second.Click += (_, _) =>
+            {
+                _notices.Children.Remove(notice);
+                other?.Invoke();
+            };
+        }
 
         _notices.Children.Add(notice);
 
@@ -1189,6 +1226,66 @@ internal sealed class MainWindow : Window, IDisposable
 
         _panel.ShowInStock(asset, entry.Name);
     }
+
+    /// <summary>The triggers of the stock notice that already spoke in this run - once per start (Part 7).</summary>
+    private readonly HashSet<StockTrigger> _spoken = [];
+
+    /// <summary>
+    /// The stock reporting itself, in the box beside the stage, under the report of the opening it
+    /// belongs to (Part 7). <b>"OK" acknowledges</b> the value it was told at - it comes again only a
+    /// step worse; <b>"Don't report again"</b> switches that one trigger off, the other stays.
+    /// </summary>
+    private void Report(StockMeasure measure)
+    {
+        if (_desk.Open is not { } open)
+        {
+            return;
+        }
+
+        foreach (var trigger in _settings.Current.Stock.Due(measure.FreeBytes, measure.Pictures, _spoken))
+        {
+            _spoken.Add(trigger);
+
+            var value = trigger is StockTrigger.FreeSpace ? measure.FreeBytes : measure.Pictures;
+
+            ControlLog.StockNoticed(_logger, open.Name, trigger, value);
+
+            var text = trigger is StockTrigger.FreeSpace
+                ? Strings.MainStockFreeSpace(measure.FreeBytes / (1024d * 1024 * 1024))
+                : Strings.MainStockPictures(_desk.OpenLabel ?? open.Name, measure.Pictures, _settings.Current.Stock.PicturesAbove);
+
+            Notify(
+                text,
+                dismissed: () => _settings.Update(current => current with
+                {
+                    Stock = trigger is StockTrigger.FreeSpace
+                        ? current.Stock with { FreeSpaceAcknowledged = measure.FreeBytes }
+                        : current.Stock with { PicturesAcknowledged = measure.Pictures },
+                }),
+                Strings.MainStockDontReport,
+                () => _settings.Update(current => current with
+                {
+                    Stock = trigger is StockTrigger.FreeSpace
+                        ? current.Stock with { FreeSpaceOn = false }
+                        : current.Stock with { PicturesOn = false },
+                }));
+        }
+    }
+
+    /// <summary>The tidy-up view of the open campaign - one at a time, brought forward when it is open already.</summary>
+    private void Tidy()
+    {
+        if (_tidy is { IsLoaded: true })
+        {
+            _ = _tidy.Activate();
+            return;
+        }
+
+        _tidy = new TidyWindow(this, _desk, ShowInStock);
+        _tidy.Show();
+    }
+
+    private TidyWindow? _tidy;
 
     private void Keep(PanelSide side)
     {

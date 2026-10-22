@@ -304,6 +304,14 @@ removed, a picture deleted by hand is marked missing (taking it in again heals i
 are left alone, and an inventory that cannot be read is rebuilt from the folder. One note beside
 the stage says what was found.
 
+**Tidy up campaign ...** in the campaign menu lists the open campaign's pictures, largest first,
+with their size and where they are used; a double click shows one in the stock, where pictures are
+deleted. *Check folder again* repeats the check of the opening; *Verify stock* reads every picture
+and names those whose file no longer matches what was taken in. When a campaign opens, the control
+also speaks up if the drive the campaigns lie on has less than 5 GB free or the campaign holds more
+than 2000 pictures — once per start, and after *OK* only when it has become a quarter worse. *Don't
+report again* switches that one notice off; both thresholds and switches are in *Settings*.
+
 **Scenes** keep an arrangement for next time. *Save screen as scene ...* in a screen's menu asks
 for a name — suggested from the screen and the time — and asks before it overwrites one that
 exists. The saved scenes stand in the panel's tab *Scenes* with a preview: a double tap lays one

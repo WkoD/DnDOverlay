@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Threading;
 using DnDOverlay.Campaign;
 using DnDOverlay.Hub;
@@ -49,6 +50,63 @@ internal sealed class CampaignDesk
 
     /// <summary>The reconciliation of a just-opened campaign has something to say. Raised on the UI thread.</summary>
     internal event EventHandler<string>? Reported;
+
+    /// <summary>
+    /// A campaign has opened and its folder check is done: the two numbers the stock reports on - its
+    /// pictures and the free space on the drive (Part 7). Measured from what opening reads anyway, plus
+    /// one system query; no other campaign is touched. Raised on the UI thread.
+    /// </summary>
+    internal event EventHandler<StockMeasure>? Measured;
+
+    /// <summary>
+    /// Free space on the drive the campaigns lie on, in bytes - one system query. A drive that cannot
+    /// be asked reports as roomy rather than as full: a false alarm about the disk would be worse than none.
+    /// </summary>
+    internal long FreeSpace()
+    {
+        try
+        {
+            return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(BasePath)) ?? BasePath).AvailableFreeSpace;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return long.MaxValue;
+        }
+    }
+
+    /// <summary>
+    /// "Check folder again" (Part 3): the name match of the opening once more - phases 1 and 2 - and
+    /// its report in the box beside the stage. Off the UI thread, like the first one.
+    /// </summary>
+    internal async Task RescanAsync()
+    {
+        if (Open is not { } campaign)
+        {
+            return;
+        }
+
+        var report = await Task.Run(() => Reconciliation.SettleAsync(campaign.Store, campaign.Shelf, Reconciliation.Survey(campaign.Store))).ConfigureAwait(true);
+
+        ControlLog.CampaignReconciled(
+            _logger, report.Adopted, report.Duplicates, report.Missing.Count, report.Foreign.Count, report.Reconstructed);
+        Reported?.Invoke(this, Words(campaign, report));
+
+        if (report.Adopted > 0 && ReferenceEquals(Open, campaign))
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>"Verify stock" (Part 3) for the open campaign - every file against its hash, off the UI thread.</summary>
+    internal async Task<StockVerification> VerifyAsync(IProgress<int> progress, CancellationToken cancellationToken)
+    {
+        var campaign = Open ?? throw new InvalidOperationException("No campaign is open.");
+        var result = await Task.Run(() => campaign.Store.VerifyAsync(progress, cancellationToken), cancellationToken).ConfigureAwait(true);
+
+        ControlLog.StockVerified(_logger, campaign.Name, result.Checked, result.Damaged.Count);
+
+        return result;
+    }
 
     /// <summary>Every campaign, for the switcher - one directory listing (Part 3).</summary>
     internal IReadOnlyList<CampaignSummary> List() => _library.List();
@@ -219,6 +277,12 @@ internal sealed class CampaignDesk
             {
                 Reported?.Invoke(this, words);
 
+                // Only for the campaign still open - a switch while the check ran has its own.
+                if (ReferenceEquals(Open, campaign))
+                {
+                    Measured?.Invoke(this, new StockMeasure(campaign.Store.Count, FreeSpace()));
+                }
+
                 // Pictures taken in from the folder belong in the lists now.
                 if (report.Adopted > 0 && ReferenceEquals(Open, campaign))
                 {
@@ -286,3 +350,8 @@ internal sealed class CampaignDesk
         return string.Join(" · ", parts);
     }
 }
+
+/// <summary>What the stock reports on, measured when a campaign opens (Part 7).</summary>
+/// <param name="Pictures">Pictures in the campaign just opened.</param>
+/// <param name="FreeBytes">Free space on the drive the campaigns lie on.</param>
+internal sealed record StockMeasure(int Pictures, long FreeBytes);

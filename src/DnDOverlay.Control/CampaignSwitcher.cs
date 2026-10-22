@@ -13,7 +13,7 @@ namespace DnDOverlay.Control;
 /// cleared, because its pictures come from the stock that closes, and undo does not reach past it.
 /// </para>
 /// </summary>
-internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<string> say)
+internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<string> say, Action tidy)
 {
     /// <summary>Opens the list under the campaign button.</summary>
     internal void Open(UIElement under)
@@ -57,6 +57,13 @@ internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<s
 
         setup.Click += (_, _) => new CampaignSetupWindow(owner, desk).Show();
         menu.Items.Add(setup);
+
+        // For the OPEN campaign, not the one tapped in the list: a closed campaign is not looked into
+        // (Part 7).
+        var tidying = new MenuItem { Header = Strings.CampaignSwitchTidy, IsEnabled = desk.Open is not null };
+
+        tidying.Click += (_, _) => tidy();
+        menu.Items.Add(tidying);
 
         menu.IsOpen = true;
     }

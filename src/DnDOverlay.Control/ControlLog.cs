@@ -415,4 +415,18 @@ internal static partial class ControlLog
         Level = LogLevel.Warning,
         Message = "The campaigns stay at \"{From}\": the move to \"{To}\" did not happen. {Reason}")]
     internal static partial void CampaignsNotMoved(ILogger logger, string from, string to, string reason);
+
+    /// <summary>"Verify stock" ran to its end - how many files were read, how many no longer match.</summary>
+    [LoggerMessage(
+        EventId = 4033,
+        Level = LogLevel.Information,
+        Message = "Verified the stock of \"{Name}\": {Checked} file(s) read, {Damaged} no longer match.")]
+    internal static partial void StockVerified(ILogger logger, string name, int @checked, int damaged);
+
+    /// <summary>The stock reported itself - which trigger, at what value (Part 7).</summary>
+    [LoggerMessage(
+        EventId = 4034,
+        Level = LogLevel.Information,
+        Message = "Stock notice for \"{Name}\": {Trigger} at {Value}.")]
+    internal static partial void StockNoticed(ILogger logger, string name, Core.Configuration.StockTrigger trigger, long value);
 }

@@ -195,6 +195,9 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// windows and menus at the next start. The devices have their own.
     /// </summary>
     public UiLanguage Language { get; set; } = UiLanguage.Automatic;
+
+    /// <summary>When the stock reports itself, and what the DM has already acknowledged (Part 7).</summary>
+    public StockReporting Stock { get; set; } = new();
 }
 
 /// <summary>Which edge of the window the campaign panel lies against (Part 7).</summary>

@@ -135,6 +135,24 @@ public sealed class ConfigurationFileTests : IDisposable
         Assert.Equal(log, reopened.Load(() => new ControlConfiguration()).Value.LogPanel);
     }
 
+    /// <summary>The stock notice's thresholds, switches and acknowledged values come back (Part 7).</summary>
+    [Fact]
+    public void The_stock_reporting_comes_back()
+    {
+        var stock = new StockReporting(3L * 1024 * 1024 * 1024, 1500, FreeSpaceOn: false, PicturesOn: true, FreeSpaceAcknowledged: 42, PicturesAcknowledged: 1800);
+
+        using (var file = Store(TimeProvider.System))
+        {
+            file.Save(new ControlConfiguration { Stock = stock });
+            file.Flush();
+        }
+
+        using var reopened = Store(TimeProvider.System);
+
+        Assert.Equal(stock, reopened.Load(() => new ControlConfiguration()).Value.Stock);
+        Assert.Equal(new StockReporting(), new ControlConfiguration().Stock);
+    }
+
     /// <summary>The control's language comes back; a file without one follows Windows (Part 8).</summary>
     [Fact]
     public void The_language_comes_back_and_defaults_to_automatic()

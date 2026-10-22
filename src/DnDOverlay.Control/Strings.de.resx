@@ -1595,4 +1595,91 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   <data name="ScreenTileFocusTooMany" xml:space="preserve">
     <value>Ein Fokus fasst höchstens {0} Bilder - mehr wäre eine zweite Szene.</value>
   </data>
+  <data name="TidyTitle" xml:space="preserve">
+    <value>Kampagne aufräumen</value>
+  </data>
+  <data name="TidyRescan" xml:space="preserve">
+    <value>Ordner erneut prüfen</value>
+  </data>
+  <data name="TidyVerify" xml:space="preserve">
+    <value>Bestand prüfen</value>
+  </data>
+  <data name="TidyBreakOff" xml:space="preserve">
+    <value>Abbrechen</value>
+  </data>
+  <data name="TidyColumnName" xml:space="preserve">
+    <value>Bild</value>
+  </data>
+  <data name="TidyColumnSize" xml:space="preserve">
+    <value>Größe</value>
+  </data>
+  <data name="TidyColumnPixels" xml:space="preserve">
+    <value>Pixel</value>
+  </data>
+  <data name="TidyColumnUsed" xml:space="preserve">
+    <value>Verwendet</value>
+  </data>
+  <data name="TidyUnused" xml:space="preserve">
+    <value>nirgends</value>
+  </data>
+  <data name="TidyDeleteNote" xml:space="preserve">
+    <value>Gelöscht wird in der Ablage - ein Doppelklick zeigt ein Bild dort.</value>
+  </data>
+  <data name="TidyRescanning" xml:space="preserve">
+    <value>Prüfe den Ordner ...</value>
+  </data>
+  <data name="TidyRescanned" xml:space="preserve">
+    <value>Ordner geprüft - der Bericht steht neben der Bühne.</value>
+  </data>
+  <data name="TidyVerifying" xml:space="preserve">
+    <value>Lese jedes Bild ...</value>
+  </data>
+  <data name="TidyVerifyBrokenOff" xml:space="preserve">
+    <value>Die Prüfung wurde abgebrochen.</value>
+  </data>
+  <data name="TidySize" xml:space="preserve">
+    <value>{0:0.0} MB</value>
+  </data>
+  <data name="TidyPixels" xml:space="preserve">
+    <value>{0} × {1}</value>
+  </data>
+  <data name="TidyUsedIn" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="TidySummary" xml:space="preserve">
+    <value>{0}: {1} Bild(er), {2:0.#} MB. {3:0.#} GB frei auf dem Laufwerk.</value>
+  </data>
+  <data name="TidyVerifiedAllWell" xml:space="preserve">
+    <value>{0} Bild(er) gelesen - jedes passt zu dem, was aufgenommen wurde.</value>
+  </data>
+  <data name="TidyVerifiedDamaged" xml:space="preserve">
+    <value>{0} Bild(er) gelesen, {1} passen nicht mehr zu dem, was aufgenommen wurde: {2}. Das Bild erneut aufnehmen, um es zu reparieren, oder in der Ablage löschen.</value>
+  </data>
+  <data name="MainStockFreeSpace" xml:space="preserve">
+    <value>Nur noch {0:0.0} GB frei auf dem Kampagnen-Laufwerk - die nächsten Bilder passen womöglich nicht mehr. Diese Kampagne aufräumen (Kampagnenmenü, "Kampagne aufräumen ...") oder in Windows Platz schaffen.</value>
+  </data>
+  <data name="MainStockPictures" xml:space="preserve">
+    <value>{0} enthält {1} Bilder - über {2} wird die Ablage beim Filtern und Öffnen zäh. "Kampagne aufräumen ..." im Kampagnenmenü zeigt, was den Platz belegt.</value>
+  </data>
+  <data name="MainStockDontReport" xml:space="preserve">
+    <value>Nicht mehr melden</value>
+  </data>
+  <data name="CampaignSwitchTidy" xml:space="preserve">
+    <value>Kampagne aufräumen ...</value>
+  </data>
+  <data name="SettingsStockFreeSpace" xml:space="preserve">
+    <value>Melden, wenn auf dem Kampagnen-Laufwerk weniger als</value>
+  </data>
+  <data name="SettingsStockFreeSpaceUnit" xml:space="preserve">
+    <value>GB frei sind</value>
+  </data>
+  <data name="SettingsStockPictures" xml:space="preserve">
+    <value>Melden, wenn die offene Kampagne mehr als</value>
+  </data>
+  <data name="SettingsStockPicturesUnit" xml:space="preserve">
+    <value>Bilder enthält</value>
+  </data>
+  <data name="SettingsStockNote" xml:space="preserve">
+    <value>Gemessen beim Öffnen einer Kampagne. Einmal je Start, danach erst wieder, wenn es um ein Viertel schlimmer ist.</value>
+  </data>
 </root>

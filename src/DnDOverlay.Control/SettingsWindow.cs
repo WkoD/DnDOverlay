@@ -69,6 +69,7 @@ internal sealed class SettingsWindow : Window, IDisposable
 
         panel.Children.Add(Heading(Strings.SettingsHeadingCampaigns));
         panel.Children.Add(Campaigns());
+        panel.Children.Add(Reporting());
 
         panel.Children.Add(Heading(Strings.SettingsHeadingLog));
         panel.Children.Add(Logging());
@@ -207,6 +208,56 @@ internal sealed class SettingsWindow : Window, IDisposable
             });
 
         return new StackPanel { Children = { Rows((Strings.SettingsLanguageLabel, language)), note } };
+    }
+
+    /// <summary>
+    /// When the stock reports itself (Part 7): the two thresholds, each with its switch - the same
+    /// switch "Don't report again" turns off in the notice. Measured when a campaign opens.
+    /// </summary>
+    private StackPanel Reporting()
+    {
+        var stock = _settings.Current.Stock;
+        var space = new CheckBox { Content = Strings.SettingsStockFreeSpace, IsChecked = stock.FreeSpaceOn, VerticalAlignment = VerticalAlignment.Center };
+        var spaceValue = new TextBox { Text = (stock.FreeSpaceBelowBytes / (1024d * 1024 * 1024)).ToString("0.#", CultureInfo.CurrentCulture), Width = 60, Margin = new Thickness(6, 0, 6, 0) };
+        var pictures = new CheckBox { Content = Strings.SettingsStockPictures, IsChecked = stock.PicturesOn, VerticalAlignment = VerticalAlignment.Center };
+        var picturesValue = new TextBox { Text = stock.PicturesAbove.ToString(CultureInfo.CurrentCulture), Width = 60, Margin = new Thickness(6, 0, 6, 0) };
+        var note = Note(Strings.SettingsStockNote);
+
+        space.Click += (_, _) => _settings.Update(current => current with { Stock = current.Stock with { FreeSpaceOn = space.IsChecked is true } });
+        pictures.Click += (_, _) => _settings.Update(current => current with { Stock = current.Stock with { PicturesOn = pictures.IsChecked is true } });
+        spaceValue.LostFocus += (_, _) =>
+        {
+            if (double.TryParse(spaceValue.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out var gigabytes) && gigabytes > 0)
+            {
+                _settings.Update(current => current with { Stock = current.Stock with { FreeSpaceBelowBytes = (long)(gigabytes * 1024 * 1024 * 1024) } });
+            }
+        };
+        picturesValue.LostFocus += (_, _) =>
+        {
+            if (int.TryParse(picturesValue.Text.Trim(), NumberStyles.None, CultureInfo.CurrentCulture, out var count) && count > 0)
+            {
+                _settings.Update(current => current with { Stock = current.Stock with { PicturesAbove = count } });
+            }
+        };
+
+        static StackPanel Line(CheckBox box, TextBox value, string unit) =>
+            new()
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 6, 0, 0),
+                Children = { box, value, new TextBlock { Text = unit, VerticalAlignment = VerticalAlignment.Center } },
+            };
+
+        return new StackPanel
+        {
+            Margin = new Thickness(0, 8, 0, 0),
+            Children =
+            {
+                Line(space, spaceValue, Strings.SettingsStockFreeSpaceUnit),
+                Line(pictures, picturesValue, Strings.SettingsStockPicturesUnit),
+                note,
+            },
+        };
     }
 
     /// <summary>The level of this control's own log - it takes effect at once (Part 8).</summary>

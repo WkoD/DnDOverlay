@@ -613,6 +613,51 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     }
 
     /// <summary>
+    /// "Verify stock" (Part 3, Part 7): every picture's file read and hashed against the content hash
+    /// it was recorded with - the thorough check the name match cannot make, and the reason it is
+    /// voluntary: two thousand pictures are minutes of reading. A file that is gone is not counted
+    /// here; it is in <see cref="Missing"/> already.
+    /// </summary>
+    /// <param name="progress">Told the number of pictures checked so far.</param>
+    /// <returns>The pictures whose file no longer matches what was taken in.</returns>
+    public async Task<StockVerification> VerifyAsync(IProgress<int>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var damaged = new List<AssetId>();
+        var checkedFiles = 0;
+        var done = 0;
+
+        foreach (var entry in Entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var file = FileOf(entry);
+
+            if (File.Exists(file))
+            {
+                byte[] hash;
+
+                var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+
+                await using (stream.ConfigureAwait(false))
+                {
+                    hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+                }
+
+                checkedFiles++;
+
+                if (!string.Equals(Convert.ToHexStringLower(hash), entry.ContentHash, StringComparison.Ordinal))
+                {
+                    damaged.Add(new AssetId(entry.AssetId));
+                }
+            }
+
+            progress?.Report(++done);
+        }
+
+        return new StockVerification(checkedFiles, damaged);
+    }
+
+    /// <summary>
     /// Makes the thumbnails that are missing and removes the ones nobody has - derived files,
     /// repaired without a word (Part 3). Only pictures WITHOUT a thumbnail are read.
     /// </summary>
@@ -773,3 +818,8 @@ public sealed class CampaignSchemaException : Exception
     {
     }
 }
+
+/// <summary>What "verify stock" found: how many files were read, and which no longer match (Part 3).</summary>
+/// <param name="Checked">Files read and hashed - pictures whose file is gone are not among them.</param>
+/// <param name="Damaged">Pictures whose file's content no longer matches the hash it was taken in with.</param>
+public sealed record StockVerification(int Checked, IReadOnlyList<AssetId> Damaged);

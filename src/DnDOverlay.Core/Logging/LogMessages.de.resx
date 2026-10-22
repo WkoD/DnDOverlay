@@ -449,4 +449,10 @@
   <data name="E4013_FrameTimes" xml:space="preserve">
     <value>Bühnen-Frames über {Seconds} s, {Frames} davon: Median {MedianMs} ms, 95. Perzentil {P95Ms} ms, Maximum {MaxMs} ms, Takt {CadenceMs} ms, CPU {CpuPercent} %, GC {GcMs} ms in {Sweeps} Durchgang/Durchgängen, längstes Zeichnen {DrawMs} ms, Hand {HandMs} ms verspätet.</value>
   </data>
+  <data name="E4033_StockVerified" xml:space="preserve">
+    <value>Bestand von "{Name}" geprüft: {Checked} Datei(en) gelesen, {Damaged} passen nicht mehr.</value>
+  </data>
+  <data name="E4034_StockNoticed" xml:space="preserve">
+    <value>Bestandsmeldung für "{Name}": {Trigger} bei {Value}.</value>
+  </data>
 </root>

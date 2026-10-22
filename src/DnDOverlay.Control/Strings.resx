@@ -1595,4 +1595,91 @@ Another DnDOverlay control is probably running already - look for its window bef
   <data name="ScreenTileFocusTooMany" xml:space="preserve">
     <value>A focus holds at most {0} pictures - more would be a second scene.</value>
   </data>
+  <data name="TidyTitle" xml:space="preserve">
+    <value>Tidy up campaign</value>
+  </data>
+  <data name="TidyRescan" xml:space="preserve">
+    <value>Check folder again</value>
+  </data>
+  <data name="TidyVerify" xml:space="preserve">
+    <value>Verify stock</value>
+  </data>
+  <data name="TidyBreakOff" xml:space="preserve">
+    <value>Break off</value>
+  </data>
+  <data name="TidyColumnName" xml:space="preserve">
+    <value>Picture</value>
+  </data>
+  <data name="TidyColumnSize" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="TidyColumnPixels" xml:space="preserve">
+    <value>Pixels</value>
+  </data>
+  <data name="TidyColumnUsed" xml:space="preserve">
+    <value>Used</value>
+  </data>
+  <data name="TidyUnused" xml:space="preserve">
+    <value>nowhere</value>
+  </data>
+  <data name="TidyDeleteNote" xml:space="preserve">
+    <value>Pictures are deleted in the stock - a double click shows one there.</value>
+  </data>
+  <data name="TidyRescanning" xml:space="preserve">
+    <value>Checking the folder ...</value>
+  </data>
+  <data name="TidyRescanned" xml:space="preserve">
+    <value>Folder checked - the report stands beside the stage.</value>
+  </data>
+  <data name="TidyVerifying" xml:space="preserve">
+    <value>Reading every picture ...</value>
+  </data>
+  <data name="TidyVerifyBrokenOff" xml:space="preserve">
+    <value>Verifying was broken off.</value>
+  </data>
+  <data name="TidySize" xml:space="preserve">
+    <value>{0:0.0} MB</value>
+  </data>
+  <data name="TidyPixels" xml:space="preserve">
+    <value>{0} × {1}</value>
+  </data>
+  <data name="TidyUsedIn" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="TidySummary" xml:space="preserve">
+    <value>{0}: {1} picture(s), {2:0.#} MB. {3:0.#} GB free on the drive.</value>
+  </data>
+  <data name="TidyVerifiedAllWell" xml:space="preserve">
+    <value>{0} picture(s) read - every one matches what was taken in.</value>
+  </data>
+  <data name="TidyVerifiedDamaged" xml:space="preserve">
+    <value>{0} picture(s) read, {1} no longer match what was taken in: {2}. Take the picture in again to repair it, or delete it in the stock.</value>
+  </data>
+  <data name="MainStockFreeSpace" xml:space="preserve">
+    <value>Only {0:0.0} GB free on the campaign drive - the next pictures may not fit. Tidy up this campaign (campaign menu, "Tidy up campaign ...") or make room in Windows.</value>
+  </data>
+  <data name="MainStockPictures" xml:space="preserve">
+    <value>{0} holds {1} pictures - above {2} the stock grows slow to filter and to open. "Tidy up campaign ..." in the campaign menu shows what takes the room.</value>
+  </data>
+  <data name="MainStockDontReport" xml:space="preserve">
+    <value>Don't report again</value>
+  </data>
+  <data name="CampaignSwitchTidy" xml:space="preserve">
+    <value>Tidy up campaign ...</value>
+  </data>
+  <data name="SettingsStockFreeSpace" xml:space="preserve">
+    <value>Report when the campaign drive has less than</value>
+  </data>
+  <data name="SettingsStockFreeSpaceUnit" xml:space="preserve">
+    <value>GB free</value>
+  </data>
+  <data name="SettingsStockPictures" xml:space="preserve">
+    <value>Report when the open campaign holds more than</value>
+  </data>
+  <data name="SettingsStockPicturesUnit" xml:space="preserve">
+    <value>pictures</value>
+  </data>
+  <data name="SettingsStockNote" xml:space="preserve">
+    <value>Measured when a campaign opens. Once per start, and again only when it is a quarter worse.</value>
+  </data>
 </root>

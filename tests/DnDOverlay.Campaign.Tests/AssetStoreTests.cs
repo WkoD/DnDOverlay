@@ -349,6 +349,31 @@ public sealed class AssetStoreTests : IDisposable
         Assert.Equal([goblin.Asset.AssetId.Value], Open().Entries.Select(entry => entry.AssetId));
     }
 
+    /// <summary>
+    /// "Verify stock" reads every file and finds the one whose content no longer matches its hash -
+    /// what the name match cannot see. A file that is gone is not read; it is missing already.
+    /// </summary>
+    [Fact]
+    public async Task VerifyingFindsAFileWhoseContentChanged()
+    {
+        var store = Open();
+        var kept = await Taken(store, "map.png", "Dorfkarte");
+        var spoiled = await Taken(store, "npc.png", "Grimmbart");
+        var gone = await Taken(store, "gone.png", "Weg");
+
+        await File.WriteAllBytesAsync(
+            Path.Combine(_directory, "assets", spoiled.Asset.AssetId.Value + "." + spoiled.Asset.Meta.Format),
+            [1, 2, 3],
+            TestContext.Current.CancellationToken);
+        File.Delete(Path.Combine(_directory, "assets", gone.Asset.AssetId.Value + "." + gone.Asset.Meta.Format));
+
+        var result = await store.VerifyAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, result.Checked);
+        Assert.Equal([spoiled.Asset.AssetId], result.Damaged);
+        Assert.DoesNotContain(kept.Asset.AssetId, result.Damaged);
+    }
+
     private AssetStore Open() => AssetStore.Open(_directory, _codec, _time);
 
     private static ReadOnlyMemory<byte> Bytes(string seed) => Encoding.UTF8.GetBytes("source:" + seed);
