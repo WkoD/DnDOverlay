@@ -1301,7 +1301,7 @@ public sealed partial class App : Application, IDisposable
 
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    var overlays = _windows.Values.Count(window => !window.Windowed);
+                    var overlays = RescueReach.Of(_windows.Select(pair => (pair.Key, pair.Value.Windowed))).Count;
 
                     if (words is not null && !_rescueUp && overlays > 0)
                     {
@@ -1335,7 +1335,7 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void HideHere()
     {
-        var screens = _windows.Keys.ToList();
+        var screens = RescueReach.Of(_windows.Select(pair => (pair.Key, pair.Value.Windowed)));
 
         foreach (var screen in screens)
         {
