@@ -291,7 +291,10 @@ internal sealed partial class PanelTouch
 
         var now = Environment.TickCount64;
 
-        if (ReferenceEquals(tapped, _lastTap)
+        // The same entry, even when the grid was drawn anew between the taps: the card is another
+        // element then, the entry it shows (its tag) the same.
+        if (_lastTap is { } last
+            && (ReferenceEquals(tapped, last) || (tapped.Tag is { } tag && Equals(tag, last.Tag)))
             && now - _lastTapMs <= GetDoubleClickTime()
             && (at - _lastTapAt).Length <= TapsApart)
         {

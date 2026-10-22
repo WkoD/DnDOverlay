@@ -32,6 +32,14 @@ namespace DnDOverlay.Control;
 /// <b>A finger taps, double taps, holds, scrolls and pulls out</b> - <see cref="PanelTouch"/> tells
 /// them apart; the mouse keeps its click, double click, Ctrl+click, frame and right button.
 /// </para>
+/// <para>
+/// <b>The table moving does not draw the grid again.</b> A token pushed at the table is a patch twenty
+/// times a second, and each one asks <see cref="CountAsync"/> for the marks "on 2" and "in 3": they are
+/// rewritten in the tiles that stand, and the tiles stay. A grid built anew would take the card a
+/// mouse carry holds its capture on out of the tree - the carry would end in the middle of the
+/// drag - and would forget the card a first tap landed on, so the second could never match it.
+/// For the same reason a redraw for any other cause waits while a carry is on its way.
+/// </para>
 /// </summary>
 internal sealed class StockView : Grid
 {
@@ -42,6 +50,7 @@ internal sealed class StockView : Grid
     private readonly Func<IReadOnlyList<ScreenView>> _screens;
     private readonly Action<string> _say;
     private readonly StockEdits _edits;
+    private readonly PanelCarry _carry;
 
     private readonly WrapPanel _tiles = new() { Background = Brushes.Transparent };
     private readonly Canvas _overlay = new() { IsHitTestVisible = false };
@@ -58,12 +67,18 @@ internal sealed class StockView : Grid
     private readonly List<AssetId> _selection = [];
     private readonly Dictionary<AssetId, Border> _cards = [];
 
+    /// <summary>The line of marks on each tile that has one, with what it is made of - rewritten in place when the counts change.</summary>
+    private readonly Dictionary<AssetId, (TextBlock Line, InventoryEntry Entry, bool Missing)> _marks = [];
+
     private string _filter = string.Empty;
     private PanelSort _sort = PanelSort.Newest;
     private double _zoom = 128;
     private IReadOnlyDictionary<AssetId, int> _lying = new Dictionary<AssetId, int>();
     private IReadOnlyDictionary<AssetId, int> _used = new Dictionary<AssetId, int>();
     private TilePoint? _frameFrom;
+
+    /// <summary>A redraw was asked for while a carry was on its way - it runs when the carry is over.</summary>
+    private bool _stale;
 
     internal StockView(
         ISessionApi session,
@@ -82,6 +97,16 @@ internal sealed class StockView : Grid
         _screens = screens;
         _say = say;
         _edits = edits;
+        _carry = carry;
+
+        carry.Ended += (_, _) =>
+        {
+            if (_stale)
+            {
+                _stale = false;
+                Refresh();
+            }
+        };
 
         // It takes the keyboard when an entry is pressed, so Del can tell "the stock" from "the stage"
         // by focus (Part 7) - the key goes to whatever has focus, not to whatever the hand is over.
@@ -207,6 +232,9 @@ internal sealed class StockView : Grid
                 .Select(Ref)]
             : [];
 
+    /// <summary>The campaigns, for the panel that runs the intake beside this grid.</summary>
+    internal CampaignDesk Desk => _desk;
+
     /// <summary>The selection changed - the menu's "send to all" follows it.</summary>
     internal event EventHandler? SelectionChanged;
 
@@ -218,10 +246,11 @@ internal sealed class StockView : Grid
     }
 
     /// <summary>
-    /// The one picture the grid is narrowed to by "Show in stock" (Part 7) - stronger than the filter
-    /// text, which would also find every name the picture's name is part of. Null shows by the filter.
+    /// The pictures the grid is narrowed to by "Show in stock", or by an intake that found them there
+    /// already (Part 7) - stronger than the filter text, which would also find every name the
+    /// picture's name is part of. Null shows by the filter.
     /// </summary>
-    internal AssetId? Narrowing { get; set; }
+    internal IReadOnlyCollection<AssetId>? Narrowing { get; set; }
 
     /// <summary>Draws the grid for this filter, order, tile size and side of the panel.</summary>
     internal void Apply(string filter, PanelSort sort, double zoom, PanelSide side)
@@ -255,15 +284,34 @@ internal sealed class StockView : Grid
             }
         }
 
+        var used = _desk.Open?.Shelf.UseCounts() ?? new Dictionary<AssetId, int>();
+
+        if (Same(counts, _lying) && Same(used, _used))
+        {
+            return;
+        }
+
         _lying = counts;
-        Refresh();
+        _used = used;
+
+        foreach (var (asset, (line, entry, missing)) in _marks)
+        {
+            line.Text = Marks(asset, entry, missing);
+        }
     }
 
-    /// <summary>Draws the grid again from the open campaign.</summary>
+    /// <summary>Draws the grid again from the open campaign - after a carry, when one is on its way.</summary>
     internal void Refresh()
     {
+        if (_carry.Carrying)
+        {
+            _stale = true;
+            return;
+        }
+
         _tiles.Children.Clear();
         _cards.Clear();
+        _marks.Clear();
         _touch.Forget();
 
         if (_desk.Open is not { } open)
@@ -276,7 +324,7 @@ internal sealed class StockView : Grid
         var entries = open.Store.Entries
             .Select(entry => (Entry: entry, Name: NameFilter.Normalise(entry.Name)))
             .Where(pair => Narrowing is { } only
-                ? pair.Entry.AssetId == only.Value
+                ? only.Contains(new AssetId(pair.Entry.AssetId))
                 : NameFilter.Matches(pair.Name, _filter))
             .Select(pair => pair.Entry);
 
@@ -316,22 +364,32 @@ internal sealed class StockView : Grid
     }
 
     /// <summary>
-    /// Picks a picture out and brings it into view with a short highlight - the end of "Show in
-    /// stock" (Part 7). After the layout pass, or there is nothing yet to scroll to.
+    /// Picks pictures out and brings them into view with a short highlight - the end of "Show in
+    /// stock" and of an intake that found them already there (Part 7). After the layout pass, or there
+    /// is nothing yet to scroll to.
     /// </summary>
-    internal void Reveal(AssetId asset)
+    internal void Reveal(IReadOnlyList<AssetId> assets)
     {
-        if (!_cards.TryGetValue(asset, out var card))
+        var cards = assets.Where(_cards.ContainsKey).ToList();
+
+        if (cards.Count == 0)
         {
             return;
         }
 
-        Select([asset]);
+        Select(cards);
 
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            card.BringIntoView();
-            card.BorderBrush = Brushes.Orange;
+            _cards.GetValueOrDefault(cards[0])?.BringIntoView();
+
+            foreach (var asset in cards)
+            {
+                if (_cards.TryGetValue(asset, out var card))
+                {
+                    card.BorderBrush = Brushes.Orange;
+                }
+            }
 
             var fading = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
 
@@ -371,38 +429,15 @@ internal sealed class StockView : Grid
 
         if (_zoom >= 64)
         {
-            var marks = new List<string>();
-
-            if (missing)
-            {
-                marks.Add(Strings.StockMarkMissing);
-            }
-
-            if (entry.IsAnimated)
-            {
-                marks.Add("GIF");
-            }
-
-            if (_lying.GetValueOrDefault(asset) is var on and > 0)
-            {
-                marks.Add(Strings.StockMarkOn(on));
-            }
-
-            // Whether something saved needs it, before anybody clicks (Part 7): "in 3" is three scenes
-            // or layouts. A picture nothing needs carries no mark and looks different for it.
-            if (_used.GetValueOrDefault(asset) is var used and > 0)
-            {
-                marks.Add(Strings.StockMarkIn(used));
-            }
-
             var top = new DockPanel
             {
                 VerticalAlignment = VerticalAlignment.Top,
                 Background = new LinearGradientBrush(Color.FromArgb(0xA0, 0, 0, 0), Colors.Transparent, 90) { RelativeTransform = new RotateTransform(180, 0.5, 0.5) },
             };
 
-            var right = new TextBlock { Text = string.Join(" · ", marks), Foreground = Brushes.White, Margin = new Thickness(3, 1, 4, 1), FontSize = 11 };
+            var right = new TextBlock { Text = Marks(asset, entry, missing), Foreground = Brushes.White, Margin = new Thickness(3, 1, 4, 1), FontSize = 11 };
 
+            _marks[asset] = (right, entry, missing);
             DockPanel.SetDock(right, Dock.Right);
             top.Children.Add(right);
 
@@ -443,6 +478,12 @@ internal sealed class StockView : Grid
         // of carrying all of them - and narrows it to this one only if the button comes up unmoved.
         var narrowOnRelease = false;
 
+        // What the selection was before such a narrowing. A double click is press, release, press:
+        // the release has narrowed already when the second press comes, and the double click must
+        // still send the selection it hit (Part 7: "double tap sends the selection when the entry hit
+        // belongs to it, else only it").
+        IReadOnlyList<AssetId>? beforeNarrowing = null;
+
         card.MouseLeftButtonDown += async (_, down) =>
         {
             down.Handled = true;
@@ -457,9 +498,17 @@ internal sealed class StockView : Grid
 
             if (down.ClickCount == 2)
             {
+                if (beforeNarrowing is { } kept)
+                {
+                    Select(kept);
+                }
+
+                beforeNarrowing = null;
                 await SendAsync(_active(), _selection.Contains(asset) ? Chosen : [Ref(entry)]).ConfigureAwait(true);
                 return;
             }
+
+            beforeNarrowing = null;
 
             if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
             {
@@ -473,6 +522,7 @@ internal sealed class StockView : Grid
             else if (_selection.Contains(asset) && _selection.Count > 1)
             {
                 narrowOnRelease = true;
+                beforeNarrowing = [.. _selection];
             }
             else
             {
@@ -500,7 +550,10 @@ internal sealed class StockView : Grid
             card.ContextMenu = Menu(entry);
         };
 
-        card.ContextMenu = Menu(entry);
+        // Built when it opens, above - not with the card: a menu per tile, each with an entry per
+        // screen and a scan of every scene for "used in", is the price of every redraw otherwise.
+        // An empty one stands in, or WPF would not raise the opening at all.
+        card.ContextMenu = new ContextMenu();
 
         return card;
     }
@@ -667,6 +720,41 @@ internal sealed class StockView : Grid
 
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// The marks top right (Part 7): missing, GIF, on how many screens it lies, in how many saved
+    /// scenes and layouts. "In 3" says before anybody clicks whether something saved needs it; a
+    /// picture nothing needs carries no mark and looks different for it.
+    /// </summary>
+    private string Marks(AssetId asset, InventoryEntry entry, bool missing)
+    {
+        var marks = new List<string>();
+
+        if (missing)
+        {
+            marks.Add(Strings.StockMarkMissing);
+        }
+
+        if (entry.IsAnimated)
+        {
+            marks.Add("GIF");
+        }
+
+        if (_lying.GetValueOrDefault(asset) is var on and > 0)
+        {
+            marks.Add(Strings.StockMarkOn(on));
+        }
+
+        if (_used.GetValueOrDefault(asset) is var used and > 0)
+        {
+            marks.Add(Strings.StockMarkIn(used));
+        }
+
+        return string.Join(" · ", marks);
+    }
+
+    private static bool Same(IReadOnlyDictionary<AssetId, int> one, IReadOnlyDictionary<AssetId, int> other) =>
+        one.Count == other.Count && one.All(pair => other.TryGetValue(pair.Key, out var count) && count == pair.Value);
 
     private static AssetRef Ref(InventoryEntry entry) => new(new AssetId(entry.AssetId), entry.Meta, entry.Name);
 

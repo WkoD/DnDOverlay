@@ -218,12 +218,12 @@ internal sealed class CampaignPanel : Border
 
         _typing.Stop();
         _narrowedTo = name;
-        _stock.Narrowing = asset;
+        _stock.Narrowing = [asset];
         _search.Text = name;
         _typing.Stop();
 
         Apply();
-        _stock.Reveal(asset);
+        _stock.Reveal([asset]);
     }
 
     /// <summary>Draws the open tab again - after a campaign change or a patch.</summary>
