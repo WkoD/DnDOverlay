@@ -122,31 +122,18 @@ internal sealed class StageGuard : IDisposable
             return;
         }
 
-        var covered = Covered();
-        var wanted = new HashSet<ScreenRef>();
-
         // Asked afresh, like the monitors: docking changes both, and a cached answer would be the
         // one that was true before the dock.
-        var own = LocalAddresses.Enumerate();
+        var wanted = CoveredScreens.Wanted(
+            _devices, LocalAddresses.Enumerate(), Covered(), screen => _session.ContextOf(screen).Presentation);
+        var (suppress, release) = CoveredScreens.Changes(_blocked, wanted);
 
-        foreach (var device in _devices.Where(device => Here(device, own)))
-        {
-            // A screen shown as a window does not lie on top of the stage - it can slip behind it
-            // like any window, so it is not held back (Part 6).
-            foreach (var screen in device.Screens.Where(screen =>
-                covered.Contains(screen.Screen.Screen)
-                && _session.ContextOf(screen.Screen).Presentation is not ScreenPresentation.Window))
-            {
-                _ = wanted.Add(screen.Screen);
-            }
-        }
-
-        foreach (var screen in wanted.Where(screen => !_blocked.Contains(screen)))
+        foreach (var screen in suppress)
         {
             _ = _session.SuppressAsync(screen, SuppressReason.ControlWindow);
         }
 
-        foreach (var screen in _blocked.Where(screen => !wanted.Contains(screen)).ToList())
+        foreach (var screen in release)
         {
             _ = _session.SuppressAsync(screen, reason: null);
         }
@@ -163,20 +150,4 @@ internal sealed class StageGuard : IDisposable
         // here, and a cached list would be the one that was true before it happened.
         return [.. StageCover.CoveredBy(handle, Screens.Enumerate(_deviceName))];
     }
-
-    /// <summary>
-    /// Whether that device is on THIS machine, and the connection is the only thing that can say
-    /// so. A machine name would not do - it is renameable and, on cloned display PCs, identical;
-    /// a <see cref="ScreenId"/> would not either, because two machines from one disk image can
-    /// report the very same device instance path (Part 3). Without this the control would suppress
-    /// a stranger's table because its monitor happens to carry the same path as ours.
-    /// <para>
-    /// <b>Not the loopback interface</b>, although the plan said so - measured, a display on this
-    /// very machine connects to the LAN address, because it takes whichever beacon it hears first
-    /// and the beacon goes out on every interface. The rule that holds is the wider one, and it is
-    /// no weaker: an address this machine answers on cannot belong to another machine.
-    /// </para>
-    /// </summary>
-    private static bool Here(DeviceView device, IReadOnlyList<LocalAddress> own) =>
-        device.Connected && LocalAddresses.IsThisMachine(device.Address, own);
 }
