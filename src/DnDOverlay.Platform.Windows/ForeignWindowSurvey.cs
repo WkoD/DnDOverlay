@@ -7,7 +7,8 @@ namespace DnDOverlay.Platform.Windows;
 /// The windows of other programs on this display PC: found, and laid (Part 6, "foreign windows").
 /// <para>
 /// <b>Four traps, each answered here.</b> The frame comes from <c>DWMWA_EXTENDED_FRAME_BOUNDS</c>, not
-/// <c>GetWindowRect</c>, which since Windows 10 includes the invisible shadow border; cloaked windows -
+/// <c>GetWindowRect</c>, which since Windows 10 includes the invisible shadow border, and a move is
+/// widened by that border again before it goes to <c>SetWindowPos</c>; cloaked windows -
 /// suspended Store apps that claim to be visible - are left out; tool windows and our own are left out,
 /// or the tile would draw itself; and a maximised window is restored before it is moved, or nothing
 /// visible happens.
@@ -116,14 +117,9 @@ public static unsafe partial class ForeignWindowSurvey
                     _ = ShowWindow(window, SwRestore);
                 }
 
-                laid = SetWindowPos(
-                    window,
-                    0,
-                    monitor.Left + (int)Math.Round(wanted.X * monitor.Width),
-                    monitor.Top + (int)Math.Round(wanted.Y * monitor.Height),
-                    (int)Math.Round(wanted.Width * monitor.Width),
-                    (int)Math.Round(wanted.Height * monitor.Height),
-                    SwpNoZOrder | SwpNoActivate);
+                var placed = WindowRect(wanted, monitor, Border(window));
+
+                laid = SetWindowPos(window, 0, placed.X, placed.Y, placed.Width, placed.Height, SwpNoZOrder | SwpNoActivate);
                 break;
 
             case WindowAction.Minimize:
@@ -151,6 +147,42 @@ public static unsafe partial class ForeignWindowSurvey
 
         return laid || error != ErrorAccessDenied ? WindowOutcome.Done : WindowOutcome.Elevated;
     }
+
+    /// <summary>
+    /// The rectangle to hand <c>SetWindowPos</c> so that the VISIBLE frame lands on
+    /// <paramref name="wanted"/>. The wireframe is the visible frame (read from
+    /// <c>DWMWA_EXTENDED_FRAME_BOUNDS</c>), but <c>SetWindowPos</c> sets the window rectangle, which
+    /// since Windows 10 includes the invisible shadow border - Part 6: "ein Verschieben darauf
+    /// gerechnet wäre um denselben Betrag daneben". Without widening by that border every move
+    /// shifted the window by it and shrank it by twice it, and the next move started from the
+    /// smaller frame.
+    /// </summary>
+    /// <param name="wanted">The visible frame, normalised to <paramref name="monitor"/>.</param>
+    /// <param name="border">How far the window rectangle reaches beyond the visible frame on each side, in pixels; zero where it cannot be read.</param>
+    public static (int X, int Y, int Width, int Height) WindowRect(
+        Rect wanted,
+        MonitorInfo monitor,
+        (int Left, int Top, int Right, int Bottom) border)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+
+        var left = monitor.Left + (int)Math.Round(wanted.X * monitor.Width);
+        var top = monitor.Top + (int)Math.Round(wanted.Y * monitor.Height);
+        var width = (int)Math.Round(wanted.Width * monitor.Width);
+        var height = (int)Math.Round(wanted.Height * monitor.Height);
+
+        return (left - border.Left, top - border.Top, width + border.Left + border.Right, height + border.Top + border.Bottom);
+    }
+
+    /// <summary>
+    /// The invisible border as it stands now - read after a maximised window is restored, because the
+    /// border of a maximised window is not the one it has in its normal place. Zero when either
+    /// rectangle cannot be read: seven pixels off is better than not moving at all.
+    /// </summary>
+    private static (int Left, int Top, int Right, int Bottom) Border(nint window) =>
+        Native.GetWindowRect(window, out var outer) && Frame(window) is { } visible
+            ? (visible.Left - outer.Left, visible.Top - outer.Top, outer.Right - visible.Right, outer.Bottom - visible.Bottom)
+            : (0, 0, 0, 0);
 
     private static Rect Normalise(Native.RectL frame, MonitorInfo monitor) =>
         new(
