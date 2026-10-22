@@ -103,11 +103,18 @@ public sealed class LogFile : IDisposable
     }
 
     /// <summary>Appends one rendered line. Silent about its own failures after the first.</summary>
-    public void Write(LogRecord record, string text)
+    public void Write(LogRecord record, string text) => Write(record, _ => text);
+
+    /// <summary>
+    /// Appends one line, rendered in <see cref="Culture"/> UNDER the same lock that
+    /// <see cref="Relabel"/> takes. Rendered outside it, a line put into words just before a language
+    /// switch landed after the "language changed" header in the old language, and the header marked
+    /// the wrong line (Part 8: the header shows from which line on the file reads differently).
+    /// </summary>
+    public void Write(LogRecord record, Func<CultureInfo, string> render)
     {
         ArgumentNullException.ThrowIfNull(record);
-
-        var line = Line(record, text);
+        ArgumentNullException.ThrowIfNull(render);
 
         lock (_gate)
         {
@@ -115,6 +122,8 @@ public sealed class LogFile : IDisposable
             {
                 return;
             }
+
+            var line = Line(record, render(Culture));
 
             // Counted in bytes rather than characters: the promise is about the size of the file,
             // and a German line with umlauts is longer than it looks.

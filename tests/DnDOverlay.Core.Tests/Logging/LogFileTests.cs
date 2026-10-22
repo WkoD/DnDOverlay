@@ -165,6 +165,52 @@ public sealed class LogFileTests : IDisposable
     }
 
     /// <summary>
+    /// A line being put into words while the language switches is written BEFORE the "language
+    /// changed" header, in the language it was rendered in - the switch waits for it. Rendered outside
+    /// the file's lock, the header came first and marked the wrong line.
+    /// </summary>
+    [Fact]
+    public async Task A_line_rendered_during_a_language_switch_lands_before_the_header()
+    {
+        var cancel = TestContext.Current.CancellationToken;
+        var timeout = TimeSpan.FromSeconds(10);
+
+        using var file = Open();
+        using var rendering = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+
+        file.Relabel(System.Globalization.CultureInfo.GetCultureInfo("en"));
+
+        var writing = Task.Run(
+            () => file.Write(
+                Record(1024, "TokenRefused", LogLevel.Warning),
+                culture =>
+                {
+                    rendering.Set();
+                    release.Wait(timeout, cancel);
+                    return "rendered in " + culture.Name;
+                }),
+            cancel);
+
+        Assert.True(rendering.Wait(timeout, cancel));
+
+        var switching = Task.Run(() => file.Relabel(System.Globalization.CultureInfo.GetCultureInfo("de")), cancel);
+
+        // The switch must wait for the line that is being rendered.
+        Assert.NotSame(switching, await Task.WhenAny(switching, Task.Delay(300, cancel)));
+
+        release.Set();
+        await writing.WaitAsync(timeout, cancel);
+        await switching.WaitAsync(timeout, cancel);
+
+        var all = ReadLines(Written().Single());
+        var line = Array.FindIndex(all, text => text.Contains("rendered in en", StringComparison.Ordinal));
+        var header = Array.FindIndex(all, text => text.Contains("| UI de |", StringComparison.Ordinal));
+
+        Assert.True(line >= 0 && header > line, string.Join(Environment.NewLine, all));
+    }
+
+    /// <summary>
     /// A logger that throws takes its caller with it, and on the display that caller is the UI
     /// thread - a full disk would become a crash. The failure is reported ONCE and the process
     /// carries on (Part 6).

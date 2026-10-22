@@ -105,7 +105,9 @@ public sealed class ProcessLog : ILoggerProvider
         ArgumentNullException.ThrowIfNull(record);
 
         Ring.Add(record);
-        _file?.Write(record, LogCatalog.Render(record, _culture));
+        // The file renders under its own lock, in its own language - so a line and a language switch
+        // cannot pass each other on the way in.
+        _file?.Write(record, culture => LogCatalog.Render(record, culture));
 
         Added?.Invoke(record);
     }
