@@ -233,6 +233,27 @@ public sealed class ScreenInventoryOverTheWireTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The device's name is the control's, reconciled at every connection: a device that says a
+    /// different name than its pairing entry is told the entry's. That one comparison covers a rename
+    /// made while it was off - also across a restart of the control, which used to lose it - a
+    /// rename lost on a closing socket, and the known name after an adoption, which used to be sent
+    /// never.
+    /// </summary>
+    [Fact(Timeout = 30_000)]
+    public async Task A_device_that_says_another_name_is_told_the_controls()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Paired as BEAMER-PC, says TISCH-PC.
+        using var renamed = await ConnectAsync(Bystander, [Info(First)], cancellationToken);
+
+        var command = await ReceiveAsync<DeviceCommandMessage>(renamed, cancellationToken);
+
+        Assert.Equal(DeviceCommand.Rename, command.Command);
+        Assert.Equal("BEAMER-PC", command.Name);
+    }
+
+    /// <summary>
     /// "Which one are you?" goes to the device that was asked and to no other. With two devices of
     /// two screens each this is the only thing that says which tile is which physical screen, and
     /// a second table lighting up with names would be exactly the confusion it exists to end

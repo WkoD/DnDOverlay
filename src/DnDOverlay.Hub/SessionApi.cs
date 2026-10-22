@@ -832,14 +832,11 @@ public sealed class SessionApi : ISessionApi, IDisposable
     public Task<bool> SendWindowCommandAsync(
         ScreenRef screen, long handle, string program, WindowAction action, Rect? bounds, CancellationToken cancellationToken = default)
     {
-        if (!_connections.TryGet(screen.Device, out var connection))
-        {
-            return Task.FromResult(false);
-        }
-
-        _ = connection.TrySend(new WindowCommandMessage(handle, screen.Screen, program, action, bounds));
-
-        return Task.FromResult(true);
+        // Whether it went out: a connection on its way out still stands in the list for a moment and
+        // takes nothing, and a grip reported as done would never be answered.
+        return Task.FromResult(
+            _connections.TryGet(screen.Device, out var connection)
+            && connection.TrySend(new WindowCommandMessage(handle, screen.Screen, program, action, bounds)));
     }
 
     /// <inheritdoc />
@@ -1959,9 +1956,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
         return Task.CompletedTask;
     }
 
-    /// <summary>New names for devices that were switched off when they were renamed - they go out on connect.</summary>
-    private readonly ConcurrentDictionary<DeviceId, string> _renames = new();
-
     /// <inheritdoc />
     public Task<bool> SendDeviceCommandAsync(DeviceId device, DeviceCommand command, string? name = null, CancellationToken cancellationToken = default)
     {
@@ -1976,35 +1970,31 @@ public sealed class SessionApi : ISessionApi, IDisposable
                 return Task.FromResult(false);
             }
 
-            if (connected)
-            {
-                _ = _renames.TryRemove(device, out _);
-                _ = connection!.TrySend(new DeviceCommandMessage(command, name));
-            }
-            else
-            {
-                _renames[device] = name;
-            }
+            // Now if it is here. Whether it is or not, and whether this send gets out or not, the
+            // pairing entry carries the name, and every connection compares the device's own name
+            // with it (HubEndpoints) - so a device that was off, a socket that was closing and a
+            // control restarted in between all end with the same name on both sides. Until M5 the
+            // name for a device that was off was kept here, in memory, and taken out before it had
+            // been delivered.
+            var sent = connected && connection!.TrySend(new DeviceCommandMessage(command, name));
 
-            HubLog.DeviceCommandSent(_logger, device, command, connected);
+            HubLog.DeviceCommandSent(_logger, device, command, sent);
 
             return Task.FromResult(true);
         }
 
-        if (!connected)
+        // The answer is whether it went out, not whether the device was in the list: a connection
+        // that is already closing still stands there for a moment and takes nothing, and "restart"
+        // reported as done is a restart nobody repeats (Part 7: "said rather than silently dropped").
+        if (!connected || !connection!.TrySend(new DeviceCommandMessage(command)))
         {
             return Task.FromResult(false);
         }
 
-        _ = connection!.TrySend(new DeviceCommandMessage(command));
         HubLog.DeviceCommandSent(_logger, device, command, true);
 
         return Task.FromResult(true);
     }
-
-    /// <summary>A new name kept for a device that was off when it was renamed - taken, so it goes out once.</summary>
-    internal string? TakeRename(DeviceId device) =>
-        _renames.TryRemove(device, out var name) ? name : null;
 
     /// <inheritdoc />
     public Task IdentifyScreensAsync(DeviceId device, CancellationToken cancellationToken = default)
@@ -2226,7 +2216,6 @@ public sealed class SessionApi : ISessionApi, IDisposable
         }
 
         _screens.Forget(device);
-        _ = _renames.TryRemove(device, out _);
         _ = _diagnosing.TryRemove(device, out _);
         _ = _windowsWanted.TryRemove(device, out _);
     }

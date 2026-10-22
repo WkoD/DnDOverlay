@@ -608,10 +608,14 @@ public static class HubEndpoints
 
             connection.TrySend(new ConfigUpdateMessage(settings));
 
-            // A rename made while the device was switched off: its screens' labels follow the name.
-            if (session is SessionApi api && api.TakeRename(device.Device) is { } renamed)
+            // The device's name is the control's, and it is reconciled here rather than remembered as
+            // a pending rename: a rename made while the device was off, one whose send was lost on a
+            // closing socket, one made before the control restarted, and the known device's name
+            // after an adoption all come down to this one comparison. Its screens' default labels
+            // follow the name (Part 7, ISessionApi.SendDeviceCommandAsync and AdoptDeviceAsync).
+            if (!string.Equals(hello.Name, device.Name, StringComparison.Ordinal))
             {
-                connection.TrySend(new DeviceCommandMessage(DeviceCommand.Rename, renamed));
+                connection.TrySend(new DeviceCommandMessage(DeviceCommand.Rename, device.Name));
             }
 
             // A diagnostic view that stayed open across the reconnect. The device forgot the wish

@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,11 +14,12 @@ public sealed class DeviceCommandTests
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     /// <summary>
-    /// A device renamed while it is switched off carries the new name in the lists at once, and the
-    /// device hears it once when it connects - not on every connection after.
+    /// A device renamed while it is switched off carries the new name in the lists at once. The
+    /// device hears it when it connects, from the comparison every connection makes (over the wire,
+    /// next door).
     /// </summary>
     [Fact]
-    public async Task A_rename_while_off_is_kept_for_the_next_connection_once()
+    public async Task A_rename_while_off_changes_the_name_in_the_lists_at_once()
     {
         var directory = Directory();
 
@@ -26,8 +28,37 @@ public sealed class DeviceCommandTests
         Assert.True(await session.SendDeviceCommandAsync(Device, DeviceCommand.Rename, "Beamer", Cancellation));
 
         Assert.Equal("Beamer", Assert.Single(directory.Paired).Name);
-        Assert.Equal("Beamer", session.TakeRename(Device));
-        Assert.Null(session.TakeRename(Device));
+    }
+
+    /// <summary>
+    /// A connection on its way out still stands in the list for a moment and takes nothing. A command
+    /// sent into it is not reported as sent - before, "restart" said done, and nobody repeated it.
+    /// </summary>
+    [Fact]
+    public async Task A_command_into_a_connection_that_takes_nothing_is_not_reported_sent()
+    {
+        var connections = new DisplayConnections();
+        var options = new HubOptions();
+
+        using var socket = WebSocket.CreateFromStream(Stream.Null, new WebSocketCreationOptions { IsServer = true });
+        using var outgoing = new SendQueues(
+            socket, options.SendLimits, new SocketReport("127.0.0.1", NullLogger.Instance), TimeProvider.System);
+
+        connections.Add(new DisplayConnection(
+            Device,
+            [new ScreenId("DISPLAY1")],
+            new HelloMessage(Device, "WAND-PC", "1.0.0", Protocol.Version, [], "a-token", null, null, null),
+            "127.0.0.1",
+            outgoing,
+            new Liveness(TimeProvider.System, options, outgoing.TrySend)));
+
+        outgoing.Dispose();
+
+        using var session = Session(connections: connections);
+
+        Assert.False(await session.SendDeviceCommandAsync(Device, DeviceCommand.Restart, cancellationToken: Cancellation));
+        Assert.False(await session.SendWindowCommandAsync(
+            new ScreenRef(Device, new ScreenId("DISPLAY1")), 42, "notepad", WindowAction.Minimize, null, Cancellation));
     }
 
     /// <summary>
@@ -83,11 +114,11 @@ public sealed class DeviceCommandTests
             Options.Create(new HubOptions { KnownDevices = [new PairedDevice(Device, "WAND-PC", PairingRole.Display, "a-token")] }),
             TimeProvider.System);
 
-    private static SessionApi Session(PairingDirectory? directory = null) =>
+    private static SessionApi Session(PairingDirectory? directory = null, DisplayConnections? connections = null) =>
         new(
             new SceneStore(),
             new ScreenCatalog(),
-            new DisplayConnections(),
+            connections ?? new DisplayConnections(),
             directory ?? Directory(),
             new SessionEvents(),
             null,
