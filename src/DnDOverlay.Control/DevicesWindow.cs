@@ -106,11 +106,18 @@ internal sealed class DevicesWindow : Window, IDisposable
         Lay(wide: true);
         SizeChanged += (_, _) => Lay(ActualWidth >= 1000);
 
+        // Only a pick that CHANGED forces the bands. The tree is rebuilt on every device event - a
+        // battery percent, a connect - and the rebuilt row is selected again, which raises this
+        // event for the same pick. Forced then, it cleared the bands under the cursor, the focused
+        // editor's LostFocus committed the half-typed name or number, and the rest of the typing
+        // went nowhere: the very case ShowBands backs off for (M5 review).
         _tree.SelectedItemChanged += (_, _) =>
         {
-            if ((_tree.SelectedItem as TreeViewItem)?.Tag is Picked picked)
+            if ((_tree.SelectedItem as TreeViewItem)?.Tag is Picked picked
+                && (picked.Device.Device, picked.Screen?.Screen) is var pick
+                && pick != _picked)
             {
-                _picked = (picked.Device.Device, picked.Screen?.Screen);
+                _picked = pick;
                 ShowBands(force: true);
             }
         };
