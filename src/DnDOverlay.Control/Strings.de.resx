@@ -879,6 +879,15 @@ Zum Löschen den Namen der Kampagne eintippen:</value>
   <data name="TileMenuRemoveAllPictures" xml:space="preserve">
     <value>Alle Bilder entfernen</value>
   </data>
+  <data name="DeviceBandSpreadArrivalSize" xml:space="preserve">
+    <value>Ankunftsgröße auf alle Bildschirme übertragen</value>
+  </data>
+  <data name="DeviceBandSpreadArrivalSizeTip" xml:space="preserve">
+    <value>Kopiert die Ankunftsgröße dieses Bildschirms einmal auf jeden Bildschirm, auch auf die ausgeschalteter Geräte. Danach lässt sich jeder Bildschirm wieder einzeln einstellen.</value>
+  </data>
+  <data name="DeviceBandSpreadArrivalSizeDone" xml:space="preserve">
+    <value>Ankunftsgröße {0:0.00} auf {1} Bildschirm(e) übertragen.</value>
+  </data>
   <data name="CampaignPanelTabPictures" xml:space="preserve">
     <value>Bilder</value>
   </data>

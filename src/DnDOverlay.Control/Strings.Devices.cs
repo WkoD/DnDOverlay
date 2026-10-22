@@ -283,4 +283,10 @@ internal static partial class Strings
     internal static string TileMenuResetItem => Text[nameof(TileMenuResetItem)];
 
     internal static string TileMenuRemoveAllPictures => Text[nameof(TileMenuRemoveAllPictures)];
+
+    internal static string DeviceBandSpreadArrivalSize => Text[nameof(DeviceBandSpreadArrivalSize)];
+
+    internal static string DeviceBandSpreadArrivalSizeTip => Text[nameof(DeviceBandSpreadArrivalSizeTip)];
+
+    internal static string DeviceBandSpreadArrivalSizeDone(double size, int screens) => Text.Format(nameof(DeviceBandSpreadArrivalSizeDone), size, screens);
 }

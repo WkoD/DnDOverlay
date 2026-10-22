@@ -189,6 +189,7 @@ internal sealed class DeviceBands
         }
 
         band.Children.Add(rows);
+        band.Children.Add(Spread(context.ScaleOnLoad));
 
         if (screen.Suppressed is not SuppressReason.Unavailable)
         {
@@ -547,6 +548,36 @@ internal sealed class DeviceBands
         };
 
         return box;
+    }
+
+    /// <summary>
+    /// "Arrival size to all screens" (DM, 22.10.2026): this screen's arrival size copied once onto every
+    /// screen the control knows, switched-off devices included - they get it when they connect. A copy,
+    /// not a table-wide setting: nothing inherits it afterwards, and each screen can be set apart again.
+    /// The real base size for the whole table is M8.
+    /// </summary>
+    private Button Spread(double scaleOnLoad)
+    {
+        var spread = Button(Strings.DeviceBandSpreadArrivalSize);
+
+        spread.ToolTip = Strings.DeviceBandSpreadArrivalSizeTip;
+        spread.Click += async (_, _) =>
+        {
+            var screens = _session.Screens;
+
+            foreach (var device in screens.GroupBy(view => view.Screen.Device))
+            {
+                await _session.ApplyConfigAsync(
+                    device.Key,
+                    new ConfigUpdate([.. device.Select(view => new ScreenConfigUpdate(view.Screen.Screen, new ScreenSettings(ScaleOnLoad: scaleOnLoad)))]))
+                    .ConfigureAwait(true);
+            }
+
+            _say(Strings.DeviceBandSpreadArrivalSizeDone(scaleOnLoad, screens.Count));
+            Changed?.Invoke(this, EventArgs.Empty);
+        };
+
+        return spread;
     }
 
     private async Task ApplyAsync(DeviceView device, ScreenView screen, ScreenSettings settings)

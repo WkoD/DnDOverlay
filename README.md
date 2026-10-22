@@ -218,7 +218,8 @@ does not appear on it —, arrival size and width, placement, the direction new
 pictures face, where parked pictures line up, the smallest and largest picture, names, turning,
 snapping, the arrival highlight, gliding, scrolling, the diagnostic bar. A value at its default
 stands back in grey with *default* after it; a value that was set stands in full with *Reset* beside
-it, and *Reset all to defaults* clears the screen. Every change takes effect at once — and works with
+it, and *Reset all to defaults* clears the screen. *Arrival size to all screens* copies the screen's
+arrival size once onto every screen, those of switched-off devices included. Every change takes effect at once — and works with
 the device switched off too: it goes out when the device connects. *Unpair …* names the screens and
 pictures that would be lost and offers to save every occupied screen as a scene first.
 

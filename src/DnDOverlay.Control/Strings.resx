@@ -879,6 +879,15 @@ Type the campaign's name to delete it:</value>
   <data name="TileMenuRemoveAllPictures" xml:space="preserve">
     <value>Remove all pictures</value>
   </data>
+  <data name="DeviceBandSpreadArrivalSize" xml:space="preserve">
+    <value>Arrival size to all screens</value>
+  </data>
+  <data name="DeviceBandSpreadArrivalSizeTip" xml:space="preserve">
+    <value>Copies this screen's arrival size once onto every screen, switched-off devices included. Each screen can be set apart again afterwards.</value>
+  </data>
+  <data name="DeviceBandSpreadArrivalSizeDone" xml:space="preserve">
+    <value>Arrival size {0:0.00} copied to {1} screen(s).</value>
+  </data>
   <data name="CampaignPanelTabPictures" xml:space="preserve">
     <value>Pictures</value>
   </data>
