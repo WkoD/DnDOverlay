@@ -206,4 +206,6 @@ internal static partial class Strings
     internal static string ScreenTileFocusOn(int count) => Text.Format(nameof(ScreenTileFocusOn), count);
 
     internal static string ScreenTileFocusTooMany(int limit) => Text.Format(nameof(ScreenTileFocusTooMany), limit);
+
+    internal static string TileLoadingCount(int arrived, int total) => Text.Format(nameof(TileLoadingCount), arrived, total);
 }

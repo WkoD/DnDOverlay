@@ -41,15 +41,23 @@ namespace DnDOverlay.Control;
 internal sealed class Loading : FrameworkElement
 {
     private readonly Pictures _pictures;
+    private readonly Func<AssetId, bool> _shown;
     private readonly Dictionary<AssetId, double> _fractions = [];
 
     private SceneState _scene = SceneState.Empty;
     private ScreenContext _screen = ScreenContext.Default(new PixelSize(1920, 1080), 96);
     private ViewRotation _view;
 
-    internal Loading(Pictures pictures)
+    /// <param name="pictures">Where the grey versions come from.</param>
+    /// <param name="shown">
+    /// Whether the drawing below already shows a picture. Only those get a fill: the drawing reads its
+    /// previews a few per pass (<see cref="SceneThumbnail"/>), and a fill that read the rest on its own
+    /// would put the whole load back into one pass.
+    /// </param>
+    internal Loading(Pictures pictures, Func<AssetId, bool> shown)
     {
         _pictures = pictures;
+        _shown = shown;
 
         // Nothing here takes a touch: it lies over the scene, and every grip belongs to what is
         // underneath.
@@ -118,17 +126,22 @@ internal sealed class Loading : FrameworkElement
             Draw(drawingContext, Layout.BackgroundRect(background, _screen), background.RotationDeg, background.AssetId, behind);
         }
 
-        if (!_scene.ItemsVisible)
+        if (_scene.ItemsVisible)
         {
-            return;
+            foreach (var item in _scene.Items.OfType<ImageItem>())
+            {
+                if (_fractions.TryGetValue(item.AssetId, out var fraction))
+                {
+                    Draw(drawingContext, Layout.ItemToRect(item, _screen), item.RotationDeg, item.AssetId, fraction);
+                }
+            }
         }
 
-        foreach (var item in _scene.Items.OfType<ImageItem>())
+        // Last, so no fill lies over it - and with the layers hidden too: what is transferred is the
+        // scene, whether or not it is shown right now.
+        if (Count(_scene, _fractions.Keys) is { } count)
         {
-            if (_fractions.TryGetValue(item.AssetId, out var fraction))
-            {
-                Draw(drawingContext, Layout.ItemToRect(item, _screen), item.RotationDeg, item.AssetId, fraction);
-            }
+            Tally(drawingContext, count.Arrived, count.Total);
         }
     }
 
@@ -140,6 +153,11 @@ internal sealed class Loading : FrameworkElement
     private void Draw(
         DrawingContext drawingContext, CoreRect normalised, double angleDeg, AssetId asset, double fraction)
     {
+        if (!_shown(asset))
+        {
+            return;
+        }
+
         var grey = _pictures.Grey(asset);
 
         if (grey is null)
@@ -174,6 +192,61 @@ internal sealed class Loading : FrameworkElement
                 new TilePoint(hull.Left, line),
                 new TilePoint(hull.Right, line));
         }
+    }
+
+    /// <summary>
+    /// <b>How many of how many</b> (Part 10, M5b; DM at the end of M4, S2): of the pictures this scene
+    /// shows, how many stand at the table, while any is still on its way - "300 of 700". Counted per
+    /// picture, not per item: one picture laid three times is one transfer. Null while nothing of this
+    /// scene is loading, and then nothing is drawn.
+    /// <para>
+    /// <b>From what is already here, and nothing new on the wire.</b> The device reports only what it
+    /// is still loading - a finished picture is said once and leaves its report - so the whole is the
+    /// scene, and what is missing is the part of it in the report.
+    /// </para>
+    /// </summary>
+    internal static (int Arrived, int Total)? Count(SceneState scene, IEnumerable<AssetId> loading)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(loading);
+
+        var pictures = scene.Items.OfType<ImageItem>().Select(item => item.AssetId).ToHashSet();
+
+        if (scene.Background is { } background)
+        {
+            pictures.Add(background.AssetId);
+        }
+
+        var missing = loading.Distinct().Count(pictures.Contains);
+
+        return missing == 0 ? null : (pictures.Count - missing, pictures.Count);
+    }
+
+    /// <summary>
+    /// The count, in the bottom left corner of the face on a plate of its own - a sentence about the
+    /// table rather than about one picture, so it stands on none of them. Not in the head: the head says
+    /// how things stand, never what is under way (Part 7).
+    /// </summary>
+    private void Tally(DrawingContext drawingContext, int arrived, int total)
+    {
+        var text = new FormattedText(
+            Strings.TileLoadingCount(arrived, total),
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            new Typeface("Segoe UI"),
+            11,
+            Brushes.White,
+            VisualTreeHelper.GetDpi(this).PixelsPerDip)
+        {
+            MaxTextWidth = Math.Max(1, RenderSize.Width - 12),
+            MaxLineCount = 1,
+            Trimming = TextTrimming.CharacterEllipsis,
+        };
+
+        var plate = new TileRect(4, RenderSize.Height - text.Height - 8, text.Width + 8, text.Height + 4);
+
+        drawingContext.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(0xB0, 0, 0, 0)), pen: null, plate, 3, 3);
+        drawingContext.DrawText(text, new TilePoint(plate.X + 4, plate.Y + 2));
     }
 
     /// <summary>The axis-parallel hull of the turned rectangle - what the fill line measures against.</summary>

@@ -58,6 +58,33 @@ internal sealed class SceneThumbnail : FrameworkElement
     }
 
     /// <summary>
+    /// How many previews one drawing reads, at most - <b>the drawing fills step by step, like the
+    /// table</b> (Part 10, M5b; DM at the end of M4, S2).
+    /// <para>
+    /// A preview is read from the campaign folder the first time it is drawn. Read all at once, seven
+    /// hundred pictures arriving in one patch held one drawing for as long as seven hundred reads take:
+    /// the tile showed nothing for a long time and then everything. The table takes at most one picture
+    /// per pass because that frame is the one a hand waits for; here the reason is the DM's stage, and
+    /// a few per pass keeps it answering while the pictures come in one after another - the same
+    /// behaviour, not the same reason. Four, because a 256 px preview from the local disk costs a few
+    /// milliseconds.
+    /// </para>
+    /// </summary>
+    internal const int PreviewsPerPass = 4;
+
+    /// <summary>The pictures whose preview this drawing has read - the ones it shows.</summary>
+    private readonly HashSet<AssetId> _read = [];
+
+    private int _readThisPass;
+    private bool _waiting;
+
+    /// <summary>
+    /// Whether this drawing shows a picture yet - asked by the loading fill, which draws only over what
+    /// is shown rather than reading the rest of the previews on its own.
+    /// </summary>
+    internal bool Shows(AssetId asset) => _read.Contains(asset);
+
+    /// <summary>
     /// The shape the drawing wants, and <b>the one place it is worked out</b>: a table turned by a
     /// quarter is upright in the tile, and whoever lays this element out has to give it that shape
     /// or everything drawn in it is stretched (<see cref="Viewing.AspectRatioInView"/>).
@@ -196,18 +223,69 @@ internal sealed class SceneThumbnail : FrameworkElement
             return;
         }
 
+        // The pictures forgot everything they held - another campaign is open - so what was read
+        // here is not held any more and comes in step by step again.
+        if (_pictures.Loaded < _read.Count)
+        {
+            _read.Clear();
+        }
+
+        _readThisPass = 0;
+        _waiting = false;
+
+        try
+        {
+            Scene(drawingContext, size);
+        }
+        finally
+        {
+            // Pictures left for later: the next pass draws again and reads the next few.
+            if (_waiting)
+            {
+                Redraw.Ask(this);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A picture's preview, read only within this pass's share (<see cref="PreviewsPerPass"/>). False
+    /// for one not read yet - it is not drawn this time and comes in a later pass.
+    /// </summary>
+    private bool TryPreview(AssetId asset, out ImageSource? picture)
+    {
+        picture = null;
+
+        if (!_read.Contains(asset))
+        {
+            if (_readThisPass >= PreviewsPerPass)
+            {
+                _waiting = true;
+                return false;
+            }
+
+            _readThisPass++;
+            _read.Add(asset);
+        }
+
+        picture = _pictures.For(asset);
+
+        return true;
+    }
+
+    private void Scene(DrawingContext drawingContext, Size size)
+    {
         // The ground is drawn whatever else happens: an empty screen is a screen, and a tile that
         // showed nothing at all would look like a tile that is broken.
         drawingContext.DrawRectangle(
             Brushes.Black, pen: null, new TileRect(0, 0, size.Width, size.Height));
 
-        if (_scene.BackgroundVisible && _scene.Background is { } background)
+        if (_scene.BackgroundVisible && _scene.Background is { } background && TryPreview(background.AssetId, out var ground))
         {
             Draw(
                 drawingContext,
                 Layout.BackgroundRect(background, _screen),
                 background.RotationDeg,
-                _pictures.For(background.AssetId),
+                ground,
                 size,
                 // The table draws no caption on the background, so neither does its picture here.
                 null,
@@ -261,11 +339,16 @@ internal sealed class SceneThumbnail : FrameworkElement
                 ? Parking.CutOf(_scene, _screen, item.ItemId)
                 : Parking.Cut.Whole;
 
+            if (!TryPicture(item, out var picture))
+            {
+                continue;
+            }
+
             Draw(
                 drawingContext,
                 Layout.ItemToRect(shown, _screen),
                 item.RotationDeg,
-                Picture(item),
+                picture,
                 size,
                 item is ImageItem { ShowName: true } named ? named.Name : null,
                 item.Locked,
@@ -281,11 +364,16 @@ internal sealed class SceneThumbnail : FrameworkElement
 
             foreach (var item in focus)
             {
+                if (!TryPicture(item, out var picture))
+                {
+                    continue;
+                }
+
                 Draw(
                     drawingContext,
                     Layout.ItemToRect(item, _screen),
                     item.RotationDeg,
-                    Picture(item),
+                    picture,
                     size,
                     item is ImageItem { ShowName: true } named ? named.Name : null,
                     item.Locked,
@@ -300,13 +388,26 @@ internal sealed class SceneThumbnail : FrameworkElement
         }
     }
 
-    /// <summary>What an item shows: a picture's decoded image, or a free text's drawing (M5b9).</summary>
-    private ImageSource? Picture(SceneItem item) => item switch
+    /// <summary>
+    /// What an item shows: a picture's decoded image, or a free text's drawing (M5b9). False for a
+    /// picture whose preview is left for a later pass (<see cref="PreviewsPerPass"/>).
+    /// </summary>
+    private bool TryPicture(SceneItem item, out ImageSource? picture)
     {
-        ImageItem image => _pictures.For(image.AssetId),
-        TextItem written => TextCard.Draw(written.Text),
-        _ => null,
-    };
+        switch (item)
+        {
+            case ImageItem image:
+                return TryPreview(image.AssetId, out picture);
+
+            case TextItem written:
+                picture = TextCard.Draw(written.Text);
+                return true;
+
+            default:
+                picture = null;
+                return true;
+        }
+    }
 
     /// <summary>
     /// One picture, from normalised scene coordinates into this element. The rectangle turns with

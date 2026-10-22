@@ -177,7 +177,7 @@ internal sealed class TileFace : Panel
         _selection = selection;
         _pictures = pictures;
         _thumbnail = new SceneThumbnail(pictures);
-        _loading = new Loading(pictures);
+        _loading = new Loading(pictures, _thumbnail.Shows);
         _marks = new Marks(selection);
 
         Children.Add(_thumbnail);
