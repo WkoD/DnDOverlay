@@ -61,6 +61,30 @@ public sealed class RecordingSessionTests
         Assert.Equal("Grimmbart", back.Name);
     }
 
+    /// <summary>
+    /// A saved scene loaded from the tab names itself in the step (Part 7: "'Ratsversammlung' loaded")
+    /// - two loads onto the same screen would otherwise read alike, and the DM could not tell which
+    /// one the next press takes back.
+    /// </summary>
+    [Fact]
+    public async Task A_loaded_scene_names_itself_in_the_step()
+    {
+        using var session = Recording();
+
+        await session.AddItemAsync(Screen, Picture("Grimmbart"), position: null, Cancellation);
+
+        var scene = await session.GetSceneAsync(Screen, Cancellation);
+
+        await session.ClearItemsAsync(Screen, Cancellation);
+        await session.LoadSavedSceneAsync("Ratsversammlung", Screen, scene, SceneLoad.Replace);
+
+        Assert.Equal(Strings.ScenesLoadStep("Ratsversammlung"), session.Timeline.UndoLabel);
+
+        await session.LoadSavedLayoutAsync("Taverne", [new LayoutScene(Screen, scene)], LayoutLoad.ReplaceAll);
+
+        Assert.Equal(Strings.LayoutsLoadStep("Taverne"), session.Timeline.UndoLabel);
+    }
+
     private static AssetRef Picture(string name) =>
         new(new AssetId(new string('a', 64)), new AssetMeta(800, 600, "png", 1024, IsAnimated: false, new string('b', 64)), name);
 

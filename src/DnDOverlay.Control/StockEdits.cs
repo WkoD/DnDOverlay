@@ -53,17 +53,31 @@ internal sealed class StockEdits
 
         while (NameDialog.Ask(owner, Strings.StockRenameTitle, Strings.StockRenamePrompt, suggestion, check: false) is { } typed)
         {
-            switch (open.Store.Rename(asset, typed))
+            // The inventory is written first; a disk that refuses it ends the rename before anything
+            // else changed, with the reason in the status line rather than a crash out of a menu.
+            if (!CampaignDesk.Writes(() => open.Store.Rename(asset, typed), out var outcome, out var refused))
+            {
+                _say(Strings.StockRenameFailed(old, refused));
+                return;
+            }
+
+            switch (outcome)
             {
                 case NameOutcome.Done:
                     var name = typed.Trim();
 
                     await _session.RenameAssetAsync(asset, name).ConfigureAwait(true);
-                    open.Shelf.RenameAsset(asset, name);
+
+                    // The scenes and layouts last: one that cannot be written keeps the old name in its
+                    // file - loading resolves names afresh anyway (Part 3) - and the DM is told which.
+                    var said = CampaignDesk.Writes(() => Done(() => open.Shelf.RenameAsset(asset, name)), out _, out var unwritten)
+                        ? Strings.StockRenamed(old, name)
+                        : Strings.StockRenamePartly(old, name, unwritten);
 
                     ControlLog.AssetRenamed(_logger, old, name);
-                    _say(Strings.StockRenamed(old, name));
+                    _say(said);
                     Changed?.Invoke(this, EventArgs.Empty);
+                    _desk.StockEdited();
 
                     return;
 
@@ -169,11 +183,16 @@ internal sealed class StockEdits
 
         await _session.RemoveAssetsAsync(ids).ConfigureAwait(true);
 
-        var emptied = open.Shelf.RemoveAssets(ids);
-
-        foreach (var id in ids)
+        // The screens are clear and the timeline cut; a scene file or the inventory the disk will not
+        // write stops the rest. Said, and what is left stays in the stock to be deleted again - never
+        // a task that ends unobserved with the DM told nothing.
+        if (!CampaignDesk.Writes(() => Removed(open, ids), out var emptied, out var refused))
         {
-            open.Store.Remove(id);
+            _say(Strings.StockDeletePartly(refused));
+            Changed?.Invoke(this, EventArgs.Empty);
+            _desk.StockEdited();
+
+            return;
         }
 
         ControlLog.AssetsDeleted(_logger, ids.Count, lying, scenes.Count, layouts.Count);
@@ -187,6 +206,27 @@ internal sealed class StockEdits
 
         _say(said);
         Changed?.Invoke(this, EventArgs.Empty);
+        _desk.StockEdited();
+    }
+
+    /// <summary>The saved files first, the stock's own files last: a reference never outlives the bytes it points at.</summary>
+    private static EmptiedByDelete Removed(OpenCampaign open, IReadOnlyCollection<AssetId> ids)
+    {
+        var emptied = open.Shelf.RemoveAssets(ids);
+
+        foreach (var id in ids)
+        {
+            open.Store.Remove(id);
+        }
+
+        return emptied;
+    }
+
+    private static bool Done(Action write)
+    {
+        write();
+
+        return true;
     }
 
     /// <summary>The scenes and layouts that held nothing but what was deleted - named, and offered for deletion.</summary>
@@ -219,12 +259,18 @@ internal sealed class StockEdits
 
         foreach (var scene in emptied.Scenes)
         {
-            shelf.DeleteScene(scene);
+            if (!CampaignDesk.Writes(() => shelf.DeleteScene(scene), out _, out var refused))
+            {
+                return " " + Strings.ScenesDeleteFailed(scene, refused);
+            }
         }
 
         foreach (var layout in emptied.Layouts)
         {
-            shelf.DeleteLayout(layout);
+            if (!CampaignDesk.Writes(() => shelf.DeleteLayout(layout), out _, out var refused))
+            {
+                return " " + Strings.LayoutsDeleteFailed(layout, refused);
+            }
         }
 
         return " " + Strings.StockEmptiedDeleted(emptied.Scenes.Count + emptied.Layouts.Count);

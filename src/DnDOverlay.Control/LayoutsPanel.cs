@@ -28,7 +28,7 @@ namespace DnDOverlay.Control;
 /// </summary>
 internal sealed class LayoutsPanel : Grid
 {
-    private readonly ISessionApi _session;
+    private readonly RecordingSession _session;
     private readonly CampaignDesk _desk;
     private readonly Pictures _pictures;
     private readonly Func<IReadOnlyList<ScreenView>> _screens;
@@ -50,7 +50,7 @@ internal sealed class LayoutsPanel : Grid
     private double _zoom = 192;
 
     internal LayoutsPanel(
-        ISessionApi session,
+        RecordingSession session,
         CampaignDesk desk,
         Pictures pictures,
         Func<IReadOnlyList<ScreenView>> screens,
@@ -194,9 +194,21 @@ internal sealed class LayoutsPanel : Grid
             return null;
         }
 
-        var name = FileNames.Suggest(Strings.LayoutsSuggestedName(FileNames.Stamp(DateTimeOffset.Now)));
+        // Numbered when the stamp is taken: a layout saved in the same minute must not make this one
+        // vanish without a word (Part 7: saved under the default name "without asking").
+        var name = FileNames.Numbered(
+            FileNames.Suggest(Strings.LayoutsSuggestedName(FileNames.Stamp(DateTimeOffset.Now))),
+            open.Shelf.Layouts.Select(saved => saved.Name));
 
-        if (open.Shelf.SaveLayout(name, parts, overwrite: false) is not ShelfOutcome.Done)
+        // The window closes after this, so a disk that refuses is said in front of it, not in a status
+        // line nobody will read.
+        if (!CampaignDesk.Writes(() => open.Shelf.SaveLayout(name, parts, overwrite: false), out var outcome, out var refused))
+        {
+            MessageBox.Show(owner, Strings.LayoutsWriteFailed(name, refused), Strings.LayoutsSaveTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return null;
+        }
+
+        if (outcome is not ShelfOutcome.Done)
         {
             return null;
         }
@@ -254,14 +266,20 @@ internal sealed class LayoutsPanel : Grid
             owner,
             Strings.LayoutsSaveTitle,
             Strings.LayoutsSavePrompt(parts.Count),
-            FileNames.Suggest(Strings.LayoutsSuggestedName(FileNames.Stamp(DateTimeOffset.Now))));
+            FileNames.Numbered(
+                FileNames.Suggest(Strings.LayoutsSuggestedName(FileNames.Stamp(DateTimeOffset.Now))),
+                open.Shelf.Layouts.Select(saved => saved.Name)));
 
         if (name is null)
         {
             return;
         }
 
-        var outcome = open.Shelf.SaveLayout(name, parts, overwrite: overwriting is not null);
+        if (!CampaignDesk.Writes(() => open.Shelf.SaveLayout(name, parts, overwrite: overwriting is not null), out var outcome, out var refused))
+        {
+            _say(Strings.LayoutsWriteFailed(name, refused));
+            return;
+        }
 
         if (outcome is ShelfOutcome.Taken)
         {
@@ -278,7 +296,11 @@ internal sealed class LayoutsPanel : Grid
                 return;
             }
 
-            outcome = open.Shelf.SaveLayout(name, parts, overwrite: true);
+            if (!CampaignDesk.Writes(() => open.Shelf.SaveLayout(name, parts, overwrite: true), out outcome, out refused))
+            {
+                _say(Strings.LayoutsWriteFailed(name, refused));
+                return;
+            }
         }
 
         if (outcome is ShelfOutcome.Done)
@@ -339,7 +361,7 @@ internal sealed class LayoutsPanel : Grid
 
         if (laying.Count > 0)
         {
-            await _session.LoadLayoutAsync(laying, mode, CancellationToken.None).ConfigureAwait(true);
+            await _session.LoadSavedLayoutAsync(name, laying, mode).ConfigureAwait(true);
         }
 
         var skipped = choices.Count(choice => choice.Onto is null && !choice.AsScene);
@@ -392,7 +414,13 @@ internal sealed class LayoutsPanel : Grid
                 FileNames.Suggest(Strings.LayoutsSceneName(part.ScreenName, stamp)),
                 open.Shelf.Scenes.Select(scene => scene.Name));
 
-            if (open.Shelf.SaveScene(name, part.Scene.Origin, part.Scene.Scene, overwrite: false) is ShelfOutcome.Done)
+            if (!CampaignDesk.Writes(() => open.Shelf.SaveScene(name, part.Scene.Origin, part.Scene.Scene, overwrite: false), out var outcome, out var refused))
+            {
+                _say(Strings.ScenesWriteFailed(name, refused));
+                break;
+            }
+
+            if (outcome is ShelfOutcome.Done)
             {
                 ControlLog.SceneSaved(_logger, name, part.Scene.Scene.Items.Count);
                 saved.Add(name);
@@ -534,7 +562,13 @@ internal sealed class LayoutsPanel : Grid
             return;
         }
 
-        switch (open.Shelf.RenameLayout(name, typed))
+        if (!CampaignDesk.Writes(() => open.Shelf.RenameLayout(name, typed), out var outcome, out var refused))
+        {
+            _say(Strings.LayoutsWriteFailed(name, refused));
+            return;
+        }
+
+        switch (outcome)
         {
             case ShelfOutcome.Done:
                 Refresh();
@@ -559,7 +593,16 @@ internal sealed class LayoutsPanel : Grid
             MessageBoxImage.Question,
             MessageBoxResult.No);
 
-        if (answer == MessageBoxResult.Yes && _desk.Open is { } open && open.Shelf.DeleteLayout(name))
+        if (answer != MessageBoxResult.Yes || _desk.Open is not { } open)
+        {
+            return;
+        }
+
+        if (!CampaignDesk.Writes(() => open.Shelf.DeleteLayout(name), out var deleted, out var refused))
+        {
+            _say(Strings.LayoutsDeleteFailed(name, refused));
+        }
+        else if (deleted)
         {
             Refresh();
         }

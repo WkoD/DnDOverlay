@@ -30,7 +30,7 @@ namespace DnDOverlay.Control;
 internal sealed class ScenesPanel : Grid
 {
 
-    private readonly ISessionApi _session;
+    private readonly RecordingSession _session;
     private readonly CampaignDesk _desk;
     private readonly Pictures _pictures;
     private readonly Func<ScreenRef?> _active;
@@ -54,7 +54,7 @@ internal sealed class ScenesPanel : Grid
     private double _zoom = 160;
 
     internal ScenesPanel(
-        ISessionApi session,
+        RecordingSession session,
         CampaignDesk desk,
         Pictures pictures,
         Func<ScreenRef?> active,
@@ -196,11 +196,15 @@ internal sealed class ScenesPanel : Grid
         var view = _screens().FirstOrDefault(known => known.Screen == screen);
         var label = view?.Info.Label ?? screen.Screen.Value;
 
+        // The suggestion is numbered when the stamp is taken - the same screen saved twice in one
+        // minute would otherwise suggest a name that ends in the overwrite question (Part 11).
         var name = overwriting ?? NameDialog.Ask(
             owner,
             Strings.ScenesSaveTitle,
             Strings.ScenesSavePrompt(label),
-            FileNames.Suggest(Strings.ScenesSuggestedName(label, FileNames.Stamp(DateTimeOffset.Now))));
+            FileNames.Numbered(
+                FileNames.Suggest(Strings.ScenesSuggestedName(label, FileNames.Stamp(DateTimeOffset.Now))),
+                shelf.Scenes.Select(saved => saved.Name)));
 
         if (name is null)
         {
@@ -210,7 +214,11 @@ internal sealed class ScenesPanel : Grid
         var scene = await _session.GetSceneAsync(screen, CancellationToken.None).ConfigureAwait(true);
         var origin = view?.Info.Size ?? new PixelSize(1920, 1080);
 
-        var outcome = shelf.SaveScene(name, origin, scene, overwrite: overwriting is not null);
+        if (!CampaignDesk.Writes(() => shelf.SaveScene(name, origin, scene, overwrite: overwriting is not null), out var outcome, out var refused))
+        {
+            _say(Strings.ScenesWriteFailed(name, refused));
+            return;
+        }
 
         if (outcome is ShelfOutcome.Taken)
         {
@@ -227,7 +235,11 @@ internal sealed class ScenesPanel : Grid
                 return;
             }
 
-            outcome = shelf.SaveScene(name, origin, scene, overwrite: true);
+            if (!CampaignDesk.Writes(() => shelf.SaveScene(name, origin, scene, overwrite: true), out outcome, out refused))
+            {
+                _say(Strings.ScenesWriteFailed(name, refused));
+                return;
+            }
         }
 
         if (outcome is ShelfOutcome.Done)
@@ -399,7 +411,7 @@ internal sealed class ScenesPanel : Grid
         var names = open.Store.Entries.ToDictionary(entry => entry.AssetId, entry => entry.Name, StringComparer.Ordinal);
         var (scene, missing) = SceneNames.Resolve(saved.Scene, asset => names.GetValueOrDefault(asset.Value));
 
-        await _session.LoadSceneAsync(screen, scene, mode, CancellationToken.None).ConfigureAwait(true);
+        await _session.LoadSavedSceneAsync(name, screen, scene, mode).ConfigureAwait(true);
 
         var pictures = scene.Items.OfType<ImageItem>().Select(item => item.AssetId)
             .Concat(scene.Background is { } background ? [background.AssetId] : [])
@@ -427,7 +439,13 @@ internal sealed class ScenesPanel : Grid
             return;
         }
 
-        switch (open.Shelf.RenameScene(name, typed))
+        if (!CampaignDesk.Writes(() => open.Shelf.RenameScene(name, typed), out var outcome, out var refused))
+        {
+            _say(Strings.ScenesWriteFailed(name, refused));
+            return;
+        }
+
+        switch (outcome)
         {
             case ShelfOutcome.Done:
                 Refresh();
@@ -452,7 +470,16 @@ internal sealed class ScenesPanel : Grid
             MessageBoxImage.Question,
             MessageBoxResult.No);
 
-        if (answer == MessageBoxResult.Yes && _desk.Open is { } open && open.Shelf.DeleteScene(name))
+        if (answer != MessageBoxResult.Yes || _desk.Open is not { } open)
+        {
+            return;
+        }
+
+        if (!CampaignDesk.Writes(() => open.Shelf.DeleteScene(name), out var deleted, out var refused))
+        {
+            _say(Strings.ScenesDeleteFailed(name, refused));
+        }
+        else if (deleted)
         {
             Refresh();
         }

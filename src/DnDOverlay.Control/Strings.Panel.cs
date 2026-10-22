@@ -288,4 +288,22 @@ internal static partial class Strings
     internal static string CampaignDeleteIncomplete(string name, string reason, string folder) => Text.Format(nameof(CampaignDeleteIncomplete), name, reason, folder);
 
     internal static string CampaignCheckFailed(string name, string reason) => Text.Format(nameof(CampaignCheckFailed), name, reason);
+
+    internal static string ScenesLoadStep(string name) => Text.Format(nameof(ScenesLoadStep), name);
+
+    internal static string LayoutsLoadStep(string name) => Text.Format(nameof(LayoutsLoadStep), name);
+
+    internal static string ScenesWriteFailed(string name, string reason) => Text.Format(nameof(ScenesWriteFailed), name, reason);
+
+    internal static string ScenesDeleteFailed(string name, string reason) => Text.Format(nameof(ScenesDeleteFailed), name, reason);
+
+    internal static string LayoutsWriteFailed(string name, string reason) => Text.Format(nameof(LayoutsWriteFailed), name, reason);
+
+    internal static string LayoutsDeleteFailed(string name, string reason) => Text.Format(nameof(LayoutsDeleteFailed), name, reason);
+
+    internal static string StockRenameFailed(string name, string reason) => Text.Format(nameof(StockRenameFailed), name, reason);
+
+    internal static string StockRenamePartly(string old, string name, string reason) => Text.Format(nameof(StockRenamePartly), old, name, reason);
+
+    internal static string StockDeletePartly(string reason) => Text.Format(nameof(StockDeletePartly), reason);
 }

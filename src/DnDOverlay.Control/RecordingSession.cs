@@ -151,6 +151,18 @@ internal sealed class RecordingSession : ISessionApi, IDisposable
         IReadOnlyList<LayoutScene> scenes, LayoutLoad mode, CancellationToken cancellationToken = default) =>
         RecordAsync(null, _ => Strings.RecordingLoadLayout, () => _inner.LoadLayoutAsync(scenes, mode, cancellationToken));
 
+    /// <summary>
+    /// A saved scene loaded from the tab - the same step as <see cref="LoadSceneAsync(ScreenRef, SceneState, SceneLoad, CancellationToken)"/>,
+    /// labelled with the scene's name: the label names what the next press hits (Part 7, "'Ratsversammlung'
+    /// loaded"), and two loads onto one screen would otherwise read alike. The hub's command carries no name.
+    /// </summary>
+    internal Task<IReadOnlyList<ItemId>> LoadSavedSceneAsync(string name, ScreenRef screen, SceneState scene, SceneLoad mode) =>
+        RecordAsync([screen], _ => Strings.ScenesLoadStep(name), () => _inner.LoadSceneAsync(screen, scene, mode, CancellationToken.None));
+
+    /// <summary>A saved layout loaded from the tab, labelled with its name.</summary>
+    internal Task<IReadOnlyDictionary<ScreenRef, IReadOnlyList<ItemId>>> LoadSavedLayoutAsync(string name, IReadOnlyList<LayoutScene> scenes, LayoutLoad mode) =>
+        RecordAsync(null, _ => Strings.LayoutsLoadStep(name), () => _inner.LoadLayoutAsync(scenes, mode, CancellationToken.None));
+
     public Task ClearAllAsync(CancellationToken cancellationToken = default) =>
         RecordAsync(null, _ => Strings.RecordingClearAll, () => _inner.ClearAllAsync(cancellationToken));
 
