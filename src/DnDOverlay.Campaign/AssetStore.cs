@@ -556,19 +556,70 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     }
 
     /// <summary>
-    /// Takes a picture that lies in <c>assets\</c> under its hash name but has no entry - a crash
-    /// between writing and recording, or a rebuilt inventory (Part 3). The identity is the file
-    /// name; the file is read once to measure it, the only bytes the reconciliation ever reads.
+    /// Puts back the file of an entry marked missing, from a copy found in the folder - "taking the
+    /// same picture in again heals the entry" (Part 3). Only when the copy is the file that went: its
+    /// bytes match the content hash the entry was recorded with, and nothing lies in its place.
     /// </summary>
-    /// <returns>The new entry's reference, or <see langword="null"/> when the file is no picture this build reads.</returns>
+    /// <returns>Whether the file was moved into place.</returns>
+    public bool Restore(AssetId asset, string file, ReadOnlySpan<byte> bytes)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+
+        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+        lock (_gate)
+        {
+            if (!_entries.TryGetValue(asset.Value, out var entry)
+                || !string.Equals(entry.ContentHash, hash, StringComparison.Ordinal)
+                || File.Exists(FileOf(entry)))
+            {
+                return false;
+            }
+
+            File.Move(file, FileOf(entry));
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether the stock has an entry for this picture, whether or not its file is there.</summary>
+    public bool Knows(AssetId asset)
+    {
+        lock (_gate)
+        {
+            return _entries.ContainsKey(asset.Value);
+        }
+    }
+
+    /// <summary>
+    /// Whether a file of this extension is one the stock delivers as it lies - what
+    /// <see cref="IImageCodec.Normalise"/> hands out. Only such a file can be adopted under its hash name
+    /// without going through the intake: anything else would be served as it is, past the conversion
+    /// and with a content type nobody can read (Part 5).
+    /// </summary>
+    public static bool IsDeliveryFormat(string extension) =>
+        extension.ToLowerInvariant() is "png" or "gif" or "jpg" or "jpeg";
+
+    /// <summary>
+    /// Takes a picture named by its hash that has no entry - a crash between writing and recording,
+    /// or a rebuilt inventory (Part 3). The identity is the file name; the file is read once to
+    /// measure it. It is checked BEFORE it is touched - a delivery format, a picture this build reads,
+    /// within the limits - and only then moved into <c>assets\</c>, never over a file that lies there:
+    /// a file that fails any of this is foreign and stays where it is (Part 3).
+    /// </summary>
+    /// <returns>
+    /// The entry's reference, or <see langword="null"/> when the file is no picture to adopt this way
+    /// or another file lies where it would go.
+    /// </returns>
     public AssetRef? AdoptStored(string file, string name, DateTimeOffset addedAt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         var id = new AssetId(Path.GetFileNameWithoutExtension(file).ToLowerInvariant());
+        var extension = Path.GetExtension(file).TrimStart('.').ToLowerInvariant();
 
-        if (!id.IsWellFormed)
+        if (!id.IsWellFormed || !IsDeliveryFormat(extension))
         {
             return null;
         }
@@ -579,17 +630,22 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         try
         {
             probe = _codec.Probe(bytes);
+
+            // The same limits as at the door: a file does not get past them by carrying a hash name.
+            _limits.ThrowIfExceeded(probe, bytes.Length);
         }
         catch (ImageRejectedException)
         {
             return null;
         }
 
+        var target = Path.Combine(Directory, AssetsFolder, id.Value + "." + extension);
+
         var entry = new InventoryEntry
         {
             AssetId = id.Value,
             AddedAt = addedAt,
-            Extension = Path.GetExtension(file).TrimStart('.').ToLowerInvariant(),
+            Extension = extension,
             PixelWidth = probe.PixelWidth,
             PixelHeight = probe.PixelHeight,
             IsAnimated = probe.Frames > 1,
@@ -602,6 +658,18 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             if (_entries.TryGetValue(id.Value, out var known))
             {
                 return new AssetRef(id, known.Meta, known.Name);
+            }
+
+            if (!string.Equals(Path.GetFullPath(file), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase))
+            {
+                // Moved only now, after the checks. And never over what lies there: nobody has looked
+                // at whether those bytes match, and a damaged copy must not replace a good file.
+                if (File.Exists(target))
+                {
+                    return null;
+                }
+
+                File.Move(file, target);
             }
 
             entry.Name = FreeName(name);

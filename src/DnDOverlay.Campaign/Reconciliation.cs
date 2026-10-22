@@ -117,23 +117,52 @@ public static partial class Reconciliation
         var kept = new List<string>();
         var done = 0;
 
-        foreach (var file in findings.Orphans)
+        // Files in assets\ first: a hash-named file there is the stock's own, and a copy of it somewhere
+        // else - a backup of the folder - is then judged against it rather than racing it for the place.
+        var assets = Path.Combine(store.Directory, "assets") + Path.DirectorySeparatorChar;
+
+        foreach (var file in findings.Orphans.OrderBy(file => file.StartsWith(assets, StringComparison.OrdinalIgnoreCase) ? 0 : 1))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var stem = Path.GetFileNameWithoutExtension(file);
-            var addedAt = new DateTimeOffset(File.GetLastWriteTimeUtc(file), TimeSpan.Zero);
-
-            if (HashName().IsMatch(stem))
+            // Taken into the stock meanwhile, by an earlier file of this run or a check beside it: it is
+            // the stock's own file now, and nothing below may treat it as a copy.
+            if (store.Keeps(file))
             {
-                var target = Path.Combine(store.Directory, "assets", stem.ToLowerInvariant() + Path.GetExtension(file).ToLowerInvariant());
+                progress?.Report(++done);
+                continue;
+            }
 
-                if (!string.Equals(Path.GetFullPath(target), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase))
+            var stem = Path.GetFileNameWithoutExtension(file);
+            var hashNamed = HashName().IsMatch(stem);
+            var bytes = await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
+
+            if (hashNamed && AssetStore.IsDeliveryFormat(Path.GetExtension(file).TrimStart('.')))
+            {
+                var asset = new AssetId(stem.ToLowerInvariant());
+
+                if (store.Knows(asset))
                 {
-                    File.Move(file, target, overwrite: true);
+                    // In the stock already. A byte-identical copy goes; the same file coming back heals
+                    // the entry whose file was missing; anything else under its name is not ours to
+                    // judge and stays (Part 3).
+                    if (store.Holds(asset, bytes))
+                    {
+                        if (RemoveCopy(store, file))
+                        {
+                            duplicates++;
+                        }
+                    }
+                    else if (store.Restore(asset, file, bytes))
+                    {
+                        adopted++;
+                    }
+                    else
+                    {
+                        foreign.Add(file);
+                    }
                 }
-
-                if (store.AdoptStored(target, NameFromScenes(shelf, stem) ?? stem[..12], addedAt) is not null)
+                else if (store.AdoptStored(file, NameFromScenes(shelf, stem) ?? stem[..12], AddedAt(file)) is not null)
                 {
                     adopted++;
                 }
@@ -144,8 +173,10 @@ public static partial class Reconciliation
             }
             else
             {
-                var bytes = await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
-                var result = await store.IngestAsync(bytes, stem, cancellationToken).ConfigureAwait(false);
+                // A hash-named file in a format the stock does not deliver comes through the intake like
+                // any other - converted, limited - and keeps the scene's name for it.
+                var proposed = hashNamed ? NameFromScenes(shelf, stem) ?? stem[..12] : stem;
+                var result = await store.IngestAsync(bytes, proposed, cancellationToken).ConfigureAwait(false);
 
                 if (result is IngestResult.Taken taken)
                 {
@@ -161,11 +192,9 @@ public static partial class Reconciliation
                     // Removed only when its bytes now lie in assets\ unchanged - "renamed to its hash and
                     // moved", "byte-identical copies removed" (Part 3). A token, or a picture converted on
                     // the way in, is not what the stock holds, and stays where the DM put it.
-                    if (store.Holds(taken.Asset.AssetId, bytes) && !store.Keeps(file))
+                    if (store.Holds(taken.Asset.AssetId, bytes))
                     {
-                        File.Delete(file);
-
-                        if (!isNew)
+                        if (RemoveCopy(store, file) && !isNew)
                         {
                             duplicates++;
                         }
@@ -200,6 +229,25 @@ public static partial class Reconciliation
             Kept = [.. kept.Select(path => Path.GetRelativePath(store.Directory, path))],
         };
     }
+
+    /// <summary>
+    /// Removes a byte-identical copy of what the stock holds - and never the stock's own file, which
+    /// is the same bytes by definition. False when it was not removed.
+    /// </summary>
+    private static bool RemoveCopy(AssetStore store, string file)
+    {
+        if (store.Keeps(file))
+        {
+            return false;
+        }
+
+        File.Delete(file);
+
+        return true;
+    }
+
+    /// <summary>When a picture adopted under its hash name came in: its file's time, the only clue left (Part 3).</summary>
+    private static DateTimeOffset AddedAt(string file) => new(File.GetLastWriteTimeUtc(file), TimeSpan.Zero);
 
     /// <summary>The name a scene of this campaign gives a picture known only by its hash (Part 3).</summary>
     private static string? NameFromScenes(SceneShelf shelf, string hash)

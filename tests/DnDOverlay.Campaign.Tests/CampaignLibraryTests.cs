@@ -194,6 +194,112 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.False(File.Exists(Path.Combine(campaign, "Ork.png")));
     }
 
+    /// <summary>
+    /// A hash name is no pass: a file named like one that is no picture is checked where it lies and
+    /// left there - not moved into assets\ first and then reported under a path that no longer exists.
+    /// </summary>
+    [Fact]
+    public async Task A_hash_named_file_that_is_no_picture_stays_where_it_lies()
+    {
+        var campaign = Campaign("Sturmküste");
+        var backup = Directory.CreateDirectory(Path.Combine(campaign, "Sicherung")).FullName;
+        var name = new string('a', 64) + ".png";
+
+        File.WriteAllBytes(Path.Combine(backup, name), FakeImageCodec.Unreadable);
+
+        var (_, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal([Path.Combine("Sicherung", name)], report.Foreign);
+        Assert.True(File.Exists(Path.Combine(backup, name)));
+        Assert.False(File.Exists(Path.Combine(campaign, "assets", name)));
+    }
+
+    /// <summary>
+    /// A copy of assets\ in a backup folder: a damaged copy never replaces the good file - nobody looked
+    /// at whether those bytes match - and an intact one is a byte-identical duplicate, removed and
+    /// counted as one rather than as a picture taken in.
+    /// </summary>
+    [Fact]
+    public async Task A_hash_named_copy_never_replaces_the_stock_file_and_an_identical_one_is_a_duplicate()
+    {
+        var campaign = Campaign("Sturmküste");
+
+        _codec.PassThrough = true;
+
+        var taken = await Ingest(Library().Open("Sturmküste").Store, "ork");
+        var name = taken.Asset.AssetId.Value + ".png";
+        var stored = Path.Combine(campaign, "assets", name);
+        var copy = Path.Combine(Directory.CreateDirectory(Path.Combine(campaign, "Sicherung")).FullName, name);
+
+        File.WriteAllBytes(copy, Bytes("beschädigt"));
+
+        var (_, damaged) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(Bytes("ork"), File.ReadAllBytes(stored));
+        Assert.Equal([Path.Combine("Sicherung", name)], damaged.Foreign);
+        Assert.Equal(0, damaged.Adopted);
+
+        File.WriteAllBytes(copy, Bytes("ork"));
+
+        var (_, intact) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(1, intact.Duplicates);
+        Assert.Equal(0, intact.Adopted);
+        Assert.False(File.Exists(copy));
+        Assert.Equal(Bytes("ork"), File.ReadAllBytes(stored));
+    }
+
+    /// <summary>The stock file of an entry marked missing, found under its hash name elsewhere, goes back into place.</summary>
+    [Fact]
+    public async Task A_hash_named_copy_of_a_missing_file_heals_its_entry()
+    {
+        var campaign = Campaign("Sturmküste");
+
+        _codec.PassThrough = true;
+
+        var taken = await Ingest(Library().Open("Sturmküste").Store, "ork");
+        var name = taken.Asset.AssetId.Value + ".png";
+        var copy = Path.Combine(Directory.CreateDirectory(Path.Combine(campaign, "Sicherung")).FullName, name);
+
+        File.Move(Path.Combine(campaign, "assets", name), copy);
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal(1, report.Adopted);
+        Assert.Empty(opened.Store.Missing);
+        Assert.True(File.Exists(Path.Combine(campaign, "assets", name)));
+    }
+
+    /// <summary>
+    /// A hash name does not get a file past the intake either: one in a format the stock does not
+    /// deliver is converted like any other (and its original stays), and one beyond the limits is not
+    /// taken in at all.
+    /// </summary>
+    [Fact]
+    public async Task A_hash_named_file_in_another_format_or_beyond_the_limits_does_not_bypass_the_intake()
+    {
+        var campaign = Campaign("Sturmküste");
+        var webp = Path.Combine(campaign, Hash(Bytes("drache")) + ".webp");
+
+        File.WriteAllBytes(webp, Bytes("drache"));
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Equal("png", Assert.Single(opened.Store.Entries).Extension);
+        Assert.Equal(1, report.Adopted);
+        Assert.True(File.Exists(webp));
+
+        var huge = Path.Combine(campaign, "assets", Hash(Bytes("riese")) + ".png");
+
+        File.WriteAllBytes(huge, Bytes("riese"));
+        _codec.Claims = new ImageProbe("png", 30_000, 64, 1);
+
+        var (reopened, beyond) = await OpenAndSettle("Sturmküste");
+
+        Assert.Single(reopened.Store.Entries);
+        Assert.Contains(Path.Combine("assets", Path.GetFileName(huge)), beyond.Foreign);
+    }
+
     /// <summary>A file deleted by hand leaves its entry marked, not removed - and taking the same picture in again heals it.</summary>
     [Fact]
     public async Task A_missing_file_is_marked_and_heals_when_the_picture_comes_back()
@@ -310,6 +416,8 @@ public sealed class CampaignLibraryTests : IDisposable
     }
 
     private static byte[] Bytes(string seed) => Encoding.UTF8.GetBytes("source:" + seed);
+
+    private static string Hash(byte[] bytes) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
 
     private static async Task<IngestResult.Taken> Ingest(AssetStore store, string seed, string? name = null) =>
         Assert.IsType<IngestResult.Taken>(await store.IngestAsync(
