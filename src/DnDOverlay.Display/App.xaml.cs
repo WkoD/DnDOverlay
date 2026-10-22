@@ -632,7 +632,7 @@ public sealed partial class App : Application, IDisposable
         // reconnect with it in silence: the device keeps its overlays, keeps showing what it shows,
         // and never looks for a control again, with not one line to say why. That is the worst
         // shape a fault can take on a machine nobody is sitting at (Part 1).
-        _ = RunAsync(host, options.Port, deviceName, _loggers).ContinueWith(
+        _ = RunAsync(host, options.Port, _loggers).ContinueWith(
             loop => DisplayLog.ConnectionLoopFailed(_logger, loop.Exception!),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted,
@@ -1257,7 +1257,6 @@ public sealed partial class App : Application, IDisposable
     private Task RunAsync(
         string? preferred,
         int port,
-        string deviceName,
         ILoggerFactory loggers)
     {
         var client = new DisplayClient(loggers.CreateLogger<DisplayClient>(), Power.Battery);
@@ -1270,7 +1269,7 @@ public sealed partial class App : Application, IDisposable
             // Read on every search, not once: after a pairing this device is bound to a control it
             // did not know when the loop started.
             listening => SearchAsync(discovery, listening),
-            (target, _) => ConnectAsync(client, discovery, target, deviceName),
+            (target, _) => ConnectAsync(client, discovery, target),
             _shutdown.Token);
     }
 
@@ -1415,8 +1414,7 @@ public sealed partial class App : Application, IDisposable
     private async Task<Attempt> ConnectAsync(
         DisplayClient client,
         DiscoveryListener discovery,
-        HubAddress target,
-        string deviceName)
+        HubAddress target)
     {
         var answeringFor = _answeringFor;
         var heardName = _heardName;
@@ -1439,7 +1437,7 @@ public sealed partial class App : Application, IDisposable
         // Built on the UI thread: it walks the screens, their names and parameters, and those
         // tables belong to it - a reconnect after waking the PC lands in the same moment as a burst
         // of DisplaySettingsChanged that rebuilds them.
-        var hello = await Dispatcher.InvokeAsync(() => Introduction(deviceName));
+        var hello = await Dispatcher.InvokeAsync(Introduction);
 
         _hubHttp = new Uri($"http://{target.Host}:{target.Port}/");
 
@@ -1630,7 +1628,7 @@ public sealed partial class App : Application, IDisposable
     /// keeps the comparison possible in the one case that needs it most.
     /// </para>
     /// </summary>
-    private HelloMessage Introduction(string deviceName)
+    private HelloMessage Introduction()
     {
         string? token = null;
 
@@ -1649,7 +1647,10 @@ public sealed partial class App : Application, IDisposable
 
         return new HelloMessage(
             _device,
-            deviceName,
+
+            // The name as it stands NOW, not as it stood at start: a rename from the control changes
+            // it while this process runs, and the hub's lines about this device are built from here.
+            _deviceName,
             typeof(App).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             Protocol.Version,
             Inventory(),
