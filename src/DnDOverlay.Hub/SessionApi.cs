@@ -236,8 +236,7 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
             // A heading's height - but never wider than most of the screen: a long line comes in
             // lower rather than reaching past both edges.
-            var screenAspect = context.AspectRatio > 0 ? context.AspectRatio : 1;
-            var scale = Math.Min(TextItem.ArrivalScale, 0.9 * screenAspect / shape);
+            var scale = Math.Min(TextItem.ArrivalScale, WidestText(shape, context));
             var centre = Placement.NextPosition(scene, scale, shape, context);
 
             var item = new TextItem(
@@ -276,8 +275,48 @@ public sealed class SessionApi : ISessionApi, IDisposable
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        return ApplyAsync(screen, new SetText(item, Written(text), Shape(aspectRatio)), cancellationToken);
+        var written = Written(text);
+        var shape = Shape(aspectRatio);
+
+        return ApplyAsync(
+            screen,
+            (scene, context) =>
+            {
+                if (scene.Items.FirstOrDefault(candidate => candidate.ItemId == item) is not TextItem current)
+                {
+                    return [new SetText(item, written, shape)];
+                }
+
+                // The height stays - until the words would no longer fit across the screen. Then the
+                // same cap a new text gets (AddTextAsync): lower rather than past both edges, in the
+                // same patch, so no surface ever draws the overlong line. A parked text is left
+                // alone; its size is the fan's (Parking).
+                var capped = current.Parked
+                    ? current
+                    : Manipulation.HoldAtEdge(
+                        current with
+                        {
+                            Text = written,
+                            AspectRatio = shape,
+                            Scale = Math.Min(current.Scale, WidestText(shape, context)),
+                        },
+                        context);
+
+                return capped.Scale == current.Scale && capped.CenterX == current.CenterX && capped.CenterY == current.CenterY
+                    ? [new SetText(item, written, shape)]
+                    :
+                    [
+                        new SetText(item, written, shape),
+                        new TransformItem(
+                            item, capped.CenterX, capped.CenterY, capped.Scale, capped.RotationDeg, capped.ZOrder, _scenes.NextRevision()),
+                    ];
+            },
+            cancellationToken);
     }
+
+    /// <summary>The largest height at which a text of this shape still lies within most of the screen's width.</summary>
+    private static double WidestText(double shape, ScreenContext context) =>
+        0.9 * (context.AspectRatio > 0 ? context.AspectRatio : 1) / shape;
 
     /// <summary>A text as it may stand on a table: control characters out, line breaks kept, trimmed, cut to length.</summary>
     private static string Written(string text)

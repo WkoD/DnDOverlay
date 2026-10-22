@@ -55,6 +55,25 @@ public sealed class TextItemTests
         Assert.Equal(before with { Text = "Kerker von Townsvil", AspectRatio = 8 }, after);
     }
 
+    /// <summary>
+    /// The height stays only while the words fit: a text that grows past the screen's width comes
+    /// down to the cap a new text gets, in the same patch, instead of reaching past both edges.
+    /// </summary>
+    [Fact]
+    public async Task Words_that_no_longer_fit_bring_the_text_down_to_the_screen_width()
+    {
+        using var session = Session();
+
+        var id = await session.AddTextAsync(Screen, "Kerker", 3, Cancellation);
+
+        await session.SetTextAsync(Screen, id, new string('x', 400), 60, Cancellation);
+
+        var after = Assert.IsType<TextItem>((await session.GetSceneAsync(Screen, Cancellation)).Items.Single());
+
+        Assert.Equal(60, after.AspectRatio);
+        Assert.True(Layout.ItemToRect(after, session.ContextOf(Screen)).Width <= 0.9 + 1e-9);
+    }
+
     private static SessionApi Session() =>
         new(
             new SceneStore(),
