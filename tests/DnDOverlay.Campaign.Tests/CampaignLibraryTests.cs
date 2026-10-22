@@ -176,9 +176,36 @@ public sealed class CampaignLibraryTests : IDisposable
         var library = Library();
         var campaign = library.CreateUnnamed();
 
-        library.Delete(campaign);
-
+        Assert.Equal(CampaignOutcome.Done, library.Delete(campaign));
         Assert.Empty(library.List());
+    }
+
+    /// <summary>
+    /// A file held open inside - a display still downloading a picture - and the delete deletes nothing
+    /// and says so, instead of leaving half a folder behind and throwing.
+    /// </summary>
+    [Fact]
+    public async Task A_delete_while_a_file_is_held_open_deletes_nothing()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to move a folder with a file held open inside");
+        }
+
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+        var taken = await Ingest(campaign.Store, "eins");
+        var picture = Assert.Single(Directory.GetFiles(Path.Combine(campaign.Directory, "assets"), taken.Asset.AssetId.Value + ".*"));
+
+        using (File.Open(picture, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.Equal(CampaignOutcome.Busy, library.Delete(campaign));
+        }
+
+        Assert.True(File.Exists(picture));
+        Assert.True(File.Exists(Path.Combine(campaign.Directory, "inventory.json")));
+        Assert.Single(library.List());
+        Assert.False(campaign.Store.IsClosed);
     }
 
     /// <summary>A loose picture in the root and one in a folder of the DM's own come in, renamed to their hash and moved; the originals are gone.</summary>

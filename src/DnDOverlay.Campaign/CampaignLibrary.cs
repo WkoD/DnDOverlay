@@ -46,7 +46,7 @@ public sealed class OpenCampaign
     public void Close() => Store.Close();
 }
 
-/// <summary>What became of a rename.</summary>
+/// <summary>What became of a rename or a delete.</summary>
 public enum CampaignOutcome
 {
     /// <summary>Done.</summary>
@@ -225,16 +225,21 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
     /// Deletes the open campaign with its folder - pictures, scenes, layouts. The one grip in the
     /// program that cannot be taken back; the question in front of it is the control's, and it asks
     /// for the name typed (Part 7).
+    /// <para>
+    /// <b>All or nothing, as far as the file system lets it be.</b> The folder is first moved aside in
+    /// one rename, which the system refuses while anything inside is held open - a display still
+    /// downloading a picture, "verify stock" reading one. Then nothing is deleted and the answer is
+    /// <see cref="CampaignOutcome.Busy"/>, rather than a folder half gone and an exception.
+    /// </para>
     /// </summary>
-    public void Delete(OpenCampaign campaign)
+    /// <returns><see cref="CampaignOutcome.Done"/>, or <see cref="CampaignOutcome.Busy"/> with the campaign as it was and its stock open again.</returns>
+    public CampaignOutcome Delete(OpenCampaign campaign)
     {
         ArgumentNullException.ThrowIfNull(campaign);
 
         // Only ever a folder directly under this base path: a recursive delete is the one call here
         // that could take something that is not a campaign.
-        var parent = Path.GetDirectoryName(Path.GetFullPath(campaign.Directory).TrimEnd(Path.DirectorySeparatorChar));
-
-        if (!string.Equals(parent, Path.GetFullPath(BasePath).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+        if (!FileNames.IsDirectlyUnder(campaign.Directory, BasePath))
         {
             throw new InvalidOperationException($"{campaign.Directory} is not a campaign under {BasePath}.");
         }
@@ -242,7 +247,40 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
         // Nothing may write the folder back after it is gone - the delete is final (Part 3).
         campaign.Close();
 
-        Directory.Delete(campaign.Directory, recursive: true);
+        var from = campaign.Directory;
+        var aside = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{from}.deleting-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.Move(from, aside);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            campaign.Store.Reopen();
+
+            return CampaignOutcome.Busy;
+        }
+
+        try
+        {
+            Directory.Delete(aside, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Something took hold of a file in the moment between: what is left goes back under its
+            // name, where the DM finds it, rather than standing in the switcher under a scratch name.
+            try
+            {
+                Directory.Move(aside, from);
+            }
+            catch (Exception back) when (back is IOException or UnauthorizedAccessException)
+            {
+            }
+
+            return CampaignOutcome.Busy;
+        }
+
+        return CampaignOutcome.Done;
     }
 
     private CampaignSummary Unnamed(string name)

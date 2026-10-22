@@ -105,4 +105,23 @@ public sealed class FileNamesTests
             Thread.CurrentThread.CurrentCulture = before;
         }
     }
+
+    /// <summary>
+    /// The guard in front of a recursive delete compares two spellings of the same place. A drive root
+    /// keeps its separator where every other folder loses it - with only one side trimmed, a campaign
+    /// on a stick used as the campaigns folder could never be deleted.
+    /// </summary>
+    [Fact]
+    public void A_folder_directly_under_a_drive_root_counts_as_under_it()
+    {
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        var folder = Path.Combine(Path.GetTempPath(), "Kampagnen");
+
+        Assert.True(FileNames.IsDirectlyUnder(Path.Combine(root, "Sturmküste"), root));
+        Assert.True(FileNames.IsDirectlyUnder(Path.Combine(folder, "Sturmküste"), folder + Path.DirectorySeparatorChar));
+        Assert.True(FileNames.IsDirectlyUnder(Path.Combine(folder, "Sturmküste") + Path.DirectorySeparatorChar, folder));
+        Assert.False(FileNames.IsDirectlyUnder(Path.Combine(folder, "Sturmküste", "scenes"), folder));
+        Assert.False(FileNames.IsDirectlyUnder(folder, folder));
+        Assert.False(FileNames.IsDirectlyUnder(root, root));
+    }
 }

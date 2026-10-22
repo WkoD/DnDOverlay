@@ -135,6 +135,24 @@ public static class FileNames
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="path"/> names an entry directly inside <paramref name="folder"/> - the
+    /// check on a BUILT path, before a recursive delete (Part 11, "paths from input"). Both sides are
+    /// spelled the same way first: a folder that is a drive root keeps its separator (<c>D:\</c>) where
+    /// any other loses it, and comparing a trimmed spelling with an untrimmed one refused every
+    /// campaign on a stick used as the campaigns folder.
+    /// </summary>
+    public static bool IsDirectlyUnder(string path, string folder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+
+        var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)));
+
+        return parent is not null
+            && string.Equals(parent, Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>The time stamp of a suggested name, without the colon a file name cannot carry: <c>2026-08-06 23-41</c>.</summary>
     public static string Stamp(DateTimeOffset at) =>
         at.ToString("yyyy-MM-dd HH-mm", System.Globalization.CultureInfo.InvariantCulture);
