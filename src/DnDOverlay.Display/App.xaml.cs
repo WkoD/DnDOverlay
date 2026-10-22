@@ -1951,6 +1951,15 @@ public sealed partial class App : Application, IDisposable
                 _configuration?.Save(_settings);
                 _configuration?.Flush();
 
+                // And it is the id the next Hello carries. Written to the file only, the device went
+                // on sending the old id: the hub probed the original again, found a clone again, and
+                // the DM was asked again - with yet another unused id written each time. What this
+                // device holds goes along: its scenes are still its own (Part 3, Part 7).
+                var fresh = new DeviceId(_settings.DeviceId);
+
+                _scenes.Rekey(_device, fresh);
+                _device = fresh;
+
                 DisplayLog.FreshIdentityTaken(_logger, _settings.DeviceId);
                 break;
 
