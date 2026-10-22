@@ -1443,7 +1443,7 @@ internal sealed class MainWindow : Window, IDisposable
             return;
         }
 
-        foreach (var trigger in _settings.Current.Stock.Due(measure.FreeBytes, measure.Pictures, _spoken))
+        foreach (var trigger in _settings.Current.Stock.Due(measure.FreeBytes, measure.Pictures, open.Name, _spoken))
         {
             _spoken.Add(trigger);
 
@@ -1461,7 +1461,7 @@ internal sealed class MainWindow : Window, IDisposable
                 {
                     Stock = trigger is StockTrigger.FreeSpace
                         ? current.Stock with { FreeSpaceAcknowledged = measure.FreeBytes }
-                        : current.Stock with { PicturesAcknowledged = measure.Pictures },
+                        : current.Stock.AcknowledgePictures(open.Name, measure.Pictures),
                 }),
                 Strings.MainStockDontReport,
                 () => _settings.Update(current => current with

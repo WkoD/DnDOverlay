@@ -139,7 +139,9 @@ public sealed class ConfigurationFileTests : IDisposable
     [Fact]
     public void The_stock_reporting_comes_back()
     {
-        var stock = new StockReporting(3L * 1024 * 1024 * 1024, 1500, FreeSpaceOn: false, PicturesOn: true, FreeSpaceAcknowledged: 42, PicturesAcknowledged: 1800);
+        var stock = new StockReporting(3L * 1024 * 1024 * 1024, 1500, FreeSpaceOn: false, PicturesOn: true, FreeSpaceAcknowledged: 42)
+            .AcknowledgePictures("Sturmküste", 1800)
+            .AcknowledgePictures("Vinland", 2500);
 
         using (var file = Store(TimeProvider.System))
         {
@@ -149,8 +151,41 @@ public sealed class ConfigurationFileTests : IDisposable
 
         using var reopened = Store(TimeProvider.System);
 
-        Assert.Equal(stock, reopened.Load(() => new ControlConfiguration()).Value.Stock);
+        var loaded = reopened.Load(() => new ControlConfiguration()).Value.Stock;
+
+        // A record compares its lists by reference; the lists are compared by content beside it.
+        Assert.Equal(stock with { PicturesAcknowledgedIn = null }, loaded with { PicturesAcknowledgedIn = null });
+        Assert.Equal(stock.PicturesAcknowledgedIn, loaded.PicturesAcknowledgedIn);
         Assert.Equal(new StockReporting(), new ControlConfiguration().Stock);
+    }
+
+    /// <summary>
+    /// A control.json from before the picture count was acknowledged per campaign - one shared
+    /// <c>picturesAcknowledged</c> - still loads with everything else in it; the old value is left unread.
+    /// </summary>
+    [Fact]
+    public void A_stock_reporting_with_one_shared_picture_count_still_loads()
+    {
+        const string Before = "\"freeSpaceAcknowledged\": 42,";
+
+        using (var file = Store(TimeProvider.System))
+        {
+            file.Save(new ControlConfiguration { Port = 47999, Stock = new StockReporting(FreeSpaceAcknowledged: 42) });
+            file.Flush();
+        }
+
+        var text = File.ReadAllText(Path0);
+
+        Assert.Contains(Before, text, StringComparison.Ordinal);
+        File.WriteAllText(Path0, text.Replace(Before, Before + " \"picturesAcknowledged\": 1800,", StringComparison.Ordinal));
+
+        using var reopened = Store(TimeProvider.System);
+        var loaded = reopened.Load(() => new ControlConfiguration());
+
+        Assert.Equal(ConfigurationOutcome.Loaded, loaded.Outcome);
+        Assert.Equal(47999, loaded.Value.Port);
+        Assert.Equal(42, loaded.Value.Stock.FreeSpaceAcknowledged);
+        Assert.Null(loaded.Value.Stock.PicturesAcknowledgedFor("Sturmküste"));
     }
 
     /// <summary>The campaign open last comes back - it is never opened by it, only offered (Part 4).</summary>
