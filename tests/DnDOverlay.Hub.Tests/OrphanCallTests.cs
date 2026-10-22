@@ -1,4 +1,6 @@
+using DnDOverlay.Core;
 using DnDOverlay.Core.Protocol;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -77,6 +79,54 @@ public sealed class OrphanCallTests
     }
 
     /// <summary>
+    /// DM decision of 22.10.2026: with "accept new devices" off, the call opens the door for its two
+    /// minutes to the displays answering it - they bring the token of the control they were bound to -
+    /// and to nobody else: a new device, which brings none, stays outside, and so does an answer that
+    /// comes after the two minutes. The press is the consent; the DM still decides each request.
+    /// </summary>
+    [Fact]
+    public void While_it_lasts_the_call_lets_its_answers_past_a_closed_gate_and_nobody_else()
+    {
+        var clock = new Clock();
+        var call = new OrphanCall(clock);
+        var directory = new PairingDirectory(Options.Create(new HubOptions { AcceptNewDevices = false }), TimeProvider.System, call);
+
+        Assert.IsType<Admission.Refused>(directory.Consider(Hello(1, token: "of-the-old-control"), "10.0.0.7"));
+
+        call.Start();
+
+        var answer = Assert.IsType<Admission.Waiting>(directory.Consider(Hello(2, token: "of-the-old-control"), "10.0.0.8"));
+
+        Assert.True(answer.Request.Snapshot.BroughtUnknownToken);
+        Assert.False(answer.Request.Decision.IsCompleted);
+        Assert.IsType<Admission.Refused>(directory.Consider(Hello(3), "10.0.0.9"));
+
+        clock.Advance(OrphanCall.Duration);
+
+        Assert.IsType<Admission.Refused>(directory.Consider(Hello(4, token: "of-the-old-control"), "10.0.0.10"));
+        Assert.Equal(new DeviceId(Some(2)), Assert.Single(directory.Pending).Device);
+        Assert.False(directory.AcceptNewDevices);
+    }
+
+    /// <summary>The hub hands the call it carries in the beacon to the pairing, so the press reaches the gate.</summary>
+    [Fact]
+    public void The_hub_hands_its_call_to_the_pairing()
+    {
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddDnDOverlayHub(options => options.AcceptNewDevices = false);
+
+        using var provider = services.BuildServiceProvider();
+
+        var directory = provider.GetRequiredService<PairingDirectory>();
+
+        provider.GetRequiredService<OrphanCall>().Start();
+
+        Assert.IsType<Admission.Waiting>(directory.Consider(Hello(2, token: "of-the-old-control"), "10.0.0.8"));
+    }
+
+    /// <summary>
     /// The beacon is built every round, so a call started while it runs is in the next datagram -
     /// over a real socket, filtered by our own identifier like every test on this port.
     /// </summary>
@@ -130,6 +180,17 @@ public sealed class OrphanCallTests
             }
         }
     }
+
+    private static Guid Some(int number) => new($"00000000-0000-0000-0000-0000000000{number:00}");
+
+    private static HelloMessage Hello(int device, string? token = null) =>
+        new(new DeviceId(Some(device)),
+            "TISCH-PC",
+            "1.0.0",
+            Protocol.Version,
+            [new ScreenInfo(new ScreenId(@"\\?\DISPLAY#TEST#1"), "TISCH-PC//DISPLAY1", null, new PixelSize(1920, 1080), 96, true)],
+            token,
+            "4271");
 
     private sealed class Clock : TimeProvider
     {

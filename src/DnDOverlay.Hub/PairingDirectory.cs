@@ -116,13 +116,20 @@ public sealed class PairingDirectory
     private readonly Dictionary<string, Attempts> _attempts = new(StringComparer.Ordinal);
     private readonly TimeProvider _time;
     private readonly HubOptions _options;
+    private readonly OrphanCall? _orphans;
 
-    public PairingDirectory(IOptions<HubOptions> options, TimeProvider time)
+    /// <param name="orphans">
+    /// The call for orphaned displays, shared with the beacon that carries it: while it lasts, the
+    /// displays answering it pass a closed <see cref="AcceptNewDevices"/>. Optional for the tests that
+    /// do not call; the hub always hands it in.
+    /// </param>
+    public PairingDirectory(IOptions<HubOptions> options, TimeProvider time, OrphanCall? orphans = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         _options = options.Value;
         _time = time;
+        _orphans = orphans;
         AcceptNewDevices = _options.AcceptNewDevices;
 
         foreach (var device in _options.KnownDevices)
@@ -143,7 +150,8 @@ public sealed class PairingDirectory
 
     /// <summary>
     /// The switch from Part 4. With it off, a request is only logged - which is the answer to a
-    /// device that keeps knocking, and it costs the DM nothing while he is playing.
+    /// device that keeps knocking, and it costs the DM nothing while he is playing. The one way past
+    /// it is the call for orphaned displays, for the displays answering it while it lasts.
     /// </summary>
     public bool AcceptNewDevices { get; set; }
 
@@ -238,7 +246,13 @@ public sealed class PairingDirectory
                 return Refuse(hello, RejectionReason.Denied, now);
             }
 
-            if (!AcceptNewDevices)
+            // The call for orphaned displays opens the gate for its two minutes - for the displays
+            // answering it, and for them only (DM decision of 22.10.2026): pressing the button is
+            // the DM's consent to exactly that. A display answers with an ordinary Hello carrying the
+            // token of the control it was bound to, one this control does not know - which is what
+            // tells it from a new device, which brings none. Nothing else loosens: a device the DM
+            // rejected stays rejected (above), the rate limit counts, and the DM still decides.
+            if (!AcceptNewDevices && !(unknownToken && _orphans is { Calling: true }))
             {
                 Note(address, now);
                 return Refuse(hello, RejectionReason.Denied, now);

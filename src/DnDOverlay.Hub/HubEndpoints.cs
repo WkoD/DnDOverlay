@@ -57,7 +57,12 @@ public static class HubEndpoints
         });
 
         services.AddSingleton<DisplayConnections>();
-        services.AddSingleton<PairingDirectory>();
+        // Built rather than resolved, so the call for orphaned displays cannot go missing silently: its
+        // displays pass a closed "accept new devices" gate while it lasts (DM decision of 22.10.2026).
+        services.AddSingleton(provider => new PairingDirectory(
+            provider.GetRequiredService<IOptions<HubOptions>>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<OrphanCall>()));
         services.AddSingleton<SessionEvents>();
 
         // Built rather than resolved for one parameter: the process log is OPTIONAL. The hub is a
