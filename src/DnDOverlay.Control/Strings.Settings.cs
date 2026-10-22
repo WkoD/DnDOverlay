@@ -287,4 +287,8 @@ internal static partial class Strings
     internal static string LayoutMappingSkip => Text[nameof(LayoutMappingSkip)];
 
     internal static string LayoutMappingNotHere(string screen) => Text.Format(nameof(LayoutMappingNotHere), screen);
+
+    internal static string SettingsStockThresholdInvalid => Text[nameof(SettingsStockThresholdInvalid)];
+
+    internal static string SettingsFolderUnreachable(string path) => Text.Format(nameof(SettingsFolderUnreachable), path);
 }

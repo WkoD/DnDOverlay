@@ -176,7 +176,21 @@ internal sealed class SettingsWindow : Window, IDisposable
         _breakOff.Click += (_, _) => _breaking?.Cancel();
         open.Click += (_, _) =>
         {
-            Directory.CreateDirectory(_desk.BasePath);
+            // The default place is made on first use. A place the DM chose that is not there - a stick
+            // pulled, a share offline - is said, and nothing is created in its stead: a new, empty base
+            // there would look like campaigns lost, and with the drive letter gone the call threw out
+            // of the click (Part 3, "nicht erreichbar"; M5 review).
+            if (!Directory.Exists(_desk.BasePath))
+            {
+                if (_settings.Current.CampaignsPath is not null)
+                {
+                    _moving.Text = Strings.SettingsFolderUnreachable(_desk.BasePath);
+                    return;
+                }
+
+                Directory.CreateDirectory(_desk.BasePath);
+            }
+
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_desk.BasePath}\"") { UseShellExecute = true });
         };
 
@@ -222,21 +236,55 @@ internal sealed class SettingsWindow : Window, IDisposable
         var pictures = new CheckBox { Content = Strings.SettingsStockPictures, IsChecked = stock.PicturesOn, VerticalAlignment = VerticalAlignment.Center };
         var picturesValue = new TextBox { Text = stock.PicturesAbove.ToString(CultureInfo.CurrentCulture), Width = 60, Margin = new Thickness(6, 0, 6, 0) };
         var note = Note(Strings.SettingsStockNote);
+        var problem = Note(string.Empty);
 
         space.Click += (_, _) => _settings.Update(current => current with { Stock = current.Stock with { FreeSpaceOn = space.IsChecked is true } });
         pictures.Click += (_, _) => _settings.Update(current => current with { Stock = current.Stock with { PicturesOn = pictures.IsChecked is true } });
-        spaceValue.LostFocus += (_, _) =>
+
+        // A value that is refused does not stay in the box: the window says every value takes effect
+        // as it is changed, so what it shows has to be what is in force - the value in force comes
+        // back, and the line beneath says why, as the port and the pattern do (M5 review). Kept on
+        // Enter as well as on leaving the field, like its neighbours.
+        void KeepSpace()
         {
             if (double.TryParse(spaceValue.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out var gigabytes) && gigabytes > 0)
             {
                 _settings.Update(current => current with { Stock = current.Stock with { FreeSpaceBelowBytes = (long)(gigabytes * 1024 * 1024 * 1024) } });
+                problem.Text = string.Empty;
+                return;
             }
-        };
-        picturesValue.LostFocus += (_, _) =>
+
+            spaceValue.Text = (_settings.Current.Stock.FreeSpaceBelowBytes / (1024d * 1024 * 1024)).ToString("0.#", CultureInfo.CurrentCulture);
+            problem.Text = Strings.SettingsStockThresholdInvalid;
+        }
+
+        void KeepPictures()
         {
             if (int.TryParse(picturesValue.Text.Trim(), NumberStyles.None, CultureInfo.CurrentCulture, out var count) && count > 0)
             {
                 _settings.Update(current => current with { Stock = current.Stock with { PicturesAbove = count } });
+                problem.Text = string.Empty;
+                return;
+            }
+
+            picturesValue.Text = _settings.Current.Stock.PicturesAbove.ToString(CultureInfo.CurrentCulture);
+            problem.Text = Strings.SettingsStockThresholdInvalid;
+        }
+
+        spaceValue.LostFocus += (_, _) => KeepSpace();
+        picturesValue.LostFocus += (_, _) => KeepPictures();
+        spaceValue.KeyDown += (_, key) =>
+        {
+            if (key.Key is System.Windows.Input.Key.Enter)
+            {
+                KeepSpace();
+            }
+        };
+        picturesValue.KeyDown += (_, key) =>
+        {
+            if (key.Key is System.Windows.Input.Key.Enter)
+            {
+                KeepPictures();
             }
         };
 
@@ -255,6 +303,7 @@ internal sealed class SettingsWindow : Window, IDisposable
             {
                 Line(space, spaceValue, Strings.SettingsStockFreeSpaceUnit),
                 Line(pictures, picturesValue, Strings.SettingsStockPicturesUnit),
+                problem,
                 note,
             },
         };
