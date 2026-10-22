@@ -2450,7 +2450,7 @@ public sealed partial class App : Application, IDisposable
 
         if (_sharpening.TryAdd(image.AssetId, 0))
         {
-            _ = Task.Run(() => SharpenAsync(screen, image.AssetId, bitmap.PixelWidth, step), _shutdown.Token);
+            _ = Task.Run(() => SharpenAsync(screen, image.AssetId, bitmap, step), _shutdown.Token);
         }
     }
 
@@ -2505,8 +2505,19 @@ public sealed partial class App : Application, IDisposable
                     continue;
                 }
 
-                _images[asset] = PictureDecoder.Decode(thumbnail, 0);
+                var small = PictureDecoder.Decode(thumbnail, 0);
+
+                // Marked BEFORE the bitmap is swapped, and swapped only if nothing replaced the large
+                // one meanwhile. The other order let a redraw in between see a small bitmap that was
+                // not marked yet and sharpen it straight back up, while the books counted the saving.
                 _steppedDown[asset] = 0;
+
+                if (!_images.TryUpdate(asset, small, before))
+                {
+                    _ = _steppedDown.TryRemove(asset, out _);
+                    continue;
+                }
+
                 _pendingRelief += Math.Max(0, ((long)large.PixelWidth * large.PixelHeight * 4) - ThumbnailBitmapBytes);
                 stepped++;
             }
@@ -3276,7 +3287,7 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        _ = Task.Run(() => SharpenAsync(screen, asset, bitmap.PixelWidth, step), _shutdown.Token);
+        _ = Task.Run(() => SharpenAsync(screen, asset, bitmap, step), _shutdown.Token);
     }
 
     /// <summary>
@@ -3294,7 +3305,8 @@ public sealed partial class App : Application, IDisposable
     /// lets the loader decode on its own thread.
     /// </para>
     /// </summary>
-    private async Task SharpenAsync(ScreenId screen, AssetId asset, int before, int step)
+    /// <param name="before">The bitmap the step was asked for - the decode replaces exactly that one, or nothing.</param>
+    private async Task SharpenAsync(ScreenId screen, AssetId asset, BitmapSource before, int step)
     {
         try
         {
@@ -3317,19 +3329,19 @@ public sealed partial class App : Application, IDisposable
 
             var decoded = PictureDecoder.Decode(bytes, step);
 
-            // Asked again after the decode: a picture can be taken off the table while its sharper
-            // version is on its way, and putting it back into the table of bitmaps would be memory
-            // no scene asks for - the very growth LetGoOfWhatNoSceneNeeds exists to prevent.
-            if (!_images.ContainsKey(asset))
+            // Put in only over the bitmap it was asked for. A picture can be taken off the table
+            // while its sharper version is on its way - putting it back would be memory no scene asks
+            // for, the very growth LetGoOfWhatNoSceneNeeds exists to prevent - and memory pressure can
+            // step it down meanwhile: the large bitmap would come back while the picture stayed
+            // marked as stepped down and the books counted the saving (Part 6).
+            if (!_images.TryUpdate(asset, decoded, before))
             {
                 return;
             }
 
-            _images[asset] = decoded;
-
             var name = NameOf(asset);
 
-            DisplayLog.PictureSharpened(_logger, name, before, step);
+            DisplayLog.PictureSharpened(_logger, name, before.PixelWidth, step);
 
             Relieve();
 
