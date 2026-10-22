@@ -36,6 +36,8 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly ControlSettings _settings;
     private readonly Uri _address;
     private readonly CancellationTokenSource _listening = new();
+
+
     private readonly StageMemory _memory = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Border _firstRun = new() { Margin = new Thickness(0, 0, 0, 12) };
@@ -54,7 +56,18 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly Grid _frame = new();
 
     private readonly LogPanel _logPanel;
-    private readonly GridSplitter _logSplitter = new() { Background = SystemColors.ControlLightBrush, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
+    /// <summary>
+    /// The line between the log panel and the main room. Stretched in both directions like the
+    /// campaign panel's: a splitter left at its default alignment hugs one edge of its 6 DIP cell
+    /// and comes out zero wide, so there was nothing to take hold of (M5 review).
+    /// </summary>
+    private readonly GridSplitter _logSplitter = new()
+    {
+        Background = SystemColors.ControlLightBrush,
+        ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+        VerticalAlignment = VerticalAlignment.Stretch,
+    };
 
     /// <summary>The stage with the retracted panel lying over it - only in use while the panel is not pinned.</summary>
     private readonly Grid _stage = new();
