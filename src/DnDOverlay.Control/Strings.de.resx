@@ -1338,7 +1338,7 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
     <value>Kampagne "{0}" geöffnet - {1} Bild(er), {2:0.#} MB, {3} Szene(n)</value>
   </data>
   <data name="DeskReconstructed" xml:space="preserve">
-    <value>ihr Bestand war nicht lesbar und wurde aus dem Ordner neu aufgebaut</value>
+    <value>ihre Ablage war nicht lesbar und wurde aus dem Ordner neu aufgebaut</value>
   </data>
   <data name="DeskAdopted" xml:space="preserve">
     <value>{0} Bild(er) aus dem Ordner aufgenommen</value>
@@ -1611,7 +1611,7 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
     <value>Ordner erneut prüfen</value>
   </data>
   <data name="TidyVerify" xml:space="preserve">
-    <value>Bestand prüfen</value>
+    <value>Ablage prüfen</value>
   </data>
   <data name="TidyBreakOff" xml:space="preserve">
     <value>Abbrechen</value>
