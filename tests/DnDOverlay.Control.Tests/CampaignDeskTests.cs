@@ -372,4 +372,134 @@ public sealed class CampaignDeskTests
         Assert.Equal(Strings.ShelfRefused, refused);
         Assert.NotNull(shelf.Scene("Taverne"));
     }
+
+    /// <summary>
+    /// From no campaign, opening one leaves the table as it is: a table taken over after a restart may
+    /// well belong to the campaign being opened (Part 3).
+    /// </summary>
+    [Fact]
+    public async Task Opening_from_no_campaign_keeps_the_table()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+        var text = await bench.Session.AddTextAsync(CampaignBench.Screen, "Townsvil", 4, Cancellation);
+
+        Assert.Null(await bench.Desk.SwitchAsync(bench.Campaign("Vandalia")));
+
+        Assert.Equal(text, Assert.Single((await bench.Session.GetSceneAsync(CampaignBench.Screen, Cancellation)).Items).ItemId);
+        Assert.NotNull(bench.Session.Timeline.UndoLabel);
+    }
+
+    /// <summary>
+    /// From an open campaign it is a switch: the pictures on the table come from the stock about to
+    /// close, so every screen is cleared and undo ends - no step brings back a placeholder (Part 4).
+    /// </summary>
+    [Fact]
+    public async Task A_switch_clears_the_table_and_ends_undo()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+        await bench.Session.AddItemAsync(CampaignBench.Screen, await bench.PictureAsync("Karte", 1), position: null, Cancellation);
+
+        var left = bench.Desk.Open!;
+
+        Assert.Null(await bench.Desk.SwitchAsync(bench.Campaign("Tyranny")));
+
+        Assert.Empty((await bench.Session.GetSceneAsync(CampaignBench.Screen, Cancellation)).Items);
+        Assert.Null(bench.Session.Timeline.UndoLabel);
+        Assert.Equal("Tyranny", bench.Desk.Open?.Name);
+        Assert.Same(bench.Desk.Open!.Store, bench.Stock.Current);
+        Assert.True(left.Store.IsClosed);
+    }
+
+    /// <summary>With nothing open there is nothing to rename, close or delete - an answer each, no change.</summary>
+    [Fact]
+    public async Task With_no_campaign_open_rename_close_and_delete_do_nothing()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+        var changes = 0;
+
+        bench.Desk.Changed += (_, _) => changes++;
+
+        Assert.Equal(CampaignOutcome.BadName, bench.Desk.Rename("Vinland"));
+        Assert.Null(await bench.Desk.CloseAsync());
+        Assert.Null(await bench.Desk.DeleteAsync());
+        Assert.Null(bench.Desk.OpenLabel);
+        Assert.Equal(0, changes);
+    }
+
+    /// <summary>
+    /// Closing for a move of the campaign folder is a switch to none: the table cleared, undo ended,
+    /// the stock behind the hub gone (Part 7).
+    /// </summary>
+    [Fact]
+    public async Task Closing_leaves_no_campaign_and_no_stock()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+        await bench.Session.AddItemAsync(CampaignBench.Screen, await bench.PictureAsync("Karte", 1), position: null, Cancellation);
+
+        Assert.Null(await bench.Desk.CloseAsync());
+
+        Assert.Null(bench.Desk.Open);
+        Assert.Null(bench.Stock.Current);
+        Assert.Empty((await bench.Session.GetSceneAsync(CampaignBench.Screen, Cancellation)).Items);
+    }
+
+    /// <summary>
+    /// The first picture while none is open makes ONE unnamed campaign (Part 3) - a second picture
+    /// arriving goes into the same one - and the change is announced on the UI thread.
+    /// </summary>
+    [Fact]
+    public async Task The_first_picture_makes_one_unnamed_campaign()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+        var announced = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        bench.Desk.Changed += (_, _) => announced.TrySetResult(thread.Dispatcher.CheckAccess());
+
+        var first = bench.Desk.EnsureOpen();
+        var second = bench.Desk.EnsureOpen();
+
+        Assert.Same(first, second);
+        Assert.True(bench.Desk.Open!.Unnamed);
+        Assert.Same(first, bench.Stock.Current);
+        Assert.True(await announced.Task.WaitAsync(TimeSpan.FromSeconds(10), Cancellation));
+        Assert.Equal(Strings.DeskUnnamedCampaign(first.CreatedAt.LocalDateTime), bench.Desk.OpenLabel);
+    }
+
+    /// <summary>How the switcher calls a campaign: its name, or for an unnamed one when it began and how much is in it.</summary>
+    [Fact]
+    public void The_switcher_names_an_unnamed_campaign_by_its_beginning()
+    {
+        var begun = new DateTimeOffset(2026, 10, 22, 19, 30, 0, TimeSpan.Zero);
+
+        Assert.Equal("Vandalia", CampaignDesk.Label(new CampaignSummary("Vandalia", Unnamed: false, begun, 12)));
+        Assert.Equal(Strings.DeskUnnamedBegun(begun.LocalDateTime, 12), CampaignDesk.Label(new CampaignSummary("2026-10-22", Unnamed: true, begun, 12)));
+        Assert.Equal(Strings.DeskUnnamedBegun(begun.LocalDateTime, 0), CampaignDesk.Label(new CampaignSummary("2026-10-22", Unnamed: true, begun)));
+        Assert.Equal(Strings.DeskUnnamed, CampaignDesk.Label(new CampaignSummary("2026-10-22", Unnamed: true)));
+    }
+
+    /// <summary>A report line with names behind it can be expanded; one without cannot (Part 3, phase 3).</summary>
+    [Fact]
+    public async Task A_report_can_be_expanded_only_when_it_names_something()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+
+        var plain = new FolderReport(bench.Desk.Open!, "Vandalia: 0 pictures");
+
+        Assert.False(plain.HasNames);
+        Assert.True((plain with { Skipped = ["neu.png"] }).HasNames);
+        Assert.True((plain with { UnreadableScenes = ["Taverne.json"] }).HasNames);
+        Assert.True((plain with { Missing = [new MissingPicture(new AssetId(new string('a', 64)), "Karte")] }).HasNames);
+    }
 }
