@@ -81,7 +81,9 @@ public enum ShelfOutcome
 /// would answer per platform - on Windows it finds <c>Dorfkarte.json</c> for <c>dorfkarte</c>,
 /// on Linux not - and the one new question in the whole program, "overwrite?", would hang on the
 /// file system rather than on our rule. Reading everything on open is affordable because scenes
-/// carry no picture data: two hundred scenes are a few hundred kilobytes.
+/// carry no picture data: two hundred scenes are a few hundred kilobytes. The list includes the
+/// files that would not read: they are kept as work (<see cref="Unreadable"/>), so their names are
+/// taken like any other - a save asks before replacing one, a rename does not land on one.
 /// </para>
 /// </summary>
 public sealed class SceneShelf
@@ -180,7 +182,7 @@ public sealed class SceneShelf
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        if (Refused(name, _scenes.Keys, overwrite) is { } refused)
+        if (Refused(name, Taken(ScenesFolder, _scenes), overwrite) is { } refused)
         {
             return refused;
         }
@@ -195,7 +197,7 @@ public sealed class SceneShelf
     {
         ArgumentNullException.ThrowIfNull(parts);
 
-        if (Refused(name, _layouts.Keys, overwrite) is { } refused)
+        if (Refused(name, Taken(LayoutsFolder, _layouts), overwrite) is { } refused)
         {
             return refused;
         }
@@ -354,6 +356,22 @@ public sealed class SceneShelf
             Background = scene.Background is { } background && background.AssetId == asset ? background with { Name = name } : scene.Background,
         };
 
+    /// <summary>The names in a folder that are taken: the loaded ones and those of the files that would not read.</summary>
+    private IEnumerable<string> Taken<T>(string folder, Dictionary<string, T> shelf) =>
+        shelf.Keys.Concat(UnreadableNames(folder));
+
+    private IEnumerable<string> UnreadableNames(string folder) =>
+        _unreadable
+            .Where(path => string.Equals(Path.GetDirectoryName(path), Path.Combine(_directory, folder), StringComparison.OrdinalIgnoreCase))
+            .Select(path => Path.GetFileNameWithoutExtension(path));
+
+    /// <summary>
+    /// The spelling under which a name is on disk in this folder - loaded or unreadable - or
+    /// <see langword="null"/>. Compared by our rule, not by asking the file system (see the type).
+    /// </summary>
+    private string? Existing<T>(string folder, Dictionary<string, T> shelf, string name) =>
+        Taken(folder, shelf).FirstOrDefault(known => FileNames.Comparer.Equals(known, name));
+
     private static ShelfOutcome? Refused(string name, IEnumerable<string> taken, bool overwrite)
     {
         if (FileNames.Check(name) is not null)
@@ -370,15 +388,19 @@ public sealed class SceneShelf
 
         // An overwrite under a different case keeps the new spelling: the old file goes first, or
         // on a case-insensitive file system the write would land in it under its old name.
-        if (shelf.Keys.FirstOrDefault(known => FileNames.Comparer.Equals(known, name)) is { } existing
+        if (Existing(folder, shelf, name) is { } existing
             && !string.Equals(existing, name, StringComparison.Ordinal))
         {
             File.Delete(PathOf(folder, existing));
             shelf.Remove(existing);
+            _unreadable.RemoveAll(path => string.Equals(path, PathOf(folder, existing), StringComparison.OrdinalIgnoreCase));
         }
 
         AtomicFile.Write(PathOf(folder, name), content);
         shelf[name] = value;
+
+        // Overwritten after the question: what would not read is replaced by what the DM saved.
+        _unreadable.RemoveAll(path => string.Equals(path, PathOf(folder, name), StringComparison.OrdinalIgnoreCase));
     }
 
     private ShelfOutcome Rename<T>(string folder, Dictionary<string, T> shelf, string name, string newName)
@@ -395,7 +417,7 @@ public sealed class SceneShelf
 
         var sameEntry = FileNames.Comparer.Equals(existing, newName);
 
-        if (!sameEntry && shelf.ContainsKey(newName))
+        if (!sameEntry && Existing(folder, shelf, newName) is not null)
         {
             return ShelfOutcome.Taken;
         }

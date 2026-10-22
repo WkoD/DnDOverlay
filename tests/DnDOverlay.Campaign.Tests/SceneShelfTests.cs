@@ -299,6 +299,32 @@ public sealed class SceneShelfTests : IDisposable
         Assert.False(reopened.UsageOf(orc).Used);
     }
 
+    /// <summary>
+    /// A scene file that would not read is kept as work - and so its name is taken: a save under it
+    /// asks first instead of replacing it, and a rename onto it is refused instead of throwing. After
+    /// the DM said "overwrite", what was unreadable is the saved scene.
+    /// </summary>
+    [Fact]
+    public void An_unreadable_file_keeps_its_name_taken()
+    {
+        var shelf = Shelf();
+
+        shelf.SaveScene("Markt", Origin, Scene("Händler"), overwrite: false);
+        File.WriteAllText(Path.Combine(_directory, "scenes", "Dorfkarte.json"), "{ halb kopiert");
+
+        var reopened = Shelf();
+
+        Assert.Single(reopened.Unreadable);
+        Assert.Equal(ShelfOutcome.Taken, reopened.SaveScene("dorfkarte", Origin, Scene("Grimmbart"), overwrite: false));
+        Assert.Equal("{ halb kopiert", File.ReadAllText(Path.Combine(_directory, "scenes", "Dorfkarte.json")));
+        Assert.Equal(ShelfOutcome.Taken, reopened.RenameScene("Markt", "Dorfkarte"));
+        Assert.NotNull(reopened.Scene("Markt"));
+
+        Assert.Equal(ShelfOutcome.Done, reopened.SaveScene("Dorfkarte", Origin, Scene("Grimmbart"), overwrite: true));
+        Assert.Empty(reopened.Unreadable);
+        Assert.Empty(Shelf().Unreadable);
+    }
+
     private SceneShelf Shelf() => SceneShelf.Open(_directory, _time);
 
     private static LayoutPart Part(SceneState scene) =>
