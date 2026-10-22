@@ -208,6 +208,42 @@ internal sealed class CampaignDesk
     internal string BasePath => _library.BasePath;
 
     /// <summary>
+    /// Whether the campaigns folder can be reached (<see cref="CampaignLibrary.Reachable"/>). Not
+    /// reachable - a stick pulled, a network drive offline, a chosen folder gone - an empty switcher
+    /// would read as "no campaigns", so whoever lists them says why instead (Part 3).
+    /// </summary>
+    internal bool Reachable => _library.Reachable;
+
+    /// <summary>
+    /// The campaigns folder, for "Open folder": the default place comes into being here as it would
+    /// with the first picture; an unreachable one is NOT created - a new, empty folder in its place
+    /// would look like campaigns lost (Part 3). False when there is no folder to open.
+    /// </summary>
+    internal bool EnsureBaseFolder()
+    {
+        if (Directory.Exists(BasePath))
+        {
+            return true;
+        }
+
+        if (!Reachable)
+        {
+            return false;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(BasePath);
+
+            return true;
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Closes the open campaign the way a switch does - the table cleared everywhere, undo ended -
     /// and opens none. The condition for moving the campaign folder: nobody moves a folder the hub is
     /// delivering pictures out of (Part 7).

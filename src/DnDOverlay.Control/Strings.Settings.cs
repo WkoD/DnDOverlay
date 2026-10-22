@@ -291,4 +291,8 @@ internal static partial class Strings
     internal static string SettingsStockThresholdInvalid => Text[nameof(SettingsStockThresholdInvalid)];
 
     internal static string SettingsFolderUnreachable(string path) => Text.Format(nameof(SettingsFolderUnreachable), path);
+
+    internal static string SettingsOldPlaceUnreachable(string from, string to) => Text.Format(nameof(SettingsOldPlaceUnreachable), from, to);
+
+    internal static string SettingsTakenUnreachable(string to, string from) => Text.Format(nameof(SettingsTakenUnreachable), to, from);
 }

@@ -314,5 +314,9 @@ internal static partial class Strings
 
     internal static string ShelfRefused => Text[nameof(ShelfRefused)];
 
+    internal static string CampaignsUnreachable(string path) => Text.Format(nameof(CampaignsUnreachable), path);
+
+    internal static string PanelHeadUnreachable => Text[nameof(PanelHeadUnreachable)];
+
     internal static string StockDeleteNotWritten(string names) => Text.Format(nameof(StockDeleteNotWritten), names);
 }

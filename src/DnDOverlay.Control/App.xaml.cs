@@ -120,7 +120,12 @@ public sealed partial class App : Application, IDisposable
                 // unreadable file, and the shortest way to a full stock - the monsters the DM has
                 // had as tokens for years - would not exist (Part 5).
                 containers: new TokenContainer()),
-            TimeProvider.System);
+            TimeProvider.System,
+
+            // A place the DM chose existed when it was chosen; gone now, it is not reachable and
+            // nothing is created there. Only the default place comes into being with the first
+            // picture (Part 3).
+            baseIsDefault: _settings.Current.CampaignsPath is null);
 
         // The one source the hub knows for the whole run; the open campaign changes behind it.
         CampaignDesk? desk = null;
@@ -249,6 +254,13 @@ public sealed partial class App : Application, IDisposable
                 // points at a function which does not exist leaves the reader worse off than one
                 // that names the only thing they can actually do (Part 8).
                 : Strings.AppConfigurationReplaced(loaded.SetAside ?? Strings.AppNotKept));
+        }
+
+        // A campaigns folder out of reach at the start - the stick still in the bag - is said before
+        // the DM looks for his campaigns in an empty switcher, or pastes a picture that is refused.
+        if (!library.Reachable)
+        {
+            window.Notify(Strings.CampaignsUnreachable(library.BasePath));
         }
     }
 

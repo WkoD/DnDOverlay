@@ -55,9 +55,15 @@ internal sealed class CampaignSwitcher(CampaignDesk desk, Window owner, Action<s
             menu.Items.Add(item);
         }
 
+        // An empty list from a folder that cannot be reached is not "no campaigns": they lie on the
+        // drive that is gone, and the line says so (Part 3).
         if (campaigns.Count == 0)
         {
-            menu.Items.Add(new MenuItem { Header = Strings.CampaignSwitchNone, IsEnabled = false });
+            menu.Items.Add(new MenuItem
+            {
+                Header = desk.Reachable ? Strings.CampaignSwitchNone : Strings.CampaignsUnreachable(desk.BasePath),
+                IsEnabled = false,
+            });
         }
 
         menu.Items.Add(new Separator());

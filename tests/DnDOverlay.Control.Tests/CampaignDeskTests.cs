@@ -230,6 +230,35 @@ public sealed class CampaignDeskTests
         Assert.DoesNotContain(reports, words => words.Contains("Vandalia", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// "Open folder" on a campaigns folder that cannot be reached - a chosen place whose drive is
+    /// gone - creates nothing there: a new, empty folder would look like campaigns lost (Part 3). The
+    /// default place comes into being as with the first picture.
+    /// </summary>
+    [Fact]
+    public void An_unreachable_campaigns_folder_is_not_created()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+        var fresh = Path.Combine(bench.Base, "neu");
+
+        Assert.True(bench.Desk.Reachable);
+
+        var library = new CampaignLibrary(fresh, directory => throw new InvalidOperationException(directory), TimeProvider.System);
+        var desk = new CampaignDesk(library, bench.Stock, bench.Session, thread.Dispatcher, NullLogger.Instance);
+
+        Assert.True(desk.EnsureBaseFolder());
+        Assert.True(Directory.Exists(fresh));
+
+        var gone = Path.Combine(bench.Base, "abgezogen", "Kampagnen");
+
+        desk.Relocate(gone);
+
+        Assert.False(desk.Reachable);
+        Assert.False(desk.EnsureBaseFolder());
+        Assert.False(Directory.Exists(gone));
+    }
+
     /// <summary>The end of an intake changes the stock as much as a switch: the tidy-up view and "Set up campaign" draw again.</summary>
     [Fact]
     public void The_end_of_an_intake_announces_a_changed_stock()

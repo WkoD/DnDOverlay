@@ -176,19 +176,15 @@ internal sealed class SettingsWindow : Window, IDisposable
         _breakOff.Click += (_, _) => _breaking?.Cancel();
         open.Click += (_, _) =>
         {
-            // The default place is made on first use. A place the DM chose that is not there - a stick
-            // pulled, a share offline - is said, and nothing is created in its stead: a new, empty base
-            // there would look like campaigns lost, and with the drive letter gone the call threw out
-            // of the click (Part 3, "nicht erreichbar"; M5 review).
-            if (!Directory.Exists(_desk.BasePath))
+            // The default place is made on first use. A place that cannot be reached - a stick pulled,
+            // a share offline, the default place under a folder that is gone - is said, and nothing is
+            // created in its stead: a new, empty base there would look like campaigns lost, and with
+            // the drive letter gone the call threw out of the click (Part 3, "nicht erreichbar"; M5
+            // review). The same rule as the library's, from the desk.
+            if (!_desk.EnsureBaseFolder())
             {
-                if (_settings.Current.CampaignsPath is not null)
-                {
-                    _moving.Text = Strings.SettingsFolderUnreachable(_desk.BasePath);
-                    return;
-                }
-
-                Directory.CreateDirectory(_desk.BasePath);
+                _moving.Text = Strings.SettingsFolderUnreachable(_desk.BasePath);
+                return;
             }
 
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_desk.BasePath}\"") { UseShellExecute = true });
@@ -387,6 +383,30 @@ internal sealed class SettingsWindow : Window, IDisposable
         if (Inside(to, from) || Inside(from, to))
         {
             MessageBox.Show(this, Strings.SettingsMoveInside, Strings.SettingsMoveCaption);
+            return;
+        }
+
+        // The place in use cannot be reached: its campaigns cannot be moved now, and the plan would
+        // count none - the place would change quietly and leave them behind. Said, and asked (Part 3).
+        if (!_desk.Reachable)
+        {
+            var anyway = MessageBox.Show(
+                this,
+                Strings.SettingsOldPlaceUnreachable(from, to),
+                Strings.SettingsMoveCaption,
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+
+            if (anyway != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            await _desk.CloseAsync().ConfigureAwait(true);
+            Take(to);
+            _say(Strings.SettingsTakenUnreachable(to, from));
+
             return;
         }
 

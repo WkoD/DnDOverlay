@@ -220,10 +220,17 @@ internal sealed class PanelHead : Border
         }
     }
 
-    /// <summary>Which campaign is open, or <see langword="null"/> for none.</summary>
-    internal void Campaign(string? label)
+    /// <summary>
+    /// Which campaign is open, or <see langword="null"/> for none. With none open,
+    /// <paramref name="unreachable"/> says why there may be none to open - the campaigns folder cannot
+    /// be reached - in place of the two ways on, which would both lead nowhere (Part 3).
+    /// </summary>
+    internal void Campaign(string? label, string? unreachable = null)
     {
-        _campaign.Content = (label ?? Strings.PanelHeadNoCampaign) + "  ▾";
+        var lost = label is null && unreachable is not null;
+
+        _campaign.Content = (label ?? (lost ? Strings.PanelHeadUnreachable : Strings.PanelHeadNoCampaign)) + "  ▾";
+        _hint.Text = lost ? unreachable : Strings.PanelHeadHint;
         _hint.Visibility = label is null ? Visibility.Visible : Visibility.Collapsed;
     }
 

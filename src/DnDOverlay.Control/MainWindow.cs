@@ -300,8 +300,7 @@ internal sealed class MainWindow : Window, IDisposable
 
             pictures.Clear();
             _layouts.Refresh();
-            _panelHead.Campaign(desk.OpenLabel);
-            _edgeLabel.Text = desk.OpenLabel ?? Strings.MainNoCampaign;
+            ShowCampaign();
             _panel.Refresh();
             _ = _stock.CountAsync();
             _ = _board.RefreshAsync(_closing);
@@ -310,9 +309,13 @@ internal sealed class MainWindow : Window, IDisposable
         desk.Reported += (_, words) => Notify(words);
         desk.Measured += (_, measure) => Report(measure);
 
-        _panelHead.CampaignAsked += (_, _) => new CampaignSwitcher(desk, this, said => _status.Text = said, Tidy, _settings.Current.LastCampaign).Open(_panelHead);
-        _panelHead.Campaign(desk.OpenLabel);
-        _edgeLabel.Text = desk.OpenLabel ?? Strings.MainNoCampaign;
+        _panelHead.CampaignAsked += (_, _) =>
+        {
+            // Looked at again here: a drive plugged back in, or pulled, since the head last said.
+            ShowCampaign();
+            new CampaignSwitcher(desk, this, said => _status.Text = said, Tidy, _settings.Current.LastCampaign).Open(_panelHead);
+        };
+        ShowCampaign();
         _board.ActiveChanged += (_, _) => Remember();
 
         // Whichever of the two ways switched the view - the button here or the tile's own menu -
@@ -1251,6 +1254,18 @@ internal sealed class MainWindow : Window, IDisposable
         var local = element.PointFromScreen(absolute);
 
         return local.X >= 0 && local.Y >= 0 && local.X <= element.ActualWidth && local.Y <= element.ActualHeight;
+    }
+
+    /// <summary>
+    /// The open campaign in the head and on the tab of a retracted panel - and with none open and the
+    /// campaigns folder out of reach, why the switcher will be empty (Part 3).
+    /// </summary>
+    private void ShowCampaign()
+    {
+        var unreachable = _desk.Open is null && !_desk.Reachable ? Strings.CampaignsUnreachable(_desk.BasePath) : null;
+
+        _panelHead.Campaign(_desk.OpenLabel, unreachable);
+        _edgeLabel.Text = _desk.OpenLabel ?? Strings.MainNoCampaign;
     }
 
     /// <summary>"Show in stock" from a tile: the panel comes out if it was retracted, and narrows to the picture.</summary>
