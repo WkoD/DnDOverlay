@@ -428,6 +428,72 @@ public sealed class ScreenInventoryTests
     }
 
     /// <summary>
+    /// The case adoption is for: the known device's settings went out long ago, the fresh install
+    /// knocks with nothing but defaults - and its first report must not undo what came over. Before,
+    /// the baseline of that report put park edge, screen name and device settings back to defaults,
+    /// and control.json was written without them.
+    /// </summary>
+    [Fact]
+    public void What_an_adoption_carries_over_survives_the_fresh_installs_first_report()
+    {
+        var catalog = new ScreenCatalog();
+        var known = new ScreenRef(Device, Screen);
+        var old = catalog.Report(
+            Device,
+            [Info(Screen) with { CustomName = "Tisch", Label = "Tisch" }],
+            new ConfigUpdate([], new DeviceSettings(RescueAfterSeconds: 90)));
+
+        catalog.Change(known, new ScreenSettings(ParkEdge: ParkEdge.Left));
+        catalog.Departed(Device, old.Presence);
+        _ = catalog.Drain(Device);
+
+        catalog.Rekey(Device, Twin);
+
+        // The fresh install's Hello: the FULL effective set, every value a default.
+        var adopted = new ScreenRef(Twin, Screen);
+        var defaults = ScreenSettings.Of(ScreenContext.Default(new PixelSize(1920, 1080), 96), customName: null);
+
+        catalog.Report(
+            Twin,
+            [Info(Screen)],
+            new ConfigUpdate([new ScreenConfigUpdate(Screen, defaults, null)], DeviceSettings.Defaults));
+
+        Assert.Equal(ParkEdge.Left, catalog.ContextFor(adopted).ParkEdge);
+        Assert.Equal("Tisch", catalog.ViewOf(adopted)?.Info.Label);
+        Assert.Equal(90, catalog.DeviceSettingsOf(Twin).RescueAfterSeconds);
+        Assert.Equal(ParkEdge.Left, Assert.Single(catalog.Snapshot()).Settings.ParkEdge);
+
+        // And it goes out to the device, which is what makes it stick there too.
+        var update = catalog.Drain(Twin);
+
+        Assert.Equal(ParkEdge.Left, Assert.Single(update.Screens).Settings?.ParkEdge);
+        Assert.Equal("Tisch", update.Screens[0].Settings?.CustomName);
+        Assert.Equal(90, update.Device?.RescueAfterSeconds);
+    }
+
+    /// <summary>
+    /// An entry already under the new identity is a leftover; what the DM chose to carry over is the
+    /// known one, and that is what stands afterwards. Before, the known entry was the one dropped.
+    /// </summary>
+    [Fact]
+    public void On_a_collision_the_known_entry_is_the_one_that_moves_in()
+    {
+        var catalog = new ScreenCatalog();
+
+        catalog.Report(Twin, [Info(Screen)], reported: null);
+        catalog.Change(new ScreenRef(Twin, Screen), new ScreenSettings(ScaleOnLoad: 0.3));
+        catalog.Report(Device, [Info(Screen)], reported: null);
+        catalog.Change(new ScreenRef(Device, Screen), new ScreenSettings(ParkEdge: ParkEdge.Left));
+
+        catalog.Rekey(Device, Twin);
+
+        var context = catalog.ContextFor(new ScreenRef(Twin, Screen));
+
+        Assert.Equal(ParkEdge.Left, context.ParkEdge);
+        Assert.NotEqual(0.3, context.ScaleOnLoad);
+    }
+
+    /// <summary>
     /// A screen that is there takes over a missing one: wish, settings and name, queued for its device;
     /// the missing entry goes.
     /// </summary>

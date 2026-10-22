@@ -2066,6 +2066,12 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
         try
         {
+            // A waiting device has no standing here; whatever the catalogue still holds under its id
+            // is left from an earlier pairing that was withdrawn. Cleared first, so the known device's
+            // screens are not mixed with it - and so a rollback moves back only what came over.
+            _screens.Forget(incoming);
+            _ = Forget(incoming);
+
             Rekey(known, incoming);
         }
         finally
@@ -2094,6 +2100,10 @@ public sealed class SessionApi : ISessionApi, IDisposable
 
         return true;
     }
+
+    /// <summary>Drops every scene of one device from the store and says which screens had one. Called under the gate.</summary>
+    private List<(ScreenRef Screen, SceneState Scene)> Forget(DeviceId device) =>
+        [.. _scenes.Screens.Where(screen => screen.Device == device).ToList().Select(screen => (screen, _scenes.Remove(screen)))];
 
     private void Rekey(DeviceId from, DeviceId to)
     {

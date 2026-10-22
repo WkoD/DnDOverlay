@@ -134,7 +134,11 @@ public sealed class ScreenCatalog
 
                 _entries[key] = entry with
                 {
-                    Info = screen,
+                    // The name is part of the same reconciliation: one the control has not yet
+                    // delivered wins over the one reported, as every other key does. Without it an
+                    // adopted device's screens took the fresh install's "DESKTOP-XYZ//DISPLAY1"
+                    // until the device had echoed the name back (Part 7, "Ein Gerät neu zuordnen").
+                    Info = mine?.CustomName is { Length: > 0 } name ? screen with { CustomName = name, Label = name } : screen,
                     Context = taken with { Size = screen.Size, Dpi = screen.Dpi },
                 };
             }
@@ -445,6 +449,20 @@ public sealed class ScreenCatalog
     /// adoption of a known device by a newly arrived one (Part 7). The screens keep their ids: on the
     /// same hardware they are what the new device reports, and they simply carry on; after a change
     /// of hardware they stand as missing beside the new ones, for "reassign screen" to map.
+    /// <para>
+    /// <b>What moves is QUEUED, not merely moved.</b> The new device's first report is a full baseline
+    /// of a fresh install - all defaults - and a baseline overwrites every key that has no outstanding
+    /// change of the control's on top of it. Moving the settings into the entries alone therefore
+    /// lasted exactly until that report: park edge, rotation, the screen names and the device settings
+    /// all went back to defaults and control.json was written without them, for good. So each screen's
+    /// opinion and the device's known settings become the control's outstanding change for the new
+    /// identity, the way <see cref="Reassign"/> queues its screen's - and then they win (Part 4,
+    /// Part 7: "Anzeigename und Ferneinstellungen wandern mit").
+    /// </para>
+    /// <para>
+    /// <b>On a collision the known entry wins.</b> An entry already under the new identity is a
+    /// leftover of an earlier pairing of that device; what the DM chose to carry over is the known one.
+    /// </para>
     /// </summary>
     public void Rekey(DeviceId from, DeviceId to)
     {
@@ -454,31 +472,73 @@ public sealed class ScreenCatalog
             {
                 var moved = new ScreenRef(to, key.Screen);
 
-                if (_entries.Remove(key, out var entry) && !_entries.ContainsKey(moved))
+                if (!_entries.Remove(key, out var entry))
                 {
-                    _entries[moved] = entry;
+                    continue;
                 }
 
-                if (_pending.Remove(key, out var settings))
+                _entries[moved] = entry;
+
+                var opinion = ScreenSettings.Opinion(entry.Context, entry.Info.CustomName);
+                var queued = _pending.Remove(key, out var settings) ? ScreenSettings.Merge(older: opinion, newer: settings) : opinion;
+
+                if (queued.IsEmpty)
                 {
-                    _pending[moved] = settings;
+                    _pending.Remove(moved);
+                }
+                else
+                {
+                    _pending[moved] = queued;
                 }
             }
 
-            if (_pendingDevice.Remove(from, out var pending))
-            {
-                _pendingDevice[to] = pending;
-            }
+            // What is known already carries every change of the control's (Know runs on each), so
+            // it is the whole of what has to go out; the outstanding remainder only matters when the
+            // device never reported in this run.
+            _pendingDevice.Remove(from, out var pending);
+            _deviceKnown.Remove(from, out var known);
+            _pendingDevice.Remove(to);
+            _deviceKnown.Remove(to);
 
-            if (_deviceKnown.Remove(from, out var known))
+            if ((known ?? pending) is { IsEmpty: false } carried)
             {
-                _deviceKnown[to] = known;
+                _pendingDevice[to] = carried;
+                _deviceKnown[to] = carried;
             }
 
             _present.Remove(from);
         }
 
         Announce(persist: true);
+    }
+
+    /// <summary>
+    /// Forgets a device: its screens with their wishes and settings, and its device settings. For an
+    /// unpaired device - "danach kann der Hub die Screens dieses Geräts nicht mehr adressieren, die
+    /// Anordnung darauf ist weg" (Part 7) - and for the leftovers of one before another identity is
+    /// moved onto it.
+    /// </summary>
+    public void Forget(DeviceId device)
+    {
+        bool forgot;
+
+        lock (_gate)
+        {
+            var keys = _entries.Keys.Concat(_pending.Keys).Where(key => key.Device == device).Distinct().ToList();
+
+            forgot = keys.Count > 0 | _pendingDevice.Remove(device) | _deviceKnown.Remove(device) | _present.Remove(device);
+
+            foreach (var key in keys)
+            {
+                _entries.Remove(key);
+                _pending.Remove(key);
+            }
+        }
+
+        if (forgot)
+        {
+            Announce(persist: true);
+        }
     }
 
     /// <summary>
