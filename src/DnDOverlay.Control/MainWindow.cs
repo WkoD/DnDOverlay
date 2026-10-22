@@ -307,6 +307,17 @@ internal sealed class MainWindow : Window, IDisposable
         };
 
         desk.Reported += (_, report) => ShowReport(report);
+
+        // A picture pulled in that is already in the stock is shown there - the panel narrows to it
+        // (Part 7). A retracted panel comes out for it, as for "Show in stock" from a tile; narrowed
+        // behind the edge, the answer to the drop would be nowhere to see.
+        _intake.AlreadyThere += (_, _) =>
+        {
+            if (!_pinned && !_out)
+            {
+                Slide(open: true);
+            }
+        };
         desk.Measured += (_, measure) =>
         {
             Report(measure);
