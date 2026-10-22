@@ -141,7 +141,13 @@ public static partial class Reconciliation
             {
                 var asset = new AssetId(stem.ToLowerInvariant());
 
-                if (store.Knows(asset))
+                if (store.WasRemoved(file))
+                {
+                    // Taken out of the stock while its file could not be deleted: the DM removed it,
+                    // and it must not come back in as a crash's leftover. Named as foreign (M5b5).
+                    foreign.Add(file);
+                }
+                else if (store.Knows(asset))
                 {
                     // In the stock already. A byte-identical copy goes; the same file coming back heals
                     // the entry whose file was missing; anything else under its name is not ours to
@@ -213,6 +219,7 @@ public static partial class Reconciliation
             progress?.Report(++done);
         }
 
+        store.ForgetRemovedGone();
         store.RepairThumbnails();
 
         var names = store.Entries.ToDictionary(entry => entry.AssetId, entry => entry.Name, StringComparer.Ordinal);

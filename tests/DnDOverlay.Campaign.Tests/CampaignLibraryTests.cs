@@ -300,6 +300,44 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.Contains(Path.Combine("assets", Path.GetFileName(huge)), beyond.Foreign);
     }
 
+    /// <summary>
+    /// M5b5: a picture file that cannot be deleted right now - a display still downloading it - stays,
+    /// the entry goes, and the next folder check names the file as foreign instead of taking it back
+    /// into the stock under its hash. Taken in again on purpose, it is a picture like any other.
+    /// </summary>
+    [Fact]
+    public async Task A_removed_picture_whose_file_was_held_open_is_named_foreign_not_taken_back()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to delete a file that somebody holds open");
+        }
+
+        var campaign = Campaign("Sturmküste");
+        var store = Library().Open("Sturmküste").Store;
+        var taken = await Ingest(store, "ork");
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(campaign, "assets"), taken.Asset.AssetId.Value + ".*"));
+
+        using (File.Open(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.True(store.Remove(taken.Asset.AssetId));
+        }
+
+        Assert.True(File.Exists(file));
+
+        var (opened, report) = await OpenAndSettle("Sturmküste");
+
+        Assert.Empty(opened.Store.Entries);
+        Assert.Equal(0, report.Adopted);
+        Assert.Equal([Path.Combine("assets", Path.GetFileName(file))], report.Foreign);
+
+        await Ingest(opened.Store, "ork");
+
+        var (_, after) = await OpenAndSettle("Sturmküste");
+
+        Assert.True(after.IsEmpty);
+    }
+
     /// <summary>A file deleted by hand leaves its entry marked, not removed - and taking the same picture in again heals it.</summary>
     [Fact]
     public async Task A_missing_file_is_marked_and_heals_when_the_picture_comes_back()

@@ -32,6 +32,14 @@ public sealed class InventoryDocument
 
     /// <summary>The entries, keyed by the source hash that identifies them.</summary>
     public List<InventoryEntry> Entries { get; set; } = [];
+
+    /// <summary>
+    /// File names in <c>assets\</c> of pictures taken out of the stock whose file could not be deleted at
+    /// the time - open in a viewer, being sent. Without this note the next folder check would see a
+    /// hash-named picture without an entry and take it back in; with it, the file is named as foreign
+    /// (M5b5). An addition a schema-1 reader skips, so the version stays.
+    /// </summary>
+    public List<string> Removed { get; set; } = [];
 }
 
 /// <summary>One image in the stock.</summary>

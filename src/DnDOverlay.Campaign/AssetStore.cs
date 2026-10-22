@@ -56,6 +56,9 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     private readonly Lock _gate = new();
     private readonly Dictionary<string, InventoryEntry> _entries = new(StringComparer.Ordinal);
 
+    /// <summary>See <see cref="InventoryDocument.Removed"/>; guarded by <see cref="_gate"/> like the entries.</summary>
+    private readonly HashSet<string> _removed = new(StringComparer.OrdinalIgnoreCase);
+
     private AssetStore(
         string directory,
         IImageCodec codec,
@@ -77,6 +80,8 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         {
             _entries[entry.AssetId] = entry;
         }
+
+        _removed.UnionWith(document.Removed ?? []);
     }
 
     /// <summary>The campaign folder this stock belongs to.</summary>
@@ -326,7 +331,8 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// screens and the saved scenes are the caller's to clear first (Part 7: what is deleted
     /// disappears everywhere), and the order matters: the reference goes before the bytes. A file
     /// that cannot be deleted right now - open in a viewer - stays behind as a foreign file the next
-    /// reconciliation names; the entry is gone either way. False when there was no such entry.
+    /// reconciliation names (M5b5) - noted in the inventory, or it would come back in as a picture
+    /// without an entry; the entry is gone either way. False when there was no such entry.
     /// </summary>
     public bool Remove(AssetId asset)
     {
@@ -342,20 +348,55 @@ public sealed class AssetStore : IAssetSource, IAssetSink
             SaveInventory();
         }
 
-        foreach (var file in new[] { FileOf(entry), ThumbnailPath(asset) })
+        try
         {
-            try
+            File.Delete(FileOf(entry));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            lock (_gate)
             {
-                File.Delete(file);
+                _removed.Add(Path.GetFileName(FileOf(entry)));
+                SaveInventory();
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Left for the reconciliation, see above.
-            }
+        }
+
+        try
+        {
+            File.Delete(ThumbnailPath(asset));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Derived: the next reconciliation removes it as a thumbnail nobody has.
         }
 
         return true;
     }
+
+    /// <summary>Whether this file is the picture of an entry that was removed while its file could not be deleted (M5b5).</summary>
+    internal bool WasRemoved(string file)
+    {
+        lock (_gate)
+        {
+            return _removed.Contains(Path.GetFileName(file));
+        }
+    }
+
+    /// <summary>Forgets the notes of <see cref="Remove"/> whose file is gone by now - deleted by hand, or taken in again.</summary>
+    internal void ForgetRemovedGone()
+    {
+        lock (_gate)
+        {
+            if (_removed.RemoveWhere(name => !File.Exists(Path.Combine(Directory, AssetsFolder, name))) > 0)
+            {
+                SaveInventory();
+            }
+        }
+    }
+
+    /// <summary>A picture taken in again is no longer a removed one; called under <see cref="_gate"/> as its entry is added.</summary>
+    private void Unremove(string assetId) =>
+        _removed.RemoveWhere(name => Path.GetFileNameWithoutExtension(name).Equals(assetId, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Where the thumbnail of an asset lies, whether or not it exists yet.</summary>
     public string ThumbnailPath(AssetId id) =>
@@ -481,6 +522,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
             entry.Name = FreeName(proposedName);
             _entries[assetId.Value] = entry;
+            Unremove(assetId.Value);
             SaveInventory();
         }
 
@@ -561,7 +603,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// bytes match the content hash the entry was recorded with, and nothing lies in its place.
     /// </summary>
     /// <returns>Whether the file was moved into place.</returns>
-    public bool Restore(AssetId asset, string file, ReadOnlySpan<byte> bytes)
+    internal bool Restore(AssetId asset, string file, ReadOnlySpan<byte> bytes)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
 
@@ -583,7 +625,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     }
 
     /// <summary>Whether the stock has an entry for this picture, whether or not its file is there.</summary>
-    public bool Knows(AssetId asset)
+    internal bool Knows(AssetId asset)
     {
         lock (_gate)
         {
@@ -597,7 +639,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// without going through the intake: anything else would be served as it is, past the conversion
     /// and with a content type nobody can read (Part 5).
     /// </summary>
-    public static bool IsDeliveryFormat(string extension) =>
+    internal static bool IsDeliveryFormat(string extension) =>
         extension.ToLowerInvariant() is "png" or "gif" or "jpg" or "jpeg";
 
     /// <summary>
@@ -674,6 +716,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
 
             entry.Name = FreeName(name);
             _entries[id.Value] = entry;
+            Unremove(id.Value);
             SaveInventory();
         }
 
@@ -782,7 +825,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
     /// what the copy does not carry. Compared against the file on disk, not against the recorded hash,
     /// so a damaged stock file never costs the good original.
     /// </summary>
-    public bool Holds(AssetId asset, ReadOnlySpan<byte> bytes)
+    internal bool Holds(AssetId asset, ReadOnlySpan<byte> bytes)
     {
         InventoryEntry? entry;
 
@@ -829,6 +872,7 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         {
             CreatedAt = CreatedAt,
             Entries = [.. _entries.Values.OrderBy(entry => entry.AddedAt)],
+            Removed = [.. _removed.Order(StringComparer.OrdinalIgnoreCase)],
         };
 
         AtomicFile.Write(
