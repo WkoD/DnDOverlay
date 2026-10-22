@@ -97,17 +97,17 @@ internal sealed class Entrances(IAssetSink stock, ControlSettings settings, Time
         }
 
         var offer = Offer(data);
-        var addresses = DroppedAddress.Candidates(
-            offer.Text,
-            Encoded(data, "UniformResourceLocatorW", System.Text.Encoding.Unicode)
-                ?? Encoded(data, "UniformResourceLocator", System.Text.Encoding.Latin1),
-            Text(data, "text/uri-list") ?? Encoded(data, "text/uri-list", System.Text.Encoding.UTF8),
-            offer.Html);
+        var urlFormat = Encoded(data, "UniformResourceLocatorW", System.Text.Encoding.Unicode)
+            ?? Encoded(data, "UniformResourceLocator", System.Text.Encoding.Latin1);
+        var uriList = Text(data, "text/uri-list") ?? Encoded(data, "text/uri-list", System.Text.Encoding.UTF8);
+        var addresses = DroppedAddress.Candidates(offer.Text, urlFormat, uriList, offer.Html);
 
         // <b>An address that names a file on this machine is a file</b>, and files come first. VS
         // Code's Markdown preview hands a picture over by such an address and nothing else - no
-        // file, no text (before a game session, 18.10.2026). Only an existing file counts.
-        var local = addresses
+        // file, no text (before a game session, 18.10.2026). Only an existing file counts - and no
+        // link of a copied page: it names what the page points to, and would win over the offer's
+        // own bitmap below (DroppedAddress.FileCandidates). As an address to fetch it stays.
+        var local = DroppedAddress.FileCandidates(offer.Text, urlFormat, uriList, offer.Html)
             .Select(DroppedAddress.LocalPath)
             .FirstOrDefault(path => path is not null && File.Exists(path));
 
