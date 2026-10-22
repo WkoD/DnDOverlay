@@ -247,6 +247,10 @@ internal sealed class ScreenTile : Border
             },
         };
 
+        // A tile that leaves the stage - its screen unplugged, its device unpaired - takes its list
+        // with it, and lets go of the window it was watching.
+        Unloaded += (_, _) => CloseReasons();
+
         _state.SelectionChanged += async (_, _) => await ChooseAsync().ConfigureAwait(true);
 
         // A tap on the head opens the reasons, a long press the screen menu, a movement the drag -
@@ -738,10 +742,17 @@ internal sealed class ScreenTile : Border
 
             // A tap anywhere else closes it again. Watched on the window, because the list lies in
             // a popup of its own and the tile does not see a tap on its neighbour.
+            //
+            // Leaving the window closes it too. A popup is a topmost window of its own: after Alt+Tab
+            // to MapTool, or with the control minimised, it floated over the other application at its
+            // old place until the DM came back and tapped (M5 review) - "the next tap closes it"
+            // (Part 7) was never meant to outlive the window.
             if (Window.GetWindow(this) is { } window)
             {
                 window.PreviewMouseDown += Elsewhere;
                 window.PreviewTouchDown += Elsewhere;
+                window.Deactivated += Away;
+                window.StateChanged += Away;
                 _watching = window;
             }
         }
@@ -759,6 +770,8 @@ internal sealed class ScreenTile : Border
 
         CloseReasons();
     }
+
+    private void Away(object? sender, EventArgs e) => CloseReasons();
 
     private static bool IsWithin(DependencyObject hit, DependencyObject container)
     {
@@ -784,6 +797,8 @@ internal sealed class ScreenTile : Border
         {
             window.PreviewMouseDown -= Elsewhere;
             window.PreviewTouchDown -= Elsewhere;
+            window.Deactivated -= Away;
+            window.StateChanged -= Away;
             _watching = null;
         }
     }
