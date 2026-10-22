@@ -106,7 +106,7 @@ public sealed class CampaignDeskTests
         using var bench = new CampaignBench(thread.Dispatcher);
         var reports = new ConcurrentQueue<string>();
 
-        bench.Desk.Reported += (_, words) => reports.Enqueue(words);
+        bench.Desk.Reported += (_, report) => reports.Enqueue(report.Line);
         await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
 
         var copying = Path.Combine(bench.Desk.Open!.Directory, "neu.png");
@@ -120,6 +120,37 @@ public sealed class CampaignDeskTests
 
         Assert.Contains(Strings.DeskSkipped(1, "neu.png"), reports.Last(), StringComparison.Ordinal);
         Assert.True(File.Exists(copying));
+    }
+
+    /// <summary>
+    /// Behind the report's line, the names it counts - a missing entry with its picture, so the box can
+    /// jump to it in the stock or remove it; a foreign file by its place in the folder, for Explorer
+    /// (Part 3, phase 3).
+    /// </summary>
+    [Fact]
+    public async Task The_report_carries_the_names_behind_its_line()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+        var reports = new ConcurrentQueue<FolderReport>();
+
+        bench.Desk.Reported += (_, report) => reports.Enqueue(report);
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+
+        var karte = await bench.PictureAsync("Karte", 1);
+        var directory = bench.Desk.Open!.Directory;
+
+        File.Delete(Directory.EnumerateFiles(Path.Combine(directory, "assets"), karte.AssetId.Value + ".*").Single());
+        await File.WriteAllTextAsync(Path.Combine(directory, "notizen.txt"), "Kein Bild.", Cancellation);
+        await bench.Desk.RescanAsync();
+
+        var last = reports.Last();
+
+        Assert.Same(bench.Desk.Open, last.Campaign);
+        Assert.Equal([new MissingPicture(karte.AssetId, "Karte")], last.Missing);
+        Assert.Equal(["notizen.txt"], last.Foreign);
+        Assert.True(last.HasNames);
+        Assert.Contains(Strings.DeskMissing(1, "Karte"), last.Line, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -185,7 +216,7 @@ public sealed class CampaignDeskTests
         using var bench = new CampaignBench(thread.Dispatcher);
         var reports = new ConcurrentQueue<string>();
 
-        bench.Desk.Reported += (_, words) => reports.Enqueue(words);
+        bench.Desk.Reported += (_, report) => reports.Enqueue(report.Line);
         await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
         await bench.Desk.RescanAsync();
 
@@ -212,11 +243,11 @@ public sealed class CampaignDeskTests
         var reports = new ConcurrentQueue<string>();
         var second = new TaskCompletionSource();
 
-        bench.Desk.Reported += (_, words) =>
+        bench.Desk.Reported += (_, report) =>
         {
-            reports.Enqueue(words);
+            reports.Enqueue(report.Line);
 
-            if (words.Contains("Tyranny", StringComparison.Ordinal))
+            if (report.Line.Contains("Tyranny", StringComparison.Ordinal))
             {
                 second.TrySetResult();
             }

@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows.Threading;
 using DnDOverlay.Campaign;
+using DnDOverlay.Core;
 using DnDOverlay.Hub;
 using Microsoft.Extensions.Logging;
 
@@ -59,7 +60,7 @@ internal sealed class CampaignDesk
     internal event EventHandler? Changed;
 
     /// <summary>The reconciliation of a just-opened campaign has something to say. Raised on the UI thread.</summary>
-    internal event EventHandler<string>? Reported;
+    internal event EventHandler<FolderReport>? Reported;
 
     /// <summary>
     /// A campaign has opened and its folder check is done: the two numbers the stock reports on - its
@@ -490,7 +491,7 @@ internal sealed class CampaignDesk
         {
             await before.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-            string? words;
+            FolderReport? said;
             var adopted = 0;
 
             try
@@ -503,13 +504,13 @@ internal sealed class CampaignDesk
 
                 // Broken off because the campaign closed under it - switched, renamed, deleted, moved:
                 // half a report, about a stock no longer in use. Nothing to say beside the stage.
-                words = report.Interrupted ? null : Words(campaign, report);
+                said = report.Interrupted ? null : Report(campaign, report);
                 adopted = report.Adopted;
             }
             catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
             {
                 ControlLog.CampaignCheckFailed(_logger, campaign.Name, failed.Message);
-                words = Strings.CampaignCheckFailed(campaign.Name, failed.Message);
+                said = new FolderReport(campaign, Strings.CampaignCheckFailed(campaign.Name, failed.Message));
             }
 
             await _dispatcher.InvokeAsync(() =>
@@ -519,9 +520,9 @@ internal sealed class CampaignDesk
                     return;
                 }
 
-                if (words is not null)
+                if (said is not null)
                 {
-                    Reported?.Invoke(this, words);
+                    Reported?.Invoke(this, said);
                 }
 
                 if (!again)
@@ -563,8 +564,31 @@ internal sealed class CampaignDesk
     }
 
     /// <summary>
-    /// The report: the campaign's numbers on arriving - the moment they count - and what the folder
-    /// check did, in one line (Part 3, Part 7).
+    /// The report beside the stage: the line, and behind it the names it counts - the missing entries
+    /// with their pictures' ids, so the box can jump to them in the stock or remove them (Part 3, phase 3).
+    /// </summary>
+    private static FolderReport Report(OpenCampaign campaign, CampaignReport report)
+    {
+        var names = campaign.Store.Entries.ToDictionary(entry => entry.AssetId, entry => entry.Name, StringComparer.Ordinal);
+
+        return new FolderReport(campaign, Words(campaign, report))
+        {
+            Missing =
+            [
+                .. campaign.Store.Missing
+                    .Select(asset => new MissingPicture(asset, names.GetValueOrDefault(asset.Value, asset.Value)))
+                    .OrderBy(missing => missing.Name, StringComparer.CurrentCulture),
+            ],
+            Foreign = report.Foreign,
+            Kept = report.Kept,
+            Skipped = report.Skipped,
+            UnreadableScenes = report.UnreadableScenes,
+        };
+    }
+
+    /// <summary>
+    /// The report's line: the campaign's numbers on arriving - the moment they count - and what the
+    /// folder check did (Part 3, Part 7). What the box shows folded.
     /// </summary>
     private static string Words(OpenCampaign campaign, CampaignReport report)
     {
@@ -623,6 +647,38 @@ internal sealed class CampaignDesk
     private static string FirstNames(IReadOnlyList<string> names) =>
         string.Join(", ", names.Take(5)) + (names.Count > 5 ? ", ..." : string.Empty);
 }
+
+/// <summary>
+/// The folder report beside the stage (Part 3, phase 3: "a report, not twenty dialogs"): one line that
+/// counts, and behind it, expandable, the names - with the actions beside them: jump to a missing entry
+/// in the stock or remove it, show a foreign file in Explorer. The names are relative to the campaign's
+/// folder; the actions belong to <see cref="Campaign"/> and to no campaign opened after it.
+/// </summary>
+/// <param name="Campaign">The campaign the report is about.</param>
+/// <param name="Line">The report folded: what it counts, in one line.</param>
+internal sealed record FolderReport(OpenCampaign Campaign, string Line)
+{
+    /// <summary>Entries whose file is gone - marked, not removed (Part 3).</summary>
+    internal IReadOnlyList<MissingPicture> Missing { get; init; } = [];
+
+    /// <summary>Files that are no picture, left where they are.</summary>
+    internal IReadOnlyList<string> Foreign { get; init; } = [];
+
+    /// <summary>Files kept beside the picture taken in from them.</summary>
+    internal IReadOnlyList<string> Kept { get; init; } = [];
+
+    /// <summary>Files that could not be read right now, tried again on the next check.</summary>
+    internal IReadOnlyList<string> Skipped { get; init; } = [];
+
+    /// <summary>Scene and layout files that would not read.</summary>
+    internal IReadOnlyList<string> UnreadableScenes { get; init; } = [];
+
+    /// <summary>Whether there are names behind the line - only then can it be expanded.</summary>
+    internal bool HasNames => Missing.Count + Foreign.Count + Kept.Count + Skipped.Count + UnreadableScenes.Count > 0;
+}
+
+/// <summary>A picture of the stock whose file is gone, as the report names it.</summary>
+internal sealed record MissingPicture(AssetId Asset, string Name);
 
 /// <summary>What the stock reports on, measured when a campaign opens (Part 7).</summary>
 /// <param name="Pictures">Pictures in the campaign just opened.</param>

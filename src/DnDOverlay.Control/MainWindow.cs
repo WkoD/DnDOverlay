@@ -306,7 +306,7 @@ internal sealed class MainWindow : Window, IDisposable
             _ = _board.RefreshAsync(_closing);
         };
 
-        desk.Reported += (_, words) => Notify(words);
+        desk.Reported += (_, report) => ShowReport(report);
         desk.Measured += (_, measure) => Report(measure);
 
         _panelHead.CampaignAsked += (_, _) =>
@@ -583,15 +583,21 @@ internal sealed class MainWindow : Window, IDisposable
     /// A notice whose dismissal means something - <paramref name="dismissed"/> runs on "OK" - and
     /// that may carry one more answer beside it, which dismisses it too.
     /// </summary>
-    private Action Notify(string text, Action? dismissed, string? otherLabel = null, Action? other = null)
-    {
-        var message = new TextBlock
-        {
-            Text = text,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 12, 0),
-        };
+    private Action Notify(string text, Action? dismissed, string? otherLabel = null, Action? other = null) =>
+        Notice(
+            new TextBlock
+            {
+                Text = text,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 12, 0),
+            },
+            dismissed,
+            otherLabel,
+            other);
 
+    /// <summary>A notice of any content - a line, or a line with more behind it - with "OK" and maybe one more answer beside it.</summary>
+    private Action Notice(FrameworkElement message, Action? dismissed, string? otherLabel = null, Action? other = null)
+    {
         var dismiss = new Button
         {
             Content = Strings.MainNoticeOk,
@@ -650,6 +656,163 @@ internal sealed class MainWindow : Window, IDisposable
         _notices.Children.Add(notice);
 
         return () => _notices.Children.Remove(notice);
+    }
+
+    /// <summary>
+    /// The folder report (Part 3, phase 3): its line, and - when it counts names - expandable to them,
+    /// with the actions beside them: a missing entry is shown in the stock or deleted from it, a foreign
+    /// file is shown in Explorer. Folded it reads as before; the names are built only when opened, so a
+    /// folder of two thousand missing files costs nothing until somebody looks.
+    /// </summary>
+    private void ShowReport(FolderReport report)
+    {
+        var body = new StackPanel { Margin = new Thickness(0, 0, 12, 0) };
+
+        body.Children.Add(new TextBlock { Text = report.Line, TextWrapping = TextWrapping.Wrap });
+
+        if (report.HasNames)
+        {
+            var names = new Expander { Header = Strings.MainReportNames, Margin = new Thickness(0, 4, 0, 0) };
+
+            names.Expanded += (_, _) => names.Content ??= Names(report);
+            body.Children.Add(names);
+        }
+
+        Notice(body, dismissed: null);
+    }
+
+    /// <summary>The names behind a folder report, by kind, each with what can be done about it.</summary>
+    private ScrollViewer Names(FolderReport report)
+    {
+        var list = new StackPanel();
+
+        if (report.Missing.Count > 0)
+        {
+            list.Children.Add(Heading(Strings.MainReportMissing));
+
+            foreach (var missing in report.Missing)
+            {
+                var show = Small(Strings.TileMenuShowInStock);
+                var delete = Small(Strings.StockMenuDelete);
+
+                show.Click += (_, _) =>
+                {
+                    if (Still(report))
+                    {
+                        ShowInStock(missing.Asset);
+                    }
+                };
+
+                // The stock's own delete, with its question: the entry goes out of every scene and
+                // layout too, and the report's button must not be a shorter way around that (Part 7).
+                delete.Click += async (_, _) =>
+                {
+                    if (!Still(report))
+                    {
+                        return;
+                    }
+
+                    await _edits.DeleteAsync(this, [missing.Asset]).ConfigureAwait(true);
+
+                    if (report.Campaign.Store.Entries.All(entry => entry.AssetId != missing.Asset.Value))
+                    {
+                        show.IsEnabled = false;
+                        delete.IsEnabled = false;
+                    }
+                };
+
+                list.Children.Add(Row(missing.Name, show, delete));
+            }
+        }
+
+        if (report.Foreign.Count > 0)
+        {
+            list.Children.Add(Heading(Strings.MainReportForeign));
+
+            foreach (var name in report.Foreign)
+            {
+                var explorer = Small(Strings.StockMenuShowFile);
+
+                explorer.Click += (_, _) => ShowFile(report, name);
+                list.Children.Add(Row(name, explorer));
+            }
+        }
+
+        foreach (var (heading, names) in new[]
+        {
+            (Strings.MainReportKept, report.Kept),
+            (Strings.MainReportSkipped, report.Skipped),
+            (Strings.MainReportUnreadable, report.UnreadableScenes),
+        })
+        {
+            if (names.Count == 0)
+            {
+                continue;
+            }
+
+            list.Children.Add(Heading(heading));
+
+            foreach (var name in names)
+            {
+                list.Children.Add(Row(name));
+            }
+        }
+
+        return new ScrollViewer { Content = list, MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+
+        static TextBlock Heading(string text) => new() { Text = text, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 2) };
+
+        static Button Small(string label) => new() { Content = label, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 1, 0, 1) };
+
+        static DockPanel Row(string name, params Button[] actions)
+        {
+            var row = new DockPanel { LastChildFill = true };
+
+            foreach (var action in actions.Reverse())
+            {
+                DockPanel.SetDock(action, System.Windows.Controls.Dock.Right);
+                row.Children.Add(action);
+            }
+
+            row.Children.Add(new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, ToolTip = name });
+
+            return row;
+        }
+    }
+
+    /// <summary>
+    /// Whether the report's campaign is still the open one. Its names mean nothing in the next one - a
+    /// missing entry there may be another picture, a foreign file another folder's - so the box says so.
+    /// </summary>
+    private bool Still(FolderReport report)
+    {
+        if (ReferenceEquals(_desk.Open, report.Campaign))
+        {
+            return true;
+        }
+
+        _status.Text = Strings.MainReportOtherCampaign;
+
+        return false;
+    }
+
+    /// <summary>A file the report names, selected in Explorer - where the DM keeps his notes, or finds what holds a file.</summary>
+    private void ShowFile(FolderReport report, string name)
+    {
+        if (!Still(report))
+        {
+            return;
+        }
+
+        var file = System.IO.Path.Combine(report.Campaign.Directory, name);
+
+        if (!System.IO.File.Exists(file))
+        {
+            _status.Text = Strings.MainReportFileGone(name);
+            return;
+        }
+
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{file}\"") { UseShellExecute = true });
     }
 
     /// <summary>

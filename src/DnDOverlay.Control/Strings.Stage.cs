@@ -41,6 +41,22 @@ internal static partial class Strings
 
     internal static string DeskKept(int count) => Text.Format(nameof(DeskKept), count);
 
+    internal static string MainReportNames => Text[nameof(MainReportNames)];
+
+    internal static string MainReportMissing => Text[nameof(MainReportMissing)];
+
+    internal static string MainReportForeign => Text[nameof(MainReportForeign)];
+
+    internal static string MainReportKept => Text[nameof(MainReportKept)];
+
+    internal static string MainReportSkipped => Text[nameof(MainReportSkipped)];
+
+    internal static string MainReportUnreadable => Text[nameof(MainReportUnreadable)];
+
+    internal static string MainReportOtherCampaign => Text[nameof(MainReportOtherCampaign)];
+
+    internal static string MainReportFileGone(string name) => Text.Format(nameof(MainReportFileGone), name);
+
     internal static string IntakeNothingUsable => Text[nameof(IntakeNothingUsable)];
 
     internal static string IntakeRunGoing => Text[nameof(IntakeRunGoing)];
