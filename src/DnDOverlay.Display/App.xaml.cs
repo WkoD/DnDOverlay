@@ -45,7 +45,7 @@ public sealed partial class App : Application, IDisposable
     /// here keeps the default available for the moment a name is taken away again (Part 6).
     /// </summary>
     private readonly Dictionary<ScreenId, string> _names = [];
-    private readonly Dictionary<ScreenRef, SceneState> _scenes = [];
+    private readonly SceneBook _scenes = new();
     private readonly Dictionary<ScreenId, ScreenContext> _contexts = [];
     private readonly Dictionary<ScreenId, MonitorInfo> _monitors = [];
 
@@ -1085,7 +1085,7 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        var mine = _scenes.Where(pair => pair.Key.Device == _device).Select(pair => pair.Value);
+        var mine = _scenes.Of(_device).Select(pair => pair.Value);
 
         if (_stock.Settle(SceneAssets.InUse(mine)) is { Adopted: > 0 } settled)
         {
@@ -1600,7 +1600,7 @@ public sealed partial class App : Application, IDisposable
             // What this device still has on its screens. A control that has just restarted takes
             // it over, and only where it has no scene of its own - which is the one exception to
             // "the hub is authoritative", and it is kept this narrow on purpose (Part 4).
-            [.. _scenes.Where(pair => pair.Key.Device == _device)
+            [.. _scenes.Of(_device)
                 .Select(pair => new ScreenScene(pair.Key.Screen, pair.Value))]);
     }
 
@@ -1646,7 +1646,7 @@ public sealed partial class App : Application, IDisposable
                 // drawn at once, the pictures come after. A snapshot is the reconnect case, so it
                 // is exactly the moment somebody has a hand on the table and is waiting to be
                 // answered again.
-                _scenes[snapshot.Screen] = snapshot.Scene;
+                _scenes.Set(snapshot.Screen, snapshot.Scene);
                 await RenderAsync(snapshot.Screen).ConfigureAwait(false);
                 Fetch(snapshot.Screen);
 
@@ -1902,46 +1902,54 @@ public sealed partial class App : Application, IDisposable
             }
 
             var ops = group.Select(op => op.Op).ToList();
-            var scene = _scenes.TryGetValue(group.Key, out var known) ? known : SceneState.Empty;
+            IReadOnlyList<ItemId> arrived = [];
 
-            // Asked BEFORE the operations are applied, because "was this screen already occupied?"
-            // has no answer afterwards.
-            var arrived = Arrival.Marked(scene, ops);
-
-            foreach (var op in ops)
+            // From the read to the write in one change of the book: a hand letting go writes into
+            // the same scene on the UI thread, and two unguarded read-modify-writes lose one of the
+            // two - the release that springs back, or this patch (Part 4, conflict rule 2).
+            _scenes.Change(group.Key, known =>
             {
-                if (op is TransformItem moved && LateAnswerToOwnGrab(moved, scene, context) is { } depthOnly)
-                {
-                    // Not measured as the answer to the release either: it answers the grab, and
-                    // pairing it with the release is what made the evening's log read 886 DIP.
-                    scene = SceneReducer.Apply(scene, depthOnly, context);
+                var scene = known ?? SceneState.Empty;
 
-                    continue;
+                // Asked BEFORE the operations are applied, because "was this screen already
+                // occupied?" has no answer afterwards.
+                arrived = Arrival.Marked(scene, ops);
+
+                foreach (var op in ops)
+                {
+                    if (op is TransformItem moved && LateAnswerToOwnGrab(moved, scene, context) is { } depthOnly)
+                    {
+                        // Not measured as the answer to the release either: it answers the grab, and
+                        // pairing it with the release is what made the evening's log read 886 DIP.
+                        scene = SceneReducer.Apply(scene, depthOnly, context);
+
+                        continue;
+                    }
+
+                    scene = SceneReducer.Apply(scene, op, context);
+
+                    if (op is ParkItem { Parked: false } unparked)
+                    {
+                        BringBack(group.Key.Screen, scene, unparked.Item);
+                    }
+
+                    if (op is TransformItem confirming)
+                    {
+                        Confirmed(confirming, context, scene);
+                    }
+
+                    if (op is RemoveItem removed)
+                    {
+                        // An item that goes away while a hand was on it leaves an entry in the
+                        // throttle that nothing would ever clear again - its binding report is the
+                        // one that never comes (Part 4, conflict rule 4).
+                        _throttle.Forget(removed.Item);
+                        _grabbedAt.TryRemove(removed.Item, out _);
+                    }
                 }
 
-                scene = SceneReducer.Apply(scene, op, context);
-
-                if (op is ParkItem { Parked: false } unparked)
-                {
-                    BringBack(group.Key.Screen, scene, unparked.Item);
-                }
-
-                if (op is TransformItem confirming)
-                {
-                    Confirmed(confirming, context, scene);
-                }
-
-                if (op is RemoveItem removed)
-                {
-                    // An item that goes away while a hand was on it leaves an entry in the throttle
-                    // that nothing would ever clear again - its binding report is the one that never
-                    // comes (Part 4, conflict rule 4).
-                    _throttle.Forget(removed.Item);
-                    _grabbedAt.TryRemove(removed.Item, out _);
-                }
-            }
-
-            _scenes[group.Key] = scene;
+                return scene;
+            });
 
             // <b>The state lands and is drawn; the pictures follow.</b> This used to wait here for
             // the whole load - fetch and decode, about three seconds a picture on the table's own
@@ -2444,7 +2452,7 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private List<DecodedPicture> Candidates(HashSet<ItemId> held)
     {
-        var mine = _scenes.Where(pair => pair.Key.Device == _device).Select(pair => pair.Value).ToList();
+        var mine = _scenes.Of(_device).Select(pair => pair.Value).ToList();
         var backgrounds = mine.Where(scene => scene.Background is not null).Select(scene => scene.Background!.AssetId).ToHashSet();
         var items = mine.SelectMany(scene => scene.Items.OfType<ImageItem>()).ToList();
         var pictures = new List<DecodedPicture>();
@@ -2562,7 +2570,7 @@ public sealed partial class App : Application, IDisposable
 
                 _peakBytes = Math.Max(_peakBytes, bytes);
 
-                var scenes = _scenes.Where(pair => pair.Key.Device == _device).ToList();
+                var scenes = _scenes.Of(_device).ToList();
 
                 // Worked out into locals rather than inside the call: an argument that costs
                 // something must not be evaluated when the level would throw the line away (CA1873).
@@ -3118,26 +3126,27 @@ public sealed partial class App : Application, IDisposable
     /// </param>
     private void Settle(ScreenId screen, ItemTransform transform, bool toFront)
     {
-        var reference = new ScreenRef(_device, screen);
-
-        if (!_scenes.TryGetValue(reference, out var scene)
-            || !_contexts.TryGetValue(screen, out var context)
-            || scene.Items.FirstOrDefault(item => item.ItemId == transform.Item) is not { } standing)
+        if (!_contexts.TryGetValue(screen, out var context))
         {
             return;
         }
 
-        _scenes[reference] = SceneReducer.Apply(
-            scene,
-            new TransformItem(
-                transform.Item,
-                transform.CenterX,
-                transform.CenterY,
-                transform.Scale,
-                transform.RotationDeg,
-                toFront ? Math.Max(standing.ZOrder, scene.Top(standing.Parked) + 1) : standing.ZOrder,
-                standing.Revision),
-            context);
+        // In one change of the book, against a patch for the same screen landing on the connection
+        // task at the same moment - see SceneBook.
+        _scenes.Change(new ScreenRef(_device, screen), scene =>
+            scene?.Items.FirstOrDefault(item => item.ItemId == transform.Item) is not { } standing
+                ? null
+                : SceneReducer.Apply(
+                    scene,
+                    new TransformItem(
+                        transform.Item,
+                        transform.CenterX,
+                        transform.CenterY,
+                        transform.Scale,
+                        transform.RotationDeg,
+                        toFront ? Math.Max(standing.ZOrder, scene.Top(standing.Parked) + 1) : standing.ZOrder,
+                        standing.Revision),
+                    context));
     }
 
     /// <summary>
