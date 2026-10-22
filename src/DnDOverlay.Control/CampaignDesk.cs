@@ -185,10 +185,13 @@ internal sealed class CampaignDesk
         {
             return gone.Message;
         }
-        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException)
+        catch (CampaignUnavailableException unavailable)
         {
-            // A file of the campaign held by another program while it opens: said, never a crash.
-            return Strings.CampaignNotOpened(name, unreadable.Message);
+            // A file of the campaign held by another program while it opens, a folder the account may
+            // not read: the library's one stated refusal, said - never a crash. Nothing was changed.
+            ControlLog.CampaignRefused(_logger, name, unavailable.Message);
+
+            return unavailable.Message;
         }
 
         if (Open is not null)
@@ -263,10 +266,17 @@ internal sealed class CampaignDesk
     /// <para>
     /// <b>All or nothing, as far as the file system lets it</b>: a display still downloading a map, a
     /// verify reading a file - a recursive delete would stop at the first file held open and leave
-    /// the campaign half gone, the one grip that cannot be taken back done by half (Part 7). So the
-    /// folder is first moved aside and back, which Windows refuses while anything in it is open; then
-    /// the campaign stays as it was, the table too, and the DM is told. What still fails after that
-    /// is said too.
+    /// the campaign half gone, the one grip that cannot be taken back done by half (Part 7). The
+    /// library moves the folder aside in one rename first, which Windows refuses while anything in it
+    /// is open (<see cref="CampaignLibrary.Delete"/>) - the one way of deleting, not a second probe
+    /// beside it. <b>Asked before the table is cleared</b>: refused, the campaign is open as it was,
+    /// the table too, and the DM is told. The table goes only with the folder.
+    /// </para>
+    /// <para>
+    /// What can still fail is a file taken hold of between the move and the delete. Then the library
+    /// has put what is left back under its name, its stock stays closed, and the campaign is not
+    /// opened again over a half-deleted folder: the table is cleared, none is open, and the DM is told
+    /// where the rest lies.
     /// </para>
     /// </summary>
     /// <returns>Why it was not deleted, or not completely, or <see langword="null"/>.</returns>
@@ -282,23 +292,27 @@ internal sealed class CampaignDesk
             return refused;
         }
 
-        // Asked before the table is cleared: refused, nothing has changed at all - not even the table.
-        if (Held(open.Directory) is { } held)
+        var outcome = _library.Delete(open);
+
+        // Refused before anything went: the library opened the stock again, and nothing - not even the
+        // table - has changed.
+        if (outcome is CampaignOutcome.Busy && !open.Store.IsClosed)
         {
-            return Strings.CampaignDeleteHeld(open.Name, held);
+            return Strings.CampaignDeleteHeld(open.Name);
         }
 
         await _session.ClearEverywhereAsync(CancellationToken.None).ConfigureAwait(true);
 
         Become(null);
 
-        try
+        if (outcome is not CampaignOutcome.Done)
         {
-            _library.Delete(open);
-        }
-        catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
-        {
-            return Strings.CampaignDeleteIncomplete(open.Name, failed.Message, open.Directory);
+            var left = Directory.Exists(open.Directory) ? open.Directory : BasePath;
+
+            ControlLog.CampaignDeleteIncomplete(
+                _logger, open.Name, $"a file in it was taken hold of while it was being deleted; what is left lies in {left}.");
+
+            return Strings.CampaignDeleteIncomplete(open.Name, left);
         }
 
         ControlLog.CampaignDeleted(_logger, open.Name);
@@ -330,38 +344,6 @@ internal sealed class CampaignDesk
 
             return false;
         }
-    }
-
-    /// <summary>
-    /// Whether something holds a file in the folder: the folder moved aside and back. Windows refuses
-    /// the move while a file in it is open without sharing delete - exactly what would stop a
-    /// recursive delete halfway. The reason, or <see langword="null"/> when nothing holds it.
-    /// </summary>
-    private static string? Held(string directory)
-    {
-        var aside = directory.TrimEnd(Path.DirectorySeparatorChar) + ".deleting";
-
-        try
-        {
-            Directory.Move(directory, aside);
-        }
-        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-        {
-            return refused.Message;
-        }
-
-        try
-        {
-            Directory.Move(aside, directory);
-        }
-        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-        {
-            // Moved aside a moment ago and not back - rare beyond words, and then nothing is deleted:
-            // the folder lies beside its old place, the reason is said.
-            return refused.Message;
-        }
-
-        return null;
     }
 
     /// <summary>
@@ -417,7 +399,7 @@ internal sealed class CampaignDesk
         {
             await before.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-            string words;
+            string? words;
             var adopted = 0;
 
             try
@@ -428,11 +410,14 @@ internal sealed class CampaignDesk
                 ControlLog.CampaignReconciled(
                     _logger, report.Adopted, report.Duplicates, report.Missing.Count, report.Foreign.Count, report.Reconstructed);
 
-                words = Words(campaign, report);
+                // Broken off because the campaign closed under it - switched, renamed, deleted, moved:
+                // half a report, about a stock no longer in use. Nothing to say beside the stage.
+                words = report.Interrupted ? null : Words(campaign, report);
                 adopted = report.Adopted;
             }
             catch (Exception failed) when (failed is IOException or UnauthorizedAccessException)
             {
+                ControlLog.CampaignCheckFailed(_logger, campaign.Name, failed.Message);
                 words = Strings.CampaignCheckFailed(campaign.Name, failed.Message);
             }
 
@@ -443,7 +428,10 @@ internal sealed class CampaignDesk
                     return;
                 }
 
-                Reported?.Invoke(this, words);
+                if (words is not null)
+                {
+                    Reported?.Invoke(this, words);
+                }
 
                 if (!again)
                 {
@@ -467,6 +455,15 @@ internal sealed class CampaignDesk
     {
         lock (_gate)
         {
+            // The campaign left behind takes no more writes: an ingest still decoding or a folder check
+            // still settling would otherwise write into its folder afterwards - and after a move of the
+            // campaigns into a folder that is no longer theirs (OpenCampaign.Close). Rename and delete
+            // closed it already; closing twice is nothing.
+            if (Open is { } leaving && !ReferenceEquals(leaving, campaign))
+            {
+                leaving.Close();
+            }
+
             Open = campaign;
             Stock.Current = campaign?.Store;
         }
@@ -503,9 +500,7 @@ internal sealed class CampaignDesk
 
         if (report.Missing.Count > 0)
         {
-            parts.Add(Strings.DeskMissing(
-                report.Missing.Count,
-                string.Join(", ", report.Missing.Take(5)) + (report.Missing.Count > 5 ? ", ..." : string.Empty)));
+            parts.Add(Strings.DeskMissing(report.Missing.Count, FirstNames(report.Missing)));
         }
 
         if (report.Foreign.Count > 0)
@@ -518,8 +513,24 @@ internal sealed class CampaignDesk
             parts.Add(Strings.DeskUnreadableScenes(report.UnreadableScenes.Count, string.Join(", ", report.UnreadableScenes)));
         }
 
+        if (report.Kept.Count > 0)
+        {
+            parts.Add(Strings.DeskKept(report.Kept.Count));
+        }
+
+        // Locked, an offline placeholder, gone since the first look: named, because the DM is the one
+        // who knows which program holds it - and the next check tries them again (Part 3, phase 3).
+        if (report.Skipped.Count > 0)
+        {
+            parts.Add(Strings.DeskSkipped(report.Skipped.Count, FirstNames(report.Skipped)));
+        }
+
         return string.Join(" · ", parts);
     }
+
+    /// <summary>The first few names of a list, for one line - the rest as "...".</summary>
+    private static string FirstNames(IReadOnlyList<string> names) =>
+        string.Join(", ", names.Take(5)) + (names.Count > 5 ? ", ..." : string.Empty);
 }
 
 /// <summary>What the stock reports on, measured when a campaign opens (Part 7).</summary>

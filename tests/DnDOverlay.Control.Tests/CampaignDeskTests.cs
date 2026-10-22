@@ -79,9 +79,9 @@ public sealed class CampaignDeskTests
             refused = await bench.Desk.DeleteAsync();
         }
 
-        Assert.NotNull(refused);
-        Assert.StartsWith(Strings.CampaignDeleteHeld("Vandalia", string.Empty)[..12], refused, StringComparison.Ordinal);
+        Assert.Equal(Strings.CampaignDeleteHeld("Vandalia"), refused);
         Assert.Same(open, bench.Desk.Open);
+        Assert.False(open.Store.IsClosed);
         Assert.Single((await bench.Session.GetSceneAsync(CampaignBench.Screen, Cancellation)).Items);
         Assert.True(File.Exists(file));
         Assert.True(File.Exists(Path.Combine(open.Directory, "inventory.json")));
@@ -92,8 +92,9 @@ public sealed class CampaignDeskTests
     }
 
     /// <summary>
-    /// "Check folder again" while Explorer still copies a file in: the file cannot be read yet. Said in
-    /// the report beside the stage - not an exception out of the tidy-up view that ends the control.
+    /// "Check folder again" while Explorer still copies a file in: the file cannot be read yet. Named in
+    /// the report beside the stage as one to try again - not an exception out of the tidy-up view that
+    /// ends the control, and not a check that stops at it.
     /// </summary>
     [Fact]
     public async Task Checking_the_folder_with_a_file_still_being_copied_reports_instead_of_crashing()
@@ -114,7 +115,84 @@ public sealed class CampaignDeskTests
             await bench.Desk.RescanAsync();
         }
 
-        Assert.Contains(Strings.CampaignCheckFailed("Vandalia", string.Empty)[..20], reports.Last(), StringComparison.Ordinal);
+        Assert.Contains(Strings.DeskSkipped(1, "neu.png"), reports.Last(), StringComparison.Ordinal);
+        Assert.True(File.Exists(copying));
+    }
+
+    /// <summary>
+    /// A campaign whose inventory another program holds while it opens: refused with the library's
+    /// reason, nothing open - not an exception out of the switcher.
+    /// </summary>
+    [Fact]
+    public async Task A_campaign_that_cannot_be_read_right_now_is_refused_with_its_reason()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+        await bench.PictureAsync("Karte", 1);
+        await bench.Desk.CloseAsync();
+
+        string? refused;
+
+        using (new FileStream(Path.Combine(bench.Base, "Vandalia", "inventory.json"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            refused = await bench.Desk.SwitchAsync("Vandalia");
+        }
+
+        Assert.NotNull(refused);
+        Assert.Contains("Vandalia", refused, StringComparison.Ordinal);
+        Assert.Null(bench.Desk.Open);
+    }
+
+    /// <summary>
+    /// The campaign left behind takes no more writes - by a switch and by closing (for the move of the
+    /// campaign folder): an ingest still decoding would otherwise write into its folder afterwards.
+    /// </summary>
+    [Fact]
+    public async Task The_campaign_left_behind_is_closed()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+
+        var vandalia = bench.Desk.Open!;
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Tyranny"));
+
+        var tyranny = bench.Desk.Open!;
+
+        Assert.True(vandalia.Store.IsClosed);
+        Assert.False(tyranny.Store.IsClosed);
+
+        await bench.Desk.CloseAsync();
+
+        Assert.True(tyranny.Store.IsClosed);
+    }
+
+    /// <summary>
+    /// A check broken off because the campaign's stock closed under it says nothing beside the stage:
+    /// half a report about a stock no longer in use would read as the whole one.
+    /// </summary>
+    [Fact]
+    public async Task A_check_broken_off_by_a_closed_stock_reports_nothing()
+    {
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+        var reports = new ConcurrentQueue<string>();
+
+        bench.Desk.Reported += (_, words) => reports.Enqueue(words);
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+        await bench.Desk.RescanAsync();
+
+        var before = reports.Count;
+
+        await File.WriteAllBytesAsync(Path.Combine(bench.Desk.Open!.Directory, "neu.png"), CampaignBench.Png(7), Cancellation);
+        bench.Desk.Open.Close();
+        await bench.Desk.RescanAsync();
+
+        Assert.Equal(before, reports.Count);
     }
 
     /// <summary>

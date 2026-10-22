@@ -429,4 +429,21 @@ internal static partial class ControlLog
         Level = LogLevel.Information,
         Message = "Stock notice for \"{Name}\": {Trigger} at {Value}.")]
     internal static partial void StockNoticed(ILogger logger, string name, Core.Configuration.StockTrigger trigger, long value);
+
+    /// <summary>
+    /// A campaign delete that began and stopped: the folder was moved aside, then a file in it was taken
+    /// hold of while deleting. What is left lies where the reason says; the campaign is closed (Part 7).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4035,
+        Level = LogLevel.Warning,
+        Message = "The campaign \"{Name}\" could not be deleted completely: {Reason}")]
+    internal static partial void CampaignDeleteIncomplete(ILogger logger, string name, string reason);
+
+    /// <summary>The folder check of a campaign ended early on a file system refusal; the box beside the stage says so (Part 3).</summary>
+    [LoggerMessage(
+        EventId = 4036,
+        Level = LogLevel.Warning,
+        Message = "The folder check of \"{Name}\" stopped: {Reason}")]
+    internal static partial void CampaignCheckFailed(ILogger logger, string name, string reason);
 }

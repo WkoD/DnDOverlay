@@ -37,6 +37,10 @@ internal static partial class Strings
 
     internal static string DeskUnreadableScenes(int count, string names) => Text.Format(nameof(DeskUnreadableScenes), count, names);
 
+    internal static string DeskSkipped(int count, string names) => Text.Format(nameof(DeskSkipped), count, names);
+
+    internal static string DeskKept(int count) => Text.Format(nameof(DeskKept), count);
+
     internal static string IntakeNothingUsable => Text[nameof(IntakeNothingUsable)];
 
     internal static string IntakeRunGoing => Text[nameof(IntakeRunGoing)];

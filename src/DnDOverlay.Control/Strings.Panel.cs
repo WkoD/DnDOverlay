@@ -281,11 +281,9 @@ internal static partial class Strings
 
     internal static string CampaignIntakeRunning => Text[nameof(CampaignIntakeRunning)];
 
-    internal static string CampaignNotOpened(string name, string reason) => Text.Format(nameof(CampaignNotOpened), name, reason);
+    internal static string CampaignDeleteHeld(string name) => Text.Format(nameof(CampaignDeleteHeld), name);
 
-    internal static string CampaignDeleteHeld(string name, string reason) => Text.Format(nameof(CampaignDeleteHeld), name, reason);
-
-    internal static string CampaignDeleteIncomplete(string name, string reason, string folder) => Text.Format(nameof(CampaignDeleteIncomplete), name, reason, folder);
+    internal static string CampaignDeleteIncomplete(string name, string folder) => Text.Format(nameof(CampaignDeleteIncomplete), name, folder);
 
     internal static string CampaignCheckFailed(string name, string reason) => Text.Format(nameof(CampaignCheckFailed), name, reason);
 
