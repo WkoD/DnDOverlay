@@ -138,7 +138,10 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
     public static bool IsUnnamed(string name) =>
         name.StartsWith(UnnamedStem, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Every campaign, by name - one directory listing, plus the small inventory of an unnamed one.</summary>
+    /// <summary>
+    /// Every campaign, by name - one directory listing, plus the small inventory of an unnamed one.
+    /// Empty when the folder cannot be listed; <see cref="Reachable"/> says whether that is why.
+    /// </summary>
     public IReadOnlyList<CampaignSummary> List()
     {
         if (!Directory.Exists(BasePath))
@@ -146,15 +149,22 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
             return [];
         }
 
-        return
-        [
-            .. Directory.EnumerateDirectories(BasePath)
-                .Select(Path.GetFileName)
-                .OfType<string>()
-                .Select(name => IsUnnamed(name) ? Unnamed(name) : new CampaignSummary(name, Unnamed: false))
-                .OrderBy(summary => summary.Unnamed)
-                .ThenBy(summary => summary.Name, StringComparer.CurrentCultureIgnoreCase),
-        ];
+        try
+        {
+            return
+            [
+                .. Directory.EnumerateDirectories(BasePath)
+                    .Select(Path.GetFileName)
+                    .OfType<string>()
+                    .Select(name => IsUnnamed(name) ? Unnamed(name) : new CampaignSummary(name, Unnamed: false))
+                    .OrderBy(summary => summary.Unnamed)
+                    .ThenBy(summary => summary.Name, StringComparer.CurrentCultureIgnoreCase),
+            ];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 
     /// <summary>
@@ -164,6 +174,10 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
     /// </summary>
     /// <exception cref="CampaignSchemaException">Written by a newer version - the one hard no (Part 3).</exception>
     /// <exception cref="DirectoryNotFoundException">There is no campaign of that name.</exception>
+    /// <exception cref="CampaignUnavailableException">
+    /// The file system refused - the inventory held by a sync client, a folder the account may not
+    /// read. Nothing was changed; trying again later may work.
+    /// </exception>
     public OpenCampaign Open(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -175,11 +189,21 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
             throw new DirectoryNotFoundException(Strings.NoSuchCampaign(name, BasePath));
         }
 
-        // The scenes first: a newer schema there refuses before the stock is touched.
-        var shelf = SceneShelf.Open(directory, time);
-        var store = openStore(directory);
+        try
+        {
+            // The scenes first: a newer schema there refuses before the stock is touched.
+            var shelf = SceneShelf.Open(directory, time);
+            var store = openStore(directory);
 
-        return new OpenCampaign(name, store, shelf, Reconciliation.Survey(store));
+            return new OpenCampaign(name, store, shelf, Reconciliation.Survey(store));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // One stated kind of refusal rather than whichever exception the file system chose - the
+            // caller has a reason to show, not a crash to have (Part 3: a campaign that cannot be
+            // opened appears with its reason).
+            throw new CampaignUnavailableException(Strings.CampaignUnavailable(name, ex.Message), ex);
+        }
     }
 
     /// <summary>
@@ -196,7 +220,14 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
             throw new CampaignBaseUnreachableException(Strings.BaseUnreachable(BasePath));
         }
 
-        Directory.CreateDirectory(BasePath);
+        try
+        {
+            Directory.CreateDirectory(BasePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new CampaignBaseUnreachableException(Strings.BaseUnreachable(BasePath), ex);
+        }
 
         var taken = Directory.EnumerateDirectories(BasePath).Select(Path.GetFileName).OfType<string>().ToList();
         var name = UnnamedStem;
@@ -255,7 +286,7 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
         {
             return (CampaignOutcome.Done, Open(newName));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CampaignSchemaException)
+        catch (Exception ex) when (ex is CampaignUnavailableException or CampaignSchemaException)
         {
             // Moved, but not readable at the new place right now - a sync client took the inventory the
             // moment it arrived. Back under the old name, so the folder and the campaign the desk holds
@@ -374,13 +405,14 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
             if (File.Exists(path)
                 && System.Text.Json.JsonSerializer.Deserialize<InventoryDocument>(File.ReadAllBytes(path), Web) is { } document)
             {
-                return new CampaignSummary(name, Unnamed: true, document.CreatedAt, document.Entries.Count);
+                // A hand-edited "entries": null is no reason the switcher cannot open.
+                return new CampaignSummary(name, Unnamed: true, document.CreatedAt, document.Entries?.Count);
             }
         }
         catch (System.Text.Json.JsonException)
         {
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
         }
 
@@ -405,6 +437,28 @@ public sealed class CampaignBaseUnreachableException : Exception
     }
 
     public CampaignBaseUnreachableException()
+    {
+    }
+}
+
+/// <summary>
+/// A campaign that cannot be read right now - its inventory held by a sync client, a folder the
+/// account may not read. Unlike <see cref="CampaignSchemaException"/> it says nothing about the
+/// campaign itself: nothing was changed, and trying again later may work. The message names it.
+/// </summary>
+public sealed class CampaignUnavailableException : Exception
+{
+    public CampaignUnavailableException(string message)
+        : base(message)
+    {
+    }
+
+    public CampaignUnavailableException(string message, Exception inner)
+        : base(message, inner)
+    {
+    }
+
+    public CampaignUnavailableException()
     {
     }
 }

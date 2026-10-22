@@ -38,4 +38,6 @@ internal static class Strings
     internal static string CampaignClosed => Text[nameof(CampaignClosed)];
 
     internal static string BaseUnreachable(string path) => Text.Format(nameof(BaseUnreachable), path);
+
+    internal static string CampaignUnavailable(string name, string reason) => Text.Format(nameof(CampaignUnavailable), name, reason);
 }

@@ -264,6 +264,50 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_base, "Kerkerwelt.renaming")));
     }
 
+    /// <summary>
+    /// A hand-edited unnamed inventory with "entries": null does not keep the switcher from opening,
+    /// nor the stock from reading; an entry without an identity is no entry.
+    /// </summary>
+    [Fact]
+    public void An_inventory_with_null_entries_still_lists_and_opens()
+    {
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+        var inventory = Path.Combine(campaign.Directory, "inventory.json");
+
+        File.WriteAllText(inventory, "{ \"schemaVersion\": 1, \"createdAt\": \"2026-10-01T00:00:00Z\", \"entries\": null }");
+
+        Assert.Null(Assert.Single(library.List()).Pictures);
+        Assert.Empty(library.Open(campaign.Name).Store.Entries);
+
+        File.WriteAllText(inventory, "{ \"schemaVersion\": 1, \"createdAt\": \"2026-10-01T00:00:00Z\", \"entries\": [ null, { \"name\": \"ohne Kennung\" } ] }");
+
+        Assert.Empty(library.Open(campaign.Name).Store.Entries);
+    }
+
+    /// <summary>
+    /// An inventory held by a sync client: opening is refused with one stated kind of reason the caller
+    /// can show - not with whichever I/O exception the file system chose, which the switch did not catch.
+    /// </summary>
+    [Fact]
+    public void A_held_inventory_refuses_the_open_with_a_stated_reason()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to read a file held without sharing");
+        }
+
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+
+        using (File.Open(Path.Combine(campaign.Directory, "inventory.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var refused = Assert.Throws<CampaignUnavailableException>(() => library.Open(campaign.Name));
+
+            Assert.Contains(campaign.Name, refused.Message, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void Deleting_takes_the_folder()
     {

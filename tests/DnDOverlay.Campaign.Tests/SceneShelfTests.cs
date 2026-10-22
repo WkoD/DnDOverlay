@@ -452,6 +452,32 @@ public sealed class SceneShelfTests : IDisposable
         Assert.True(await reader > 0);
     }
 
+    /// <summary>
+    /// A file of the right syntax without what a scene needs - "items": null, or nothing at all - is
+    /// unreadable like a broken one, rather than a crash later when the usage marks are counted.
+    /// </summary>
+    [Fact]
+    public void A_scene_without_its_lists_is_unreadable_not_a_crash_later()
+    {
+        Shelf().SaveScene("Gut", Origin, Scene("Grimmbart"), overwrite: false);
+        Shelf().SaveLayout("Abend", [Part(Scene("Grimmbart"))], overwrite: false);
+
+        var scenes = Path.Combine(_directory, "scenes");
+
+        File.WriteAllText(Path.Combine(scenes, "Leer.json"), "{}");
+        File.WriteAllText(
+            Path.Combine(scenes, "Ohne Liste.json"),
+            File.ReadAllText(Path.Combine(scenes, "Gut.json")).Replace("\"items\": [", "\"items\": null, \"x\": [", StringComparison.Ordinal));
+        File.WriteAllText(Path.Combine(_directory, "layouts", "Ohne Teile.json"), "{ \"schemaVersion\": 1, \"parts\": null }");
+
+        var shelf = Shelf();
+
+        Assert.Equal(3, shelf.Unreadable.Count);
+        Assert.Equal(["Gut"], shelf.Scenes.Select(scene => scene.Name));
+        Assert.Single(shelf.UseCounts());
+        Assert.False(shelf.UsageOf(new AssetId(new string('a', 64))).Used);
+    }
+
     private SceneShelf Shelf() => SceneShelf.Open(_directory, _time);
 
     private static LayoutPart Part(SceneState scene) =>

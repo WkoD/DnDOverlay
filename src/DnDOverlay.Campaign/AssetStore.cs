@@ -79,9 +79,18 @@ public sealed class AssetStore : IAssetSource, IAssetSink
         _time = time;
         CreatedAt = document.CreatedAt;
 
-        foreach (var entry in document.Entries)
+        // A hand-edited inventory is read as far as it makes sense: "entries": null is none, an entry
+        // without a well-formed identity is no entry (its file comes back in by its hash name on the next
+        // folder check, with its name from the scenes), and a missing name is its hash's beginning.
+        foreach (var entry in document.Entries ?? [])
         {
-            _entries[entry.AssetId] = entry;
+            if (entry?.AssetId is not { } id || !new AssetId(id).IsWellFormed)
+            {
+                continue;
+            }
+
+            entry.Name ??= id[..12];
+            _entries[id] = entry;
         }
 
         _removed.UnionWith(document.Removed ?? []);

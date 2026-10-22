@@ -64,10 +64,10 @@ public sealed class OpenStock(Func<AssetStore> ensure) : IAssetSource, IAssetSin
         {
             store = _current ?? ensure();
         }
-        catch (CampaignBaseUnreachableException unreachable)
+        catch (Exception ex) when (ex is CampaignBaseUnreachableException or CampaignUnavailableException)
         {
             // Nothing is created anywhere instead (Part 3): the picture is refused, with the folder named.
-            return Task.FromResult<IngestResult>(new IngestResult.Refused(IntakeRejection.Unavailable, unreachable.Message));
+            return Task.FromResult<IngestResult>(new IngestResult.Refused(IntakeRejection.Unavailable, ex.Message));
         }
 
         return store.IngestAsync(source, proposedName, cancellationToken);

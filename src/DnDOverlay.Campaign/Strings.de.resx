@@ -65,6 +65,9 @@
   <data name="CampaignClosed" xml:space="preserve">
     <value>Die Kampagne wurde geschlossen, während dieses Bild hereinkam - es wurde nicht übernommen.</value>
   </data>
+  <data name="CampaignUnavailable" xml:space="preserve">
+    <value>Die Kampagne "{0}" lässt sich gerade nicht lesen: {1}</value>
+  </data>
   <data name="BaseUnreachable" xml:space="preserve">
     <value>Der Kampagnenordner {0} ist nicht erreichbar, es wurde nichts angelegt. Sein Laufwerk anschließen oder in den Einstellungen einen anderen Ort wählen.</value>
   </data>

@@ -161,7 +161,7 @@ public sealed class SceneShelf
 
         foreach (var (name, path) in shelf.Files(ScenesFolder))
         {
-            if (Read(path, CampaignJsonContext.Default.SceneFile) is { } file)
+            if (Read(path, CampaignJsonContext.Default.SceneFile) is { } file && file.IsWhole)
             {
                 shelf._scenes[name] = file.ToScene();
             }
@@ -173,7 +173,7 @@ public sealed class SceneShelf
 
         foreach (var (name, path) in shelf.Files(LayoutsFolder))
         {
-            if (Read(path, CampaignJsonContext.Default.LayoutFile) is { } file)
+            if (Read(path, CampaignJsonContext.Default.LayoutFile) is { } file && file.IsWhole)
             {
                 shelf._layouts[name] = file.ToLayout();
             }
@@ -621,7 +621,7 @@ public sealed class SceneShelf
         {
             return null;
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -684,7 +684,18 @@ internal sealed record SceneFile(int SchemaVersion, PixelSize Origin, DateTimeOf
     internal static SceneFile Of(SavedScene saved) =>
         new(InventoryDocument.CurrentSchemaVersion, saved.Origin, saved.SavedAt, saved.Scene);
 
+    /// <summary>
+    /// Whether the file carries what a scene needs. A file of the right syntax can still lack it -
+    /// <c>"items": null</c>, or <c>{}</c>, deserializes with nulls where the rest of the program counts
+    /// on lists - and is then unreadable like any other, rather than a crash later on.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.MemberNotNullWhen(true, nameof(Scene))]
+    internal bool IsWhole => IsWholeScene(Scene);
+
     internal SavedScene ToScene() => new(Origin, SavedAt, Scene);
+
+    internal static bool IsWholeScene(SceneState? scene) =>
+        scene?.Items is { } items && items.All(item => item is not null);
 }
 
 /// <summary>The layout file on disk.</summary>
@@ -692,6 +703,11 @@ internal sealed record LayoutFile(int SchemaVersion, DateTimeOffset SavedAt, IRe
 {
     internal static LayoutFile Of(SavedLayout saved) =>
         new(InventoryDocument.CurrentSchemaVersion, saved.SavedAt, saved.Parts);
+
+    /// <summary>Whether every part carries a screen name and a whole scene - see <see cref="SceneFile.IsWhole"/>.</summary>
+    internal bool IsWhole =>
+        Parts is { } parts
+        && parts.All(part => part?.ScreenName is not null && part.Scene is { } saved && SceneFile.IsWholeScene(saved.Scene));
 
     internal SavedLayout ToLayout() => new(SavedAt, Parts);
 }
