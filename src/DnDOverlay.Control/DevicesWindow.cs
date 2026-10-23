@@ -416,7 +416,7 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// </summary>
     private async Task<bool> AdoptAsync(PendingPairing request)
     {
-        var candidates = _devices.Where(device => !device.Connected && device.Device != request.Device).ToList();
+        var candidates = PairingDesk.AdoptCandidates(_devices, request);
 
         if (candidates.Count == 0)
         {

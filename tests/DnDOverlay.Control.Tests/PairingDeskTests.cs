@@ -170,6 +170,26 @@ public sealed class PairingDeskTests : IDisposable
         Assert.Equal(Table.Value, Assert.Single(reread.KnownScreens).DeviceId);
     }
 
+    /// <summary>
+    /// A waiting device may be assigned only to a known device that is not connected - a connected one is
+    /// somebody else - and never to itself (Part 7).
+    /// </summary>
+    [Fact]
+    public void Only_a_known_device_that_is_away_is_offered_for_assignment()
+    {
+        var away = new DeviceId(Guid.Parse("eeeeeeee-0000-0000-0000-0000000000e3"));
+        IReadOnlyList<DeviceView> devices =
+        [
+            Device(Table, "TISCH-PC", "TISCH-PC//1"),
+            Device(away, "BEAMER", "BEAMER//1") with { Connected = false },
+            Device(Clone, "TISCH-PC", "TISCH-PC//1") with { Connected = false },
+        ];
+
+        var offered = PairingDesk.AdoptCandidates(devices, new PendingPairing(Clone, "TISCH-PC", "1234", "10.0.0.2", DateTimeOffset.UnixEpoch, IsClone: true));
+
+        Assert.Equal(away, Assert.Single(offered).Device);
+    }
+
     private ConfigurationFile<ControlConfiguration> Configuration() =>
         new(Path.Combine(_folder, "control.json"), ConfigurationJsonContext.Default.ControlConfiguration, TimeProvider.System);
 

@@ -195,6 +195,19 @@ internal sealed class PairingDesk
         return false;
     }
 
+    /// <summary>
+    /// The known devices a waiting one may be assigned to (Part 7): <b>only those that are not
+    /// connected</b> - a connected one is demonstrably somebody else, and offering it would be the one
+    /// wrong grip that throws two devices onto one entry - and never the waiting device itself.
+    /// </summary>
+    internal static IReadOnlyList<DeviceView> AdoptCandidates(IReadOnlyList<DeviceView> devices, PendingPairing request)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        ArgumentNullException.ThrowIfNull(request);
+
+        return [.. devices.Where(device => !device.Connected && device.Device != request.Device)];
+    }
+
     /// <summary>Says no. The device keeps its place in the list, with the reason (Part 4).</summary>
     internal Task DenyAsync(PendingPairing request)
     {
