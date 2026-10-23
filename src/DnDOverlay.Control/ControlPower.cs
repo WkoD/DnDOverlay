@@ -34,9 +34,10 @@ internal sealed partial class ControlPower : IDisposable
     private readonly Func<BatteryInfo?> _battery;
     private readonly DispatcherTimer _clock;
 
+    private readonly BatteryWarning _warning = new();
+
     private bool _holding;
     private Action? _withdraw;
-    private bool _warned;
 
     /// <param name="notify">Puts a text in the box beside the stage and hands back how to take it away again.</param>
     internal ControlPower(ILogger logger, Func<string, Action> notify, Func<BatteryInfo?>? battery = null)
@@ -84,29 +85,21 @@ internal sealed partial class ControlPower : IDisposable
     {
         var battery = _battery();
 
-        if (battery is null || battery.PluggedIn || !battery.Low)
+        switch (_warning.Look(battery))
         {
-            // Back above the line or on the cable: the warning goes, and may come again next time.
-            _withdraw?.Invoke();
-            _withdraw = null;
+            case BatteryWarning.Step.Withdraw:
+                _withdraw?.Invoke();
+                _withdraw = null;
+                break;
 
-            if (battery is null || battery.PluggedIn || battery.Percent > BatteryInfo.LowPercent)
-            {
-                _warned = false;
-            }
+            case BatteryWarning.Step.Warn:
+                ControlLog.BatteryLow(_logger, battery!.Percent);
+                _withdraw = _notify(Strings.PowerBatteryLow(battery.Percent));
+                break;
 
-            return;
+            default:
+                break;
         }
-
-        if (_warned)
-        {
-            return;
-        }
-
-        _warned = true;
-        ControlLog.BatteryLow(_logger, battery.Percent);
-
-        _withdraw = _notify(Strings.PowerBatteryLow(battery.Percent));
     }
 
     [LibraryImport("kernel32.dll")]
