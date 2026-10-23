@@ -27,6 +27,21 @@ public sealed class MouseTurnTests
         Assert.Equal(0, MouseTurn.Swept(Centre, new Point(600, 300), new Point(900, 300)), 6);
     }
 
+    /// <summary>
+    /// Crossing the line left of the centre - where the angle jumps from +180 to -180 - is a small step
+    /// like any other. Read as -358 degrees it left the dead zone at once, and a picture meant to stay
+    /// straight jumped by the whole dead zone (Part 6, <c>Manipulation.Turn</c>).
+    /// </summary>
+    [Fact]
+    public void Crossing_the_left_of_the_centre_is_a_small_step()
+    {
+        var down = MouseTurn.Swept(Centre, new Point(400, 299), new Point(400, 301));
+        var up = MouseTurn.Swept(Centre, new Point(400, 301), new Point(400, 299));
+
+        Assert.InRange(down, -1.2, -1.1);
+        Assert.InRange(up, 1.1, 1.2);
+    }
+
     /// <summary>The same angle near the centre and far from it.</summary>
     [Fact]
     public void The_distance_from_the_centre_does_not_matter()
