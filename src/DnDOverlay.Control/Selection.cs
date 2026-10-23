@@ -115,6 +115,33 @@ internal sealed class Selection
         }
     }
 
+    /// <summary>
+    /// Follows the screen from one picture of it to the next: <b>what was put away is no longer
+    /// selected</b> - an outline round a card in the fan marks something the DM no longer works on
+    /// (Handlauf M4, third run) - and what left the screen is dropped (<see cref="Keep"/>).
+    /// <para>
+    /// <b>The TRANSITION is asked, not the state</b>: being parked does not forbid a selection, and the
+    /// menu selects the whole fan in one grip. A card that lay parked before and still does keeps its
+    /// outline.
+    /// </para>
+    /// </summary>
+    internal void Follow(SceneState before, SceneState after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        foreach (var away in after.Items)
+        {
+            if (away.Parked
+                && before.Items.Any(was => was.ItemId == away.ItemId && !was.Parked))
+            {
+                Drop(away.ItemId);
+            }
+        }
+
+        Keep(after);
+    }
+
     internal void Keep(SceneState scene)
     {
         ArgumentNullException.ThrowIfNull(scene);

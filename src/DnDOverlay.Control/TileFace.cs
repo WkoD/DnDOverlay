@@ -406,27 +406,14 @@ internal sealed class TileFace : Panel
 
         var before = Shape();
 
-        // <b>Was weggelegt wird, ist nicht mehr ausgewählt.</b> Ein Rahmen um eine Karte im Fächer
-        // markiert etwas, woran der DM nicht mehr arbeitet - und er blieb dort durch alles hindurch
-        // stehen, was der Fächer danach tat (Handlauf M4, dritter Lauf). Gefragt wird der ÜBERGANG
-        // und nicht der Zustand: Geparktsein verbietet die Auswahl nicht, das Menü wählt den ganzen
-        // Fächer auf einen Griff aus.
-        foreach (var away in scene.Items)
-        {
-            if (away.Parked
-                && _scene.Items.Any(was => was.ItemId == away.ItemId && !was.Parked))
-            {
-                _selection.Drop(away.ItemId);
-            }
-        }
+        // What was put away is no longer selected, and a picture that has left this screen is not
+        // either - a menu command to an item that is not there would be ineffective at the hub and a
+        // broken promise in the surface.
+        _selection.Follow(_scene, scene);
 
         _scene = scene;
         _screen = screen;
         _view = view;
-
-        // A picture that has left this screen is no longer selected - a menu command to an item
-        // that is not there would be ineffective at the hub and a broken promise in the surface.
-        _selection.Keep(scene);
 
         // And one carried in from another tile is, as soon as it is here.
         if (_awaited is { } awaited && scene.Items.Any(lying => lying.ItemId == awaited))

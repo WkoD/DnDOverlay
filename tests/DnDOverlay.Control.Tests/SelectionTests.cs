@@ -152,5 +152,47 @@ public sealed class SelectionTests
         Assert.Equal(1, changes);
     }
 
+    /// <summary>A picture put away into the fan loses its outline; the others keep theirs (Handlauf M4, third run).</summary>
+    [Fact]
+    public void A_picture_put_away_is_no_longer_selected()
+    {
+        var selection = new Selection();
+
+        selection.Set([Orc, Goblin]);
+        selection.Follow(
+            SceneState.Empty with { Items = [Text(Orc), Text(Goblin)] },
+            SceneState.Empty with { Items = [Text(Orc) with { Parked = true }, Text(Goblin)] });
+
+        Assert.Equal([Goblin], selection.Items);
+    }
+
+    /// <summary>
+    /// The transition is asked, not the state: a card that lay in the fan before and still does keeps the
+    /// outline the menu gave the whole fan.
+    /// </summary>
+    [Fact]
+    public void A_card_that_was_parked_already_stays_selected()
+    {
+        var selection = new Selection();
+        var fan = SceneState.Empty with { Items = [Text(Orc) with { Parked = true }, Text(Goblin) with { Parked = true }] };
+
+        selection.Set([Orc, Goblin]);
+        selection.Follow(fan, fan with { Items = [.. fan.Items] });
+
+        Assert.Equal([Orc, Goblin], selection.Items);
+    }
+
+    /// <summary>Following the screen also drops what left it.</summary>
+    [Fact]
+    public void Following_drops_what_left_the_screen()
+    {
+        var selection = new Selection();
+
+        selection.Set([Orc, Troll]);
+        selection.Follow(SceneState.Empty with { Items = [Text(Orc), Text(Troll)] }, SceneState.Empty with { Items = [Text(Troll)] });
+
+        Assert.Equal([Troll], selection.Items);
+    }
+
     private static TextItem Text(ItemId item) => new(item, 0.5, 0.5, 0.2, 4, 0, 0, false, false, 1, "Townsvil");
 }
