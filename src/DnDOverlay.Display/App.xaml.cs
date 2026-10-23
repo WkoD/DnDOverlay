@@ -155,10 +155,11 @@ public sealed partial class App : Application, IDisposable
     private static readonly TimeSpan PredecessorPatience = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// How each screen stands right now. Everything starts <see cref="ScreenState.Inactive"/>
-    /// and stays that way until a control says otherwise - the silent start (Part 3).
+    /// How each screen stands right now: the wish, and what the rescue mark hid at the device.
+    /// Everything starts <see cref="ScreenState.Inactive"/> and stays that way until a control says
+    /// otherwise - the silent start (Part 3). UI thread only.
     /// </summary>
-    private readonly Dictionary<ScreenId, ScreenCommand> _states = [];
+    private readonly ScreenStates _states = new();
 
     private readonly CancellationTokenSource _shutdown = new();
 
@@ -276,12 +277,6 @@ public sealed partial class App : Application, IDisposable
     /// <summary>The identifier of the control the last search found - the caller, when it answered a call.</summary>
     private Guid? _heardControl;
 
-    /// <summary>
-    /// The screens hidden at the device with the rescue mark - the local finding, kept apart from
-    /// the control's, which only the control may lift (Part 3). Any arriving <c>ConfigUpdate</c>
-    /// clears it: whoever has their control back wants to play on. UI thread only.
-    /// </summary>
-    private readonly HashSet<ScreenId> _hiddenHere = [];
 
     /// <summary>The rescue mark's grace as set for this device, or null for the default - kept to be written back (Part 6).</summary>
     private int? _rescueAfterSeconds;
@@ -712,7 +707,7 @@ public sealed partial class App : Application, IDisposable
                 _names[id] = custom;
             }
 
-            _states.TryAdd(id, new ScreenCommand(ScreenState.Inactive));
+            _states.Found(id);
         }
 
         return true;
@@ -804,11 +799,7 @@ public sealed partial class App : Application, IDisposable
         // <b>Whoever has their control back wants to play on</b> (Part 6): every arriving update
         // lifts what the rescue mark hid, before anything else, and the windows come back in exactly
         // the states that stood there all along - nothing was written over them.
-        var unhidden = _hiddenHere.ToList();
-
-        _hiddenHere.Clear();
-
-        foreach (var screen in unhidden)
+        foreach (var screen in _states.LiftHidden())
         {
             Show(screen);
         }
@@ -842,7 +833,7 @@ public sealed partial class App : Application, IDisposable
             {
                 // Any arriving ConfigUpdate clears a local suppression as well: whoever has their
                 // control back wants to play on, not switch every screen back by hand (Part 6).
-                _states[screen.Screen] = command;
+                _states.Wish(screen.Screen, command);
             }
 
             Show(screen.Screen);
@@ -940,11 +931,8 @@ public sealed partial class App : Application, IDisposable
     {
         // Written as one refusal rather than as a "wanted" flag, because everything below needs the
         // COMMAND and not only the answer: the state decides whether the screen takes gestures, and
-        // a flag would have thrown exactly that away.
-        if (!_states.TryGetValue(screen, out var command)
-            || command.State == ScreenState.Inactive
-            || command.Suppress is not null
-            || _hiddenHere.Contains(screen)
+        // a flag would have thrown exactly that away (ScreenStates.Overlay).
+        if (_states.Overlay(screen) is not { } command
             || !_monitors.TryGetValue(screen, out var monitor))
         {
             Close(screen);
@@ -1333,7 +1321,7 @@ public sealed partial class App : Application, IDisposable
 
         foreach (var screen in screens)
         {
-            _hiddenHere.Add(screen);
+            _states.HideHere(screen);
             Show(screen);
         }
 
@@ -1853,9 +1841,8 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private void GoIdle()
     {
-        foreach (var screen in _states.Keys.ToList())
+        foreach (var screen in _states.GoIdle())
         {
-            _states[screen] = new ScreenCommand(ScreenState.Inactive);
             Show(screen);
         }
 
@@ -2864,7 +2851,7 @@ public sealed partial class App : Application, IDisposable
             ? WindowOutcome.NotAllowed
             : !_monitors.TryGetValue(command.Screen, out var monitor)
                 ? WindowOutcome.Gone
-                : _states.TryGetValue(command.Screen, out var state) && state.State is ScreenState.Inactive
+                : _states.IsInactive(command.Screen)
                     ? WindowOutcome.Inactive
                     : ForeignWindowSurvey.Lay(command.Handle, command.Program, command.Action, command.Bounds, monitor, out after);
 
