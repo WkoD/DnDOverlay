@@ -1500,17 +1500,7 @@ public sealed partial class App : Application, IDisposable
 
         await foreach (var message in inbox.Reader.ReadAllAsync(_shutdown.Token).ConfigureAwait(false))
         {
-            attempt = message switch
-            {
-                WelcomeMessage or PairingPendingMessage => Attempt.Worthwhile,
-                RejectedMessage refusal => refusal.Reason switch
-                {
-                    RejectionReason.DuplicateDevice => Attempt.Worthwhile,
-                    RejectionReason.LimitExceeded => Attempt.Fruitless,
-                    _ => Attempt.Refused,
-                },
-                _ => attempt,
-            };
+            attempt = AttemptVerdict.After(message, attempt);
 
             // Something arriving is the proof the socket stands, and it is the only one to be had
             // here: the task above returns long before ClientWebSocket has finished connecting.
@@ -1577,7 +1567,7 @@ public sealed partial class App : Application, IDisposable
         _answeringCall = false;
 
         // Dropped for its own control: worth starting from the top at once, the beacon is there.
-        return abandon.IsCancellationRequested && !_shutdown.IsCancellationRequested ? Attempt.Worthwhile : attempt;
+        return AttemptVerdict.AtEnd(attempt, abandon.IsCancellationRequested && !_shutdown.IsCancellationRequested);
     }
 
     /// <summary>
