@@ -55,6 +55,12 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// </summary>
     private ScreenRef? _wanted;
 
+    /// <summary>Whether the call for orphaned devices was answered - kept with the window, so a window opened again says nothing stale.</summary>
+    private readonly OrphanWatch _orphanWatch = new();
+
+    /// <summary>The requests waiting as last reported - what a call that starts now finds already there.</summary>
+    private IReadOnlyList<DeviceId> _waitingNow = [];
+
     internal DevicesWindow(ISessionApi session, PairingDesk pairing, CampaignDesk desk, ControlSettings settings, Uri address)
     {
         ArgumentNullException.ThrowIfNull(address);
@@ -385,6 +391,9 @@ internal sealed class DevicesWindow : Window, IDisposable
 
     private void Show(IReadOnlyList<PendingPairing> pending, IReadOnlyList<RefusedDevice> refused)
     {
+        _waitingNow = [.. pending.Select(request => request.Device)];
+        _orphanWatch.Saw(_waitingNow);
+
         Refill(_waiting, [.. pending.Select(request => new PendingEntry(request))]);
         Refill(_refused, [.. refused.Select(device => new RefusedEntry(device))]);
     }
@@ -591,6 +600,11 @@ internal sealed class DevicesWindow : Window, IDisposable
     /// The call for orphaned displays, for a control whose identity is gone: two minutes in the
     /// beacon, and displays that lost their control without a goodbye more than a minute ago
     /// answer and stand above as requests (Part 4). Pressing again starts the two minutes anew.
+    /// <para>
+    /// <b>When the two minutes are up and nobody answered, the window says so</b> (Prüfschritt 43c):
+    /// a call that ends in silence must not read like one still running. The clock here starts when
+    /// the hub has set the call, so it ends a moment after the beacon stops carrying it, never before.
+    /// </para>
     /// </summary>
     private Button Orphans()
     {
@@ -604,8 +618,40 @@ internal sealed class DevicesWindow : Window, IDisposable
 
         button.Click += async (_, _) =>
         {
-            await _session.CallOrphansAsync(_listening.Token).ConfigureAwait(true);
-            _status.Text = Strings.DevicesCallingOrphans;
+            // Taken before the first await: the window may close meanwhile, and its token source
+            // with it.
+            var closing = _listening.Token;
+            int call;
+
+            try
+            {
+                await _session.CallOrphansAsync(closing).ConfigureAwait(true);
+                call = _orphanWatch.Started(_waitingNow);
+                _status.Text = Strings.DevicesCallingOrphans;
+
+                await Task.Delay(OrphanCall.Duration, closing).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                // The window was closed - there is nobody to tell.
+                return;
+            }
+
+            switch (_orphanWatch.Ended(call))
+            {
+                case OrphanWatch.Ending.NobodyAnswered:
+                    _status.Text = Strings.DevicesNobodyAnswered;
+                    break;
+
+                // The answer stands in the list above; only the line saying the call runs is put
+                // right, and only if nothing else has been said since.
+                case OrphanWatch.Ending.Answered when _status.Text == Strings.DevicesCallingOrphans:
+                    _status.Text = Strings.DevicesCallEnded;
+                    break;
+
+                default:
+                    break;
+            }
         };
 
         return button;

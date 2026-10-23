@@ -43,6 +43,10 @@ internal static partial class Strings
 
     internal static string DevicesCallingOrphans => Text[nameof(DevicesCallingOrphans)];
 
+    internal static string DevicesNobodyAnswered => Text[nameof(DevicesNobodyAnswered)];
+
+    internal static string DevicesCallEnded => Text[nameof(DevicesCallEnded)];
+
     internal static string DevicesSuppressUnavailable => Text[nameof(DevicesSuppressUnavailable)];
 
     internal static string DevicesSuppressControlWindow => Text[nameof(DevicesSuppressControlWindow)];
