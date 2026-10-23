@@ -2178,23 +2178,9 @@ public sealed partial class App : Application, IDisposable
                 group => group.Key,
                 group => DecodeSteps.Base(edge, group.First().Meta.PixelWidth, group.First().Meta.PixelHeight));
 
-        // <b>Thumbnails jump the queue; pictures keep their order.</b> Two rules, and they are about
-        // different things - the first is about kind, the second about time. Neither is about size.
-        //
-        // Part 5 promises a picture STANDS at its place blurred within a second and is replaced when
-        // the original lands, and that promise is kept by the order things are DECODED in, not the
-        // order they arrive in. While one picture was fetched at a time the two coincided:
-        // thumbnail, original, next picture. With three at a time they come apart, and the table
-        // showed it the same evening the parallel fetching first engaged - a full decode costs one
-        // to two and a half seconds on that machine, and every thumbnail landing during it waited
-        // behind it. The runner saw rings filling over nothing where a blurred picture belonged.
-        //
-        // Among the originals the order is <b>the order they came in</b> and nothing else. <i>"The
-        // DM has already thought about the order when he sends them"</i> - sorting them here by
-        // anything of ours, size above all, would quietly overrule a decision somebody made on
-        // purpose.
-        var thumbnails = new Queue<AssetArrived>();
-        var pictures = new Queue<AssetArrived>();
+        // Thumbnails jump the queue, pictures keep their order, and a blur nobody has to wait for is
+        // dropped - see DecodeOrder (Part 5).
+        var order = new DecodeOrder();
 
         while (true)
         {
@@ -2202,10 +2188,10 @@ public sealed partial class App : Application, IDisposable
             // a long decode is already in hand when that decode ends.
             while (arrivals.Reader.TryRead(out var arrived))
             {
-                (arrived.IsThumbnail ? thumbnails : pictures).Enqueue(arrived);
+                order.Add(arrived);
             }
 
-            if (thumbnails.Count == 0 && pictures.Count == 0)
+            if (order.IsEmpty)
             {
                 if (!await arrivals.Reader.WaitToReadAsync(_shutdown.Token).ConfigureAwait(false))
                 {
@@ -2215,21 +2201,10 @@ public sealed partial class App : Application, IDisposable
                 continue;
             }
 
-            var next = thumbnails.Count > 0 ? thumbnails.Dequeue() : pictures.Dequeue();
-
-            // <b>A blur nobody has to wait for is not worth showing.</b> When a picture comes out of
-            // the store rather than off the wire, its thumbnail and its original land in the same
-            // instant - and taking all the thumbnails first then puts twenty blurred pictures on the
-            // table at once, followed by twenty sharpenings. The runner named it: everything appears
-            // together instead of one after another. So a thumbnail whose original is already in
-            // hand is dropped, and the pictures come up sharp, one after another, in the order they
-            // arrived - which for a full store is the order the DM sent them in.
-            if (next.IsThumbnail && pictures.Any(picture => picture.Asset == next.Asset))
+            if (order.Take() is { } next)
             {
-                continue;
+                Decode(next, steps.GetValueOrDefault(next.Asset));
             }
-
-            Decode(next, steps.GetValueOrDefault(next.Asset));
         }
 
         var run = await loading.ConfigureAwait(false);
