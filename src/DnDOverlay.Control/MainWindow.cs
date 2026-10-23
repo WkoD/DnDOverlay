@@ -1467,7 +1467,7 @@ internal sealed class MainWindow : Window, IDisposable
     private bool _connected;
 
     /// <summary>Where quitting stands: nobody asked, the question or its work is under way, or it is done.</summary>
-    private QuitStage _quit;
+    private readonly QuitGate _quit = new();
 
     /// <summary>The window has closed - a quit whose work was still running has nothing left to close.</summary>
     private bool _closed;
@@ -1496,20 +1496,19 @@ internal sealed class MainWindow : Window, IDisposable
     /// </summary>
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_quit is QuitStage.Done || SessionEnding)
+        var verdict = _quit.Closing(SessionEnding);
+
+        if (verdict is QuitGate.Verdict.Close)
         {
             return;
         }
 
         e.Cancel = true;
 
-        if (_quit is QuitStage.Asking)
+        if (verdict is QuitGate.Verdict.Ask)
         {
-            return;
+            Dispatcher.BeginInvoke(QuitAsked);
         }
-
-        _quit = QuitStage.Asking;
-        Dispatcher.BeginInvoke(QuitAsked);
     }
 
     /// <summary>
@@ -1522,7 +1521,7 @@ internal sealed class MainWindow : Window, IDisposable
         if (_closed || QuitDialog.Ask(this, _desk.Open is not null, _connected) is not { } answer || _closed)
         {
             // Cancelled - or the window went meanwhile, at the end of a Windows session.
-            _quit = QuitStage.Open;
+            _quit.Cancelled();
             return;
         }
 
@@ -1541,16 +1540,8 @@ internal sealed class MainWindow : Window, IDisposable
             return;
         }
 
-        _quit = QuitStage.Done;
+        _quit.Answered();
         Close();
-    }
-
-    /// <summary>The three stages of quitting (see <see cref="OnClosing"/>).</summary>
-    private enum QuitStage
-    {
-        Open,
-        Asking,
-        Done,
     }
 
     /// <summary>Whether the last campaign has been offered in this run - once is enough.</summary>
