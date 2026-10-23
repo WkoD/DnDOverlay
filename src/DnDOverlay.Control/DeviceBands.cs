@@ -458,8 +458,7 @@ internal sealed class DeviceBands
                 return;
             }
 
-            if (!double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out var typed)
-                || typed < parameter.Min || typed > parameter.Max)
+            if (ParameterInput.Value(box.Text, parameter, CultureInfo.CurrentCulture) is not { } typed)
             {
                 box.ToolTip = Strings.DeviceBandRange(parameter.Min.ToString(format, CultureInfo.CurrentCulture), parameter.Max.ToString(format, CultureInfo.CurrentCulture));
                 box.Text = shown;
@@ -467,7 +466,7 @@ internal sealed class DeviceBands
             }
 
             shown = box.Text;
-            await set(Math.Round(typed, parameter.Decimals)).ConfigureAwait(true);
+            await set(typed).ConfigureAwait(true);
         }
 
         box.LostFocus += async (_, _) => await KeepAsync().ConfigureAwait(true);
