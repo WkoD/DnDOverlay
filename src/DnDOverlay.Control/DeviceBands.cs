@@ -263,13 +263,12 @@ internal sealed class DeviceBands
                 return;
             }
 
-            if (!await _session.ReassignScreenAsync(old.Screen, screen.Screen).ConfigureAwait(true))
+            if (!await ScreenTakeOver.RunAsync(_session, _settings, old.Screen, screen.Screen).ConfigureAwait(true))
             {
                 _say(Strings.DeviceBandTakeOverFailed(old.Info.Label));
                 return;
             }
 
-            Inherit(old.Screen, screen.Screen);
             _say(Strings.DeviceBandTookOver(screen.Info.Label, old.Info.Label));
             Changed?.Invoke(this, EventArgs.Empty);
         };
@@ -280,32 +279,6 @@ internal sealed class DeviceBands
         row.Children.Add(choice);
         row.Children.Add(take);
         band.Children.Add(row);
-    }
-
-    /// <summary>The control's half of a take-over: the old screen's tile place and view rotation go to the new one.</summary>
-    private void Inherit(ScreenRef old, ScreenRef fresh)
-    {
-        var from = new ScreenKey(old.Device.Value, old.Screen.Value);
-        var to = new ScreenKey(fresh.Device.Value, fresh.Screen.Value);
-
-        _settings.Update(configuration =>
-        {
-            var view = configuration.KnownScreens.FirstOrDefault(known => known.DeviceId == from.DeviceId && known.ScreenId == from.ScreenId)?.View;
-            var order = configuration.TileOrder.Contains(from)
-                ? configuration.TileOrder.Where(key => key != to).Select(key => key == from ? to : key)
-                : configuration.TileOrder;
-
-            return configuration with
-            {
-                TileOrder = [.. order],
-                KnownScreens =
-                [
-                    .. configuration.KnownScreens
-                        .Where(known => !(known.DeviceId == from.DeviceId && known.ScreenId == from.ScreenId))
-                        .Select(known => known.DeviceId == to.DeviceId && known.ScreenId == to.ScreenId && view is { } turned ? known with { View = turned } : known),
-                ],
-            };
-        });
     }
 
     /// <summary>
