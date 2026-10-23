@@ -119,9 +119,6 @@ internal sealed class TileFace : Panel
     private Fanning? _fan;
     private bool _spent;
 
-    /// <summary>How tall a face is in the overview, in DIP. The width follows the table's shape.</summary>
-    internal const double Small = 150;
-
     private readonly WindowGrips _grips;
 
     /// <summary>The foreign windows on this screen, while the underground is switched on (Part 7).</summary>
@@ -461,11 +458,7 @@ internal sealed class TileFace : Panel
         // Centred, so an open tile that is wider than the table has its margin on both sides. The
         // layers all get the SAME rectangle, which is the whole reason this panel exists.
         var face = Wanted(finalSize);
-        var place = new TileRect(
-            Math.Max(0, (finalSize.Width - face.Width) / 2),
-            Math.Max(0, (finalSize.Height - face.Height) / 2),
-            face.Width,
-            face.Height);
+        var place = new TileRect(FaceFit.Corner(finalSize, face), face);
 
         foreach (UIElement child in InternalChildren)
         {
@@ -475,32 +468,8 @@ internal sealed class TileFace : Panel
         return finalSize;
     }
 
-    /// <summary>
-    /// The largest rectangle of the table's shape that fits in what is offered.
-    /// <para>
-    /// In the overview the height is fixed and leads: the tiles are rows of a wrapping arrangement,
-    /// and rows of unequal height leave holes in it (Part 7).
-    /// </para>
-    /// </summary>
-    private Size Wanted(Size available)
-    {
-        var shape = Shape();
-
-        if (shape <= 0)
-        {
-            return new Size(0, 0);
-        }
-
-        var height = Opened
-            ? double.IsInfinity(available.Height) ? Small : available.Height
-            : Small;
-
-        var width = height * shape;
-
-        return double.IsInfinity(available.Width) || width <= available.Width
-            ? new Size(width, height)
-            : new Size(available.Width, available.Width / shape);
-    }
+    /// <summary>The largest rectangle of the table's shape that fits in what is offered (<see cref="FaceFit.Wanted"/>).</summary>
+    private Size Wanted(Size available) => FaceFit.Wanted(available, Shape(), Opened);
 
     /// <summary>
     /// The shape the table has as the DM sees it - <b>asked of the drawing rather than worked out
@@ -510,14 +479,7 @@ internal sealed class TileFace : Panel
     private double Shape() => _thumbnail.AspectRatio;
 
     /// <summary>Where the face itself lies inside this panel - what a grip has to subtract.</summary>
-    private TilePoint OnFace(TilePoint at)
-    {
-        var face = Wanted(RenderSize);
-
-        return new TilePoint(
-            at.X - Math.Max(0, (RenderSize.Width - face.Width) / 2),
-            at.Y - Math.Max(0, (RenderSize.Height - face.Height) / 2));
-    }
+    private TilePoint OnFace(TilePoint at) => FaceFit.OnFace(at, RenderSize, Wanted(RenderSize));
 
     /// <summary>
     /// Hands the scene down to the three layers - <b>with the picture in the hand at the values the
@@ -907,13 +869,7 @@ internal sealed class TileFace : Panel
     /// Whether a place is on this tile's face. Asked where the hand IS rather than remembered from
     /// where it was, so no flag can be left standing by a hold that ended some other way.
     /// </summary>
-    private bool Over(TilePoint local)
-    {
-        var face = Wanted(RenderSize);
-        var on = OnFace(local);
-
-        return on.X >= 0 && on.Y >= 0 && on.X <= face.Width && on.Y <= face.Height;
-    }
+    private bool Over(TilePoint local) => FaceFit.Within(OnFace(local), Wanted(RenderSize));
 
     /// <summary>
     /// The hand let go outside its tile. The picture is put down where it waited - <b>never into the
@@ -1789,14 +1745,7 @@ internal sealed class TileFace : Panel
             Math.Abs(to.X - from.X),
             Math.Abs(to.Y - from.Y));
 
-    private TilePoint Clamped(TilePoint at)
-    {
-        var face = Wanted(RenderSize);
-
-        return new TilePoint(
-            Math.Clamp(at.X, 0, Math.Max(0, face.Width)),
-            Math.Clamp(at.Y, 0, Math.Max(0, face.Height)));
-    }
+    private TilePoint Clamped(TilePoint at) => FaceFit.Clamped(at, Wanted(RenderSize));
 
     /// <summary>
     /// Selects a picture a hand has just taken hold of.
@@ -2011,9 +1960,7 @@ internal sealed class TileFace : Panel
         var on = OnFace(PointFromScreen(absolute));
         var face = Wanted(RenderSize);
 
-        return on.X < 0 || on.Y < 0 || on.X > face.Width || on.Y > face.Height
-            ? null
-            : Placing.InScene(on, _view, face);
+        return FaceFit.Within(on, face) ? Placing.InScene(on, _view, face) : null;
     }
 
     /// <summary>What a hand is carrying, and how far along that is.</summary>
