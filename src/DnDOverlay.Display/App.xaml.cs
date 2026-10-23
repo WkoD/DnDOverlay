@@ -282,7 +282,7 @@ public sealed partial class App : Application, IDisposable
     private int? _rescueAfterSeconds;
 
     /// <summary>Whether the rescue mark is up for the absence running now - its line is written once.</summary>
-    private bool _rescueUp;
+    private readonly RescueMark _rescue = new();
 
     /// <summary>
     /// What this device is offering itself to after answering a call, and how to take it back: the
@@ -1271,25 +1271,15 @@ public sealed partial class App : Application, IDisposable
                 var absent = _takeover.Absent;
                 var offer = _offer;
 
-                string? words = null;
-
-                if (due && absent is { } gone)
-                {
-                    words = Strings.NoControlFor(Math.Max(1, (int)gone.TotalMinutes));
-                }
+                var words = RescueMark.Minutes(due, absent) is { } minutes ? Strings.NoControlFor(minutes) : null;
 
                 await Dispatcher.InvokeAsync(() =>
                 {
                     var overlays = RescueReach.Of(_windows.Select(pair => (pair.Key, pair.Value.Windowed))).Count;
 
-                    if (words is not null && !_rescueUp && overlays > 0)
+                    if (_rescue.CameUp(words is not null, overlays))
                     {
-                        _rescueUp = true;
                         DisplayLog.RescueMarkUp(_logger, overlays, (int)_takeover.Grace.TotalSeconds);
-                    }
-                    else if (words is null)
-                    {
-                        _rescueUp = false;
                     }
 
                     // Where an overlay lies and only there: a window leaves the taskbar free, and the
