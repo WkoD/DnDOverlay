@@ -71,6 +71,9 @@
   <data name="ParameterMinVisiblePixelsUnit" xml:space="preserve">
     <value>DIP</value>
   </data>
+  <data name="ParameterShowImageName" xml:space="preserve">
+    <value>Neue Bilder zeigen ihren Namen</value>
+  </data>
   <data name="ParameterImageTextSize" xml:space="preserve">
     <value>Namensgröße</value>
   </data>

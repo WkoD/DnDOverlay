@@ -75,6 +75,27 @@ public sealed class DisplayParametersTests
         Assert.Equal(120d, DisplayParameters.Value(smallest, changed));
     }
 
+    /// <summary>
+    /// "Names on new pictures" is a screen toggle the band renders like any other (Part 7): off on a
+    /// fresh screen, its own delta when switched, and reset sends "off", which drops out of the files.
+    /// </summary>
+    [Fact]
+    public void Names_on_new_pictures_is_a_screen_toggle_off_by_default()
+    {
+        var names = DisplayParameters.All.Single(parameter => parameter.Key == nameof(ScreenSettings.ShowImageName));
+
+        Assert.Equal((ParameterScope.Screen, ParameterKind.Toggle), (names.Scope, names.Kind));
+        Assert.False((bool)DisplayParameters.Value(names, Table));
+
+        var delta = DisplayParameters.Set(names, Table, true);
+        var on = delta.ApplyTo(Table);
+
+        Assert.Equal(new ScreenSettings(ShowImageName: true), delta);
+        Assert.False(DisplayParameters.FollowsDefault(names, on));
+        Assert.Equal(new ScreenSettings(ShowImageName: false), DisplayParameters.Reset(names, on));
+        Assert.True(ScreenSettings.Opinion(DisplayParameters.Reset(names, on).ApplyTo(on), null).IsEmpty);
+    }
+
     /// <summary>"Automatic" for the diagnostic bar cannot travel in a delta - choosing it says nothing, and it is the one not offered for reset.</summary>
     [Fact]
     public void The_automatic_diagnostic_bar_is_no_change()

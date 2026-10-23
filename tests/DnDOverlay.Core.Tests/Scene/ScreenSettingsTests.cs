@@ -222,6 +222,23 @@ public sealed class ScreenSettingsTests
         Assert.Equal(new ScreenSettings(ScaleOnLoad: 0.25), opinion);
     }
 
+    /// <summary>
+    /// Names on new pictures are off by default (Part 6) and so not written; switched on, that is the
+    /// one thing the screen keeps, and a delta that says nothing else leaves it alone in a merge.
+    /// </summary>
+    [Fact]
+    public void Names_on_new_pictures_are_off_by_default_and_written_only_when_on()
+    {
+        Assert.False(Context.ShowImageName);
+
+        var on = new ScreenSettings(ShowImageName: true);
+
+        Assert.False(on.IsEmpty);
+        Assert.Equal(on, ScreenSettings.Opinion(on.ApplyTo(Context), customName: null));
+        Assert.True(ScreenSettings.Merge(on, new ScreenSettings(ScaleOnLoad: 0.3)).ShowImageName);
+        Assert.Equal(on, ScreenSettings.Diff(ScreenSettings.Of(Context, null), ScreenSettings.Of(on.ApplyTo(Context), null)));
+    }
+
     /// <summary>A name is an opinion like any other, and the only one that is not a number.</summary>
     [Fact]
     public void A_name_somebody_gave_the_screen_is_an_opinion()
@@ -254,6 +271,7 @@ public sealed class ScreenSettingsTests
             Inertia = false,
             ScrollUpZoomsIn = false,
             DiagnosticEdge = ParkEdge.Left,
+            ShowImageName = true,
         };
 
         var written = ScreenSettings.Opinion(mine, "Tisch");

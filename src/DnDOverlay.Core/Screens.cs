@@ -197,9 +197,10 @@ public sealed record ScreenView(
 /// It has to be a delta because the same value has two writers - the control and the device
 /// itself, where Part 6 requires every setting to be reachable as well. A full set in one
 /// direction would reset the other side's change without anybody ordering it. Which is not
-/// cosmetic: four of these act in the HUB rather than at the device - the two load values enter
-/// the cap, <see cref="PlacementMode"/> the placement, <see cref="DefaultRotationDeg"/> every new
-/// item, and <see cref="ParkEdge"/> decides where parked images line up (Part 4).
+/// cosmetic: five of these act in the HUB rather than at the device - the two load values enter
+/// the cap, <see cref="PlacementMode"/> the placement, <see cref="DefaultRotationDeg"/> and
+/// <see cref="ShowImageName"/> every new picture, and <see cref="ParkEdge"/> decides where parked
+/// images line up (Part 4).
 /// </para>
 /// <para>
 /// A record of nullable fields rather than a name/value map, for the same reason the protocol has
@@ -224,7 +225,8 @@ public sealed record ScreenSettings(
     bool? Inertia = null,
     bool? ScrollUpZoomsIn = null,
     ParkEdge? DiagnosticEdge = null,
-    ScreenPresentation? Presentation = null)
+    ScreenPresentation? Presentation = null,
+    bool? ShowImageName = null)
 {
     /// <summary>Nothing changed - the answer when a diff finds no difference.</summary>
     public static readonly ScreenSettings None = new();
@@ -256,7 +258,8 @@ public sealed record ScreenSettings(
         && Inertia is null
         && ScrollUpZoomsIn is null
         && DiagnosticEdge is null
-        && Presentation is null;
+        && Presentation is null
+        && ShowImageName is null;
 
     /// <summary>
     /// The full effective set of a screen, for the baseline in the <c>Hello</c>. Size and DPI are
@@ -284,7 +287,8 @@ public sealed record ScreenSettings(
             Inertia: context.Inertia,
             ScrollUpZoomsIn: context.ScrollUpZoomsIn,
             DiagnosticEdge: context.DiagnosticEdge,
-            Presentation: context.Presentation);
+            Presentation: context.Presentation,
+            ShowImageName: context.ShowImageName);
     }
 
     /// <summary>
@@ -338,6 +342,7 @@ public sealed record ScreenSettings(
             ScrollUpZoomsIn = ScrollUpZoomsIn ?? context.ScrollUpZoomsIn,
             DiagnosticEdge = DiagnosticEdge ?? context.DiagnosticEdge,
             Presentation = Presentation ?? context.Presentation,
+            ShowImageName = ShowImageName ?? context.ShowImageName,
         };
     }
 
@@ -374,7 +379,8 @@ public sealed record ScreenSettings(
             Inertia: newer.Inertia ?? older.Inertia,
             ScrollUpZoomsIn: newer.ScrollUpZoomsIn ?? older.ScrollUpZoomsIn,
             DiagnosticEdge: newer.DiagnosticEdge ?? older.DiagnosticEdge,
-            Presentation: newer.Presentation ?? older.Presentation);
+            Presentation: newer.Presentation ?? older.Presentation,
+            ShowImageName: newer.ShowImageName ?? older.ShowImageName);
     }
 
     /// <summary>
@@ -416,7 +422,8 @@ public sealed record ScreenSettings(
                 ? null
                 : after.ScrollUpZoomsIn,
             DiagnosticEdge: before.DiagnosticEdge == after.DiagnosticEdge ? null : after.DiagnosticEdge,
-            Presentation: before.Presentation == after.Presentation ? null : after.Presentation);
+            Presentation: before.Presentation == after.Presentation ? null : after.Presentation,
+            ShowImageName: before.ShowImageName == after.ShowImageName ? null : after.ShowImageName);
     }
 }
 
@@ -712,7 +719,16 @@ public sealed record ScreenContext(
     ParkEdge? DiagnosticEdge = null,
 
     /// <summary>Overlay or window (Part 6) - the default is the overlay.</summary>
-    ScreenPresentation Presentation = ScreenPresentation.Overlay)
+    ScreenPresentation Presentation = ScreenPresentation.Overlay,
+
+    /// <summary>
+    /// Whether a picture newly put on this screen arrives with its name shown (Part 6, Part 7). Off
+    /// by default: a freshly taken picture carries its file name, and <c>ork_04</c> under a portrait
+    /// is worse than nothing. A campaign named through can switch it on once for every picture to
+    /// come. It decides the ARRIVAL only - <see cref="ImageItem.ShowName"/> belongs to the instance,
+    /// so what already lies there, a copy or a move, and a loaded scene keep what they had.
+    /// </summary>
+    bool ShowImageName = false)
 {
     /// <summary>The screen height in DIP - the unit <see cref="MinVisiblePixels"/> is given in.</summary>
     public double HeightInDip => Dpi <= 0 ? Size.Height : Size.Height * 96d / Dpi;
@@ -788,6 +804,9 @@ public sealed record ScreenContext(
             // among twelve others, and that is over in a fraction of a second.
             ArrivalHighlightSeconds: 0.8,
             Inertia: true,
-            ScrollUpZoomsIn: true);
+            ScrollUpZoomsIn: true,
+
+            // Part 6, "ShowImageName for new pictures": off, until somebody wants it otherwise (Part 7).
+            ShowImageName: false);
     }
 }

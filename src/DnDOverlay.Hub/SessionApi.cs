@@ -439,7 +439,11 @@ public sealed class SessionApi : ISessionApi, IDisposable
             AssetId: asset.AssetId,
             Meta: asset.Meta,
             Name: asset.Name,
-            ShowName: false,
+
+            // The screen's default for a new picture (Part 7: off, until somebody wants it). Only
+            // here, where a picture from the stock arrives: a copy or a move keeps the instance's own
+            // choice, and a loaded scene what it was saved with.
+            ShowName: context.ShowImageName,
             AnimationPaused: false);
 
         return item;
@@ -635,6 +639,9 @@ public sealed class SessionApi : ISessionApi, IDisposable
             asset.AssetId,
             asset.Meta,
             asset.Name,
+
+            // Not the screen's ShowImageName: the caption under a background was taken out in M4 -
+            // it hung under a layer reaching past the screen and could not be read there.
             ShowName: false,
             CenterX: centre.X,
             CenterY: centre.Y,

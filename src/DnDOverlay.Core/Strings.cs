@@ -39,6 +39,8 @@ internal static class Strings
 
     internal static string ParameterMinVisiblePixelsUnit => Text[nameof(ParameterMinVisiblePixelsUnit)];
 
+    internal static string ParameterShowImageName => Text[nameof(ParameterShowImageName)];
+
     internal static string ParameterImageTextSize => Text[nameof(ParameterImageTextSize)];
 
     internal static string ParameterImageTextSizeUnit => Text[nameof(ParameterImageTextSizeUnit)];
