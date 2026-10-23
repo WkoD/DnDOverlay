@@ -3025,25 +3025,10 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
-    /// Lays a gesture into this device's own scene, through the reducer both ends share.
-    /// <para>
-    /// The revision stays as it was: numbering is the hub's alone (conflict rule 1), and a display
-    /// that invented one would win a comparison it has no business winning. What this changes is
-    /// only WHERE the picture is drawn - and how high it lies - until the hub says so too.
-    /// </para>
-    /// <para>
-    /// <b>The grab raises it here too</b>, by the hub's own arithmetic. Part 3 promises that what is
-    /// taken hold of comes to the front "locally at once and bindingly from the hub right
-    /// afterwards", and the second half was the only half built: the picture rose when the answer
-    /// came back. On a quiet link that is ten milliseconds and nobody sees it. Under load the
-    /// runner saw it plainly - every pushed picture was "touched again" at the end of the load, one
-    /// after another, as the queued answers finally arrived with the depth each grab had earned.
-    /// </para>
+    /// Lays a gesture into this device's own scene at once - the grab raised by the hub's own
+    /// arithmetic, the revision left to the hub (<see cref="LocalGesture"/>).
     /// </summary>
-    /// <param name="toFront">
-    /// Whether this is the grab. The formula is the hub's, deliberately duplicated rather than
-    /// approximated: a display that guessed a different depth would be corrected visibly.
-    /// </param>
+    /// <param name="toFront">Whether this is the grab.</param>
     private void Settle(ScreenId screen, ItemTransform transform, bool toFront)
     {
         if (!_contexts.TryGetValue(screen, out var context))
@@ -3053,20 +3038,7 @@ public sealed partial class App : Application, IDisposable
 
         // In one change of the book, against a patch for the same screen landing on the connection
         // task at the same moment - see SceneBook.
-        _scenes.Change(new ScreenRef(_device, screen), scene =>
-            scene?.Items.FirstOrDefault(item => item.ItemId == transform.Item) is not { } standing
-                ? null
-                : SceneReducer.Apply(
-                    scene,
-                    new TransformItem(
-                        transform.Item,
-                        transform.CenterX,
-                        transform.CenterY,
-                        transform.Scale,
-                        transform.RotationDeg,
-                        toFront ? Math.Max(standing.ZOrder, scene.Top(standing.Parked) + 1) : standing.ZOrder,
-                        standing.Revision),
-                    context));
+        _scenes.Change(new ScreenRef(_device, screen), scene => LocalGesture.Apply(scene, transform, toFront, context));
     }
 
     /// <summary>
