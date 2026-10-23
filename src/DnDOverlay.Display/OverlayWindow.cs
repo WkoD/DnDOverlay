@@ -44,20 +44,6 @@ internal sealed class OverlayWindow : Window
     /// <summary>Below this it says nothing worth the pixels, so it is left off.</summary>
     private const double RingFloor = 16;
 
-    /// <summary>
-    /// How far above the scene a held picture is drawn. Far enough that no depth the hub hands out
-    /// can reach it, and an offset rather than a single top value so that two hands on two pictures
-    /// keep their order relative to each other.
-    /// </summary>
-    private const int HeldAbove = 1 << 20;
-
-    /// <summary>
-    /// The focus lies above everything of the scene - the table, the fan, a held picture - with the
-    /// dimming one step below it (Part 3). Nothing takes a gesture while it lies, so nothing can
-    /// outrank it from the table either.
-    /// </summary>
-    private const int FocusAbove = 1 << 22;
-
     /// <summary>How long a picture takes into its place in the focus and back - short, both ways (Part 6).</summary>
     private static readonly Duration FocusTransition = new(TimeSpan.FromMilliseconds(300));
 
@@ -330,7 +316,7 @@ internal sealed class OverlayWindow : Window
         Panel.SetZIndex(_band, Parking.FanAbove - 1);
         _stage.Children.Add(_band);
 
-        Panel.SetZIndex(_dim, FocusAbove - 1);
+        Panel.SetZIndex(_dim, StageDepth.FocusAbove - 1);
         _stage.Children.Add(_dim);
 
         // Above every picture and below the nameplate, and hit-testable by nothing: a ring that
@@ -1012,26 +998,14 @@ internal sealed class OverlayWindow : Window
                 var mount = _mounts.TryGetValue(image.ItemId, out var known) ? known : Raise(image.ItemId);
 
                 // Depth by Z index rather than by the order things were added, so keeping a place
-                // between renders does not decide what lies on top of what.
-                // A held picture is drawn above everything, and keeps its own depth relative to
-                // anything else being held. It is a local statement about NOW, not a change to the
-                // scene: the hand is on it, so it belongs on top, and the moment the hand leaves it
-                // falls back to whatever the hub says.
-                //
-                // Found at the table (hand-run of M3, step 17): a picture arriving while somebody
-                // was pushing another one landed on top of it - the hub hands every new item the
-                // next depth up, and a hand at the table had no way to outrank an arrival.
-                //
-                // A parked picture is not in the scene's depth order at all: the fan lies ABOVE
-                // the whole table, because the way to get a picture back must never be covered by
-                // the table it was tidied off (Parking.Depth).
+                // between renders does not decide what lies on top of what - the bands are in
+                // StageDepth: table, fan, a hand, the focus.
                 Panel.SetZIndex(
                     mount.Element,
-                    inFocus
-                        ? FocusAbove + scene.FocusItems.ToList().IndexOf(image.ItemId)
-                        : _held.ContainsKey(image.ItemId) || Shown(image.ItemId)
-                            ? HeldAbove + item.ZOrder
-                            : Parking.Depth(item));
+                    StageDepth.Of(
+                        item,
+                        inFocus ? scene.FocusItems.ToList().IndexOf(image.ItemId) : null,
+                        _held.ContainsKey(image.ItemId) || Shown(image.ItemId)));
 
                 // <b>At most one picture is hung up per pass.</b> Twenty arriving at once would
                 // otherwise all be built into the visual tree in one drawing - and that drawing is
@@ -1131,11 +1105,10 @@ internal sealed class OverlayWindow : Window
 
         Panel.SetZIndex(
             mount.Element,
-            inFocus
-                ? FocusAbove + focus.ToList().FindIndex(drawn => drawn.ItemId == item.ItemId)
-                : _held.ContainsKey(item.ItemId) || Shown(item.ItemId)
-                    ? HeldAbove + item.ZOrder
-                    : Parking.Depth(item));
+            StageDepth.Of(
+                item,
+                inFocus ? focus.ToList().FindIndex(drawn => drawn.ItemId == item.ItemId) : null,
+                _held.ContainsKey(item.ItemId) || Shown(item.ItemId)));
 
         var drawing = TextCard.Draw(original.Text);
 
@@ -1529,7 +1502,7 @@ internal sealed class OverlayWindow : Window
 
         Place(mount, item with { CenterX = at.X, CenterY = at.Y }, context);
         Trim(mount, Parking.Cut.Whole, context);
-        Panel.SetZIndex(mount.Element, HeldAbove);
+        Panel.SetZIndex(mount.Element, StageDepth.HeldAbove);
     }
 
     /// <summary>And puts it back, when the hand has moved on to the next one or let go.</summary>
