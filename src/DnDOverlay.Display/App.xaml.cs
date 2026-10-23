@@ -2520,46 +2520,18 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    /// <summary>
-    /// Every decoded picture the memory rule may step down: not one already down, not one that
-    /// moves (its frames are built from bytes), not one any background shows.
-    /// </summary>
-    private List<DecodedPicture> Candidates(HashSet<ItemId> held)
-    {
-        var mine = _scenes.Of(_device).Select(pair => pair.Value).ToList();
-        var backgrounds = mine.Where(scene => scene.Background is not null).Select(scene => scene.Background!.AssetId).ToHashSet();
-        var items = mine.SelectMany(scene => scene.Items.OfType<ImageItem>()).ToList();
-        var pictures = new List<DecodedPicture>();
-
-        foreach (var (asset, image) in _images)
-        {
-            if (image is not BitmapSource bitmap
-                || _steppedDown.ContainsKey(asset)
-                || _moving.ContainsKey(asset)
-                || backgrounds.Contains(asset))
-            {
-                continue;
-            }
-
-            var showing = items.Where(item => item.AssetId == asset).ToList();
-
-            if (showing.Count == 0)
-            {
-                continue;
-            }
-
-            var parked = showing.All(item => item.Parked);
-
-            pictures.Add(new DecodedPicture(
-                asset,
-                (long)bitmap.PixelWidth * bitmap.PixelHeight * 4,
-                parked,
-                parked ? showing.Min(item => item.ZOrder) : _touchedAt.GetValueOrDefault(asset),
-                showing.Any(item => held.Contains(item.ItemId))));
-        }
-
-        return pictures;
-    }
+    /// <summary>Every decoded picture the memory rule may step down - see <see cref="ReliefCandidates"/>.</summary>
+    private List<DecodedPicture> Candidates(HashSet<ItemId> held) =>
+        ReliefCandidates.Of(
+            _scenes.Of(_device).Select(pair => pair.Value),
+            from pair in _images
+            let bitmap = pair.Value as BitmapSource
+            where bitmap is not null
+            select (pair.Key, bitmap.PixelWidth, bitmap.PixelHeight),
+            _steppedDown.ContainsKey,
+            _moving.ContainsKey,
+            asset => _touchedAt.GetValueOrDefault(asset),
+            held);
 
     private void LetGoOfWhatNoSceneNeeds()
     {
