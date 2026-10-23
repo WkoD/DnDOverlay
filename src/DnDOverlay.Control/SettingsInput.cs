@@ -35,14 +35,29 @@ internal static class SettingsInput
         return pattern.Contains("{n}", StringComparison.Ordinal) ? pattern : null;
     }
 
-    /// <summary>The free-space threshold, typed in GB in the DM's own number format, as bytes - more than nothing, or null.</summary>
+    /// <summary>
+    /// The free-space threshold, typed in GB in the DM's own number format, as bytes - more than nothing,
+    /// or null.
+    /// <para>
+    /// <b>Only a number that has a byte count</b>: "∞", or one so large that its bytes do not fit, was
+    /// taken and saturated to the largest count there is - a threshold no drive is ever above, so the
+    /// notice would always speak (M5 test sweep). One so small that it comes to no byte at all is refused
+    /// as nothing.
+    /// </para>
+    /// </summary>
     internal static long? FreeSpaceBytes(string typed, CultureInfo culture)
     {
         ArgumentNullException.ThrowIfNull(typed);
 
-        return double.TryParse(typed.Trim(), NumberStyles.Float, culture, out var gigabytes) && gigabytes > 0
-            ? (long)(gigabytes * 1024 * 1024 * 1024)
-            : null;
+        if (!double.TryParse(typed.Trim(), NumberStyles.Float, culture, out var gigabytes) || !double.IsFinite(gigabytes))
+        {
+            return null;
+        }
+
+        var bytes = Math.Floor(gigabytes * 1024 * 1024 * 1024);
+
+        // long.MaxValue as a double is 2^63, one above the largest long: below it, the cast is exact.
+        return bytes >= 1 && bytes < long.MaxValue ? (long)bytes : null;
     }
 
     /// <summary>The picture-count threshold, a whole number above nothing - or null.</summary>

@@ -51,6 +51,31 @@ public sealed class SettingsInputTests
     public void Free_space_of_nothing_or_less_is_refused(string typed) =>
         Assert.Null(SettingsInput.FreeSpaceBytes(typed, German));
 
+    /// <summary>
+    /// Infinity, or a number whose bytes do not fit, would saturate to the largest byte count - a
+    /// threshold no drive is above, so the notice would always speak (M5 test sweep). Refused, as is a
+    /// number too small to come to a single byte.
+    /// </summary>
+    [Theory]
+    [InlineData("∞")]
+    [InlineData("-∞")]
+    [InlineData("NaN")]
+    [InlineData("1e30")]
+    [InlineData("8589934592")]
+    [InlineData("1e-12")]
+    public void Free_space_without_a_byte_count_is_refused(string typed) =>
+        Assert.Null(SettingsInput.FreeSpaceBytes(typed, German));
+
+    /// <summary>The English spelling of infinity is refused the same way.</summary>
+    [Fact]
+    public void Infinity_is_refused_in_any_number_format() =>
+        Assert.Null(SettingsInput.FreeSpaceBytes("Infinity", CultureInfo.InvariantCulture));
+
+    /// <summary>The largest threshold whose bytes fit is still taken - the bound is the byte count, not a guess at drive sizes.</summary>
+    [Fact]
+    public void A_large_threshold_that_fits_is_taken() =>
+        Assert.Equal(8589934591L * 1024 * 1024 * 1024, SettingsInput.FreeSpaceBytes("8589934591", German));
+
     [Fact]
     public void The_picture_count_is_a_whole_number_above_nothing()
     {
