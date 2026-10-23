@@ -2790,7 +2790,7 @@ public sealed partial class App : Application, IDisposable
         {
             while (await tick.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                if (!_windowsWanted || _foreign is ForeignWindowsMode.Off)
+                if (!ForeignWindowsGate.Reports(_windowsWanted, _foreign))
                 {
                     continue;
                 }
@@ -2824,13 +2824,10 @@ public sealed partial class App : Application, IDisposable
     {
         DnDOverlay.Core.Rect? after = null;
 
-        var outcome = _foreign is not ForeignWindowsMode.ReportAndControl
-            ? WindowOutcome.NotAllowed
-            : !_monitors.TryGetValue(command.Screen, out var monitor)
-                ? WindowOutcome.Gone
-                : _states.IsInactive(command.Screen)
-                    ? WindowOutcome.Inactive
-                    : ForeignWindowSurvey.Lay(command.Handle, command.Program, command.Action, command.Bounds, monitor, out after);
+        var known = _monitors.TryGetValue(command.Screen, out var monitor);
+
+        var outcome = ForeignWindowsGate.Refusal(_foreign, known, _states.IsInactive(command.Screen))
+            ?? ForeignWindowSurvey.Lay(command.Handle, command.Program, command.Action, command.Bounds, monitor!, out after);
 
         DisplayLog.WindowLaid(_logger, command.Program, command.Action, outcome);
         _outbox?.TrySend(new WindowResultMessage(command.Handle, outcome, after));
