@@ -619,43 +619,7 @@ internal sealed class StageBoard : Panel
     {
         var info = _screens.FirstOrDefault(known => known.Screen == screen);
 
-        _settings.Update(current =>
-        {
-            var written = false;
-
-            var screens = current.KnownScreens
-                .Select(known =>
-                {
-                    if (known.DeviceId != screen.Device.Value || known.ScreenId != screen.Screen.Value)
-                    {
-                        return known;
-                    }
-
-                    written = true;
-
-                    return known with { View = view };
-                })
-                .ToList();
-
-            // A screen the file has never heard of gets its entry here rather than losing the
-            // value. Until the hand-run the rotation was written only into an EXISTING row, so on
-            // a screen that had not been named or configured yet it vanished without a word and
-            // came back at 0 after every restart (hand-run of M4, 25).
-            if (!written && info is { } view0)
-            {
-                screens.Add(new KnownScreen(
-                    screen.Device.Value,
-                    screen.Screen.Value,
-                    view0.Info.Label,
-                    view0.State,
-                    view0.Info.Size,
-                    view0.Info.Dpi,
-                    new ScreenSettings(),
-                    view));
-            }
-
-            return current with { KnownScreens = screens };
-        });
+        _settings.Update(current => ScreenViews.Turned(current, screen, info, view));
 
         _ = RefreshAsync();
     }
@@ -665,12 +629,7 @@ internal sealed class StageBoard : Panel
     /// one place (Part 7), and a second copy on the stage would be the one that is stale after the
     /// menu has set it.
     /// </summary>
-    private ViewRotation View(ScreenRef screen) =>
-        _settings.Current.KnownScreens
-            .FirstOrDefault(known =>
-                known.DeviceId == screen.Device.Value && known.ScreenId == screen.Screen.Value)
-            ?.View
-        ?? ViewRotation.None;
+    private ViewRotation View(ScreenRef screen) => ScreenViews.Of(_settings.Current, screen);
 
     /// <summary>
     /// The tile a hand has taken hold of, and where it started. Nothing moves yet: a press on the

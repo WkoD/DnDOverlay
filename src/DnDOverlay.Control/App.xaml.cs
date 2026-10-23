@@ -363,23 +363,7 @@ public sealed partial class App : Application, IDisposable
         // complained and every write of the inventory silently reset the rotation to zero. That is
         // what the table saw twice: the tile order survived a restart and the rotation did not
         // (hand-run of M4, 25, both runs).
-        _settings.Update(configuration =>
-        {
-            var seen = configuration.KnownScreens.ToDictionary(
-                known => (known.DeviceId, known.ScreenId),
-                known => known.View);
-
-            return configuration with
-            {
-                KnownScreens =
-                [
-                    .. _screens.Snapshot().Select(known =>
-                        seen.TryGetValue((known.DeviceId, known.ScreenId), out var view)
-                            ? known with { View = view }
-                            : known),
-                ],
-            };
-        });
+        _settings.Update(configuration => ScreenViews.KeptThrough(configuration, _screens.Snapshot()));
     }
 
     public void Dispose()
