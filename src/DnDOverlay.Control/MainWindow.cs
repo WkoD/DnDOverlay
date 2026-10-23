@@ -387,13 +387,13 @@ internal sealed class MainWindow : Window, IDisposable
             }
         };
 
-        // Where the window stood, if that place is still there (Part 7). Done before the window is
-        // shown, so it never appears in one place and jumps to another.
+        // Where the window stood, if that place is still there (Part 7). Applied as the handle comes
+        // into being, before the window is drawn, so it never appears in one place and jumps to another.
         StagePlace.Restore(this, settings.Current.Window);
 
         Closing += (_, _) =>
         {
-            _settings.Update(current => current with { Window = StagePlace.Taken(this) });
+            _settings.Update(current => current with { Window = StagePlace.Taken(this) ?? current.Window });
             _settings.Flush();
         };
 

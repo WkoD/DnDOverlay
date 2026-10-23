@@ -157,6 +157,12 @@ public sealed record ControlConfiguration : IConfigurationDocument
     /// application runs and cannot be found. The check belongs to whoever opens the window, which
     /// is why this is a plain record of numbers and not a promise about where the window will be.
     /// </para>
+    /// <para>
+    /// <b>In physical pixels</b> (workspace coordinates, as <c>GetWindowPlacement</c> gives them) -
+    /// the unit the monitors are enumerated in, so the check compares like with like. Why, and what
+    /// becomes of a file written while this held device-independent units, is with the control's
+    /// <c>StagePlace</c>.
+    /// </para>
     /// </summary>
     public WindowPlacement? Window { get; set; }
 
