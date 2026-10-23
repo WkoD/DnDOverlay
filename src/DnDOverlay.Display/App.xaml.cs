@@ -329,11 +329,8 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private readonly long _up = TimeProvider.System.GetTimestamp();
 
-    /// <summary>Screens whose pictures are being fetched right now - one run each, no more.</summary>
-    private readonly ConcurrentDictionary<ScreenId, byte> _fetching = new();
-
-    /// <summary>Screens that were asked for again while their run was going.</summary>
-    private readonly ConcurrentDictionary<ScreenId, byte> _refetch = new();
+    /// <summary>Screens whose pictures are being fetched right now - one run each, no more - and those asked for again meanwhile.</summary>
+    private readonly FetchRuns _runs = new();
 
     /// <summary>Whether the ring loop is already running - there is exactly one for the process.</summary>
     private int _turning;
@@ -2066,22 +2063,14 @@ public sealed partial class App : Application, IDisposable
     }
 
     /// <summary>
-    /// Asks for whatever the current scene of this screen is still missing, off the receive loop.
-    /// <para>
-    /// <b>One run at a time per screen, and a second ask while one is going does not queue a second
-    /// run</b> - it marks the running one to look again when it is done. Queueing would give twenty
-    /// arriving pictures twenty runs of one picture each, which is exactly the shape that kept the
-    /// loader's three-at-a-time from ever engaging (<c>Peak=1</c> in every run of every hand-run so
-    /// far). Looking again instead means the next round sees everything that is still missing and
-    /// fetches it together.
-    /// </para>
+    /// Asks for whatever the current scene of this screen is still missing, off the receive loop -
+    /// one run at a time per screen, a second ask marking the running one to look again
+    /// (<see cref="FetchRuns"/>).
     /// </summary>
     private void Fetch(ScreenRef screen)
     {
-        if (!_fetching.TryAdd(screen.Screen, 0))
+        if (!_runs.Ask(screen.Screen))
         {
-            _refetch[screen.Screen] = 0;
-
             return;
         }
 
@@ -2094,7 +2083,7 @@ public sealed partial class App : Application, IDisposable
         {
             do
             {
-                _ = _refetch.TryRemove(screen.Screen, out _);
+                _runs.Looking(screen.Screen);
 
                 var scene = _scenes.TryGetValue(screen, out var known) ? known : SceneState.Empty;
 
@@ -2105,7 +2094,7 @@ public sealed partial class App : Application, IDisposable
                 await EnsureImagesAsync(scene, screen.Screen).ConfigureAwait(false);
                 await RenderAsync(screen).ConfigureAwait(false);
             }
-            while (_refetch.ContainsKey(screen.Screen));
+            while (_runs.AskedAgain(screen.Screen));
         }
         catch (OperationCanceledException)
         {
@@ -2113,12 +2102,9 @@ public sealed partial class App : Application, IDisposable
         }
         finally
         {
-            _ = _fetching.TryRemove(screen.Screen, out _);
-
-            // Asked between the last look and letting go of the mark, which is a window of a few
-            // instructions and therefore certain to happen eventually. Without this the ask would
-            // be dropped and a picture would never arrive.
-            if (_refetch.ContainsKey(screen.Screen))
+            // Asked between the last look and letting go of the mark: without this the ask would be
+            // dropped and a picture would never arrive.
+            if (_runs.Finished(screen.Screen))
             {
                 Fetch(screen);
             }
