@@ -483,4 +483,7 @@
   <data name="E3053_WindowSurveyChanged" xml:space="preserve">
     <value>Foreign window survey for the control: {On}.</value>
   </data>
+  <data name="E4037_CampaignsListed" xml:space="preserve">
+    <value>Campaign list read: {Count} campaign(s)</value>
+  </data>
 </root>

@@ -542,6 +542,12 @@ Take {1} as the place for campaigns anyway?</value>
   <data name="DevicesCallingOrphans" xml:space="preserve">
     <value>Calling for two minutes. Displays that lost their control more than a minute ago appear under Waiting for a decision.</value>
   </data>
+  <data name="DevicesNobodyAnswered" xml:space="preserve">
+    <value>The call has ended - no device answered.</value>
+  </data>
+  <data name="DevicesCallEnded" xml:space="preserve">
+    <value>The call has ended.</value>
+  </data>
   <data name="DevicesSuppressUnavailable" xml:space="preserve">
     <value>unavailable</value>
   </data>
@@ -1456,6 +1462,9 @@ Another DnDOverlay control is probably running already - look for its window bef
   <data name="IntakeTaken" xml:space="preserve">
     <value>{0} taken in</value>
   </data>
+  <data name="IntakeTakenOf" xml:space="preserve">
+    <value>{0} of {1} taken in</value>
+  </data>
   <data name="IntakeAlreadyPresent" xml:space="preserve">
     <value>{0} already in the stock</value>
   </data>
@@ -1515,6 +1524,9 @@ Another DnDOverlay control is probably running already - look for its window bef
   </data>
   <data name="MainDockLog" xml:space="preserve">
     <value>Dock log</value>
+  </data>
+  <data name="MainResetArrangement" xml:space="preserve">
+    <value>Reset arrangement</value>
   </data>
   <data name="MainEdgeLeft" xml:space="preserve">
     <value>Left</value>

@@ -542,6 +542,12 @@ Zum Löschen den Namen der Kampagne eintippen:</value>
   <data name="DevicesCallingOrphans" xml:space="preserve">
     <value>Der Ruf läuft zwei Minuten. Displays, die ihr Control vor mehr als einer Minute verloren haben, erscheinen unter "Wartet auf Entscheidung".</value>
   </data>
+  <data name="DevicesNobodyAnswered" xml:space="preserve">
+    <value>Der Ruf ist beendet - kein Gerät hat geantwortet.</value>
+  </data>
+  <data name="DevicesCallEnded" xml:space="preserve">
+    <value>Der Ruf ist beendet.</value>
+  </data>
   <data name="DevicesSuppressUnavailable" xml:space="preserve">
     <value>nicht verfügbar</value>
   </data>
@@ -1456,6 +1462,9 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   <data name="IntakeTaken" xml:space="preserve">
     <value>{0} aufgenommen</value>
   </data>
+  <data name="IntakeTakenOf" xml:space="preserve">
+    <value>{0} von {1} aufgenommen</value>
+  </data>
   <data name="IntakeAlreadyPresent" xml:space="preserve">
     <value>{0} schon in der Ablage</value>
   </data>
@@ -1515,6 +1524,9 @@ Vermutlich läuft schon ein anderes DnDOverlay-Control - erst nach dessen Fenste
   </data>
   <data name="MainDockLog" xml:space="preserve">
     <value>Protokoll andocken</value>
+  </data>
+  <data name="MainResetArrangement" xml:space="preserve">
+    <value>Anordnung zurücksetzen</value>
   </data>
   <data name="MainEdgeLeft" xml:space="preserve">
     <value>Links</value>
