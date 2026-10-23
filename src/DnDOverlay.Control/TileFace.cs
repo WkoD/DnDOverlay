@@ -1899,29 +1899,13 @@ internal sealed class TileFace : Panel
         return new GestureStep(scene.X, scene.Y, 1, 0, pivot);
     }
 
-    /// <summary>
-    /// The angle the mouse swept around the picture's centre. A mouse has one point, so there is no
-    /// pinch to take an angle from - the centre is the only pivot that makes a drag read as a turn.
-    /// <para>
-    /// <b>Measured on the face and not in the scene</b>, because the face is where the hand is: it
-    /// is a difference of two angles, so the quarter turns of the view cancel out of it and no
-    /// inverse is needed. The anisotropy does not enter either - the face restores the aspect that
-    /// normalised coordinates leave out.
-    /// </para>
-    /// </summary>
+    /// <summary>The angle the mouse swept around the picture's centre, on the face (<see cref="MouseTurn"/>).</summary>
     private double Swept(SceneItem item, TilePoint from, TilePoint to, Size face) =>
         Swept(new CorePoint(item.CenterX, item.CenterY), from, to, face);
 
     /// <inheritdoc cref="Swept(SceneItem, TilePoint, TilePoint, Size)" />
-    private double Swept(CorePoint about, TilePoint from, TilePoint to, Size face)
-    {
-        var centre = Placing.InTile(about, _view, face);
-
-        var before = Math.Atan2(from.Y - centre.Y, from.X - centre.X);
-        var after = Math.Atan2(to.Y - centre.Y, to.X - centre.X);
-
-        return (after - before) * 180 / Math.PI;
-    }
+    private double Swept(CorePoint about, TilePoint from, TilePoint to, Size face) =>
+        MouseTurn.Swept(Placing.InTile(about, _view, face), from, to);
 
     private static CorePoint Centre(SceneItem item) => new(item.CenterX, item.CenterY);
 
