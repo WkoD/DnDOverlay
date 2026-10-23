@@ -2217,22 +2217,12 @@ internal sealed class OverlayWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>
-    /// The angle the mouse swept around the item's centre between two positions. A mouse has one
-    /// point, so there is no pinch to take an angle from - the centre is the only pivot that makes
-    /// a drag read as a rotation.
-    /// </summary>
+    /// <summary>The angle the mouse swept around the item's centre between two positions - see <see cref="MouseTurn"/>.</summary>
     private double Swept(SceneItem item, System.Windows.Point from, System.Windows.Point to, ScreenContext context)
     {
         var (width, height) = Surface(context);
 
-        var centreX = item.CenterX * width;
-        var centreY = item.CenterY * height;
-
-        var before = Math.Atan2(from.Y - centreY, from.X - centreX);
-        var after = Math.Atan2(to.Y - centreY, to.X - centreX);
-
-        return (after - before) * 180 / Math.PI;
+        return MouseTurn.Swept(new System.Windows.Point(item.CenterX * width, item.CenterY * height), from, to);
     }
 
     private static CorePoint Centre(SceneItem item) => new(item.CenterX, item.CenterY);
