@@ -38,9 +38,7 @@ internal static class StagePlace
             return;
         }
 
-        var wanted = new Rect(place.Left, place.Top, place.Width, place.Height);
-
-        if (!Screens.Enumerate(Environment.MachineName).Any(monitor => Overlaps(wanted, monitor)))
+        if (!Reachable(place, Screens.Enumerate(Environment.MachineName)))
         {
             // Left where the window manager puts it. Saying nothing is right here: the DM did not
             // do anything wrong, and the window is where it can be seen.
@@ -73,15 +71,24 @@ internal static class StagePlace
             window.WindowState is WindowState.Maximized);
     }
 
-    private static bool Overlaps(Rect wanted, MonitorInfo monitor)
+    /// <summary>
+    /// Whether a kept place still lies on a monitor - <b>overlapping one is enough</b>; touching its edge
+    /// is not. Compared as the two are handed in: the place as the window gave it, the monitors' bounds
+    /// as <see cref="Screens.Enumerate"/> reports them.
+    /// </summary>
+    internal static bool Reachable(WindowPlacement place, IReadOnlyList<MonitorInfo> monitors)
     {
-        var (x, y, width, height) = monitor.Bounds;
+        ArgumentNullException.ThrowIfNull(place);
+        ArgumentNullException.ThrowIfNull(monitors);
 
-        return wanted.Left < x + width
-            && wanted.Left + wanted.Width > x
-            && wanted.Top < y + height
-            && wanted.Top + wanted.Height > y;
+        return monitors.Any(monitor =>
+        {
+            var (x, y, width, height) = monitor.Bounds;
+
+            return place.Left < x + width
+                && place.Left + place.Width > x
+                && place.Top < y + height
+                && place.Top + place.Height > y;
+        });
     }
-
-    private readonly record struct Rect(double Left, double Top, double Width, double Height);
 }
