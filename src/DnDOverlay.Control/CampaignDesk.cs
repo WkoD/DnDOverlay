@@ -319,7 +319,8 @@ internal sealed class CampaignDesk
     /// </para>
     /// <para>
     /// What can still fail is a file taken hold of between the move and the delete. Then the library
-    /// has put what is left back under its name, its stock stays closed, and the campaign is not
+    /// has put what is left back under its name, its stock stays closed, and it says so with
+    /// <see cref="CampaignOutcome.Incomplete"/> rather than <see cref="CampaignOutcome.Busy"/>. The campaign is not
     /// opened again over a half-deleted folder: the table is cleared, none is open, and the DM is told
     /// where the rest lies.
     /// </para>
@@ -341,7 +342,7 @@ internal sealed class CampaignDesk
 
         // Refused before anything went: the library opened the stock again, and nothing - not even the
         // table - has changed.
-        if (outcome is CampaignOutcome.Busy && !open.Store.IsClosed)
+        if (outcome is CampaignOutcome.Busy)
         {
             return Strings.CampaignDeleteHeld(open.Name);
         }
@@ -350,7 +351,7 @@ internal sealed class CampaignDesk
 
         Become(null);
 
-        if (outcome is not CampaignOutcome.Done)
+        if (outcome is CampaignOutcome.Incomplete)
         {
             var left = Directory.Exists(open.Directory) ? open.Directory : BasePath;
 

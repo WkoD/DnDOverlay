@@ -346,6 +346,46 @@ public sealed class CampaignLibraryTests : IDisposable
         Assert.False(campaign.Store.IsClosed);
     }
 
+    /// <summary>
+    /// The move aside went through, the delete then stopped at a file it could not take - staged with a
+    /// read-only picture, which does not keep the folder from moving but the file from going. Part is
+    /// gone, so the answer is not "busy" (nothing changed, the stock open again) but "incomplete": the
+    /// rest back under its name, the stock closed.
+    /// </summary>
+    [Fact]
+    public async Task A_delete_that_stops_halfway_says_incomplete_and_keeps_the_stock_closed()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to delete a read-only file in a writable folder");
+        }
+
+        var library = Library();
+        var campaign = library.CreateUnnamed();
+        var taken = await Ingest(campaign.Store, "eins");
+        var picture = Assert.Single(Directory.GetFiles(Path.Combine(campaign.Directory, "assets"), taken.Asset.AssetId.Value + ".*"));
+
+        File.SetAttributes(picture, FileAttributes.ReadOnly);
+
+        try
+        {
+            Assert.Equal(CampaignOutcome.Incomplete, library.Delete(campaign));
+
+            Assert.True(File.Exists(picture));
+            Assert.False(File.Exists(Path.Combine(campaign.Directory, "inventory.json")));
+            Assert.True(campaign.Store.IsClosed);
+            Assert.Empty(Directory.GetDirectories(_base, "*.deleting-*"));
+        }
+        finally
+        {
+            // Or the folder outlives the test: Dispose deletes it the same way.
+            if (File.Exists(picture))
+            {
+                File.SetAttributes(picture, FileAttributes.Normal);
+            }
+        }
+    }
+
     /// <summary>A loose picture in the root and one in a folder of the DM's own come in, renamed to their hash and moved; the originals are gone.</summary>
     [Fact]
     public async Task Loose_pictures_anywhere_in_the_folder_are_taken_in()

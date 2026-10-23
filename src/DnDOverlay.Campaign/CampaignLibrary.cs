@@ -58,8 +58,16 @@ public enum CampaignOutcome
     /// <summary>The name cannot be a folder name; <see cref="FileNames.Check"/> says why.</summary>
     BadName,
 
-    /// <summary>The folder is in use - a picture being sent right now; try again.</summary>
+    /// <summary>The folder is in use - a picture being sent right now; nothing changed, try again.</summary>
     Busy,
+
+    /// <summary>
+    /// A delete that started and could not finish: some files are gone, what is left lies under the
+    /// campaign's name again where it could be put back, and its stock stays closed - nothing may
+    /// write into a half-deleted folder (Part 3). Only <see cref="CampaignLibrary.Delete"/> answers
+    /// this; unlike <see cref="Busy"/>, trying again is not the same as nothing having happened.
+    /// </summary>
+    Incomplete,
 }
 
 /// <summary>
@@ -344,8 +352,18 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
     /// downloading a picture, "verify stock" reading one. Then nothing is deleted and the answer is
     /// <see cref="CampaignOutcome.Busy"/>, rather than a folder half gone and an exception.
     /// </para>
+    /// <para>
+    /// What the rename cannot rule out is a file the delete itself cannot take - one taken hold of in
+    /// the moment between, or one marked read-only. Then part is gone and the answer is
+    /// <see cref="CampaignOutcome.Incomplete"/>: a caller must not treat that like <see cref="CampaignOutcome.Busy"/>
+    /// and carry on with the campaign as if nothing happened.
+    /// </para>
     /// </summary>
-    /// <returns><see cref="CampaignOutcome.Done"/>, or <see cref="CampaignOutcome.Busy"/> with the campaign as it was and its stock open again.</returns>
+    /// <returns>
+    /// <see cref="CampaignOutcome.Done"/>; <see cref="CampaignOutcome.Busy"/> with the campaign as it
+    /// was and its stock open again; or <see cref="CampaignOutcome.Incomplete"/> with part of the folder
+    /// gone, the rest back under its name if the system allowed it, and the stock closed.
+    /// </returns>
     public CampaignOutcome Delete(OpenCampaign campaign)
     {
         ArgumentNullException.ThrowIfNull(campaign);
@@ -390,7 +408,9 @@ public sealed class CampaignLibrary(string basePath, Func<string, AssetStore> op
             {
             }
 
-            return CampaignOutcome.Busy;
+            // Not Busy: files are gone and the stock stays closed, and a caller told "busy" would
+            // carry on with the campaign as it was.
+            return CampaignOutcome.Incomplete;
         }
 
         return CampaignOutcome.Done;

@@ -95,6 +95,48 @@ public sealed class CampaignDeskTests
     }
 
     /// <summary>
+    /// A delete that stopped halfway (a read-only picture: the folder moves, the file does not go) is
+    /// told by its outcome, not mistaken for one refused before anything went: the table is cleared,
+    /// no campaign is open over the half-deleted folder, and the DM is told where the rest lies.
+    /// </summary>
+    [Fact]
+    public async Task A_delete_that_stops_halfway_clears_the_table_and_says_where_the_rest_lies()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("only Windows refuses to delete a read-only file in a writable folder");
+        }
+
+        using var thread = new DispatcherThread();
+        using var bench = new CampaignBench(thread.Dispatcher);
+
+        await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+        await bench.Session.AddItemAsync(CampaignBench.Screen, await bench.PictureAsync("Karte", 1), position: null, Cancellation);
+
+        var open = bench.Desk.Open!;
+        var file = Directory.EnumerateFiles(Path.Combine(open.Directory, "assets")).First();
+
+        File.SetAttributes(file, FileAttributes.ReadOnly);
+
+        try
+        {
+            Assert.Equal(Strings.CampaignDeleteIncomplete("Vandalia", open.Directory), await bench.Desk.DeleteAsync());
+            Assert.Null(bench.Desk.Open);
+            Assert.True(open.Store.IsClosed);
+            Assert.Empty((await bench.Session.GetSceneAsync(CampaignBench.Screen, Cancellation)).Items);
+            Assert.True(File.Exists(file));
+        }
+        finally
+        {
+            // Or the bench cannot clear its folder afterwards.
+            if (File.Exists(file))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+            }
+        }
+    }
+
+    /// <summary>
     /// "Check folder again" while Explorer still copies a file in: the file cannot be read yet. Named in
     /// the report beside the stage as one to try again - not an exception out of the tidy-up view that
     /// ends the control, and not a check that stops at it.
