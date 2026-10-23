@@ -127,9 +127,7 @@ internal sealed class SettingsWindow : Window, IDisposable
 
         void Keep()
         {
-            var typed = pattern.Text.Trim();
-
-            if (!typed.Contains("{n}", StringComparison.Ordinal))
+            if (SettingsInput.Pattern(pattern.Text) is not { } typed)
             {
                 problem.Text = Strings.SettingsPatternNeedsNumber;
                 return;
@@ -243,9 +241,9 @@ internal sealed class SettingsWindow : Window, IDisposable
         // Enter as well as on leaving the field, like its neighbours.
         void KeepSpace()
         {
-            if (double.TryParse(spaceValue.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out var gigabytes) && gigabytes > 0)
+            if (SettingsInput.FreeSpaceBytes(spaceValue.Text, CultureInfo.CurrentCulture) is { } bytes)
             {
-                _settings.Update(current => current with { Stock = current.Stock with { FreeSpaceBelowBytes = (long)(gigabytes * 1024 * 1024 * 1024) } });
+                _settings.Update(current => current with { Stock = current.Stock with { FreeSpaceBelowBytes = bytes } });
                 problem.Text = string.Empty;
                 return;
             }
@@ -256,7 +254,7 @@ internal sealed class SettingsWindow : Window, IDisposable
 
         void KeepPictures()
         {
-            if (int.TryParse(picturesValue.Text.Trim(), NumberStyles.None, CultureInfo.CurrentCulture, out var count) && count > 0)
+            if (SettingsInput.PictureCount(picturesValue.Text, CultureInfo.CurrentCulture) is { } count)
             {
                 _settings.Update(current => current with { Stock = current.Stock with { PicturesAbove = count } });
                 problem.Text = string.Empty;
@@ -331,7 +329,7 @@ internal sealed class SettingsWindow : Window, IDisposable
 
         void Keep()
         {
-            if (!int.TryParse(port.Text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var wanted) || wanted is < 1024 or > 65535)
+            if (SettingsInput.Port(port.Text) is not { } wanted)
             {
                 note.Text = Strings.SettingsPortRange;
                 return;
@@ -383,12 +381,12 @@ internal sealed class SettingsWindow : Window, IDisposable
         var from = Path.GetFullPath(_desk.BasePath);
         var to = Path.GetFullPath(picker.FolderName);
 
-        if (string.Equals(from.TrimEnd('\\'), to.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        if (SettingsInput.SamePlace(from, to))
         {
             return;
         }
 
-        if (Inside(to, from) || Inside(from, to))
+        if (SettingsInput.Nested(from, to))
         {
             MessageBox.Show(this, Strings.SettingsMoveInside, Strings.SettingsMoveCaption);
             return;
@@ -531,9 +529,6 @@ internal sealed class SettingsWindow : Window, IDisposable
         _desk.Relocate(to);
         ShowPlace();
     }
-
-    private static bool Inside(string path, string folder) =>
-        path.StartsWith(folder.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
 
     private static ComboBox Choice<T>(IReadOnlyList<(string Label, T Value)> options, T current, Action<T> chosen)
     {
