@@ -473,4 +473,7 @@
   <data name="E4036_CampaignCheckFailed" xml:space="preserve">
     <value>Die Ordnerprüfung von "{Name}" brach ab: {Reason}</value>
   </data>
+  <data name="E3053_WindowSurveyChanged" xml:space="preserve">
+    <value>Erhebung fremder Fenster für das Control: {On}.</value>
+  </data>
 </root>

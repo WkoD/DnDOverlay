@@ -845,6 +845,7 @@ line that only appears above some threshold is a line nobody can rely on.
 | 3050 | `WindowLaid` | Information |
 | 3051 | `WentIdle` | Information |
 | 3052 | `MessageHandlingFailed` | Error |
+| 3053 | `WindowSurveyChanged` | Information |
 
 **3029 gained two numbers in M3c**, and the second is the one that says anything: touch
 reports sent, and the points inside them. A count of reports cannot tell a working table
@@ -856,7 +857,7 @@ capped at 32; a resting or a swallowed one contributes exactly one. Until the th
 M4 there is nothing to look at, so this ratio is the whole evidence that the trails are
 collected at all.
 
-**Next free: 3053.**
+**Next free: 3054.**
 
 **3036 and 3037 are not 3033 and 3034 with a number added**, and the separation is deliberate.
 3033 answers "where did that picture go?" and is written by a hand dragging one across; the pair
