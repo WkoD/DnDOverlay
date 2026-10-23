@@ -113,6 +113,8 @@ internal static partial class Strings
 
     internal static string MainDockLog => Text[nameof(MainDockLog)];
 
+    internal static string MainResetArrangement => Text[nameof(MainResetArrangement)];
+
     internal static string MainEdgeLeft => Text[nameof(MainEdgeLeft)];
 
     internal static string MainEdgeRight => Text[nameof(MainEdgeRight)];

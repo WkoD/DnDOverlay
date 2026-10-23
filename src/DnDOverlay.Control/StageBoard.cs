@@ -563,6 +563,23 @@ internal sealed class StageBoard : Panel
         TileArrangement.Arranged(screens, _settings.Current.TileOrder);
 
     /// <summary>
+    /// "Reset the arrangement" (Part 7): the tiles by device and screen name, written where the DM's
+    /// own order is kept. <b>Nothing is sent and nothing enters the timeline</b> - the order is a view
+    /// property of the control like the view rotation (Part 4), so the undo button's label stays as it
+    /// was (Prüfschritt 24b).
+    /// </summary>
+    internal void ResetArrangement()
+    {
+        var current = _settings.Current;
+        var order = TileArrangement.Reset(_screens, current.TileOrder, current.KnownScreens, current.KnownDevices);
+
+        _settings.Update(configuration => configuration with { TileOrder = order });
+        _screens = InOrder(_screens);
+
+        Lay();
+    }
+
+    /// <summary>
     /// Fetches every scene and hands it to its tile. Called on every patch: what a patch changed is
     /// known to the hub, and asking it is one round trip in the same process - cheaper than a
     /// second copy of the scene state here that could drift from it (rule 1).

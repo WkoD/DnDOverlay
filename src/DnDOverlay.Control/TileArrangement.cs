@@ -70,5 +70,48 @@ internal static class TileArrangement
         return [.. here, .. saved.Where(key => !here.Contains(key))];
     }
 
+    /// <summary>
+    /// "Reset the arrangement" (Part 7): the order by device name, and within a device by screen name -
+    /// ignoring case, as the device list sorts (Part 3). It covers the screens on the stage AND the saved
+    /// places of the ones that are not: an unplugged screen takes its place by name as well, from the
+    /// names <c>control.json</c> keeps, and stands there when it comes back. A saved place whose screen
+    /// has no name anywhere goes to the end, in the order it had.
+    /// <para>
+    /// The devices' screens stay together under one device even if two had the same name - the
+    /// device is the second key, its name the first.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<ScreenKey> Reset(
+        IReadOnlyList<ScreenView> screens,
+        IReadOnlyList<ScreenKey> saved,
+        IReadOnlyList<KnownScreen> knownScreens,
+        IReadOnlyList<KnownDevice> knownDevices)
+    {
+        ArgumentNullException.ThrowIfNull(screens);
+        ArgumentNullException.ThrowIfNull(saved);
+        ArgumentNullException.ThrowIfNull(knownScreens);
+        ArgumentNullException.ThrowIfNull(knownDevices);
+
+        var here = screens.ToDictionary(view => Key(view.Screen), view => view.Info.Label);
+        var devices = knownDevices.ToDictionary(device => device.DeviceId, device => device.Name);
+        var labels = knownScreens.ToDictionary(screen => new ScreenKey(screen.DeviceId, screen.ScreenId), screen => screen.Label);
+        var keys = here.Keys.Concat(saved.Where(key => !here.ContainsKey(key))).Distinct().ToList();
+
+        string? Label(ScreenKey key) => here.TryGetValue(key, out var label) ? label : labels.GetValueOrDefault(key);
+
+        var named = keys.Where(key => Label(key) is not null).ToList();
+        var comparer = StringComparer.CurrentCultureIgnoreCase;
+
+        return
+        [
+            .. named
+                .OrderBy(key => devices.GetValueOrDefault(key.DeviceId, string.Empty), comparer)
+                .ThenBy(key => key.DeviceId)
+                .ThenBy(key => Label(key), comparer)
+                .ThenBy(key => key.ScreenId, StringComparer.Ordinal),
+            .. keys.Except(named),
+        ];
+    }
+
     private static ScreenKey Key(ScreenRef screen) => new(screen.Device.Value, screen.Screen.Value);
 }

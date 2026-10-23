@@ -968,6 +968,10 @@ internal sealed class MainWindow : Window, IDisposable
 
         menu.Items.Add(logDocking);
 
+        // Beside the other ways the control is laid out, and here rather than in a tile's menu: it
+        // acts on all tiles at once, and a screen's menu carries what concerns that one screen (Part 7).
+        menu.Items.Add(Item(Strings.MainResetArrangement, _board.ResetArrangement));
+
         menu.IsOpen = true;
     }
 
