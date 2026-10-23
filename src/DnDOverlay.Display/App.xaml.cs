@@ -2212,36 +2212,8 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    /// <summary>
-    /// What the DM calls this picture. The scenes of this device carry it, and the hash is what is
-    /// left when nothing does - a picture can be dropped from a scene while its bytes are still on
-    /// their way.
-    /// <para>
-    /// Asked at the moment of writing rather than kept in a table beside the pictures: a second
-    /// table over the same keys is the shape that cost 2 GB in M2b, and this one would be read a
-    /// handful of times an evening.
-    /// </para>
-    /// </summary>
-    private string NameOf(AssetId asset)
-    {
-        foreach (var scene in _scenes.Values)
-        {
-            foreach (var item in scene.Items)
-            {
-                if (item is ImageItem picture && picture.AssetId == asset)
-                {
-                    return picture.Name;
-                }
-            }
-
-            if (scene.Background is { } background && background.AssetId == asset)
-            {
-                return background.Name ?? asset.Value[..8];
-            }
-        }
-
-        return asset.Value[..8];
-    }
+    /// <summary>What the DM calls this picture, from the scenes of this device - see <see cref="PictureFacts.NameOf"/>.</summary>
+    private string NameOf(AssetId asset) => PictureFacts.NameOf(_scenes.Values, asset);
 
     /// <summary>
     /// One arrival becomes a bitmap. A thumbnail is taken only while nothing better is there, so a
@@ -2630,17 +2602,8 @@ public sealed partial class App : Application, IDisposable
                 .ToDictionary(load => load.Asset, load => load.Fraction)
             : new Dictionary<AssetId, double>();
 
-    /// <summary>
-    /// Whether any scene this device holds says this picture moves. Asked of the SCENE rather than
-    /// of the bytes: the codec has already worked it out, and asking again would be a second answer
-    /// to a settled question (Part 5).
-    /// </summary>
-    private bool Animated(AssetId asset) =>
-        _scenes.Values.Any(scene =>
-            (scene.Background is { } background
-                && background.AssetId == asset
-                && background.Meta.IsAnimated)
-            || scene.Items.OfType<ImageItem>().Any(item => item.AssetId == asset && item.Meta.IsAnimated));
+    /// <summary>Whether any scene this device holds says this picture moves - see <see cref="PictureFacts.Animated"/>.</summary>
+    private bool Animated(AssetId asset) => PictureFacts.Animated(_scenes.Values, asset);
 
     /// <summary>
     /// Sends every finger on every screen, ten times a second and <b>only while there are any</b>.
@@ -3153,30 +3116,8 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    /// <summary>
-    /// How many pixels the source has, from the scenes that carry the picture. Zero when nothing
-    /// does any more - a picture dropped while its sharpening was on its way.
-    /// </summary>
-    private int SourceWidth(AssetId asset)
-    {
-        foreach (var scene in _scenes.Values)
-        {
-            foreach (var item in scene.Items.OfType<ImageItem>())
-            {
-                if (item.AssetId == asset)
-                {
-                    return item.Meta.PixelWidth;
-                }
-            }
-
-            if (scene.Background is { } background && background.AssetId == asset)
-            {
-                return background.Meta.PixelWidth;
-            }
-        }
-
-        return 0;
-    }
+    /// <summary>How many pixels the source has, from the scenes that carry the picture - see <see cref="PictureFacts.SourceWidth"/>.</summary>
+    private int SourceWidth(AssetId asset) => PictureFacts.SourceWidth(_scenes.Values, asset);
 
     /// <summary>
     /// The screens being played right now, by the name the DM would recognise. Asked at the moment
