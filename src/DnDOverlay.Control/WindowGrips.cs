@@ -221,27 +221,7 @@ internal sealed class WindowGrips : FrameworkElement
             return null;
         }
 
-        var place = Placing.InScene(at, _view, RenderSize);
-        var reach = SceneThumbnail.Strip(RenderSize);
-
-        foreach (var window in _windows.Where(window => !window.Minimized).OrderBy(window => window.ZOrder))
-        {
-            var grip = WindowGeometry.At(window.Bounds, place, reach);
-
-            if (grip is not WindowGrip.None)
-            {
-                return (window, grip);
-            }
-
-            // A window lying over the place hides the ones beneath it, grip or not.
-            if (place.X >= window.Bounds.X && place.X <= window.Bounds.X + window.Bounds.Width
-                && place.Y >= window.Bounds.Y && place.Y <= window.Bounds.Y + window.Bounds.Height)
-            {
-                return null;
-            }
-        }
-
-        return null;
+        return WindowPick.At(_windows, Placing.InScene(at, _view, RenderSize), SceneThumbnail.Strip(RenderSize));
     }
 
     private bool Begin(TilePoint at)
