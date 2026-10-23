@@ -1612,15 +1612,9 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     private HelloMessage Introduction()
     {
-        string? token = null;
-
-        // The token travels with the control it belongs to: one without the other would be
-        // offered to the first hub that answers. A stored token that does not decrypt is simply
-        // absent - the device pairs again.
-        if (_settings.ControlId is not null && DeviceTokens.TryRead(_secrets, _settings.Token, out var stored))
-        {
-            token = stored;
-        }
+        // The token travels with the control it belongs to, and one that does not decrypt is simply
+        // absent - the device pairs again (PairingRecord).
+        var token = PairingRecord.TokenFor(_settings, _secrets);
 
         // Kept for the asset fetches. The Welcome may hand out a fresh one right after this, and
         // the handler below replaces it - the picture path and the socket must never disagree
@@ -1813,12 +1807,7 @@ public sealed partial class App : Application, IDisposable
         // is right after this. Setting it only on the next start-up would leave a freshly paired
         // device fetching with the token it no longer has (Part 4).
         _sessionToken = welcome.Token;
-
-        _settings = _settings with
-        {
-            ControlId = welcome.ControlId,
-            Token = DeviceTokens.Store(_secrets, welcome.Token),
-        };
+        _settings = PairingRecord.Welcomed(_settings, welcome, _secrets) ?? _settings;
 
         _configuration.Save(_settings);
         _configuration.Flush();
@@ -1942,7 +1931,7 @@ public sealed partial class App : Application, IDisposable
                 // Cloning a disk is the usual way to set up a second display PC. The control only
                 // says the identity collides; the fresh one is made HERE, which keeps the rule
                 // that every device creates its own (Part 3, Part 7).
-                _settings = _settings with { DeviceId = Guid.NewGuid(), ControlId = null, Token = null };
+                _settings = PairingRecord.Rejected(_settings, reason, Guid.NewGuid()) ?? _settings;
                 _configuration?.Save(_settings);
                 _configuration?.Flush();
 
@@ -1959,10 +1948,8 @@ public sealed partial class App : Application, IDisposable
                 break;
 
             case RejectionReason.InvalidToken:
-                // The binding is NOT dropped here. The beacon is unauthenticated, so a forged
-                // control answering every Hello with "unknown token" would unbind every display
-                // in the house and then adopt them. It takes a tap at the device, and that tap is
-                // the hurdle an attacker on the network cannot take (Part 4).
+                // The binding is NOT dropped here - a forged control could unbind every display in
+                // the house that way (PairingRecord, Part 4).
                 DisplayLog.TokenUnknown(_logger);
                 break;
 
