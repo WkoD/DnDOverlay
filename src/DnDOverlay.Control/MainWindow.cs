@@ -1369,53 +1369,47 @@ internal sealed class MainWindow : Window, IDisposable
 
     private async Task LandAsync(CarryLoad load, System.Windows.Point at)
     {
-        // Wherever over the stage it is let go: a layout reaches the screens it names, not the one
-        // under the hand (Part 7), the way the settings say.
-        if (load.Layout is { } layout)
-        {
-            if (Hits(_board, at))
-            {
-                await _layouts.LoadAsync(layout, _settings.Current.LayoutLoad).ConfigureAwait(true);
-            }
-
-            return;
-        }
-
-        if (_board.Aim(at) is not { } aim)
-        {
-            return;
-        }
+        // A layout asks only whether it is over the stage, anything else only which tile is under the
+        // hand - asking the stage lights the strip it finds.
+        var landing = load.Layout is not null
+            ? CarryLanding.Decide(load, Hits(_board, at), aim: null)
+            : CarryLanding.Decide(load, overStage: false, _board.Aim(at));
 
         // Where the DM just put something is where the next blind grip lands (Part 7).
-        _board.Activate(aim.Screen);
-
-        if (load.Scene is { } scene)
+        if (landing is CarryLanding.Landing.OnScreen on)
         {
-            await _scenes.LoadAsync(scene, aim.Screen, _settings.Current.SceneLoad).ConfigureAwait(true);
-            return;
+            _board.Activate(on.Screen);
         }
 
-        if (aim.Background)
+        switch (landing)
         {
-            // A background layer carries one picture (Part 7).
-            if (load.Pictures.Count != 1)
-            {
+            case CarryLanding.Landing.Layout layout:
+                await _layouts.LoadAsync(layout.Name, _settings.Current.LayoutLoad).ConfigureAwait(true);
+                break;
+
+            case CarryLanding.Landing.Scene scene:
+                await _scenes.LoadAsync(scene.Name, scene.Screen, _settings.Current.SceneLoad).ConfigureAwait(true);
+                break;
+
+            case CarryLanding.Landing.BackgroundRefused:
                 _status.Text = Strings.MainBackgroundOnePicture;
-                return;
-            }
+                break;
 
-            await _session.SetBackgroundAsync(aim.Screen, load.Pictures[0]).ConfigureAwait(true);
-            return;
+            case CarryLanding.Landing.Background background:
+                await _session.SetBackgroundAsync(background.Screen, background.Asset).ConfigureAwait(true);
+                break;
+
+            case CarryLanding.Landing.Picture picture:
+                _ = await _session.AddItemAsync(picture.Screen, picture.Asset, picture.At).ConfigureAwait(true);
+                break;
+
+            case CarryLanding.Landing.Pictures pictures:
+                _ = await _session.AddItemsAsync(pictures.Screen, pictures.Assets).ConfigureAwait(true);
+                break;
+
+            default:
+                break;
         }
-
-        if (load.Pictures.Count == 1)
-        {
-            _ = await _session.AddItemAsync(aim.Screen, load.Pictures[0], aim.At).ConfigureAwait(true);
-            return;
-        }
-
-        // Several are ONE command, and Flow lays them side by side (Part 7).
-        _ = await _session.AddItemsAsync(aim.Screen, load.Pictures).ConfigureAwait(true);
     }
 
     /// <summary>Whether a place on the screen lies on the panel, where it can be seen, or on the tab of a retracted one.</summary>
