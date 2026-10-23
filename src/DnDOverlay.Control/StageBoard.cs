@@ -559,27 +559,8 @@ internal sealed class StageBoard : Panel
     /// that is unplugged right now, and it takes its place again when it comes back (Part 7).
     /// </para>
     /// </summary>
-    private IReadOnlyList<ScreenView> InOrder(IReadOnlyList<ScreenView> screens)
-    {
-        var saved = _settings.Current.TileOrder;
-
-        if (saved.Count == 0)
-        {
-            return screens;
-        }
-
-        var places = saved
-            .Select((key, index) => (Key: key, Index: index))
-            .ToDictionary(entry => entry.Key, entry => entry.Index);
-
-        return
-        [
-            .. screens.OrderBy(view =>
-                places.TryGetValue(Key(view.Screen), out var place) ? place : int.MaxValue),
-        ];
-    }
-
-    private static ScreenKey Key(ScreenRef screen) => new(screen.Device.Value, screen.Screen.Value);
+    private IReadOnlyList<ScreenView> InOrder(IReadOnlyList<ScreenView> screens) =>
+        TileArrangement.Arranged(screens, _settings.Current.TileOrder);
 
     /// <summary>
     /// Fetches every scene and hands it to its tile. Called on every patch: what a patch changed is
@@ -666,17 +647,10 @@ internal sealed class StageBoard : Panel
             return;
         }
 
-        var order = _screens.Select(view => view.Screen).ToList();
-        var taken = order.IndexOf(tile.Screen);
-        var place = order.IndexOf(target.Screen);
-
-        if (taken < 0 || place < 0)
+        if (TileArrangement.Moved([.. _screens.Select(view => view.Screen)], tile.Screen, target.Screen) is not { } order)
         {
             return;
         }
-
-        order.RemoveAt(taken);
-        order.Insert(place, tile.Screen);
 
         _screens = [.. order.Select(screen => _screens.First(view => view.Screen == screen))];
 
@@ -703,13 +677,11 @@ internal sealed class StageBoard : Panel
         _dragged = null;
         _from = null;
 
-        var order = _screens.Select(view => Key(view.Screen)).ToList();
-
         // What is kept is the screens that are here PLUS the saved places of the ones that are
         // not: a screen that is unplugged during a rearrangement must not lose its place (Part 7).
-        var absent = _settings.Current.TileOrder.Where(key => !order.Contains(key));
+        var kept = TileArrangement.Kept([.. _screens.Select(view => view.Screen)], _settings.Current.TileOrder);
 
-        _settings.Update(current => current with { TileOrder = [.. order, .. absent] });
+        _settings.Update(current => current with { TileOrder = kept });
     }
 
     /// <summary>
