@@ -300,10 +300,7 @@ internal sealed class DeviceBands
                 return;
             }
 
-            var taken = all.Select(other => other.Name)
-                .Concat(all.SelectMany(other => other.Screens).Where(other => other.Screen != screen.Screen).Select(other => other.Info.Label));
-
-            if (typed.Length > 0 && taken.Contains(typed, StringComparer.OrdinalIgnoreCase))
+            if (DeviceNames.ScreenNameTaken(all, screen.Screen, typed))
             {
                 _say(Strings.DeviceBandScreenNameTaken(typed));
                 name.Text = screen.Info.CustomName ?? string.Empty;
@@ -346,10 +343,7 @@ internal sealed class DeviceBands
                 return;
             }
 
-            var taken = all.Where(other => other.Device != device.Device).Select(other => other.Name)
-                .Concat(all.SelectMany(other => other.Screens).Select(screen => screen.Info.Label));
-
-            if (taken.Contains(typed, StringComparer.OrdinalIgnoreCase))
+            if (DeviceNames.DeviceNameTaken(all, device.Device, typed))
             {
                 _say(Strings.DeviceBandDeviceNameTaken(typed));
                 name.Text = device.Name;
