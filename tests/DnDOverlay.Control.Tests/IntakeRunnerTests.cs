@@ -167,8 +167,63 @@ public sealed class IntakeRunnerTests
 
             var said = bench.Said.Last();
 
-            Assert.StartsWith(Strings.IntakeTaken(1), said, StringComparison.Ordinal);
+            // Partly refused, the run names how many it was given (Part 10, M5).
+            Assert.StartsWith(Strings.IntakeTakenOf(1, 2), said, StringComparison.Ordinal);
             Assert.Contains("Weg: nicht erreichbar", said, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>
+    /// A run broken off names its reference count - "1 von 3 aufgenommen - abgebrochen ..." rather than
+    /// "1 aufgenommen", which reads like a run that went through (Part 10, M5; checks/M5, ohne Erbauer 1).
+    /// </summary>
+    [Fact]
+    public async Task A_run_broken_off_names_how_many_it_was_given()
+    {
+        using var thread = new DispatcherThread();
+
+        await thread.On(async () =>
+        {
+            using var bench = new CampaignBench(thread.Dispatcher);
+
+            await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+
+            var intake = bench.Parts().Intake;
+
+            // The DM breaks off while the second picture is being reached for.
+            var breaking = new IntakeSource("Grimmbart", token =>
+            {
+                intake.BreakOff();
+                token.ThrowIfCancellationRequested();
+
+                return ValueTask.FromResult<IntakeBytes>(new IntakeBytes.Ready(CampaignBench.Png(2)));
+            });
+
+            await intake.RunAsync([Ready("Karte", 1), breaking, Ready("Ork", 3)], target: null);
+
+            Assert.Equal(Strings.IntakeBrokenOff(Strings.IntakeTakenOf(1, 3)), bench.Said.Last());
+            Assert.Equal(1, bench.Stock.Current!.Count);
+        });
+    }
+
+    /// <summary>One picture refused names no count - "0 von 1" would say nothing the refusal does not.</summary>
+    [Fact]
+    public async Task A_single_refused_picture_names_no_count()
+    {
+        using var thread = new DispatcherThread();
+
+        await thread.On(async () =>
+        {
+            using var bench = new CampaignBench(thread.Dispatcher);
+
+            await bench.Desk.SwitchAsync(bench.Campaign("Vandalia"));
+
+            var intake = bench.Parts().Intake;
+            var gone = new IntakeSource("Weg", _ => ValueTask.FromResult<IntakeBytes>(new IntakeBytes.Unavailable(IntakeRejection.Unreachable, "nicht erreichbar")));
+
+            await intake.RunAsync([gone], target: null);
+
+            Assert.Equal(Strings.IntakeRefused(1, "Weg: nicht erreichbar") + ".", bench.Said.Last());
         });
     }
 

@@ -113,7 +113,9 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
 
         var unused = target is { } screen ? await ShowAsync(screen, report, at, background).ConfigureAwait(true) : null;
 
-        say(unused is null ? Collected(report) : Collected(report) + " " + unused);
+        var collected = Collected(report, sources.Count);
+
+        say(unused is null ? collected : collected + " " + unused);
 
         if (report.AlreadyPresent.Count > 0)
         {
@@ -163,12 +165,26 @@ internal sealed class IntakeRunner(ISessionApi session, Entrances entrances, Act
             ? Strings.IntakeTakingOne(step.Name)
             : Strings.IntakeProgressOf(step.Done, step.Total, step.Name);
 
-    /// <summary>ONE collected message, not one dialogue per file (Part 7).</summary>
-    private static string Collected(IntakeReport report)
+    /// <summary>
+    /// ONE collected message, not one dialogue per file (Part 7).
+    /// <para>
+    /// <b>A run that did not go through completely names its reference count</b> - "12 von 700
+    /// aufgenommen" instead of "12 aufgenommen" (Part 10, M5). Without it a run broken off or partly
+    /// refused reads like one that succeeded, and the DM finds out at the table that half is missing.
+    /// Pictures already in the stock count as gone through: they are there. A single picture needs no
+    /// reference count - "0 von 1" says nothing the rest of the line does not.
+    /// </para>
+    /// </summary>
+    /// <param name="total">How many sources the run was given.</param>
+    private static string Collected(IntakeReport report, int total)
     {
         var parts = new List<string>();
 
-        if (report.Taken.Count > 0)
+        if ((report.Cancelled || report.Refused.Count > 0) && total > 1)
+        {
+            parts.Add(Strings.IntakeTakenOf(report.Taken.Count, total));
+        }
+        else if (report.Taken.Count > 0)
         {
             parts.Add(Strings.IntakeTaken(report.Taken.Count));
         }

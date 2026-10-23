@@ -71,6 +71,8 @@ internal static partial class Strings
 
     internal static string IntakeTaken(int count) => Text.Format(nameof(IntakeTaken), count);
 
+    internal static string IntakeTakenOf(int count, int total) => Text.Format(nameof(IntakeTakenOf), count, total);
+
     internal static string IntakeAlreadyPresent(int count) => Text.Format(nameof(IntakeAlreadyPresent), count);
 
     internal static string IntakeRefused(int count, string details) => Text.Format(nameof(IntakeRefused), count, details);
