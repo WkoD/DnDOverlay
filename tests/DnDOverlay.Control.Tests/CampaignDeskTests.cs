@@ -8,6 +8,7 @@ using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
 using DnDOverlay.Hub;
 using DnDOverlay.Imaging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -528,6 +529,29 @@ public sealed class CampaignDeskTests
         Assert.Equal(Strings.DeskUnnamed, CampaignDesk.Label(new CampaignSummary("2026-10-22", Unnamed: true)));
     }
 
+    /// <summary>
+    /// Every reading of the campaign list is logged with its count (4037) - the evidence Prüfschritt 40d1
+    /// reads: the switcher opened once, the list read once.
+    /// </summary>
+    [Fact]
+    public void Reading_the_campaign_list_is_logged_with_its_count()
+    {
+        using var thread = new DispatcherThread();
+        var log = new Captured();
+        using var bench = new CampaignBench(thread.Dispatcher, log);
+
+        bench.Campaign("Vandalia");
+        bench.Campaign("Tyranny");
+
+        var campaigns = bench.Desk.List();
+
+        var line = Assert.Single(log.Lines, written => written.Id == 4037);
+
+        Assert.Equal(2, campaigns.Count);
+        Assert.Equal(LogLevel.Debug, line.Level);
+        Assert.Equal("Campaign list read: 2 campaign(s)", line.Message);
+    }
+
     /// <summary>A report line with names behind it can be expanded; one without cannot (Part 3, phase 3).</summary>
     [Fact]
     public async Task A_report_can_be_expanded_only_when_it_names_something()
@@ -543,5 +567,26 @@ public sealed class CampaignDeskTests
         Assert.True((plain with { Skipped = ["neu.png"] }).HasNames);
         Assert.True((plain with { UnreadableScenes = ["Taverne.json"] }).HasNames);
         Assert.True((plain with { Missing = [new MissingPicture(new AssetId(new string('a', 64)), "Karte")] }).HasNames);
+    }
+
+    /// <summary>What the desk wrote to its log: event id, level and the message as it reads.</summary>
+    private sealed class Captured : ILogger
+    {
+        private readonly ConcurrentQueue<(int Id, LogLevel Level, string Message)> _lines = new();
+
+        internal IReadOnlyList<(int Id, LogLevel Level, string Message)> Lines => [.. _lines];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            _lines.Enqueue((eventId.Id, logLevel, formatter(state, exception)));
     }
 }

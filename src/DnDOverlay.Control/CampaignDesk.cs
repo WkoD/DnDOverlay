@@ -140,8 +140,18 @@ internal sealed class CampaignDesk
         return result;
     }
 
-    /// <summary>Every campaign, for the switcher - one directory listing (Part 3).</summary>
-    internal IReadOnlyList<CampaignSummary> List() => _library.List();
+    /// <summary>
+    /// Every campaign, for the switcher - one directory listing (Part 3). Each reading is logged with
+    /// its count, so that the log shows how often the list was read (Prüfschritt 40d1).
+    /// </summary>
+    internal IReadOnlyList<CampaignSummary> List()
+    {
+        var campaigns = _library.List();
+
+        ControlLog.CampaignsListed(_logger, campaigns.Count);
+
+        return campaigns;
+    }
 
     /// <summary>How the switcher calls a campaign: its name, or for an unnamed one when it began and how much is in it.</summary>
     internal static string Label(CampaignSummary summary) =>

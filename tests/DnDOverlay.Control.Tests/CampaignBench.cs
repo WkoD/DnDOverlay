@@ -8,6 +8,7 @@ using DnDOverlay.Core;
 using DnDOverlay.Core.Configuration;
 using DnDOverlay.Hub;
 using DnDOverlay.Imaging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +22,8 @@ internal sealed class CampaignBench : IDisposable
 {
     internal static readonly ScreenRef Screen = new(new DeviceId(Guid.Parse("eeeeeeee-0000-0000-0000-0000000000d1")), new ScreenId("DISPLAY1"));
 
-    internal CampaignBench(Dispatcher dispatcher)
+    /// <param name="logger">What the desk logs to - nowhere unless a test reads the log.</param>
+    internal CampaignBench(Dispatcher dispatcher, ILogger? logger = null)
     {
         // Before the first picture operation, as the control's start does it (Part 5).
         CoderPolicy.Apply();
@@ -50,7 +52,7 @@ internal sealed class CampaignBench : IDisposable
             null,
             NullLogger<SessionApi>.Instance));
 
-        desk = new CampaignDesk(Library, Stock, Session, dispatcher, NullLogger.Instance);
+        desk = new CampaignDesk(Library, Stock, Session, dispatcher, logger ?? NullLogger.Instance);
         Desk = desk;
     }
 

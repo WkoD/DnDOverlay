@@ -446,4 +446,15 @@ internal static partial class ControlLog
         Level = LogLevel.Warning,
         Message = "The folder check of \"{Name}\" stopped: {Reason}")]
     internal static partial void CampaignCheckFailed(ILogger logger, string name, string reason);
+
+    /// <summary>
+    /// The list of campaigns was read from disk - once per opening of the switcher. Debug, because it is
+    /// evidence rather than news: Prüfschritt 40d1 reads here that opening the switcher costs one directory
+    /// listing and opens no foreign inventory beyond it (Part 3).
+    /// </summary>
+    [LoggerMessage(
+        EventId = 4037,
+        Level = LogLevel.Debug,
+        Message = "Campaign list read: {Count} campaign(s)")]
+    internal static partial void CampaignsListed(ILogger logger, int count);
 }
