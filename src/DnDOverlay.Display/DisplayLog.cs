@@ -576,6 +576,17 @@ internal static partial class DisplayLog
         Message = "Diagnostics stream to the control: {On}.")]
     internal static partial void DiagnosticsRequested(ILogger logger, bool on);
 
+    /// <summary>
+    /// The control switched this device's survey of foreign windows on or off - the background
+    /// switch on the first of its tiles went on, or on the last went off (Part 7). Said only on a
+    /// change, so step 37d2 can read off the log that the device stops sending its window list.
+    /// </summary>
+    [LoggerMessage(
+        EventId = 3053,
+        Level = LogLevel.Information,
+        Message = "Foreign window survey for the control: {On}.")]
+    internal static partial void WindowSurveyChanged(ILogger logger, bool on);
+
     /// <summary>The control said goodbye on quitting - back to the start state (Part 4).</summary>
     [LoggerMessage(
         EventId = 3051,

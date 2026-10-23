@@ -1743,6 +1743,13 @@ public sealed partial class App : Application, IDisposable
                 break;
 
             case WindowsRequestMessage request:
+                // Said when it changes, like 3045 above, so "switched off, the device stops sending
+                // its WindowList" can be read off this device's log (step 37d2).
+                if (_windowsWanted != request.On)
+                {
+                    DisplayLog.WindowSurveyChanged(_logger, request.On);
+                }
+
                 _windowsWanted = request.On;
                 break;
 
