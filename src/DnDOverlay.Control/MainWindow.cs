@@ -996,8 +996,8 @@ internal sealed class MainWindow : Window, IDisposable
 
         var across = side is PanelSide.Left or PanelSide.Right;
         var panelFirst = side is PanelSide.Left or PanelSide.Top;
-        var limit = Math.Max(200, (across ? ActualWidth : ActualHeight) / 2);
-        var length = new GridLength(Math.Clamp(size, 160, limit));
+        var limit = Docking.PanelLimit(across ? ActualWidth : ActualHeight);
+        var length = new GridLength(Docking.Length(size, limit));
         var star = new GridLength(1, GridUnitType.Star);
 
         _side = side;
@@ -1059,9 +1059,6 @@ internal sealed class MainWindow : Window, IDisposable
         Frame();
     }
 
-    /// <summary>The room the stage keeps between the two panels, in DIP - a row of tiles still fits.</summary>
-    private const double StageMinimum = 320;
-
     /// <summary>
     /// The log panel at its edge beside the main room, or the main room alone (Part 7). <b>Never at the
     /// campaign panel's edge</b> - it goes to the opposite one when that edge is taken - and <b>the one
@@ -1086,8 +1083,8 @@ internal sealed class MainWindow : Window, IDisposable
         var logFirst = side is PanelSide.Left or PanelSide.Top;
         var room = across ? _frame.ActualWidth : _frame.ActualHeight;
         var taken = _pinned && (_side is PanelSide.Left or PanelSide.Right) == across ? _overlaySize : 0;
-        var limit = Math.Max(160, room - taken - StageMinimum);
-        var length = new GridLength(Math.Clamp(placement.Size, 160, limit));
+        var limit = Docking.LogLimit(room, taken);
+        var length = new GridLength(Docking.Length(placement.Size, limit));
         var star = new GridLength(1, GridUnitType.Star);
 
         GridLength[] lengths = logFirst ? [length, new GridLength(6), star] : [star, new GridLength(6), length];
@@ -1131,21 +1128,7 @@ internal sealed class MainWindow : Window, IDisposable
     }
 
     /// <summary>The log panel's edge: its own, unless the campaign panel lies there - then the opposite one.</summary>
-    private PanelSide LogSide()
-    {
-        var side = _settings.Current.LogPanel?.Side ?? Opposite(_side);
-
-        return side == _side ? Opposite(_side) : side;
-    }
-
-    private static PanelSide Opposite(PanelSide side) =>
-        side switch
-        {
-            PanelSide.Left => PanelSide.Right,
-            PanelSide.Right => PanelSide.Left,
-            PanelSide.Top => PanelSide.Bottom,
-            _ => PanelSide.Top,
-        };
+    private PanelSide LogSide() => Docking.LogSide(_settings.Current.LogPanel?.Side, _side);
 
     /// <summary>Changes the log panel's placement, kept globally, and lays the frame anew.</summary>
     private void PlaceLog(Func<LogPlacement, LogPlacement> change)
