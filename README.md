@@ -223,9 +223,10 @@ arrival size once onto every screen, those of switched-off devices included. Eve
 the device switched off too: it goes out when the device connects. *Unpair …* names the screens and
 pictures that would be lost and offers to save every occupied screen as a scene first.
 
-A display waiting to be paired shows its **setup screen** — its name, its address and the pairing
-code, large enough to read from across the room — for exactly as long as the request lies before
-you; at the control the same three stand in the waiting line. A display that lost its identity —
+A display waiting to be paired shows its **setup card** — its name, its address and the pairing
+code, in the bottom right corner of each of its monitors, above the taskbar — for exactly as long as
+the request lies before you; at the control the same three stand in the waiting line. The card covers
+nothing else, so a display on the same machine as the control can be allowed from there. A display that lost its identity —
 reinstalled Windows, a swapped disk — knocks as a new device: **Assign to a known device …** lets it
 in as the old one, which is not connected, taking over its name, settings, screens and what lies on
 them. On the same hardware the screens simply carry on. After new hardware the old screens stand

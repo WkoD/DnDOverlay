@@ -10,13 +10,18 @@ using DnDOverlay.Platform.Windows;
 namespace DnDOverlay.Display;
 
 /// <summary>
-/// The setup screen (Part 6, Part 4): while a pairing request lies before the DM - and exactly then -
-/// the device shows its name, its address and the pairing code, large enough to read from two metres,
-/// so the DM can compare them with the line in the control without walking.
+/// The setup card (Part 6, Part 4): while a pairing request lies before the DM - and exactly then -
+/// the device shows its name, its address and the pairing code, so the DM can compare them with the
+/// line in the control.
+/// <para>
+/// <b>A small card above the taskbar, not a full screen</b> (DM decision, 24.10.2026; see
+/// <see cref="SetupCard"/>): the full screen covered the control's own window when both run on one
+/// machine, and blocked an unpaired PC for as long as the request stood.
+/// </para>
 /// <para>
 /// <b>Not before, and not after a refusal.</b> A device that only searches starts quietly; a
-/// full-screen box at every login would be a trap on an ordinary Tuesday. A refusal ends the
-/// connection and takes the screen with it, and the retries five minutes apart do not bring it back.
+/// box at every login would be a trap on an ordinary Tuesday. A refusal ends the connection and
+/// takes the card with it, and the retries five minutes apart do not bring it back.
 /// </para>
 /// <para>
 /// <b>It shows, it does not ask</b>: nothing on it can be operated, so it takes no focus and no input -
@@ -38,6 +43,8 @@ internal sealed class SetupWindow : Window
         Focusable = false;
         Topmost = true;
         Background = new SolidColorBrush(Color.FromRgb(0x12, 0x12, 0x18));
+        BorderBrush = new SolidColorBrush(Color.FromRgb(0x5a, 0x5a, 0x6e));
+        BorderThickness = new Thickness(1);
         Title = Strings.SetupTitle;
 
         var lines = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
@@ -48,12 +55,12 @@ internal sealed class SetupWindow : Window
         lines.Children.Add(Line(Strings.SetupCode(code), 64, 1, margin: 24));
         lines.Children.Add(Line(Strings.SetupHint, 16, 0.7, margin: 18));
 
-        // Scaled with the screen: two metres from a 65-inch table and from a 13-inch tablet alike.
+        // Scaled to the card, which SetupCard sizes with the monitor's scaling.
         Content = new Viewbox
         {
             Child = lines,
             Stretch = Stretch.Uniform,
-            Margin = new Thickness(80),
+            Margin = new Thickness(14),
             MaxWidth = double.PositiveInfinity,
         };
 
@@ -93,7 +100,7 @@ internal sealed class SetupWindow : Window
             return;
         }
 
-        var (x, y, width, height) = _monitor.Bounds;
+        var (x, y, width, height) = SetupCard.Place(_monitor.Work, _monitor.Screen.Dpi);
 
         Native.SetWindowPos(handle, insertAfter: 0, x, y, width, height, Native.SwpNoZOrder | Native.SwpNoActivate);
     }

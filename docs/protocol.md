@@ -39,7 +39,7 @@ does not exist here, and the address is typed into a browser by a person standin
 |---|---|---|
 | `Hello` | display → control | device identifier, name, application version, protocol version, its screens — plus **either** a device token **or** a pairing code, plus the full effective parameter set and the scene it still has on each screen |
 | `Welcome` | control → display | the control's identifier, the **path** assets are served from, and a freshly issued token exactly once |
-| `PairingPending` | control → display | the pairing code, so the device can put its setup screen down |
+| `PairingPending` | control → display | the pairing code, so the device can show its setup card |
 | `Rejected` | control → display | why: `Denied` · `InvalidToken` · `LimitExceeded` · `DuplicateDevice` |
 | `Ping` / `Pong` | control ↔ display | heartbeat, and the probe that tells a clone from a restart; the ping carries the last measured round trip, the pong the battery |
 | `SceneSnapshot` | control → display | the complete scene of one screen |

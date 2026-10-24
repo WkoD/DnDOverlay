@@ -7,6 +7,15 @@ namespace DnDOverlay.Platform.Windows;
 public sealed record MonitorInfo(ScreenInfo Screen, int Left, int Top, int Width, int Height)
 {
     public (int X, int Y, int Width, int Height) Bounds => (Left, Top, Width, Height);
+
+    /// <summary>
+    /// The bounds less the taskbar and other docked bars, as Windows reported them when the monitor
+    /// was found; <see langword="null"/> when it could not say.
+    /// </summary>
+    public (int X, int Y, int Width, int Height)? WorkArea { get; init; }
+
+    /// <summary>Where something may stand without covering the taskbar - the bounds when the work area is unknown.</summary>
+    public (int X, int Y, int Width, int Height) Work => WorkArea ?? Bounds;
 }
 
 /// <summary>
@@ -92,6 +101,16 @@ public static unsafe class Screens
             dpi = dpiX;
         }
 
+        (int X, int Y, int Width, int Height)? work = null;
+        var info = new Native.MonitorInfoEx { cbSize = (uint)sizeof(Native.MonitorInfoEx) };
+
+        if (handle != 0 && Native.GetMonitorInfo(handle, ref info))
+        {
+            var area = info.rcWork;
+
+            work = (area.Left, area.Top, area.Right - area.Left, area.Bottom - area.Top);
+        }
+
         // The device interface name, e.g. \\?\DISPLAY#IVM1234#5&1a2b… - unique per machine and
         // no further, which is why ScreenRef puts a DeviceId in front of it (Part 3).
         var target = new Native.DisplayDevice { cb = (uint)sizeof(Native.DisplayDevice) };
@@ -124,6 +143,9 @@ public static unsafe class Screens
             origin.X,
             origin.Y,
             width,
-            height);
+            height)
+        {
+            WorkArea = work,
+        };
     }
 }

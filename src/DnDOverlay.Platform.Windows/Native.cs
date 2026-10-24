@@ -124,6 +124,23 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     internal static partial nint MonitorFromPoint(PointL point, uint flags);
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MonitorInfoEx
+    {
+        internal uint cbSize;
+        internal RectL rcMonitor;
+        internal RectL rcWork;
+        internal uint dwFlags;
+    }
+
+    /// <summary>
+    /// The monitor's work area: its bounds less the taskbar and other docked bars, in PHYSICAL pixels
+    /// like the bounds - where something may stand without covering the taskbar (Part 6).
+    /// </summary>
+    [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetMonitorInfo(nint monitor, ref MonitorInfoEx info);
+
     /// <summary>
     /// Effective DPI of one monitor. Mixed scaling across the screens of one device is the
     /// normal case - the Surface brings its own high-DPI panel and drives the table beside it -
