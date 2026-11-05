@@ -90,9 +90,35 @@ public sealed class CampaignDeskTests
         Assert.True(File.Exists(file));
         Assert.True(File.Exists(Path.Combine(open.Directory, "inventory.json")));
 
-        Assert.Null(await bench.Desk.DeleteAsync());
+        Assert.Null(await DeletedOnceFreeAsync(bench));
         Assert.False(Directory.Exists(open.Directory));
         Assert.Null(bench.Desk.Open);
+    }
+
+    /// <summary>
+    /// The delete again, once the file is ours to let go of - tried for a while rather than once. Closing
+    /// the stream frees the file for us, not for everybody: a virus scanner may still look at it in that
+    /// moment, and the delete is then refused as rightly as the first time (seen on the CI runner,
+    /// 01.11.2026). The refusal is the product's answer; what this half checks is that it goes through
+    /// once nothing holds the folder any more.
+    /// </summary>
+    private static async Task<string?> DeletedOnceFreeAsync(CampaignBench bench)
+    {
+        string? refused = null;
+
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            refused = await bench.Desk.DeleteAsync();
+
+            if (refused is null)
+            {
+                return null;
+            }
+
+            await Task.Delay(20, Cancellation);
+        }
+
+        return refused;
     }
 
     /// <summary>
