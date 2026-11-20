@@ -1,8 +1,61 @@
+using System.Runtime.ExceptionServices;
+using System.Windows;
+
 namespace DnDOverlay.Control.Tests;
 
 /// <summary>The head of the campaign panel: undo and redo say what the next press does, in the room there is (Part 7).</summary>
 public sealed class PanelHeadTests
 {
+    /// <summary>
+    /// ☰ stays within the head however narrow the panel - with no campaign open, too, where the head
+    /// carries its longest hint. On the SP7 at half the window it lay beyond the edge, and with it the
+    /// only way to "Devices ..." and the pairing (hand run, 20.11.2026).
+    /// </summary>
+    [Theory]
+    [InlineData(420)]
+    [InlineData(600)]
+    [InlineData(900)]
+    public void The_menu_stays_in_reach_however_narrow_the_panel(double width)
+    {
+        OnUiThread(() =>
+        {
+            var head = new PanelHead();
+
+            head.Campaign(label: null);
+            head.Measure(new Size(width, double.PositiveInfinity));
+            head.Arrange(new Rect(0, 0, width, head.DesiredSize.Height));
+
+            var menu = (FrameworkElement)head.MenuButton;
+            var left = menu.TranslatePoint(new Point(0, 0), head).X;
+
+            Assert.True(menu.ActualWidth > 0, "the menu button has no width");
+            Assert.InRange(left, 0, width - menu.ActualWidth);
+        });
+    }
+
+    private static void OnUiThread(Action body)
+    {
+        ExceptionDispatchInfo? fault = null;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                body();
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException)
+            {
+                fault = ExceptionDispatchInfo.Capture(exception);
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        fault?.Throw();
+    }
+
     /// <summary>
     /// Narrow, the label is cut to its verb (Part 7) - first in English, last in German, whose steps
     /// end on the participle. The first German word would be the picture's name, a number or "Szene".

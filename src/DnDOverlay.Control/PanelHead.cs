@@ -60,7 +60,14 @@ internal sealed class PanelHead : Border
         Margin = new Thickness(8, 0, 0, 0),
     };
 
-    private readonly StackPanel _row = new() { Orientation = Orientation.Horizontal };
+    /// <summary>
+    /// The head's first line. <b>☰ and the view switch are docked first, so they keep their room
+    /// whatever the panel's width</b> - in a plain row they came last and were cut off once the panel
+    /// was narrower than campaign, hint and switch together: on the SP7 at half the window, with no
+    /// campaign open, ☰ - and with it "Devices ..." and the pairing - could not be reached at all
+    /// (hand run on the development PC, 20.11.2026). The hint takes what is left and wraps.
+    /// </summary>
+    private readonly DockPanel _row = new();
 
     /// <summary>
     /// Undo and redo on a line of their own (Part 7: in the head, beside the view switch) - each label
@@ -93,10 +100,7 @@ internal sealed class PanelHead : Border
         Times(vertical: false);
         Timeline(undo: null, redo: null);
 
-        _row.Children.Add(_campaign);
-        _row.Children.Add(_hint);
-        _row.Children.Add(_view);
-        _row.Children.Add(_menu);
+        Arrange(vertical: false);
 
         _campaign.Click += (_, _) => CampaignAsked?.Invoke(this, EventArgs.Empty);
         _menu.Click += (_, _) => MenuAsked?.Invoke(this, EventArgs.Empty);
@@ -206,18 +210,48 @@ internal sealed class PanelHead : Border
     {
         set
         {
-            _row.Orientation = value ? Orientation.Vertical : Orientation.Horizontal;
-            _hint.TextWrapping = value ? TextWrapping.Wrap : TextWrapping.NoWrap;
-            _hint.MaxWidth = value ? 180 : double.PositiveInfinity;
+            Arrange(value);
             Padding = value ? new Thickness(0, 0, 6, 0) : new Thickness(0, 0, 0, 6);
-
-            foreach (var child in _row.Children.OfType<FrameworkElement>())
-            {
-                child.Margin = value ? new Thickness(0, 0, 0, 6) : new Thickness(0, 0, 8, 0);
-            }
-
             Times(value);
         }
+    }
+
+    /// <summary>
+    /// Lays the first line out across the top (☰ and the view switch docked right, the campaign left,
+    /// the hint filling the rest) or down the side of a lying panel (one under the other, ☰ last).
+    /// </summary>
+    private void Arrange(bool vertical)
+    {
+        _row.Children.Clear();
+        _hint.TextWrapping = TextWrapping.Wrap;
+        _hint.MaxWidth = vertical ? 180 : double.PositiveInfinity;
+
+        if (vertical)
+        {
+            _row.LastChildFill = false;
+
+            foreach (var child in new FrameworkElement[] { _campaign, _hint, _view, _menu })
+            {
+                DockPanel.SetDock(child, Dock.Top);
+                child.Margin = new Thickness(0, 0, 0, 6);
+                _row.Children.Add(child);
+            }
+
+            return;
+        }
+
+        _row.LastChildFill = true;
+        DockPanel.SetDock(_menu, Dock.Right);
+        DockPanel.SetDock(_view, Dock.Right);
+        DockPanel.SetDock(_campaign, Dock.Left);
+        _menu.Margin = new Thickness(8, 0, 0, 0);
+        _view.Margin = new Thickness(8, 0, 0, 0);
+        _campaign.Margin = new Thickness(0, 0, 8, 0);
+        _hint.Margin = new Thickness(0, 0, 4, 0);
+        _row.Children.Add(_menu);
+        _row.Children.Add(_view);
+        _row.Children.Add(_campaign);
+        _row.Children.Add(_hint);
     }
 
     /// <summary>
